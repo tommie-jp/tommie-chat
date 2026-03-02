@@ -1,8 +1,5 @@
 # MMO Node.jS test
 
- - [x] BUG-2026-03-01
-  - ブラウザをリサイズすると、立方体が見えなくなる（範囲外に行ってしまう）
-
 ---
 
 - Node.jsでTypeScriptのテストプログラム。
@@ -14,3 +11,47 @@
   - `npm run start`　JS実行
 - Node.js v24 LTS
   
+---
+
+## TODO & BUG
+
+- [x] BUG-2026-03-01
+  - ブラウザをリサイズすると、立方体が見えなくなる（範囲外に行ってしまう）
+
+---
+
+## ディレクトリ構成
+
+```text
+24-mmo-Tommie-chat/
+├── public/              # 静的アセット（ビルドされずそのままコピーされる）
+│   ├── models/          # .glb, .gltf ファイル
+│   └── textures/        # .jpg, .png 等
+├── src/                 # ソースコード
+│   ├── shaders/         # カスタムシェーダー (.glsl)
+│   ├── app.ts           # Babylon.js のメインロジック
+│   └── main.ts          # エントリーポイント
+├── index.html           # Canvas要素を配置
+├── package.json
+└── vite.config.ts       # Vite の詳細設定
+```
+
+---
+
+- デバッグ用
+  - ショートカットキー（Ctrl + Shift + I）による開閉機能
+
+- クロームのコンソールログの以下は無視してよい
+
+```text
+Download the React DevTools for a better development experience: https://react.dev/link/react-devtools
+
+Blocked aria-hidden on an element because its descendant retained focus...
+```
+
+# Babylon.js（およびWebGPU/WebGL環境）で利用する場合、
+# basisuよりも圧倒的に toktx がおすすめです。
+
+
+toktx --t2 --encode uastc --genmipmap output.ktx2 input_transparent.png
+
