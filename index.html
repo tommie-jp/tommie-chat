@@ -5,9 +5,7 @@
     <title>tommie-chat</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87ceeb; }
-        canvas { width: 100vw; height: 100vh; display: block; touch-action: none;
-            /* image-rendering: pixelated; */
-        }
+        canvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
         
         #chat-container {
             position: fixed;
@@ -41,11 +39,188 @@
         }
         #sendBtn { background: #0076d752; }
         #clearBtn { background: #d7000034; }
+
+        /* ======== デバッグオーバーレイ用スタイル ======== */
+        #debug-overlay {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 270px; /* ★変更: 項目名変更や1行表示に合わせて少し広げました(240px -> 270px) */
+            background: rgba(255, 255, 255, 0.85); 
+            border-radius: 8px;
+            color: #000000; 
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px; 
+            padding: 8px 10px; 
+            z-index: 100;
+            pointer-events: auto;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15); 
+        }
+        
+        #debug-overlay .overlay-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px; 
+            color: #000000;
+            margin-bottom: 4px; 
+            padding-bottom: 4px;
+            border-bottom: 1px solid #000000; 
+            cursor: help; 
+        }
+
+        #debug-overlay table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #debug-overlay td {
+            padding: 1px 0; 
+            vertical-align: middle;
+        }
+        #debug-overlay td.label {
+            text-align: left;
+            width: 55%;
+            font-weight: bold;
+            cursor: help; 
+            border-bottom: 1px dotted #aaaaaa; 
+            transition: all 0.2s ease; 
+        }
+        
+        #debug-overlay td.label:hover {
+            background-color: rgba(0, 0, 0, 0.08); 
+            color: #0056b3; 
+            border-bottom: 1px solid #0056b3; 
+        }
+
+        #debug-overlay td.value {
+            text-align: right;
+            width: 45%;
+        }
+
+        /* ★追加: 指定した項目の値が改行されないようにする */
+        #val-player-pos, #val-cam-info {
+            white-space: nowrap;
+        }
+
+        .debug-select, .debug-btn, .debug-input, .debug-color {
+            border: 1px solid #000000; 
+            border-radius: 4px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 11px; 
+            width: 60px;
+            float: right;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .debug-select {
+            background: #ffffff;
+            color: #000000;
+            padding: 0px 2px;
+            cursor: pointer;
+        }
+
+        .debug-btn {
+            background: #ffffff; 
+            color: #000000;      
+            padding: 1px 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .debug-btn.off {
+            background: #dddddd; 
+            color: #000000;
+        }
+
+        .debug-input {
+            background: #ffffff;
+            color: #000000;
+            padding: 1px 4px;
+            text-align: right; 
+        }
+
+        .debug-color {
+            background: #ffffff;
+            padding: 0px; 
+            height: 17px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <canvas id="renderCanvas"></canvas>
     
+    <div id="debug-overlay">
+        <div class="overlay-title" title="TommieChatはアバターチャットです。">tommieChat</div>
+        <table>
+            <tr><td class="label" title="・項目名：01.Ver:&#10;・説明：アプリケーションのバージョン。&#10;・初期値：0.09&#10;・一般的なMMOの設定範囲：-">01.Ver:</td><td class="value" id="val-ver">0.09</td></tr>
+            <tr><td class="label" title="・項目名：02.Update:&#10;・説明：最終更新日。&#10;・初期値：2026/03/03&#10;・一般的なMMOの設定範囲：-">02.Update:</td><td class="value">2026/03/03</td></tr>
+            <tr><td class="label" title="・項目名：03.Scale:&#10;・説明：レンダリングの解像度スケール。パフォーマンスと画質の調整に使用します。&#10;・初期値：0.5&#10;・一般的なMMOの設定範囲：1.0 (環境により可変)">03.Scale:</td><td class="value">
+                <select id="scaleSelect" class="debug-select">
+                    <option value="1.0">1.0</option>
+                    <option value="0.75">0.75</option>
+                    <option value="0.5" selected>0.5</option>
+                </select>
+            </td></tr>
+            <tr><td class="label" title="・項目名：04.AntiAliasing:&#10;・説明：ジャギー(輪郭のギザギザ)をなめらかにするアンチエイリアシング処理。&#10;・初期値：On&#10;・一般的なMMOの設定範囲：ユーザー設定でOn/Off選択">04.AntiAliasing:</td><td class="value">
+                <button id="aaBtn" class="debug-btn">On</button>
+            </td></tr>
+            <tr><td class="label" title="・項目名：05.FPS:&#10;・説明：1秒間の描画フレーム数 (Frames Per Second)。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：60 または 144">05.FPS:</td><td class="value" id="val-fps">0</td></tr>
+            <tr><td class="label" title="・項目名：06.CPU ms:&#10;・説明：CPUが1フレームの処理にかかった時間(ミリ秒)。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：16.6ms以下 (60FPS維持の目安)">06.CPU ms:</td><td class="value" id="val-cpu">0.00</td></tr>
+            <tr><td class="label" title="・項目名：07.GPU ms:&#10;・説明：GPUが描画にかかった時間(ミリ秒)。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：16.6ms以下 (60FPS維持の目安)">07.GPU ms:</td><td class="value" id="val-gpu">0.00</td></tr>
+            <tr><td class="label" title="・項目名：08.DRAW:&#10;・説明：ドローコール(GPUへの描画命令)の数。少ないほど動作が軽量。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：数千〜1万程度">08.DRAW:</td><td class="value" id="val-draw">0</td></tr>
+            <tr><td class="label" title="・項目名：09.MESH:&#10;・説明：画面内に描画されている3Dメッシュ(モデル)の数。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：数千〜数万">09.MESH:</td><td class="value" id="val-mesh">0</td></tr>
+            <tr><td class="label" title="・項目名：10.Mats:&#10;・説明：使用されているマテリアル(質感設定)の種類数。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：数百〜数千">10.Mats:</td><td class="value" id="val-mats">0</td></tr>
+            <tr><td class="label" title="・項目名：11.Bones:&#10;・説明：アニメーション計算が行われているボーン(骨組み)の総数。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：数万〜十数万">11.Bones:</td><td class="value" id="val-bones">0</td></tr>
+            <tr><td class="label" title="・項目名：12.JS RAM:&#10;・説明：JavaScriptのヒープメモリ使用量。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：数百MB〜1GB強">12.JS RAM:</td><td class="value" id="val-jsram">0.0 MB</td></tr>
+            <tr><td class="label" title="・項目名：13.TexRAM:&#10;・説明：テクスチャ画像が消費しているVRAM(ビデオメモリ)の推定値。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：1GB〜数GB">13.TexRAM:</td><td class="value" id="val-texram">0.0 MB</td></tr>
+            <tr><td class="label" title="・項目名：14.GeoRAM:&#10;・説明：ジオメトリ(頂点データ等)が消費しているVRAMの推定値。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：数百MB〜数GB">14.GeoRAM:</td><td class="value" id="val-georam">0.0 MB</td></tr>
+            <tr><td class="label" title="・項目名：15.Indices:&#10;・説明：描画されているインデックス(頂点の接続順)の総数。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：数百万〜数千万">15.Indices:</td><td class="value" id="val-indices">0</td></tr>
+            <tr><td class="label" title="・項目名：16.Polys:&#10;・説明：描画されているポリゴン(三角形)の総数。&#10;・初期値：変動&#10;・一般的なMMOの設定範囲：100万〜数百万">16.Polys:</td><td class="value" id="val-polys">0</td></tr>
+            <tr><td class="label" title="・項目名：17.LOD:&#10;・説明：カメラ距離に応じたモデルの自動簡略化(Level of Detail)の有効状態。&#10;・初期値：Off&#10;・一般的なMMOの設定範囲：パフォーマンス維持のため必須でActive">17.LOD:</td><td class="value">
+                <button id="lodBtn" class="debug-btn off">Off</button>
+            </td></tr>
+            <tr><td class="label" title="・項目名：18.OcclQ:&#10;・説明：オクルージョンカリング(隠面消去)のクエリ数。見えない物を描画から省く処理。&#10;・初期値：0&#10;・一般的なMMOの設定範囲：シーンの複雑さに依存">18.OcclQ:</td><td class="value" id="val-occlq">0</td></tr>
+            <tr><td class="label" title="・項目名：19.FarClip:&#10;・説明：カメラの描画限界距離(メートル)。これより遠くのオブジェクトは描画されません。&#10;・初期値：500&#10;・一般的なMMOの設定範囲：500〜5000以上">19.FarClip:</td><td class="value">
+                <input type="number" id="farClipInput" class="debug-input" value="500" step="1">
+            </td></tr>
+            <tr>
+                <td class="label" title="・項目名：20.FOV:&#10;・説明：カメラの垂直視野角(度)。視界の広さを決めます。&#10;・初期値：60&#10;・一般的なMMOの設定範囲：50〜75 (水平90〜110相当)">20.FOV:</td>
+                <td class="value" style="display: flex; justify-content: flex-end; gap: 4px;">
+                    <select id="fovSelect" class="debug-select" style="width: 45px;">
+                        <option value="30">30</option>
+                        <option value="45">45</option>
+                        <option value="60" selected>60</option>
+                        <option value="90">90</option>
+                    </select>
+                    <input type="number" id="fovInput" class="debug-input" value="60" step="1" style="width: 45px;">
+                </td>
+            </tr>
+            <tr><td class="label" title="・項目名：21.Fog:&#10;・説明：遠景を背景色に溶け込ませる空気遠近法。世界の広がりを表現しつつ遠景の不自然な切れ目を隠します。&#10;・初期値：On&#10;・一般的なMMOの設定範囲：ほぼ必須でOn">21.Fog:</td><td class="value">
+                <button id="fogBtn" class="debug-btn">On</button>
+            </td></tr>
+            <tr><td class="label" title="・項目名：22.Fog Color:&#10;・説明：フォグ(霧)と背景(空)の色。&#10;・初期値：#a0d7f3&#10;・一般的なMMOの設定範囲：時間帯や天候システムにより動的に変化">22.Fog Color:</td><td class="value">
+                <input type="color" id="fogColorInput" class="debug-color" value="#a0d7f3">
+            </td></tr>
+            <tr><td class="label" title="・項目名：23.DoF:&#10;・説明：被写界深度(Depth of Field)。ピントの合っていない場所をボカす一眼レフカメラのようなエフェクト。&#10;・初期値：Off&#10;・一般的なMMOの設定範囲：視認性優先のため通常時はOff、スクリーンショットモード等でOn">23.DoF:</td><td class="value">
+                <button id="dofBtn" class="debug-btn off">Off</button>
+            </td></tr>
+            <tr><td class="label" title="・項目名：24.fStop:&#10;・説明：DoFの絞り値。値が小さいほどボケやすく、ピントの合う奥行きが極端に狭くなります。&#10;・初期値：5.6&#10;・一般的なMMOの設定範囲：5.6〜8.0 (プレイアビリティ確保のため過度なボケを防ぐ)">24.fStop:</td><td class="value">
+                <input type="number" id="fStopInput" class="debug-input" value="5.6" step="0.1">
+            </td></tr>
+            <tr><td class="label" title="・項目名：25.FocalLen:&#10;・説明：DoFの焦点距離(mm)。値が大きい(望遠)ほどボケやすくなります。&#10;・初期値：50&#10;・一般的なMMOの設定範囲：35〜50 (標準レンズ相当)">25.FocalLen:</td><td class="value">
+                <input type="number" id="focalLengthInput" class="debug-input" value="50" step="1">
+            </td></tr>
+            <tr><td class="label" title="・項目名：26.Default View:&#10;・説明：カメラ視点を一般的なMMOの背後からの見下ろし視点にリセットします。&#10;・初期値：距離10.0&#10;・一般的なMMOの設定範囲：三人称背後視点(TPS)">26.Default View:</td><td class="value">
+                <button id="resetViewBtn" class="debug-btn">Reset</button>
+            </td></tr>
+            <tr><td class="label" title="・項目名：27.Player Pos:&#10;・説明：自分のアバターの現在の座標位置(X, Y, Z)。&#10;・初期値：0.0, 0.0, 0.0&#10;・一般的なMMOの設定範囲：マップサイズに依存">27.Player Pos:</td><td class="value" id="val-player-pos">0.0, 0.0, 0.0</td></tr>
+            
+            <tr><td class="label" title="・項目名：28.Cam Info:&#10;・説明：カメラの現在の角度(α, β)と、ターゲットからの距離(Radius)。&#10;・初期値：-&#10;・一般的なMMOの設定範囲：プレイヤーの操作により変動">28.Cam Info:</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
+
+            <tr><td class="label" title="・項目名：29.API:&#10;・説明：現在ブラウザで使用している描画用のグラフィックスAPI。&#10;・初期値：環境依存&#10;・一般的なMMOの設定範囲：ターゲットによる (PCならDirectX/Vulkan、ブラウザならWebGL2/WebGPU)">29.API:</td><td class="value" id="val-api">WebGL2</td></tr>
+        </table>
+    </div>
+
     <div id="chat-container">
         <textarea id="chatInput" placeholder="セリフを入力してEnterで送信..."></textarea>
         <button id="sendBtn" class="ui-btn">送信</button>

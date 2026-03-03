@@ -18,7 +18,7 @@ import {
     PointerEventTypes,
     DefaultRenderingPipeline 
 } from "@babylonjs/core";
-import { AdvancedDynamicTexture, TextBlock, Rectangle, Control, Grid, Button } from "@babylonjs/gui"; 
+import { AdvancedDynamicTexture, TextBlock, Rectangle, Control } from "@babylonjs/gui"; 
 import "@babylonjs/loaders";
 import { GridMaterial } from "@babylonjs/materials";
 
@@ -39,8 +39,9 @@ export class GameScene {
     private renderingPipeline!: DefaultRenderingPipeline;
 
     constructor(canvas: HTMLCanvasElement) {
-        this.engine = new Engine(canvas, false);
-        this.engine.setHardwareScalingLevel(1.0);
+        this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+        
+        this.engine.setHardwareScalingLevel(0.5);
 
         this.scene = new Scene(this.engine);
 
@@ -62,28 +63,37 @@ export class GameScene {
     }
 
     private setupScene(): void {
+        // 仮の初期化（後でアバターが生成された後に向きに合わせて再設定します）
         this.camera = new ArcRotateCamera(
             "camera", 
-            -Math.PI / 3.2,
-            Math.PI / 2,
-            6.0,
+            -Math.PI / 2,     
+            Math.PI / 2.5,    
+            10.0,             
             new Vector3(0, 0.9, 0),
             this.scene
         );
         this.camera.attachControl(this.engine.getRenderingCanvas() as HTMLCanvasElement, true);
 
-        this.camera.lowerRadiusLimit = 3;
+        this.camera.lowerRadiusLimit = 2; 
         this.camera.upperRadiusLimit = 50;
         this.camera.fovMode = ArcRotateCamera.FOVMODE_VERTICAL_FIXED;
         this.camera.inertia = 0;
-        this.camera.maxZ = 2000;
+        
+        this.camera.maxZ = 500;
+        this.camera.fov = 60 * Math.PI / 180;
 
         const light = new HemisphericLight("light", new Vector3(0, 1, 0), this.scene);
         light.intensity = 1.8;
         light.groundColor = new Color3(0.9, 0.9, 0.9);
 
-        this.scene.clearColor = new Color4(0.53, 0.81, 0.98, 1.0);
+        const skyColor = Color3.FromHexString("#a0d7f3");
+        this.scene.clearColor = new Color4(skyColor.r, skyColor.g, skyColor.b, 1.0);
         this.scene.ambientColor = new Color3(0.65, 0.65, 0.75);
+
+        this.scene.fogMode = Scene.FOGMODE_LINEAR;
+        this.scene.fogColor = skyColor; 
+        this.scene.fogStart = 30.0; 
+        this.scene.fogEnd = this.camera.maxZ; 
 
         this.renderingPipeline = new DefaultRenderingPipeline(
             "defaultPipeline", 
@@ -91,7 +101,14 @@ export class GameScene {
             this.scene, 
             [this.camera]
         );
-        this.renderingPipeline.samples = 1; 
+        this.renderingPipeline.samples = 4; 
+        
+        this.renderingPipeline.depthOfFieldEnabled = true;
+        if (this.renderingPipeline.depthOfField) {
+            this.renderingPipeline.depthOfField.fStop = 5.6;         
+            this.renderingPipeline.depthOfField.focalLength = 50;    
+        }
+        this.renderingPipeline.depthOfFieldEnabled = false; 
     }
 
     private setupHtmlUI(): void {
@@ -144,8 +161,8 @@ export class GameScene {
         mat.albedoTexture = tex;
         mat.useAlphaFromAlbedoTexture = true;
         
-        mat.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
-        mat.alphaMode = Engine.ALPHA_COMBINE;
+        mat.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHATESTAND; 
+        
         mat.metallic = 0.0;
         mat.roughness = 0.02;   
         mat.backFaceCulling = false;
@@ -162,20 +179,22 @@ export class GameScene {
         namePlane.parent = targetMesh;
         namePlane.position = new Vector3(0, 0.95, 0);
 
-        const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 600, 120);
+        const dpr = window.devicePixelRatio || 1;
+        const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 3600 * dpr, 300 * dpr);
+
         const textBlock = new TextBlock();
         textBlock.text = nameText;
         textBlock.color = "white";
-        textBlock.fontSize = "24px";
+        textBlock.fontSize = `${80 * dpr}px`;
         textBlock.fontWeight = "bold";
-        textBlock.outlineWidth = 5;
+        textBlock.outlineWidth = 12 * dpr;
         textBlock.outlineColor = "black";
         
         adt.addControl(textBlock);
     }
 
     private createObjects(): void {
-        const ground = MeshBuilder.CreateGround("ground", { width: 100, height: 100 }, this.scene);
+        const ground = MeshBuilder.CreateGround("ground", { width: 400, height: 400 }, this.scene);
         const gridMaterial = new GridMaterial("gridMaterial", this.scene);
         gridMaterial.mainColor = new Color3(0.85, 0.95, 0.85);
         gridMaterial.lineColor = new Color3(0.35, 0.55, 0.35);
@@ -273,9 +292,20 @@ export class GameScene {
                     this.clickMarker.isVisible = false; 
                 }
             }
+
+            if (this.renderingPipeline.depthOfFieldEnabled && this.renderingPipeline.depthOfField) {
+                this.renderingPipeline.depthOfField.focusDistance = this.camera.radius * 1000;
+            }
         });
 
-        this.resetCameraScale();
+        // ★変更: アバター生成後、初期カメラ位置を「アバターの向いている方向の背後」に設定
+        if (this.camera && this.playerBox) {
+            this.camera.setTarget(this.playerBox);
+            // Babylon.jsの計算上「-90度 ( -Math.PI / 2 ) からキャラのY回転を引く」と真後ろになります
+            this.camera.alpha = -Math.PI / 2 - this.playerBox.rotation.y;
+            this.camera.beta = Math.PI / 2.5;
+            this.camera.radius = 10.0;
+        }
     }
 
     private createSpeechBubble(targetMesh: Mesh, speechText: string): (newText: string) => void {
@@ -286,7 +316,8 @@ export class GameScene {
         bubblePlane.parent = targetMesh;
         bubblePlane.position = new Vector3(0, 1.2, 0); 
         
-        const adt = AdvancedDynamicTexture.CreateForMesh(bubblePlane, 600, 100);
+        const dpr = window.devicePixelRatio || 1;
+        const adt = AdvancedDynamicTexture.CreateForMesh(bubblePlane, 3600 * dpr, 260 * dpr);
         
         const bg = new Rectangle();
         bg.width = "100%"; bg.height = "100%";
@@ -298,16 +329,16 @@ export class GameScene {
 
         const textBlock = new TextBlock();
         textBlock.text = speechText;
-        textBlock.fontSize = "24px";
+        textBlock.fontSize = `${80 * dpr}px`;
         textBlock.color = "black";
         
         textBlock.textWrapping = true;
         textBlock.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
         textBlock.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
-        textBlock.paddingLeft = "10px";
-        textBlock.paddingRight = "10px";
-        textBlock.paddingTop = "10px";
-        textBlock.paddingBottom = "10px";
+        textBlock.paddingLeft = `${35 * dpr}px`;
+        textBlock.paddingRight = `${35 * dpr}px`;
+        textBlock.paddingTop = `${20 * dpr}px`;
+        textBlock.paddingBottom = `${20 * dpr}px`;
         
         bg.addControl(textBlock);
 
@@ -332,10 +363,10 @@ export class GameScene {
     }
 
     private createMinecraftClouds(): void {
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 15; i++) {
             const cloudGroup = new TransformNode("cloudGroup" + i, this.scene);
-            const baseX = (Math.random() - 0.5) * 140;
-            const baseZ = (Math.random() - 0.5) * 140;
+            const baseX = (Math.random() - 0.5) * 240;
+            const baseZ = (Math.random() - 0.5) * 240;
             const baseY = 18 + Math.random() * 12;
             const cloudMaterial = new StandardMaterial("cloudMat" + i, this.scene);
             cloudMaterial.diffuseColor = new Color3(0.9, 0.9, 0.95);
@@ -376,136 +407,159 @@ export class GameScene {
     }
 
     private createDebugOverlay(): void {
-        const adt = AdvancedDynamicTexture.CreateFullscreenUI("UI");
-        const panel = new Rectangle();
+        const scaleSelect = document.getElementById("scaleSelect") as HTMLSelectElement;
+        const aaBtn = document.getElementById("aaBtn") as HTMLButtonElement;
+        const lodBtn = document.getElementById("lodBtn") as HTMLButtonElement;
+        const farClipInput = document.getElementById("farClipInput") as HTMLInputElement;
+        const fovSelect = document.getElementById("fovSelect") as HTMLSelectElement;
+        const fovInput = document.getElementById("fovInput") as HTMLInputElement;
+        const fogBtn = document.getElementById("fogBtn") as HTMLButtonElement;
+        const fogColorInput = document.getElementById("fogColorInput") as HTMLInputElement;
+        const dofBtn = document.getElementById("dofBtn") as HTMLButtonElement;
+        const fStopInput = document.getElementById("fStopInput") as HTMLInputElement;
+        const focalLengthInput = document.getElementById("focalLengthInput") as HTMLInputElement;
         
-        panel.width = "260px"; 
-        panel.height = "520px";
-        panel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
-        panel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
-        panel.top = "15px"; panel.left = "-15px";
-        panel.background = "rgba(0, 0, 0, 0.7)";
-        panel.cornerRadius = 8;
-        adt.addControl(panel);
+        const resetViewBtn = document.getElementById("resetViewBtn") as HTMLButtonElement;
+        const playerPosVal = document.getElementById("val-player-pos");
+        const camInfoVal = document.getElementById("val-cam-info");
 
-        const grid = new Grid();
-        grid.addColumnDefinition(0.55); 
-        grid.addColumnDefinition(0.45);
-        
-        const numRows = 19;
-        for(let i = 0; i < numRows; i++) grid.addRowDefinition(1 / numRows);
-        panel.addControl(grid);
+        const fv = document.getElementById("val-fps");
+        const cv = document.getElementById("val-cpu");
+        const gv = document.getElementById("val-gpu");
+        const dv = document.getElementById("val-draw");
+        const mv = document.getElementById("val-mesh");
+        const matv = document.getElementById("val-mats");
+        const bv = document.getElementById("val-bones");
+        const rv = document.getElementById("val-jsram");
+        const tv = document.getElementById("val-texram");
+        const geov = document.getElementById("val-georam");
+        const iv = document.getElementById("val-indices");
+        const pv = document.getElementById("val-polys");
+        const ov = document.getElementById("val-occlq");
+        const apiv = document.getElementById("val-api");
 
-        const createCell = (t: string, r: number, c: number, isl: boolean) => {
-            const tb = new TextBlock();
-            tb.text = t; 
-            tb.color = isl ? "#AAAAAA" : (t.includes("ms") ? "#FFA500" : "#00FF00");
-            tb.fontSize = 16; 
-            tb.fontFamily = "Courier New, monospace";
-            tb.textHorizontalAlignment = isl ? Control.HORIZONTAL_ALIGNMENT_LEFT : Control.HORIZONTAL_ALIGNMENT_RIGHT;
-            tb.paddingLeft = isl ? "10px" : "0px"; 
-            tb.paddingRight = isl ? "0px" : "10px";
-            grid.addControl(tb, r, c);
-            return tb;
-        };
-
-        createCell("Scale:", 0, 0, true);  
-        createCell("Ver", 1, 0, true);
-        createCell("FPS:", 2, 0, true); 
-        createCell("CPU ms:", 3, 0, true);  
-        createCell("GPU ms:", 4, 0, true);  
-        createCell("DRAW:", 5, 0, true);
-        createCell("MESH:", 6, 0, true); 
-        createCell("Mats:", 7, 0, true);    
-        createCell("Bones:", 8, 0, true);   
-        createCell("JS RAM:", 9, 0, true);
-        createCell("TexRAM:", 10, 0, true); 
-        createCell("GeoRAM:", 11, 0, true); 
-        createCell("Indices:", 12, 0, true); 
-        createCell("Polys:", 13, 0, true);
-        createCell("LOD:", 14, 0, true); 
-        createCell("OcclQ:", 15, 0, true);
-        createCell("FarClip:", 16, 0, true); 
-        createCell("API:", 17, 0, true);
-        createCell("AntiAliasing:", 18, 0, true);
-
-        const scaleBtn = Button.CreateSimpleButton("scaleBtn", "1.0");
-        scaleBtn.width = "60px";
-        scaleBtn.height = "22px";
-        scaleBtn.color = "#00FF00";
-        scaleBtn.background = "rgba(50, 50, 50, 0.8)";
-        scaleBtn.thickness = 1;
-        scaleBtn.cornerRadius = 4;
-        scaleBtn.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
-        scaleBtn.paddingRight = "10px"; 
-        
-        if (scaleBtn.textBlock) {
-            scaleBtn.textBlock.fontSize = 14;
-            scaleBtn.textBlock.fontFamily = "Courier New, monospace";
-        }
-        grid.addControl(scaleBtn, 0, 1);
-
-        // ★ ご要望の通り選択肢を更新
-        const scaleLevels = [1.0, 2.0, 3.0, 0.5, 0.8];
-        let currentScaleIdx = 0;
-
-        scaleBtn.onPointerUpObservable.add(() => {
-            currentScaleIdx = (currentScaleIdx + 1) % scaleLevels.length;
-            const newScale = scaleLevels[currentScaleIdx];
-            this.engine.setHardwareScalingLevel(newScale);
-            
-            if (scaleBtn.textBlock) {
-                scaleBtn.textBlock.text = newScale.toFixed(1);
-            }
-        });
-
-        createCell("0.08", 1, 1, false);
-        const fv = createCell("0", 2, 1, false);
-        const cv = createCell("0.0", 3, 1, false);
-        const gv = createCell("0.0", 4, 1, false);
-        const dv = createCell("0", 5, 1, false);
-        const mv = createCell("0", 6, 1, false);
-        const matv = createCell("0", 7, 1, false);
-        const bv = createCell("0", 8, 1, false);
-        const rv = createCell("0.0 MB", 9, 1, false);
-        const tv = createCell("0.0 MB", 10, 1, false);
-        const geov = createCell("0.0 MB", 11, 1, false);
-        const iv = createCell("0", 12, 1, false);
-        const pv = createCell("0", 13, 1, false);
-        const lv = createCell("Off", 14, 1, false);
-        const ov = createCell("0", 15, 1, false);
-        const fcv = createCell("0", 16, 1, false);
-        
         const isWebGPU = (this.engine as any).isWebGPU || this.engine.name === "WebGPU";
-        createCell(isWebGPU ? "WebGPU" : "WebGL2", 17, 1, false);
-        
-        const aaBtn = Button.CreateSimpleButton("aaBtn", "Off");
-        aaBtn.width = "60px";
-        aaBtn.height = "22px";
-        aaBtn.color = "#00FF00";
-        aaBtn.background = "rgba(50, 50, 50, 0.8)";
-        aaBtn.thickness = 1;
-        aaBtn.cornerRadius = 4;
-        aaBtn.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
-        aaBtn.paddingRight = "10px"; 
-        
-        if (aaBtn.textBlock) {
-            aaBtn.textBlock.fontSize = 14;
-            aaBtn.textBlock.fontFamily = "Courier New, monospace";
-        }
-        grid.addControl(aaBtn, 18, 1); 
+        if (apiv) apiv.innerText = isWebGPU ? "WebGPU" : "WebGL2";
 
-        let isAAEnabled = false;
-        aaBtn.onPointerUpObservable.add(() => {
-            isAAEnabled = !isAAEnabled;
-            this.renderingPipeline.samples = isAAEnabled ? 4 : 1; 
-            
-            if (aaBtn.textBlock) {
-                aaBtn.textBlock.text = isAAEnabled ? "On" : "Off";
-                aaBtn.textBlock.color = isAAEnabled ? "#FFFFFF" : "#00FF00";
-            }
-            aaBtn.background = isAAEnabled ? "rgba(0, 120, 0, 0.8)" : "rgba(50, 50, 50, 0.8)";
-        });
+        if (scaleSelect) {
+            scaleSelect.addEventListener("change", (e) => {
+                const target = e.target as HTMLSelectElement;
+                const newScale = parseFloat(target.value);
+                this.engine.setHardwareScalingLevel(newScale);
+            });
+        }
+
+        let isAAEnabled = true;
+        if (aaBtn) {
+            aaBtn.addEventListener("click", () => {
+                isAAEnabled = !isAAEnabled;
+                this.renderingPipeline.samples = isAAEnabled ? 4 : 1; 
+                aaBtn.innerText = isAAEnabled ? "On" : "Off";
+                if (isAAEnabled) aaBtn.classList.remove("off");
+                else aaBtn.classList.add("off");
+            });
+        }
+
+        let isLODEnabled = false;
+        if (lodBtn) {
+            lodBtn.addEventListener("click", () => {
+                isLODEnabled = !isLODEnabled;
+                lodBtn.innerText = isLODEnabled ? "On" : "Off";
+                if (isLODEnabled) lodBtn.classList.remove("off");
+                else lodBtn.classList.add("off");
+            });
+        }
+
+        if (farClipInput && this.camera) {
+            farClipInput.addEventListener("input", (e) => {
+                const val = parseFloat((e.target as HTMLInputElement).value);
+                if (!isNaN(val) && val > 0) {
+                    this.camera.maxZ = val;
+                    this.scene.fogEnd = val;
+                }
+            });
+        }
+
+        if (fovSelect && fovInput && this.camera) {
+            fovInput.addEventListener("input", (e) => {
+                const val = parseFloat((e.target as HTMLInputElement).value);
+                if (!isNaN(val) && val > 0) {
+                    this.camera.fov = val * Math.PI / 180;
+                    
+                    const optionExists = Array.from(fovSelect.options).some(opt => opt.value === val.toString());
+                    if (optionExists) {
+                        fovSelect.value = val.toString();
+                    }
+                }
+            });
+
+            fovSelect.addEventListener("change", (e) => {
+                const target = e.target as HTMLSelectElement;
+                const val = parseFloat(target.value);
+                if (!isNaN(val) && val > 0) {
+                    this.camera.fov = val * Math.PI / 180;
+                    fovInput.value = target.value; 
+                }
+            });
+        }
+
+        let isFogEnabled = true;
+        if (fogBtn) {
+            fogBtn.addEventListener("click", () => {
+                isFogEnabled = !isFogEnabled;
+                this.scene.fogMode = isFogEnabled ? Scene.FOGMODE_LINEAR : Scene.FOGMODE_NONE;
+                fogBtn.innerText = isFogEnabled ? "On" : "Off";
+                if (isFogEnabled) fogBtn.classList.remove("off");
+                else fogBtn.classList.add("off");
+            });
+        }
+
+        if (fogColorInput) {
+            fogColorInput.addEventListener("input", (e) => {
+                const val = (e.target as HTMLInputElement).value;
+                const newColor = Color3.FromHexString(val);
+                this.scene.fogColor = newColor;
+                this.scene.clearColor = new Color4(newColor.r, newColor.g, newColor.b, 1.0);
+            });
+        }
+
+        let isDofEnabled = false;
+        if (dofBtn) {
+            dofBtn.addEventListener("click", () => {
+                isDofEnabled = !isDofEnabled;
+                this.renderingPipeline.depthOfFieldEnabled = isDofEnabled;
+                dofBtn.innerText = isDofEnabled ? "On" : "Off";
+                if (isDofEnabled) dofBtn.classList.remove("off");
+                else dofBtn.classList.add("off");
+            });
+        }
+
+        if (fStopInput) {
+            fStopInput.addEventListener("input", (e) => {
+                const val = parseFloat((e.target as HTMLInputElement).value);
+                if (!isNaN(val) && val > 0 && this.renderingPipeline.depthOfField) {
+                    this.renderingPipeline.depthOfField.fStop = val;
+                }
+            });
+        }
+
+        if (focalLengthInput) {
+            focalLengthInput.addEventListener("input", (e) => {
+                const val = parseFloat((e.target as HTMLInputElement).value);
+                if (!isNaN(val) && val > 0 && this.renderingPipeline.depthOfField) {
+                    this.renderingPipeline.depthOfField.focalLength = val;
+                }
+            });
+        }
+
+        // ★変更: リセット時も現在のアバターの向きを考慮して背後へ回り込ませる
+        if (resetViewBtn && this.camera && this.playerBox) {
+            resetViewBtn.addEventListener("click", () => {
+                this.camera.alpha = -Math.PI / 2 - this.playerBox.rotation.y;     
+                this.camera.beta = Math.PI / 2.5;     
+                this.camera.radius = 10.0;            
+            });
+        }
 
         const sceneInstrumentation = new SceneInstrumentation(this.scene);
         sceneInstrumentation.captureFrameTime = true;
@@ -522,34 +576,44 @@ export class GameScene {
             
             if (frameCount % 10 !== 0) return;
 
-            fv.text = this.engine.getFps().toFixed(0);
+            if (fv) fv.innerText = this.engine.getFps().toFixed(0);
             
-            if (sceneInstrumentation.frameTimeCounter) {
-                cv.text = sceneInstrumentation.frameTimeCounter.lastSecAverage.toFixed(2);
+            if (sceneInstrumentation.frameTimeCounter && cv) {
+                cv.innerText = sceneInstrumentation.frameTimeCounter.lastSecAverage.toFixed(2);
             }
             
-            if (engineInstrumentation.gpuFrameTimeCounter) {
-                const gpuTime = engineInstrumentation.gpuFrameTimeCounter.lastSecAverage;
-                gv.text = gpuTime > 0 ? gpuTime.toFixed(2) : "N/A"; 
+            if (engineInstrumentation.gpuFrameTimeCounter && gv) {
+                let gpuTime = engineInstrumentation.gpuFrameTimeCounter.lastSecAverage;
+                
+                if (gpuTime > 0) {
+                    gv.innerText = gpuTime.toFixed(2);
+                } else {
+                    const currentFps = this.engine.getFps();
+                    const frameTime = currentFps > 0 ? 1000 / currentFps : 0; 
+                    const cpuTime = sceneInstrumentation.frameTimeCounter ? sceneInstrumentation.frameTimeCounter.lastSecAverage : 0;
+                    
+                    gpuTime = Math.max(0, frameTime - cpuTime);
+                    gv.innerText = `~${gpuTime.toFixed(2)}`; 
+                }
             }
 
-            if (sceneInstrumentation.drawCallsCounter) {
-                dv.text = sceneInstrumentation.drawCallsCounter.current.toString();
+            if (sceneInstrumentation.drawCallsCounter && dv) {
+                dv.innerText = sceneInstrumentation.drawCallsCounter.current.toString();
             }
             
             const activeMeshes = this.scene.getActiveMeshes();
-            mv.text = activeMeshes.length.toString();
+            if (mv) mv.innerText = activeMeshes.length.toString();
             
             const activeMaterials = new Set();
             activeMeshes.forEach(m => { if(m.material) activeMaterials.add(m.material.name); });
-            matv.text = activeMaterials.size.toString();
+            if (matv) matv.innerText = activeMaterials.size.toString();
 
             let activeBones = 0;
             activeMeshes.forEach(m => { if(m.skeleton) activeBones += m.skeleton.bones.length; });
-            bv.text = activeBones.toString();
+            if (bv) bv.innerText = activeBones.toString();
             
             const mem = (performance as any).memory;
-            if (mem) rv.text = (mem.usedJSHeapSize / (1024 * 1024)).toFixed(1) + " MB";
+            if (mem && rv) rv.innerText = (mem.usedJSHeapSize / (1024 * 1024)).toFixed(1) + " MB";
 
             if (frameCount % 60 === 0) { 
                 let textureMemoryBytes = 0;
@@ -570,34 +634,31 @@ export class GameScene {
                 });
                 lastGeoRAM = (geoMemoryBytes / (1024 * 1024)).toFixed(1) + " MB";
             }
-            tv.text = lastTexRAM;
-            geov.text = lastGeoRAM;
+            if (tv) tv.innerText = lastTexRAM;
+            if (geov) geov.innerText = lastGeoRAM;
 
             const activeIndices = this.scene.getActiveIndices();
-            iv.text = activeIndices.toString();
-            pv.text = Math.floor(activeIndices / 3).toString();
-
-            const hasLOD = activeMeshes.data.some((m: any) => m.hasLODLevels);
-            lv.text = hasLOD ? "Active" : "Off";
+            if (iv) iv.innerText = activeIndices.toString();
+            if (pv) pv.innerText = Math.floor(activeIndices / 3).toString();
 
             const activeOcclusionQueries = this.scene.meshes.filter((m: any) => m.isOcclusionQueryInProgress).length;
-            ov.text = activeOcclusionQueries.toString();
+            if (ov) ov.innerText = activeOcclusionQueries.toString();
 
-            if (this.camera) {
-                fcv.text = this.camera.maxZ.toString();
+            if (playerPosVal && this.playerBox) {
+                const pos = this.playerBox.position;
+                playerPosVal.innerText = `${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
+            }
+
+            if (camInfoVal && this.camera) {
+                const a = (this.camera.alpha * 180 / Math.PI).toFixed(0);
+                const b = (this.camera.beta * 180 / Math.PI).toFixed(0);
+                const r = this.camera.radius.toFixed(1);
+                camInfoVal.innerText = `α:${a}°, β:${b}°, r:${r}`;
             }
         });
     }
 
     private handleResize(): void {
         this.engine.resize(true);
-        if (this.camera && this.playerBox) this.resetCameraScale();
-    }
-
-    private resetCameraScale(): void {
-        const h = window.innerHeight || (this.engine.getRenderingCanvas() as HTMLCanvasElement).clientHeight;
-        this.camera.setTarget(this.playerBox);
-        this.camera.radius = Math.max(8, Math.min(30, h / 22));
-        this.camera.rebuildAnglesAndRadius();
     }
 }
