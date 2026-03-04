@@ -23,6 +23,7 @@ import {
 import { GridMaterial } from "@babylonjs/materials";
 import { AdvancedDynamicTexture, TextBlock, Rectangle, Control } from "@babylonjs/gui"; 
 import "@babylonjs/loaders";
+import { NakamaService } from "./NakamaService";
 
 export class GameScene {
     private engine: Engine;
@@ -40,6 +41,7 @@ export class GameScene {
 
     private updatePlayerSpeech!: (newText: string) => void;
     private updatePlayerNameTag!: (newName: string) => void;
+    private nakama = new NakamaService();
     private renderingPipeline: DefaultRenderingPipeline | null = null;
     private camSpecLight!: DirectionalLight;
 
@@ -239,11 +241,49 @@ export class GameScene {
             this.updatePlayerNameTag(savedLoginName);
         }
 
-        const applyLoginName = () => {
+        const loginStatus = document.getElementById("loginStatus") as HTMLSpanElement;
+        const userList    = document.getElementById("user-list") as HTMLUListElement;
+
+        // ユーザーリスト管理
+        const userMap = new Map<string, string>(); // userId -> username
+        const renderUserList = () => {
+            if (!userList) return;
+            userList.innerHTML = "";
+            userMap.forEach((username) => {
+                const li = document.createElement("li");
+                li.textContent = username;
+                userList.appendChild(li);
+            });
+        };
+
+        // Nakama コールバック設定
+        this.nakama.onChatMessage = (username, text) => {
+            addChatHistory(username, text);
+        };
+        this.nakama.onPresenceJoin = (userId, username) => {
+            userMap.set(userId, username);
+            renderUserList();
+        };
+        this.nakama.onPresenceLeave = (userId, _username) => {
+            userMap.delete(userId);
+            renderUserList();
+        };
+
+        const applyLoginName = async () => {
             const name = loginNameInput?.value.trim();
-            if (name) {
-                this.updatePlayerNameTag(name);
-                setCookie("loginName", name);
+            if (!name) return;
+            this.updatePlayerNameTag(name);
+            setCookie("loginName", name);
+            if (loginStatus) loginStatus.textContent = "接続中…";
+            if (loginBtn)    loginBtn.disabled = true;
+            try {
+                await this.nakama.login(name);
+                if (loginStatus) loginStatus.textContent = "✓ ログイン済み";
+            } catch (e) {
+                console.error("Nakama login failed:", e);
+                if (loginStatus) loginStatus.textContent = "⚠ 接続失敗";
+            } finally {
+                if (loginBtn) loginBtn.disabled = false;
             }
         };
 
@@ -257,15 +297,25 @@ export class GameScene {
             };
         }
 
-        const sendMessage = () => {
+        const sendMessage = async () => {
             const text = textarea.value.trim();
-            if (this.updatePlayerSpeech) {
-                this.updatePlayerSpeech(text);
-                if (text) {
+            if (!text) return;
+            this.updatePlayerSpeech(text);
+            textarea.value = "";
+            if (this.nakama.getSession()) {
+                // ログイン済み: サーバー送信 → エコーで履歴反映
+                try {
+                    await this.nakama.sendChatMessage(text);
+                } catch (e) {
+                    console.error("sendChatMessage failed:", e);
+                    // 送信失敗時はローカルで表示
                     const name = loginNameInput?.value.trim() || "tommie.jp";
                     addChatHistory(name, text);
                 }
-                textarea.value = "";
+            } else {
+                // 未ログイン: ローカルのみ
+                const name = loginNameInput?.value.trim() || "tommie.jp";
+                addChatHistory(name, text);
             }
         };
 
@@ -274,7 +324,7 @@ export class GameScene {
             textarea.value = "";
         };
 
-        sendBtn.onclick = sendMessage;
+        sendBtn.onclick = () => { sendMessage(); };
         textarea.onkeydown = (e) => {
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

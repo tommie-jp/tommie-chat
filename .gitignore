@@ -90,3 +90,11 @@ Thumbs.db
 # もしリポジトリが重くなるのを避けたい場合のみ指定
 # *.blend
 # *.psd
+
+# Nakama / Server auto-generated runtime files
+.cookie
+*.log
+
+# Database volumes and local data (if you mapped data to a local directory)
+data/
+!data/modules/ # モジュールのソースコードディレクトリは除外しない（構成による）
