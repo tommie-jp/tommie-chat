@@ -16,7 +16,6 @@ import {
     SceneInstrumentation,
     EngineInstrumentation,
     PointerEventTypes,
-    DefaultRenderingPipeline,
     VertexBuffer,
     VertexData
 } from "@babylonjs/core";
@@ -40,7 +39,6 @@ export class GameScene {
 
     private updatePlayerSpeech!: (newText: string) => void;
 
-    private renderingPipeline!: DefaultRenderingPipeline;
 
     // ==================== 自動移動用 ====================
     private time = 0;
@@ -126,20 +124,6 @@ export class GameScene {
         this.scene.fogStart = 30.0; 
         this.scene.fogEnd = this.camera.maxZ; 
 
-        this.renderingPipeline = new DefaultRenderingPipeline(
-            "defaultPipeline", 
-            false, 
-            this.scene, 
-            [this.camera]
-        );
-        this.renderingPipeline.samples = 1;
-        
-        this.renderingPipeline.depthOfFieldEnabled = true;
-        if (this.renderingPipeline.depthOfField) {
-            this.renderingPipeline.depthOfField.fStop = 5.6;         
-            this.renderingPipeline.depthOfField.focalLength = 50;    
-        }
-        this.renderingPipeline.depthOfFieldEnabled = false; 
     }
 
     private setupHtmlUI(): void {
@@ -678,9 +662,7 @@ export class GameScene {
                 this.npc003.rotation.y += diff3 * 0.25;
             }
 
-            if (this.renderingPipeline.depthOfFieldEnabled && this.renderingPipeline.depthOfField) {
-                this.renderingPipeline.depthOfField.focusDistance = this.camera.radius * 1000;
-            }
+
         });
 
         if (this.camera && this.playerBox) {
@@ -850,8 +832,7 @@ export class GameScene {
         const fogBtn = document.getElementById("fogBtn") as HTMLButtonElement;
         const fogColorInput = document.getElementById("fogColorInput") as HTMLInputElement;
         const dofBtn = document.getElementById("dofBtn") as HTMLButtonElement;
-        const fStopInput = document.getElementById("fStopInput") as HTMLInputElement;
-        const focalLengthInput = document.getElementById("focalLengthInput") as HTMLInputElement;
+
         const glossInput = document.getElementById("glossInput") as HTMLInputElement;
 
         const resetViewBtn   = document.getElementById("resetViewBtn")   as HTMLButtonElement;
@@ -1029,17 +1010,10 @@ export class GameScene {
             });
         }
 
-        let isAAEnabled = false;
         if (aaBtn) {
             aaBtn.innerText = "Off";
             aaBtn.classList.add("off");
-            aaBtn.addEventListener("click", () => {
-                isAAEnabled = !isAAEnabled;
-                this.renderingPipeline.samples = isAAEnabled ? 2 : 1;
-                aaBtn.innerText = isAAEnabled ? "On" : "Off";
-                if (isAAEnabled) aaBtn.classList.remove("off");
-                else aaBtn.classList.add("off");
-            });
+            aaBtn.disabled = true;
         }
 
         let isLODEnabled = false;
@@ -1106,32 +1080,9 @@ export class GameScene {
         }
 
         if (dofBtn) {
-            let isDofEnabled = false;
-            dofBtn.addEventListener("click", () => {
-                isDofEnabled = !isDofEnabled;
-                this.renderingPipeline.depthOfFieldEnabled = isDofEnabled;
-                dofBtn.innerText = isDofEnabled ? "On" : "Off";
-                if (isDofEnabled) dofBtn.classList.remove("off");
-                else dofBtn.classList.add("off");
-            });
-        }
-
-        if (fStopInput) {
-            fStopInput.addEventListener("input", (e) => {
-                const val = parseFloat((e.target as HTMLInputElement).value);
-                if (!isNaN(val) && val > 0 && this.renderingPipeline.depthOfField) {
-                    this.renderingPipeline.depthOfField.fStop = val;
-                }
-            });
-        }
-
-        if (focalLengthInput) {
-            focalLengthInput.addEventListener("input", (e) => {
-                const val = parseFloat((e.target as HTMLInputElement).value);
-                if (!isNaN(val) && val > 0 && this.renderingPipeline.depthOfField) {
-                    this.renderingPipeline.depthOfField.focalLength = val;
-                }
-            });
+            dofBtn.innerText = "Off";
+            dofBtn.classList.add("off");
+            dofBtn.disabled = true;
         }
 
         if (glossInput) {
