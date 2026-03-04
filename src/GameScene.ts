@@ -56,7 +56,7 @@ export class GameScene {
     // ===================================================
 
     constructor(canvas: HTMLCanvasElement) {
-        this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+        this.engine = new Engine(canvas, false, { stencil: true });
         
         this.engine.setHardwareScalingLevel(0.5);
 
