@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>tommie-chat</title>
+    <title>tommieChat 0.0.10</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87ceeb; }
         canvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
@@ -40,12 +40,11 @@
         #sendBtn { background: #0076d752; }
         #clearBtn { background: #d7000034; }
 
-        /* ======== デバッグオーバーレイ用スタイル ======== */
         #debug-overlay {
             position: absolute;
             top: 15px;
             right: 15px;
-            width: 270px; /* ★変更: 項目名変更や1行表示に合わせて少し広げました(240px -> 270px) */
+            width: 270px; 
             background: rgba(255, 255, 255, 0.85); 
             border-radius: 8px;
             color: #000000; 
@@ -96,7 +95,6 @@
             width: 45%;
         }
 
-        /* ★追加: 指定した項目の値が改行されないようにする */
         #val-player-pos, #val-cam-info {
             white-space: nowrap;
         }
@@ -152,8 +150,8 @@
     <div id="debug-overlay">
         <div class="overlay-title" title="TommieChatはアバターチャットです。">tommieChat</div>
         <table>
-            <tr><td class="label" title="・項目名：01.Ver:&#10;・説明：アプリケーションのバージョン。&#10;・初期値：0.09&#10;・一般的なMMOの設定範囲：-">01.Ver:</td><td class="value" id="val-ver">0.09</td></tr>
-            <tr><td class="label" title="・項目名：02.Update:&#10;・説明：最終更新日。&#10;・初期値：2026/03/03&#10;・一般的なMMOの設定範囲：-">02.Update:</td><td class="value">2026/03/03</td></tr>
+            <tr><td class="label" title="・項目名：01.Ver:&#10;・説明：アプリケーションのバージョン。&#10;・初期値：0.0.10&#10;・一般的なMMOの設定範囲：-">01.Ver:</td><td class="value" id="val-ver">0.0.10</td></tr>
+            <tr><td class="label" title="・項目名：02.Update:&#10;・説明：最終更新日。&#10;・初期値：2026/03/04&#10;・一般的なMMOの設定範囲：-">02.Update:</td><td class="value">2026/03/04</td></tr>
             <tr><td class="label" title="・項目名：03.Scale:&#10;・説明：レンダリングの解像度スケール。パフォーマンスと画質の調整に使用します。&#10;・初期値：0.5&#10;・一般的なMMOの設定範囲：1.0 (環境により可変)">03.Scale:</td><td class="value">
                 <select id="scaleSelect" class="debug-select">
                     <option value="1.0">1.0</option>
@@ -198,7 +196,7 @@
             <tr><td class="label" title="・項目名：21.Fog:&#10;・説明：遠景を背景色に溶け込ませる空気遠近法。世界の広がりを表現しつつ遠景の不自然な切れ目を隠します。&#10;・初期値：On&#10;・一般的なMMOの設定範囲：ほぼ必須でOn">21.Fog:</td><td class="value">
                 <button id="fogBtn" class="debug-btn">On</button>
             </td></tr>
-            <tr><td class="label" title="・項目名：22.Fog Color:&#10;・説明：フォグ(霧)と背景(空)の色。&#10;・初期値：#a0d7f3&#10;・一般的なMMOの設定範囲：時間帯や天候システムにより動的に変化">22.Fog Color:</td><td class="value">
+            <tr><td class="label" title="・項目名：22.Fog Color:&#10;・説明：フォグ(霧)と背景(空)の色。&#10;初期値：#a0d7f3&#10;・一般的なMMOの設定範囲：時間帯や天候システムにより動的に変化">22.Fog Color:</td><td class="value">
                 <input type="color" id="fogColorInput" class="debug-color" value="#a0d7f3">
             </td></tr>
             <tr><td class="label" title="・項目名：23.DoF:&#10;・説明：被写界深度(Depth of Field)。ピントの合っていない場所をボカす一眼レフカメラのようなエフェクト。&#10;・初期値：Off&#10;・一般的なMMOの設定範囲：視認性優先のため通常時はOff、スクリーンショットモード等でOn">23.DoF:</td><td class="value">
@@ -213,11 +211,19 @@
             <tr><td class="label" title="・項目名：26.Default View:&#10;・説明：カメラ視点を一般的なMMOの背後からの見下ろし視点にリセットします。&#10;・初期値：距離10.0&#10;・一般的なMMOの設定範囲：三人称背後視点(TPS)">26.Default View:</td><td class="value">
                 <button id="resetViewBtn" class="debug-btn">Reset</button>
             </td></tr>
-            <tr><td class="label" title="・項目名：27.Player Pos:&#10;・説明：自分のアバターの現在の座標位置(X, Y, Z)。&#10;・初期値：0.0, 0.0, 0.0&#10;・一般的なMMOの設定範囲：マップサイズに依存">27.Player Pos:</td><td class="value" id="val-player-pos">0.0, 0.0, 0.0</td></tr>
             
-            <tr><td class="label" title="・項目名：28.Cam Info:&#10;・説明：カメラの現在の角度(α, β)と、ターゲットからの距離(Radius)。&#10;・初期値：-&#10;・一般的なMMOの設定範囲：プレイヤーの操作により変動">28.Cam Info:</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
+            <!-- 【新規追加】27.Top View -->
+            <tr><td class="label" title="・項目名：27.Top View:&#10;・説明：自分のアバターの真上から見るカメラアングル（距離最大）。水平をプレイヤーの向きに、垂直を真上に完全に合わせます。&#10;・初期値：-&#10;・一般的なMMOの設定範囲：俯瞰・戦略視点・地図表示">27.Top View:</td><td class="value">
+                <button id="topViewBtn" class="debug-btn">Top View</button>
+            </td></tr>
 
-            <tr><td class="label" title="・項目名：29.API:&#10;・説明：現在ブラウザで使用している描画用のグラフィックスAPI。&#10;・初期値：環境依存&#10;・一般的なMMOの設定範囲：ターゲットによる (PCならDirectX/Vulkan、ブラウザならWebGL2/WebGPU)">29.API:</td><td class="value" id="val-api">WebGL2</td></tr>
+            <tr><td class="label" title="・項目名：28.Player Pos:&#10;・説明：自分のアバターの現在の座標位置(X, Y, Z)。&#10;・初期値：0.0, 0.0, 0.0&#10;・一般的なMMOの設定範囲：マップサイズに依存">28.Player Pos:</td><td class="value" id="val-player-pos">0.0, 0.0, 0.0</td></tr>
+            <tr><td class="label" title="・項目名：29.Cam Info:&#10;・説明：カメラの現在の角度(α, β)と、ターゲットからの距離(Radius)。&#10;・初期値：-&#10;・一般的なMMOの設定範囲：プレイヤーの操作により変動">29.Cam Info:</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
+            <tr><td class="label" title="・項目名：30.API:&#10;・説明：現在ブラウザで使用している描画用のグラフィックスAPI。&#10;・初期値：環境依存&#10;・一般的なMMOの設定範囲：ターゲットによる (PCならDirectX/Vulkan、ブラウザならWebGL2/WebGPU)">30.API:</td><td class="value" id="val-api">WebGL2</td></tr>
+            <tr><td class="label" title="・項目名：31.Glossiness:&#10;・説明：アバター表面のテカリ(光沢)の強さ。0で反射なし、1で最大。&#10;・初期値：0.5&#10;・一般的なMMOの設定範囲：0.0〜1.0">31.Glossiness:</td><td class="value">
+                <input type="number" id="glossInput" class="debug-input" value="0.5" step="0.1" min="0" max="1">
+            </td></tr>
+            <tr><td class="label" title="【基本操作(MMOスタイル)】&#10;[W][↑] 前進&#10;[S][↓] 後退&#10;[A][D] または [←][→] 左右移動&#10;[Q][E] カニ歩き&#10;[X] または [Space] オートラン停止&#10;[地面を左クリック] オートラン開始">32.Controls:</td><td class="value"></td></tr>
         </table>
     </div>
 
