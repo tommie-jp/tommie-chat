@@ -40,6 +40,7 @@ export class GameScene {
 
     private updatePlayerSpeech!: (newText: string) => void;
     private renderingPipeline: DefaultRenderingPipeline | null = null;
+    private camSpecLight!: DirectionalLight;
 
     // ==================== 自動移動用 ====================
     private time = 0;
@@ -116,6 +117,10 @@ export class GameScene {
         const dirLightFront = new DirectionalLight("dirLightFront", new Vector3(-0.5, -1.0, 1.0), this.scene);
         dirLightFront.intensity = 0.7;
         dirLightFront.specular = new Color3(1.0, 1.0, 1.0);
+
+        this.camSpecLight = new DirectionalLight("camSpecLight", new Vector3(0, -1, 0), this.scene);
+        this.camSpecLight.diffuse = new Color3(0, 0, 0);
+        this.camSpecLight.specular = new Color3(0.6, 0.6, 0.6);
 
         const skyColor = Color3.FromHexString("#a0d7f3");
         this.scene.clearColor = new Color4(skyColor.r, skyColor.g, skyColor.b, 1.0);
@@ -664,7 +669,7 @@ export class GameScene {
                 this.npc003.rotation.y += diff3 * 0.25;
             }
 
-
+            this.camSpecLight.direction = this.camera.getDirection(Vector3.Forward());
         });
 
         if (this.camera && this.playerBox) {
