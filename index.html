@@ -339,39 +339,43 @@
         </div>
         <div id="debug-body">
         <table>
-            <tr><td class="label">01.Ver:</td><td class="value" id="val-ver">0.0.11</td></tr>
-            <tr><td class="label">02.Update:</td><td class="value">2026/03/04</td></tr>
-            <tr><td class="label">03.Scale:</td><td class="value">
+            <tr><td class="label" title="01.Ver&#10;アプリケーションバージョン番号&#10;初期値: 0.0.11&#10;典型的なMMO: 定期更新あり">01.Ver:</td><td class="value" id="val-ver">0.0.11</td></tr>
+            <tr><td class="label" title="02.Update&#10;最終更新日&#10;初期値: 2026/03/04&#10;典型的なMMO: 週〜月単位で更新">02.Update:</td><td class="value">2026/03/04</td></tr>
+            <tr><td class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1.0（ネイティブ解像度）&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）">03.Scale:</td><td class="value">
                 <select id="scaleSelect" class="debug-select">
-                    <option value="1.0">1.0</option>
+                    <option value="1.0" selected>1.0</option>
                     <option value="0.75">0.75</option>
-                    <option value="0.5" selected>0.5</option>
+                    <option value="0.5">0.5</option>
                 </select>
             </td></tr>
-            <tr><td class="label">04.AntiAliasing:</td><td class="value">
-                <button id="aaBtn" class="debug-btn">On</button>
+            <tr><td class="label" title="04.AntiAliasing&#10;アンチエイリアシング（MSAA）。ジャギーを軽減&#10;初期値: Off&#10;典型的なMMO: Off〜2x（パフォーマンス優先時はOff）">04.AntiAliasing:</td><td class="value">
+                <select id="aaSelect" class="debug-select">
+                    <option value="1">Off</option>
+                    <option value="2" selected>2</option>
+                    <option value="4">4</option>
+                </select>
             </td></tr>
-            <tr><td class="label">05.FPS:</td><td class="value" id="val-fps">0</td></tr>
-            <tr><td class="label">06.CPU ms:</td><td class="value" id="val-cpu">0.00</td></tr>
-            <tr><td class="label">07.GPU ms:</td><td class="value" id="val-gpu">0.00</td></tr>
-            <tr><td class="label">08.DRAW:</td><td class="value" id="val-draw">0</td></tr>
-            <tr><td class="label">09.MESH:</td><td class="value" id="val-mesh">0</td></tr>
-            <tr><td class="label">10.Mats:</td><td class="value" id="val-mats">0</td></tr>
-            <tr><td class="label">11.Bones:</td><td class="value" id="val-bones">0</td></tr>
-            <tr><td class="label">12.JS RAM:</td><td class="value" id="val-jsram">0.0 MB</td></tr>
-            <tr><td class="label">13.TexRAM:</td><td class="value" id="val-texram">0.0 MB</td></tr>
-            <tr><td class="label">14.GeoRAM:</td><td class="value" id="val-georam">0.0 MB</td></tr>
-            <tr><td class="label">15.Indices:</td><td class="value" id="val-indices">0</td></tr>
-            <tr><td class="label">16.Polys:</td><td class="value" id="val-polys">0</td></tr>
-            <tr><td class="label">17.LOD:</td><td class="value">
+            <tr><td class="label" title="05.FPS&#10;フレームレート（Frames Per Second）&#10;初期値: 計測値&#10;典型的なMMO: 30〜60fps（60fps目標）">05.FPS:</td><td class="value" id="val-fps">0</td></tr>
+            <tr><td class="label" title="06.CPU ms&#10;1フレームのCPU処理時間（ミリ秒）&#10;初期値: 計測値&#10;典型的なMMO: 1〜5ms（16ms超でCPUボトルネック）">06.CPU ms:</td><td class="value" id="val-cpu">0.00</td></tr>
+            <tr><td class="label" title="07.GPU ms&#10;1フレームのGPU描画時間（ミリ秒）&#10;初期値: 計測値&#10;典型的なMMO: 8〜16ms（16ms以下で60fps達成）">07.GPU ms:</td><td class="value" id="val-gpu">0.00</td></tr>
+            <tr><td class="label" title="08.DRAW&#10;ドローコール数（WebGL描画命令回数）&#10;初期値: 計測値&#10;典型的なMMO: 50〜300（少ないほど高速）">08.DRAW:</td><td class="value" id="val-draw">0</td></tr>
+            <tr><td class="label" title="09.MESH&#10;フラスタム内のアクティブメッシュ数&#10;初期値: 計測値&#10;典型的なMMO: 20〜200">09.MESH:</td><td class="value" id="val-mesh">0</td></tr>
+            <tr><td class="label" title="10.Mats&#10;シーン内のマテリアル（シェーダー）数&#10;初期値: 計測値&#10;典型的なMMO: 10〜100">10.Mats:</td><td class="value" id="val-mats">0</td></tr>
+            <tr><td class="label" title="11.Bones&#10;スケルタルアニメーションのボーン総数&#10;初期値: 0（板ポリキャラのため）&#10;典型的なMMO: 50〜500（3Dキャラ1体あたり30〜80本）">11.Bones:</td><td class="value" id="val-bones">0</td></tr>
+            <tr><td class="label" title="12.JS RAM&#10;JavaScriptヒープメモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 50〜300MB">12.JS RAM:</td><td class="value" id="val-jsram">0.0 MB</td></tr>
+            <tr><td class="label" title="13.TexRAM&#10;GPUテクスチャメモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 50〜500MB（キャラ・地形テクスチャ含む）">13.TexRAM:</td><td class="value" id="val-texram">0.0 MB</td></tr>
+            <tr><td class="label" title="14.GeoRAM&#10;頂点バッファ（メッシュジオメトリ）メモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 1〜100MB">14.GeoRAM:</td><td class="value" id="val-georam">0.0 MB</td></tr>
+            <tr><td class="label" title="15.Indices&#10;インデックスバッファの総要素数（頂点接続情報）&#10;初期値: 計測値&#10;典型的なMMO: 10,000〜500,000">15.Indices:</td><td class="value" id="val-indices">0</td></tr>
+            <tr><td class="label" title="16.Polys&#10;描画ポリゴン（三角形）数&#10;初期値: 計測値&#10;典型的なMMO: 5,000〜200,000">16.Polys:</td><td class="value" id="val-polys">0</td></tr>
+            <tr><td class="label" title="17.LOD&#10;Level of Detail：距離に応じて低品質メッシュに切り替え&#10;初期値: Off&#10;典型的なMMO: On（遠距離キャラのポリゴン削減に有効）">17.LOD:</td><td class="value">
                 <button id="lodBtn" class="debug-btn off">Off</button>
             </td></tr>
-            <tr><td class="label">18.OcclQ:</td><td class="value" id="val-occlq">0</td></tr>
-            <tr><td class="label">19.FarClip:</td><td class="value">
+            <tr><td class="label" title="18.OcclQ&#10;オクルージョンクエリ数（障害物で隠れたオブジェクトの描画省略判定）&#10;初期値: 0&#10;典型的なMMO: 0〜50">18.OcclQ:</td><td class="value" id="val-occlq">0</td></tr>
+            <tr><td class="label" title="19.FarClip&#10;カメラの最遠クリップ距離（これより遠いオブジェクトを描画しない）&#10;初期値: 500&#10;典型的なMMO: 100〜1000（フォグ終点に合わせると自然）">19.FarClip:</td><td class="value">
                 <input type="number" id="farClipInput" class="debug-input" value="500" step="1">
             </td></tr>
             <tr>
-                <td class="label">20.FOV:</td>
+                <td class="label" title="20.FOV&#10;視野角（Field of View）。大きいほど広角・魚眼に近くなる&#10;初期値: 60°&#10;典型的なMMO: 60〜90°（TPSは60〜75°が多い）">20.FOV:</td>
                 <td class="value">
                     <div style="display:flex; justify-content:flex-end; gap:2px; width:100%;">
                         <select id="fovSelect" class="debug-select" style="width:42px; float:none;">
@@ -384,37 +388,37 @@
                     </div>
                 </td>
             </tr>
-            <tr><td class="label">21.Fog:</td><td class="value">
+            <tr><td class="label" title="21.Fog&#10;リニアフォグ。遠景をスカイカラーに溶け込ませる&#10;初期値: On（fogStart=30, fogEnd=FarClip）&#10;典型的なMMO: On（視距離制限とパフォーマンス両立）">21.Fog:</td><td class="value">
                 <button id="fogBtn" class="debug-btn">On</button>
             </td></tr>
-            <tr><td class="label">22.Fog Color:</td><td class="value">
+            <tr><td class="label" title="22.Fog Color&#10;フォグの色（スカイ・背景色と合わせると境界が自然に消える）&#10;初期値: #a0d7f3（空色）&#10;典型的なMMO: 背景clearColorと同色に設定">22.Fog Color:</td><td class="value">
                 <input type="color" id="fogColorInput" class="debug-color" value="#a0d7f3">
             </td></tr>
-            <tr><td class="label">23.DoF:</td><td class="value">
+            <tr><td class="label" title="23.DoF&#10;被写界深度エフェクト（現在無効）&#10;初期値: Off&#10;典型的なMMO: Off（重いためカットシーンのみOnにすることが多い）">23.DoF:</td><td class="value">
                 <button id="dofBtn" class="debug-btn off">Off</button>
             </td></tr>
-            <tr><td class="label">24.fStop:</td><td class="value">
+            <tr><td class="label" title="24.fStop&#10;絞り値（f値）。小さいほどボケが強くなる&#10;初期値: 5.6&#10;典型的なMMO: 2.8〜11">24.fStop:</td><td class="value">
                 <input type="number" id="fStopInput" class="debug-input" value="5.6" step="0.1">
             </td></tr>
-            <tr><td class="label">25.FocalLen:</td><td class="value">
+            <tr><td class="label" title="25.FocalLen&#10;焦点距離（mm）。大きいほど遠くにピントが合う&#10;初期値: 50mm&#10;典型的なMMO: 35〜85mm">25.FocalLen:</td><td class="value">
                 <input type="number" id="focalLengthInput" class="debug-input" value="50" step="1">
             </td></tr>
-            <tr><td class="label">26.Default View:</td><td class="value">
+            <tr><td class="label" title="26.Default View&#10;カメラをデフォルト位置・角度にリセット&#10;初期値: α=90°, β=67°, r=10&#10;典型的なMMO: TPS視点（斜め後方俯瞰）">26.Default View:</td><td class="value">
                 <button id="resetViewBtn" class="debug-btn">Reset</button>
             </td></tr>
-            <tr><td class="label">27.Top View:</td><td class="value">
+            <tr><td class="label" title="27.Top View&#10;真上から見下ろすミニマップ風トップビューに切り替え&#10;初期値: β=90°（真上）&#10;典型的なMMO: マップ確認・デバッグ用途">27.Top View:</td><td class="value">
                 <button id="topViewBtn" class="debug-btn">Top View</button>
             </td></tr>
-            <tr><td class="label">28.Player Pos:</td><td class="value" id="val-player-pos">0.0, 0.0, 0.0</td></tr>
-            <tr><td class="label">29.Cam Info:</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
-            <tr><td class="label">30.API:</td><td class="value" id="val-api">WebGL2</td></tr>
-            <tr><td class="label">31.Glossiness:</td><td class="value">
+            <tr><td class="label" title="28.Player Pos&#10;プレイヤーのワールド座標（X, Y, Z）&#10;初期値: 0.0, 0.0, 0.0（原点）&#10;典型的なMMO: ゾーン座標として使用">28.Player Pos:</td><td class="value" id="val-player-pos">0.0, 0.0, 0.0</td></tr>
+            <tr><td class="label" title="29.Cam Info&#10;カメラのα（水平回転角）, β（垂直仰角）, r（プレイヤーからの距離）&#10;初期値: α=90°, β=67°, r=10&#10;典型的なMMO: β=45〜80°, r=5〜20">29.Cam Info:</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
+            <tr><td class="label" title="30.API&#10;使用中のグラフィックスAPI&#10;初期値: WebGL2&#10;典型的なMMO: WebGL2（WebGPUは次世代・高性能）">30.API:</td><td class="value" id="val-api">WebGL2</td></tr>
+            <tr><td class="label" title="31.Glossiness&#10;マテリアルの鏡面反射強度（specularColor）&#10;初期値: 0.5&#10;典型的なMMO: 0.0（つや消し）〜1.0（金属・水面）">31.Glossiness:</td><td class="value">
                 <input type="number" id="glossInput" class="debug-input" value="0.5" step="0.1" min="0" max="1">
             </td></tr>
-            <tr><td class="label">33.Def.Pos:</td><td class="value">
+            <tr><td class="label" title="33.Def.Pos&#10;プレイヤーをデフォルト位置（原点 0,0,0）にテレポート&#10;初期値: X=0, Y=0, Z=0&#10;典型的なMMO: リスポーン・スタート地点に相当">33.Def.Pos:</td><td class="value">
                 <button id="defaultPosBtn" class="debug-btn">Reset</button>
             </td></tr>
-            <tr><td class="label">32.Controls:</td><td class="value"></td></tr>
+            <tr><td class="label" title="32.Controls&#10;操作方法&#10;[移動] W/↑:前進  S/↓:後退  A/←:左  D/→:右&#10;[カメラ] マウス左ドラッグ:回転  ホイール:ズーム&#10;[移動先] 地面を左クリック:クリック位置へ移動&#10;[チャット] テキスト入力後 Enter または 送信ボタン&#10;[クリア] クリアボタン:吹き出しテキスト消去">32.Controls:</td><td class="value"></td></tr>
         </table>
         </div>
     </div>

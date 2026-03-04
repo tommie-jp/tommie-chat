@@ -17,7 +17,8 @@ import {
     EngineInstrumentation,
     PointerEventTypes,
     VertexBuffer,
-    VertexData
+    VertexData,
+    DefaultRenderingPipeline
 } from "@babylonjs/core";
 import { GridMaterial } from "@babylonjs/materials";
 import { AdvancedDynamicTexture, TextBlock, Rectangle, Control } from "@babylonjs/gui"; 
@@ -38,7 +39,7 @@ export class GameScene {
     private clickMarker!: Mesh;
 
     private updatePlayerSpeech!: (newText: string) => void;
-
+    private renderingPipeline: DefaultRenderingPipeline | null = null;
 
     // ==================== 自動移動用 ====================
     private time = 0;
@@ -55,13 +56,14 @@ export class GameScene {
     constructor(canvas: HTMLCanvasElement) {
         this.engine = new Engine(canvas, false, { stencil: true });
         
-        this.engine.setHardwareScalingLevel(0.5);
+        this.engine.setHardwareScalingLevel(1.0);
 
         this.scene = new Scene(this.engine);
 
         this.setupScene();
         this.createObjects();
-        this.setupHtmlUI(); 
+        this.setMSAA(2);
+        this.setupHtmlUI();
 
         this.handleResize();
 
@@ -795,6 +797,20 @@ export class GameScene {
         }
     }
 
+    private setMSAA(samples: number): void {
+        if (samples <= 1) {
+            if (this.renderingPipeline) {
+                this.renderingPipeline.dispose();
+                this.renderingPipeline = null;
+            }
+        } else {
+            if (!this.renderingPipeline) {
+                this.renderingPipeline = new DefaultRenderingPipeline("defaultPipeline", false, this.scene, [this.camera]);
+            }
+            this.renderingPipeline.samples = samples;
+        }
+    }
+
     private createCoordinateLabels(): void {
         const step = 10;
         const range = 50;
@@ -824,7 +840,7 @@ export class GameScene {
 
     private createDebugOverlay(): void {
         const scaleSelect = document.getElementById("scaleSelect") as HTMLSelectElement;
-        const aaBtn = document.getElementById("aaBtn") as HTMLButtonElement;
+
         const lodBtn = document.getElementById("lodBtn") as HTMLButtonElement;
         const farClipInput = document.getElementById("farClipInput") as HTMLInputElement;
         const fovSelect = document.getElementById("fovSelect") as HTMLSelectElement;
@@ -1010,10 +1026,11 @@ export class GameScene {
             });
         }
 
-        if (aaBtn) {
-            aaBtn.innerText = "Off";
-            aaBtn.classList.add("off");
-            aaBtn.disabled = true;
+        const aaSelect = document.getElementById("aaSelect") as HTMLSelectElement;
+        if (aaSelect) {
+            aaSelect.addEventListener("change", () => {
+                this.setMSAA(parseInt(aaSelect.value));
+            });
         }
 
         let isLODEnabled = false;
