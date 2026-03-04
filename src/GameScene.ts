@@ -6,8 +6,7 @@ import {
     Color4,
     MeshBuilder, 
     HemisphericLight,
-    DirectionalLight, 
-    PointLight,
+    DirectionalLight,
     ArcRotateCamera,     
     StandardMaterial, 
     Color3,
@@ -21,9 +20,9 @@ import {
     VertexBuffer,
     VertexData
 } from "@babylonjs/core";
+import { GridMaterial } from "@babylonjs/materials";
 import { AdvancedDynamicTexture, TextBlock, Rectangle, Control } from "@babylonjs/gui"; 
 import "@babylonjs/loaders";
-import { GridMaterial } from "@babylonjs/materials";
 
 export class GameScene {
     private engine: Engine;
@@ -121,12 +120,6 @@ export class GameScene {
         const dirLightBack = new DirectionalLight("dirLightBack", new Vector3(0.5, -1.0, -1.0), this.scene);
         dirLightBack.intensity = 0.6;
         dirLightBack.specular = new Color3(1.0, 1.0, 1.0); 
-
-        const camLight = new PointLight("camLight", new Vector3(0, 0, 0), this.scene);
-        camLight.parent = this.camera; 
-        camLight.intensity = 0.4; 
-        camLight.diffuse = new Color3(0.0, 0.0, 0.0); 
-        camLight.specular = new Color3(0.8, 0.8, 0.8); 
 
         const skyColor = Color3.FromHexString("#a0d7f3");
         this.scene.clearColor = new Color4(skyColor.r, skyColor.g, skyColor.b, 1.0);
