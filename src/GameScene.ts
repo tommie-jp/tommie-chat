@@ -437,8 +437,9 @@ export class GameScene {
         gridMaterial.lineColor = new Color3(0.35, 0.55, 0.35);
         gridMaterial.gridRatio = 1.0;
         gridMaterial.opacity = 1.0;
-        gridMaterial.freeze(); 
+        gridMaterial.freeze();
         ground.material = gridMaterial;
+        ground.freezeWorldMatrix();
 
         this.hoverMarker = MeshBuilder.CreatePlane("hoverMarker", { size: 1.0 }, this.scene);
         this.hoverMarker.rotation.x = Math.PI / 2;
@@ -835,6 +836,7 @@ export class GameScene {
         plane.rotation.x = Math.PI / 2;
         plane.position.set(x, 0.02, z);
         plane.isPickable = false;
+        plane.freezeWorldMatrix();
         
         const texture = AdvancedDynamicTexture.CreateForMesh(plane, 256, 256, false);
         const bg = new Rectangle();
