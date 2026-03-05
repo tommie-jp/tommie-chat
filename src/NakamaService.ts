@@ -30,6 +30,8 @@ export class NakamaService {
             if (content?.text) this.onChatMessage?.(msg.username ?? "", content.text);
         };
 
+        await this.storeLoginTime();
+
         const ch: Channel = await this.socket.joinChat(CHAT_ROOM, CHAT_TYPE, true, false);
         this.channelId = ch.id;
 
@@ -64,5 +66,31 @@ export class NakamaService {
 
     getSession(): Session | null {
         return this.session;
+    }
+
+    private async storeLoginTime(): Promise<void> {
+        if (!this.session) return;
+        await this.client.writeStorageObjects(this.session, [{
+            collection: "user_status",
+            key: "login_time",
+            value: { loginTime: new Date().toISOString() },
+            permission_read: 2,
+            permission_write: 1,
+        }]);
+    }
+
+    async getUserLoginTime(userId: string): Promise<string | null> {
+        if (!this.session) return null;
+        try {
+            const result = await this.client.readStorageObjects(this.session, {
+                object_ids: [{ collection: "user_status", key: "login_time", user_id: userId }]
+            });
+            const obj = result.objects?.[0];
+            if (obj?.value) {
+                const val = obj.value as { loginTime?: string };
+                return val.loginTime ?? null;
+            }
+        } catch { /* ignore */ }
+        return null;
     }
 }

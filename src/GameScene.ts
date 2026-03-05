@@ -236,11 +236,18 @@ export class GameScene {
 
                 const savedL = gCookieFn("ulLeft");
                 const savedT = gCookieFn("ulTop");
+                const savedW = gCookieFn("ulWidth");
+                const savedH = gCookieFn("ulHeight");
                 if (savedL !== null) { ulPanel.style.left = savedL + "px"; ulPanel.style.right = "auto"; }
                 if (savedT !== null)   ulPanel.style.top  = savedT + "px";
 
                 const savedMin = gCookieFn("ulMinimized");
-                if (savedMin === "1") ulPanel.classList.add("minimized");
+                if (savedMin === "1") {
+                    ulPanel.classList.add("minimized");
+                } else {
+                    if (savedW !== null) ulPanel.style.width  = savedW + "px";
+                    if (savedH !== null) ulPanel.style.height = savedH + "px";
+                }
 
                 let isDrag = false, offX = 0, offY = 0;
                 ulHeader.addEventListener("mousedown", (e: MouseEvent) => {
@@ -262,6 +269,14 @@ export class GameScene {
                     sCookieFn("ulLeft", String(Math.round(r.left)));
                     sCookieFn("ulTop",  String(Math.round(r.top)));
                 });
+
+                const ulResizeObserver = new ResizeObserver(() => {
+                    if (ulPanel.classList.contains("minimized")) return;
+                    const r = ulPanel.getBoundingClientRect();
+                    sCookieFn("ulWidth",  String(Math.round(r.width)));
+                    sCookieFn("ulHeight", String(Math.round(r.height)));
+                });
+                ulResizeObserver.observe(ulPanel);
 
                 if (ulClose) {
                     ulClose.addEventListener("click", () => {
@@ -359,9 +374,17 @@ export class GameScene {
                 slPanel.style.right = "auto";
                 const savedL = gCk("slLeft");
                 const savedT = gCk("slTop");
+                const savedW = gCk("slWidth");
+                const savedH = gCk("slHeight");
                 if (savedL !== null) { slPanel.style.left = savedL + "px"; slPanel.style.right = "auto"; }
-                if (savedT !== null)   slPanel.style.top  = savedT + "px";
-                if (gCk("slMinimized") === "1") slPanel.classList.add("minimized");
+                if (savedT !== null)   slPanel.style.top   = savedT + "px";
+                const isMin = gCk("slMinimized") === "1";
+                if (isMin) {
+                    slPanel.classList.add("minimized");
+                } else {
+                    if (savedW !== null) slPanel.style.width  = savedW + "px";
+                    if (savedH !== null) slPanel.style.height = savedH + "px";
+                }
 
                 let isDrag = false, offX = 0, offY = 0;
                 slHeader.addEventListener("mousedown", (e: MouseEvent) => {
@@ -383,6 +406,14 @@ export class GameScene {
                     sCk("slLeft", String(Math.round(r.left)));
                     sCk("slTop",  String(Math.round(r.top)));
                 });
+                const slResizeObserver = new ResizeObserver(() => {
+                    if (slPanel.classList.contains("minimized")) return;
+                    const r = slPanel.getBoundingClientRect();
+                    sCk("slWidth",  String(Math.round(r.width)));
+                    sCk("slHeight", String(Math.round(r.height)));
+                });
+                slResizeObserver.observe(slPanel);
+
                 if (slClose) {
                     slClose.addEventListener("click", () => {
                         const min = slPanel.classList.toggle("minimized");
@@ -405,9 +436,10 @@ export class GameScene {
 
             const entry = document.createElement("div");
             entry.className = "chat-history-entry";
+            const nameClass = avatarName === "[system]" ? "chat-history-system" : "chat-history-name";
             entry.innerHTML =
                 `<span class="chat-history-time">${timeStr}</span>` +
-                `<span class="chat-history-name">${avatarName}</span>` +
+                `<span class="${nameClass}">${avatarName}</span>` +
                 `<span class="chat-history-text">${text}</span>`;
             list.appendChild(entry);
             list.scrollTop = list.scrollHeight;
@@ -432,18 +464,56 @@ export class GameScene {
         }
 
         const loginStatus = document.getElementById("loginStatus") as HTMLSpanElement;
-        const userList    = document.getElementById("user-list") as HTMLUListElement;
+        const userListBody = document.getElementById("user-list-body") as HTMLTableSectionElement;
 
         // ユーザーリスト管理
-        const userMap = new Map<string, string>(); // userId -> username
+        const formatTimestamp = (date: Date): string => {
+            const off = -date.getTimezoneOffset();
+            const sign = off >= 0 ? "+" : "-";
+            const p2 = (n: number) => String(Math.abs(n)).padStart(2, "0");
+            const tz = `${sign}${p2(Math.floor(Math.abs(off) / 60))}:${p2(Math.abs(off) % 60)}`;
+            return `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}T`
+                 + `${p2(date.getHours())}:${p2(date.getMinutes())}:${p2(date.getSeconds())}${tz}`;
+        };
+
+        const userMap = new Map<string, { username: string; loginTime: string }>();
+        let ulSortKey: "username" | "loginTime" = "username";
+        let ulSortAsc = true;
+        const thUser = document.getElementById("ul-th-user") as HTMLTableCellElement;
+        const thTime = document.getElementById("ul-th-time") as HTMLTableCellElement;
+
         const renderUserList = () => {
-            if (!userList) return;
-            userList.innerHTML = "";
-            userMap.forEach((username) => {
-                const li = document.createElement("li");
-                li.textContent = username;
-                userList.appendChild(li);
+            if (!userListBody) return;
+            userListBody.innerHTML = "";
+            const entries = [...userMap.values()].sort((a, b) => {
+                const va = a[ulSortKey], vb = b[ulSortKey];
+                return ulSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
             });
+            for (const { username, loginTime } of entries) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${username}</td><td>${loginTime}</td>`;
+                userListBody.appendChild(tr);
+            }
+            const arrow = ulSortAsc ? "▲" : "▼";
+            if (thUser) thUser.dataset.sort = ulSortKey === "username" ? arrow : "";
+            if (thTime) thTime.dataset.sort = ulSortKey === "loginTime" ? arrow : "";
+        };
+
+        if (thUser) thUser.addEventListener("click", () => {
+            if (ulSortKey === "username") ulSortAsc = !ulSortAsc;
+            else { ulSortKey = "username"; ulSortAsc = true; }
+            renderUserList();
+        });
+        if (thTime) thTime.addEventListener("click", () => {
+            if (ulSortKey === "loginTime") ulSortAsc = !ulSortAsc;
+            else { ulSortKey = "loginTime"; ulSortAsc = true; }
+            renderUserList();
+        });
+        const fetchAndSetLoginTime = async (userId: string, username: string) => {
+            const isoStr = await this.nakama.getUserLoginTime(userId);
+            const loginTime = formatTimestamp(isoStr ? new Date(isoStr) : new Date());
+            userMap.set(userId, { username, loginTime });
+            renderUserList();
         };
 
         // Nakama コールバック設定
@@ -451,17 +521,20 @@ export class GameScene {
             addChatHistory(username, text);
         };
         this.nakama.onPresenceJoin = (userId, username) => {
-            userMap.set(userId, username);
+            userMap.set(userId, { username, loginTime: "…" });
             renderUserList();
+            fetchAndSetLoginTime(userId, username);
         };
         this.nakama.onPresenceNewJoin = (userId, username) => {
-            userMap.set(userId, username);
+            userMap.set(userId, { username, loginTime: "…" });
             renderUserList();
-            addChatHistory(username, "がログインしました。");
+            fetchAndSetLoginTime(userId, username);
+            addChatHistory("[system]", `${username}がログインしました。`);
         };
-        this.nakama.onPresenceLeave = (userId, _username) => {
+        this.nakama.onPresenceLeave = (userId, username) => {
             userMap.delete(userId);
             renderUserList();
+            addChatHistory("[system]", `${username}がログアウトしました。`);
         };
 
         const setLoginMode = () => {
