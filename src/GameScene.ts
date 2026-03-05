@@ -47,6 +47,7 @@ export class GameScene {
 
     // ==================== 自動移動用 ====================
     private time = 0;
+    private isNpcChatOn = false;
     private npc001!: Mesh;
     private npc002!: Mesh;
     private npc003!: Mesh;                    
@@ -201,7 +202,196 @@ export class GameScene {
                 savePanelState();
             });
             resizeObserver.observe(historyPanel);
+
+            const histClose = document.getElementById("chat-history-close") as HTMLElement;
+            if (histClose) {
+                const savedHistMin = getCookie("histMinimized");
+                if (savedHistMin === "1") historyPanel.classList.add("minimized");
+
+                histClose.addEventListener("click", () => {
+                    const min = historyPanel.classList.toggle("minimized");
+                    setCookie("histMinimized", min ? "1" : "0");
+                });
+            }
         }
+
+        // ===== ユーザーリスト ドラッグ & 最小化 =====
+        {
+            const ulPanel  = document.getElementById("user-list-panel") as HTMLElement;
+            const ulHeader = document.getElementById("user-list-header") as HTMLElement;
+            const ulClose  = document.getElementById("user-list-close") as HTMLElement;
+
+            if (ulPanel && ulHeader) {
+                // right ベースの初期位置を left ベースに変換（ドラッグのため）
+                const initRect = ulPanel.getBoundingClientRect();
+                ulPanel.style.left  = initRect.left + "px";
+                ulPanel.style.right = "auto";
+
+                const sCookieFn = (k: string, v: string) =>
+                    document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                const gCookieFn = (k: string): string | null => {
+                    const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                    return m ? decodeURIComponent(m[1]) : null;
+                };
+
+                const savedL = gCookieFn("ulLeft");
+                const savedT = gCookieFn("ulTop");
+                if (savedL !== null) { ulPanel.style.left = savedL + "px"; ulPanel.style.right = "auto"; }
+                if (savedT !== null)   ulPanel.style.top  = savedT + "px";
+
+                const savedMin = gCookieFn("ulMinimized");
+                if (savedMin === "1") ulPanel.classList.add("minimized");
+
+                let isDrag = false, offX = 0, offY = 0;
+                ulHeader.addEventListener("mousedown", (e: MouseEvent) => {
+                    if ((e.target as HTMLElement).id === "user-list-close") return;
+                    isDrag = true;
+                    offX = e.clientX - ulPanel.getBoundingClientRect().left;
+                    offY = e.clientY - ulPanel.getBoundingClientRect().top;
+                    e.preventDefault();
+                });
+                document.addEventListener("mousemove", (e: MouseEvent) => {
+                    if (!isDrag) return;
+                    ulPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    ulPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                });
+                document.addEventListener("mouseup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                    const r = ulPanel.getBoundingClientRect();
+                    sCookieFn("ulLeft", String(Math.round(r.left)));
+                    sCookieFn("ulTop",  String(Math.round(r.top)));
+                });
+
+                if (ulClose) {
+                    ulClose.addEventListener("click", () => {
+                        const min = ulPanel.classList.toggle("minimized");
+                        sCookieFn("ulMinimized", min ? "1" : "0");
+                    });
+                }
+            }
+        }
+
+        // ===== サーバ設定パネル ドラッグ & 最小化 & クッキー復元 =====
+        {
+            const srvPanel  = document.getElementById("server-settings-panel") as HTMLElement;
+            const srvHeader = document.getElementById("server-settings-header") as HTMLElement;
+            const srvClose  = document.getElementById("server-settings-close") as HTMLElement;
+            const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
+            const srvPortInput = document.getElementById("serverPort") as HTMLInputElement;
+
+            if (srvPanel && srvHeader) {
+                const sCk = (k: string, v: string) =>
+                    document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                const gCk = (k: string): string | null => {
+                    const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                    return m ? decodeURIComponent(m[1]) : null;
+                };
+
+                // 入力値をクッキーから復元
+                const savedUrl  = gCk("srvUrl");
+                const savedPort = gCk("srvPort");
+                if (savedUrl  && srvUrlInput)  srvUrlInput.value  = savedUrl;
+                if (savedPort && srvPortInput) srvPortInput.value = savedPort;
+
+                // 値が変わったらクッキーに保存
+                srvUrlInput?.addEventListener("change",  () => sCk("srvUrl",  srvUrlInput.value.trim()));
+                srvPortInput?.addEventListener("change", () => sCk("srvPort", srvPortInput.value.trim()));
+
+                // 位置をクッキーから復元（right ベース → left ベースに変換）
+                const initRect = srvPanel.getBoundingClientRect();
+                srvPanel.style.left  = initRect.left + "px";
+                srvPanel.style.right = "auto";
+                const savedL = gCk("srvLeft");
+                const savedT = gCk("srvTop");
+                if (savedL !== null) { srvPanel.style.left = savedL + "px"; srvPanel.style.right = "auto"; }
+                if (savedT !== null)   srvPanel.style.top  = savedT + "px";
+
+                // 最小化状態を復元
+                if (gCk("srvMinimized") === "1") srvPanel.classList.add("minimized");
+
+                // ドラッグ
+                let isDrag = false, offX = 0, offY = 0;
+                srvHeader.addEventListener("mousedown", (e: MouseEvent) => {
+                    if ((e.target as HTMLElement).id === "server-settings-close") return;
+                    isDrag = true;
+                    offX = e.clientX - srvPanel.getBoundingClientRect().left;
+                    offY = e.clientY - srvPanel.getBoundingClientRect().top;
+                    e.preventDefault();
+                });
+                document.addEventListener("mousemove", (e: MouseEvent) => {
+                    if (!isDrag) return;
+                    srvPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    srvPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                });
+                document.addEventListener("mouseup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                    const r = srvPanel.getBoundingClientRect();
+                    sCk("srvLeft", String(Math.round(r.left)));
+                    sCk("srvTop",  String(Math.round(r.top)));
+                });
+
+                if (srvClose) {
+                    srvClose.addEventListener("click", () => {
+                        const min = srvPanel.classList.toggle("minimized");
+                        sCk("srvMinimized", min ? "1" : "0");
+                    });
+                }
+            }
+        }
+        // ===== サーバ接続ログパネル ドラッグ & 最小化 =====
+        {
+            const slPanel  = document.getElementById("server-log-panel") as HTMLElement;
+            const slHeader = document.getElementById("server-log-header") as HTMLElement;
+            const slClose  = document.getElementById("server-log-close")  as HTMLElement;
+
+            if (slPanel && slHeader) {
+                const sCk = (k: string, v: string) =>
+                    document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                const gCk = (k: string): string | null => {
+                    const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                    return m ? decodeURIComponent(m[1]) : null;
+                };
+
+                const initRect = slPanel.getBoundingClientRect();
+                slPanel.style.left  = initRect.left + "px";
+                slPanel.style.right = "auto";
+                const savedL = gCk("slLeft");
+                const savedT = gCk("slTop");
+                if (savedL !== null) { slPanel.style.left = savedL + "px"; slPanel.style.right = "auto"; }
+                if (savedT !== null)   slPanel.style.top  = savedT + "px";
+                if (gCk("slMinimized") === "1") slPanel.classList.add("minimized");
+
+                let isDrag = false, offX = 0, offY = 0;
+                slHeader.addEventListener("mousedown", (e: MouseEvent) => {
+                    if ((e.target as HTMLElement).id === "server-log-close") return;
+                    isDrag = true;
+                    offX = e.clientX - slPanel.getBoundingClientRect().left;
+                    offY = e.clientY - slPanel.getBoundingClientRect().top;
+                    e.preventDefault();
+                });
+                document.addEventListener("mousemove", (e: MouseEvent) => {
+                    if (!isDrag) return;
+                    slPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    slPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                });
+                document.addEventListener("mouseup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                    const r = slPanel.getBoundingClientRect();
+                    sCk("slLeft", String(Math.round(r.left)));
+                    sCk("slTop",  String(Math.round(r.top)));
+                });
+                if (slClose) {
+                    slClose.addEventListener("click", () => {
+                        const min = slPanel.classList.toggle("minimized");
+                        sCk("slMinimized", min ? "1" : "0");
+                    });
+                }
+            }
+        }
+        // ===============================================
 
         const addChatHistory = (avatarName: string, text: string) => {
             if (!text) return;
@@ -264,38 +454,135 @@ export class GameScene {
             userMap.set(userId, username);
             renderUserList();
         };
+        this.nakama.onPresenceNewJoin = (userId, username) => {
+            userMap.set(userId, username);
+            renderUserList();
+            addChatHistory(username, "がログインしました。");
+        };
         this.nakama.onPresenceLeave = (userId, _username) => {
             userMap.delete(userId);
             renderUserList();
         };
 
-        const applyLoginName = async () => {
+        const setLoginMode = () => {
+            if (loginBtn) {
+                loginBtn.textContent = "ログイン";
+                loginBtn.onclick = doLogin;
+            }
+            if (loginNameInput) {
+                loginNameInput.onkeydown = (e) => {
+                    if (e.key === "Enter") { e.preventDefault(); doLogin(); }
+                };
+            }
+        };
+
+        const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
+        const srvPortInput = document.getElementById("serverPort") as HTMLInputElement;
+
+        const updateLoginTooltip = () => {
+            const url  = srvUrlInput?.value.trim()  || "127.0.0.1";
+            const port = srvPortInput?.value.trim() || "7350";
+            if (loginBtn) loginBtn.title =
+                "tommieChatサーバへログインします。\nサーバURL: " + url + "\nポート番号: " + port;
+        };
+        srvUrlInput?.addEventListener("input",  updateLoginTooltip);
+        srvPortInput?.addEventListener("input", updateLoginTooltip);
+        updateLoginTooltip();
+
+        // ===== サーバ接続ログ =====
+        const addServerLog = (host: string, port: string, label: string, detail = "", hint = "") => {
+            const list = document.getElementById("server-log-list");
+            if (!list) return;
+            const now = new Date();
+            const off = -now.getTimezoneOffset();
+            const sign = off >= 0 ? "+" : "-";
+            const p2 = (n: number) => String(Math.abs(n)).padStart(2, "0");
+            const tz = `${sign}${p2(Math.floor(Math.abs(off) / 60))}:${p2(Math.abs(off) % 60)}`;
+            const ts = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}T`
+                     + `${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}.`
+                     + `${String(now.getMilliseconds()).padStart(3, "0")}${tz}`;
+            const entry = document.createElement("div");
+            entry.className = "server-log-entry";
+            entry.textContent = hint
+                ? `${ts} ${label} : ${hint} URL="${host}:${port}" ${detail}`.trimEnd()
+                : `${ts} ${label} URL=${host}:${port}` + (detail ? ` ${detail}` : "");
+            list.appendChild(entry);
+            list.scrollTop = list.scrollHeight;
+        };
+        // ===========================
+
+        const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
+        const doLogin = async () => {
             const name = loginNameInput?.value.trim();
             if (!name) return;
+            if (!NAKAMA_ID_RE.test(name)) {
+                if (loginStatus) {
+                    loginStatus.style.color = "#ff4444";
+                    loginStatus.textContent = "✘ 使えない文字が含まれています。使える文字: 英数字と . _ @ + -（6〜128文字）";
+                }
+                return;
+            }
+            const host = srvUrlInput?.value.trim()  || "127.0.0.1";
+            const port = srvPortInput?.value.trim() || "7350";
             this.updatePlayerNameTag(name);
             setCookie("loginName", name);
-            if (loginStatus) loginStatus.textContent = "接続中…";
+            if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = "接続中…"; }
             if (loginBtn)    loginBtn.disabled = true;
             try {
-                await this.nakama.login(name);
-                if (loginStatus) loginStatus.textContent = "✓ ログイン済み";
+                await this.nakama.login(name, host, port);
+                addServerLog(host, port, "ログイン成功");
+                if (loginStatus) {
+                    loginStatus.style.color = "#00dd55";
+                    loginStatus.textContent = "✔ログイン済み";
+                }
+                if (loginBtn) {
+                    loginBtn.textContent = "ログアウト";
+                    loginBtn.style.background = "#e0509099";
+                    loginBtn.onclick = doLogout;
+                }
+                if (loginNameInput) loginNameInput.onkeydown = null;
             } catch (e) {
                 console.error("Nakama login failed:", e);
-                if (loginStatus) loginStatus.textContent = "⚠ 接続失敗";
+                let reason: string;
+                if (e instanceof Error) {
+                    reason = e.message;
+                } else if (e instanceof Response) {
+                    try {
+                        const body = await e.json() as { message?: string; error?: string };
+                        reason = body.message ?? body.error ?? `HTTP ${e.status} ${e.statusText}`;
+                    } catch {
+                        reason = `HTTP ${e.status} ${e.statusText}`;
+                    }
+                } else {
+                    reason = String(e);
+                }
+                if (reason === "Not Found") reason += ": サーバに接続できません。サーバが動いていないか、URLかポート番号が間違っている可能性があります。";
+                const hint = reason.includes("Failed to parse URL") ? "URLの形式が違います。"
+                           : reason === "Failed to fetch"           ? "サーバが稼働していないか、URL、ポート番号が間違っている可能性があります。"
+                           : "";
+                addServerLog(host, port, "ログイン失敗", reason, hint);
+                if (loginStatus) {
+                    loginStatus.style.color = "#ff4444";
+                    loginStatus.textContent = "✘ログイン失敗: " + reason;
+                }
             } finally {
                 if (loginBtn) loginBtn.disabled = false;
             }
         };
 
-        if (loginBtn) loginBtn.onclick = applyLoginName;
-        if (loginNameInput) {
-            loginNameInput.onkeydown = (e) => {
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    applyLoginName();
-                }
-            };
-        }
+        const doLogout = () => {
+            const host = srvUrlInput?.value.trim()  || "127.0.0.1";
+            const port = srvPortInput?.value.trim() || "7350";
+            this.nakama.logout();
+            addServerLog(host, port, "ログアウト");
+            userMap.clear();
+            renderUserList();
+            if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.textContent = "ログインして下さい！"; }
+            if (loginBtn) loginBtn.style.background = "#28a74580";
+            setLoginMode();
+        };
+
+        setLoginMode();
 
         const sendMessage = async () => {
             const text = textarea.value.trim();
@@ -586,23 +873,25 @@ export class GameScene {
             list.scrollTop = list.scrollHeight;
         };
 
-        setInterval(() => {
-            const msg = getNpcMessage("わーい。キタちゃん１です。");
-            updateNpc001Speech(msg);
-            addChatHistoryGlobal("npc001", msg);
-        }, 3000);
-
-        setInterval(() => {
-            const msg = getNpcMessage("キタちゃん２です。❤");
-            updateNpc002Speech(msg);
-            addChatHistoryGlobal("npc002", msg);
-        }, 5000);
-
-        setInterval(() => {
-            const msg = getNpcMessage("にゃにゃ。キタちゃん３です。🐕️");
-            updateNpc003Speech(msg);
-            addChatHistoryGlobal("npc003", msg);
-        }, 8000);
+        let npcIntervals: ReturnType<typeof setInterval>[] = [];
+        const startNpcIntervals = () => {
+            npcIntervals.push(setInterval(() => {
+                const msg = getNpcMessage("わーい。キタちゃん１です。");
+                updateNpc001Speech(msg);
+                if (this.isNpcChatOn) addChatHistoryGlobal("npc001", msg);
+            }, 3000));
+            npcIntervals.push(setInterval(() => {
+                const msg = getNpcMessage("キタちゃん２です。❤");
+                updateNpc002Speech(msg);
+                if (this.isNpcChatOn) addChatHistoryGlobal("npc002", msg);
+            }, 5000));
+            npcIntervals.push(setInterval(() => {
+                const msg = getNpcMessage("にゃにゃ。キタちゃん３です。🐕️");
+                updateNpc003Speech(msg);
+                if (this.isNpcChatOn) addChatHistoryGlobal("npc003", msg);
+            }, 8000));
+        };
+        startNpcIntervals();
 
         this.createDebugOverlay();
 
@@ -947,6 +1236,8 @@ export class GameScene {
         const dofBtn = document.getElementById("dofBtn") as HTMLButtonElement;
 
         const glossInput = document.getElementById("glossInput") as HTMLInputElement;
+        const autoChatBtn = document.getElementById("autoChatBtn") as HTMLButtonElement;
+        const npcAutoChatBtn = document.getElementById("npcAutoChatBtn") as HTMLButtonElement;
 
         const resetViewBtn   = document.getElementById("resetViewBtn")   as HTMLButtonElement;
         const topViewBtn     = document.getElementById("topViewBtn")     as HTMLButtonElement;
@@ -1092,6 +1383,39 @@ export class GameScene {
                 });
                 location.reload();
             });
+
+            // パネル表示 ON/OFF トグル（クッキーで状態を保存・復元）
+            const gCk = (k: string): string | null => {
+                const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                return m ? decodeURIComponent(m[1]) : null;
+            };
+            const sCk = (k: string, v: string) =>
+                document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+
+            const makeToggle = (btnId: string, targetId: string, label: string, cookieKey: string) => {
+                const btn    = document.getElementById(btnId);
+                const target = document.getElementById(targetId);
+                if (!btn || !target) return;
+
+                // 初期状態をクッキーから復元
+                if (gCk(cookieKey) === "0") {
+                    target.style.display = "none";
+                    btn.textContent = "　 " + label;
+                }
+
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const visible = target.style.display !== "none";
+                    target.style.display = visible ? "none" : "";
+                    btn.textContent = (visible ? "　" : "✓") + " " + label;
+                    sCk(cookieKey, visible ? "0" : "1");
+                });
+            };
+            makeToggle("menu-serversettings", "server-settings-panel", "サーバ設定",    "showSrvSettings");
+            makeToggle("menu-serverlog",      "server-log-panel",      "サーバ接続ログ", "showSrvLog");
+            makeToggle("menu-userlist",       "user-list-panel",       "ユーザリスト",  "showUserList");
+            makeToggle("menu-chathistory",    "chat-history-panel",    "チャット履歴",  "showChatHist");
+            makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
         }
 
         const playerPosVal = document.getElementById("val-player-pos");
@@ -1190,6 +1514,52 @@ export class GameScene {
                 const newColor = Color3.FromHexString(val);
                 this.scene.fogColor = newColor;
                 this.scene.clearColor = new Color4(newColor.r, newColor.g, newColor.b, 1.0);
+            });
+        }
+
+        if (autoChatBtn) {
+            const npcMessages = [
+                "こんにちは！⭐️",
+                "今日もいい天気だね。",
+                "何か面白いことある？",
+                "ここは好きな場所だよ。",
+                "また会えたね！",
+                "ちょっと疲れたな〜",
+                "このあたりは静かでいいね。",
+                "どこから来たの？",
+                "冒険に出かけようよ！",
+                "今日のランチは何だろう？",
+            ];
+            let autoChatTimer: ReturnType<typeof setTimeout> | null = null;
+            let isAutoChatOn = false;
+            const scheduleNext = () => {
+                const delay = 3000 + Math.random() * 4000;
+                autoChatTimer = setTimeout(async () => {
+                    if (!isAutoChatOn) return;
+                    const msg = npcMessages[Math.floor(Math.random() * npcMessages.length)];
+                    try { await this.nakama.sendChatMessage(msg); } catch { /* ignore */ }
+                    scheduleNext();
+                }, delay);
+            };
+            autoChatBtn.addEventListener("click", () => {
+                isAutoChatOn = !isAutoChatOn;
+                autoChatBtn.textContent = isAutoChatOn ? "On" : "Off";
+                if (isAutoChatOn) {
+                    autoChatBtn.classList.remove("off");
+                    scheduleNext();
+                } else {
+                    autoChatBtn.classList.add("off");
+                    if (autoChatTimer !== null) { clearTimeout(autoChatTimer); autoChatTimer = null; }
+                }
+            });
+        }
+
+        if (npcAutoChatBtn) {
+            npcAutoChatBtn.addEventListener("click", () => {
+                this.isNpcChatOn = !this.isNpcChatOn;
+                npcAutoChatBtn.textContent = this.isNpcChatOn ? "On" : "Off";
+                if (this.isNpcChatOn) npcAutoChatBtn.classList.remove("off");
+                else npcAutoChatBtn.classList.add("off");
             });
         }
 

@@ -86,9 +86,23 @@
         #user-list-header {
             padding: 4px 8px;
             font-weight: bold;
+            font-size: 13px;
             border-bottom: 1px solid rgba(0,0,0,0.15);
             background: rgba(255,255,255,0.4);
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
         }
+        #user-list-close {
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            opacity: 0.6;
+        }
+        #user-list-close:hover { opacity: 1; }
+        #user-list-panel.minimized #user-list { display: none; }
         #user-list {
             list-style: none;
             margin: 0;
@@ -146,26 +160,23 @@
         #debug-title-bar:active { cursor: grabbing; }
         #debug-title-text {
             font-weight: bold;
-            font-size: 14px;
+            font-size: 13px;
             color: #000000;
             flex: 1;
             text-align: center;
         }
         #debug-minimize-btn, #debug-restore-btn {
             background: none;
-            border: 1px solid #888;
-            border-radius: 3px;
+            border: none;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 11px;
             line-height: 1;
-            padding: 0 4px;
+            padding: 0;
             margin-left: 4px;
-            color: #333;
+            opacity: 0.6;
             flex-shrink: 0;
         }
-        #debug-minimize-btn:hover, #debug-restore-btn:hover {
-            background: rgba(0,0,0,0.1);
-        }
+        #debug-minimize-btn:hover, #debug-restore-btn:hover { opacity: 1; }
         #debug-body {
             padding: 4px 10px 8px 10px;
             overflow-x: hidden;
@@ -283,18 +294,27 @@
             backdrop-filter: blur(2px);
         }
         #chat-history-header {
-            background: rgba(0,0,0,0.12);
-            border-bottom: 1px solid rgba(0,0,0,0.25);
+            background: rgba(255,255,255,0.4);
+            border-bottom: 1px solid rgba(0,0,0,0.15);
             padding: 5px 10px;
             font-weight: bold;
             font-size: 13px;
-            text-align: center;
             cursor: grab;
             flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
         }
-        #chat-history-header:active {
-            cursor: grabbing;
+        #chat-history-header:active { cursor: grabbing; }
+        #chat-history-close {
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            opacity: 0.6;
         }
+        #chat-history-close:hover { opacity: 1; }
+        #chat-history-panel.minimized #chat-history-list { display: none; }
         #chat-history-list {
             flex: 1;
             overflow-y: auto;
@@ -323,6 +343,137 @@
         .chat-history-text {
             color: #222;
         }
+
+        /* ===== サーバ設定パネル ===== */
+        #server-settings-panel {
+            position: fixed;
+            top: 15px;
+            right: 460px;
+            width: 210px;
+            background: rgba(255, 255, 255, 0.35);
+            backdrop-filter: blur(2px);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+            z-index: 100;
+            overflow: hidden;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            color: #000;
+        }
+        #server-settings-header {
+            padding: 4px 8px;
+            font-weight: bold;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(0,0,0,0.15);
+            background: rgba(255,255,255,0.4);
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+        #server-settings-close {
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            opacity: 0.6;
+        }
+        #server-settings-close:hover { opacity: 1; }
+        #server-settings-panel.minimized #server-settings-body { display: none; }
+        #server-settings-body {
+            padding: 6px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .srv-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .srv-row label {
+            white-space: nowrap;
+            font-size: 11px;
+            width: 72px;
+            flex-shrink: 0;
+        }
+        .srv-row input {
+            flex: 1;
+            min-width: 0;
+            font-size: 11px;
+            padding: 2px 4px;
+            border: 1px solid #888;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.85);
+            box-sizing: border-box;
+        }
+
+        .srv-desc {
+            font-size: 10px;
+            color: #444;
+            margin-bottom: 2px;
+        }
+
+        /* ===== サーバ接続ログパネル ===== */
+        #server-log-panel {
+            position: fixed;
+            top: 120px;
+            right: 15px;
+            width: 320px;
+            height: 200px;
+            min-width: 200px;
+            min-height: 80px;
+            background: rgba(255, 255, 255, 0.35);
+            backdrop-filter: blur(2px);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+            z-index: 100;
+            overflow: hidden;
+            resize: both;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 11px;
+            color: #000;
+            display: flex;
+            flex-direction: column;
+        }
+        #server-log-panel.minimized {
+            resize: none;
+            height: auto;
+        }
+        #server-log-header {
+            padding: 4px 8px;
+            font-weight: bold;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(0,0,0,0.15);
+            background: rgba(255,255,255,0.4);
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        #server-log-close {
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            opacity: 0.6;
+        }
+        #server-log-close:hover { opacity: 1; }
+        #server-log-panel.minimized #server-log-list { display: none; }
+        #server-log-list {
+            overflow-y: auto;
+            padding: 4px 8px;
+            flex: 1;
+        }
+        .server-log-entry {
+            padding: 1px 0;
+            border-bottom: 1px dotted rgba(0,0,0,0.15);
+            word-break: break-all;
+            line-height: 1.5;
+        }
+        .server-log-entry.srv-ok  { color: #000; }
+        .server-log-entry.srv-err { color: #000; }
 
         /* ===== ハンバーガーメニュー ===== */
         #menu-btn {
@@ -390,13 +541,16 @@
     <canvas id="renderCanvas"></canvas>
 
     <div id="chat-history-panel">
-        <div id="chat-history-header">チャット履歴</div>
+        <div id="chat-history-header">
+            <span>チャット履歴</span>
+            <span id="chat-history-close">❌️</span>
+        </div>
         <div id="chat-history-list"></div>
     </div>
     
     <div id="debug-overlay">
         <div id="debug-title-bar">
-            <span id="debug-title-text" title="TommieChatはアバターチャットです。">tommieChat</span>
+            <span id="debug-title-text" title="TommieChatはアバターチャットです。">デバッグツール</span>
             <button id="debug-minimize-btn" title="最小化">❌️</button>
             <button id="debug-restore-btn" title="復元">□</button>
         </div>
@@ -493,12 +647,47 @@
                 <button id="defaultPosBtn" class="debug-btn">Reset</button>
             </td></tr>
             <tr><td class="label" title="32.Controls&#10;操作方法&#10;[移動] W/↑:前進  S/↓:後退  A/←:左  D/→:右&#10;[カメラ] マウス左ドラッグ:回転  ホイール:ズーム&#10;[移動先] 地面を左クリック:クリック位置へ移動&#10;[チャット] テキスト入力後 Enter または 送信ボタン&#10;[クリア] クリアボタン:吹き出しテキスト消去&#10;Minecraft: WASD:移動, Space:ジャンプ, Shift:スニーク, F5:視点切替, F3:デバッグ, T:チャット">32.Controls:</td><td class="value"></td></tr>
+            <tr><td class="label" title="34.自動デバッグチャット&#10;数秒毎にランダムなセリフを自動投稿します&#10;初期値: Off&#10;ログイン中のみ有効">34.AutoChat:</td><td class="value">
+                <button id="autoChatBtn" class="debug-btn off">Off</button>
+            </td></tr>
+            <tr><td class="label" title="35.NPC Chat&#10;npc001〜003が数秒毎にチャット履歴へ自動投稿します&#10;初期値: Off">35.NPC Chat:</td><td class="value">
+                <button id="npcAutoChatBtn" class="debug-btn off">Off</button>
+            </td></tr>
         </table>
         </div>
     </div>
 
+    <div id="server-settings-panel">
+        <div id="server-settings-header">
+            <span>サーバ設定</span>
+            <span id="server-settings-close">❌️</span>
+        </div>
+        <div id="server-settings-body">
+            <div class="srv-desc">接続するtommieChatサーバの設定<br>ローカルデバッグ時URL<br>127.0.0.1:7350</div>
+            <div class="srv-row">
+                <label for="serverUrl">サーバURL:</label>
+                <input id="serverUrl" type="text" value="127.0.0.1">
+            </div>
+            <div class="srv-row">
+                <label for="serverPort">ポート番号:</label>
+                <input id="serverPort" type="text" value="7350">
+            </div>
+        </div>
+    </div>
+
+    <div id="server-log-panel">
+        <div id="server-log-header">
+            <span>サーバ接続ログ</span>
+            <span id="server-log-close">❌️</span>
+        </div>
+        <div id="server-log-list"></div>
+    </div>
+
     <div id="user-list-panel">
-        <div id="user-list-header">ユーザー</div>
+        <div id="user-list-header">
+            <span>ユーザー</span>
+            <span id="user-list-close">❌️</span>
+        </div>
         <ul id="user-list"></ul>
     </div>
 
@@ -506,15 +695,21 @@
         <span></span><span></span><span></span>
     </button>
     <div id="menu-popup">
+        <button class="menu-item" id="menu-serversettings">✓ サーバ設定</button>
+        <button class="menu-item" id="menu-serverlog">✓ サーバ接続ログ</button>
+        <button class="menu-item" id="menu-userlist">✓ ユーザリスト</button>
+        <button class="menu-item" id="menu-chathistory">✓ チャット履歴</button>
+        <button class="menu-item" id="menu-debug">✓ デバッグツール</button>
+        <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
         <button class="menu-item" id="menu-cookie-reset">クッキーリセット</button>
     </div>
 
     <div id="chat-container">
         <div id="login-row">
             <label for="loginName">ログイン名:</label>
-            <input id="loginName" type="text" placeholder="名前を入力...">
-            <button id="loginBtn" class="ui-btn" style="width:80px;background:#28a74580;">ログイン</button>
-            <span id="loginStatus" style="color:#fff;font-size:13px;text-shadow:0 1px 2px rgba(0,0,0,0.7);"></span>
+            <input id="loginName" type="text" placeholder="名前を入力..." title="使える文字: 英数字 (a-z A-Z 0-9) と . _ @ + -&#10;例: tommie, user01, my.name&#10;6〜128文字">
+            <button id="loginBtn" class="ui-btn" style="width:auto;padding:0 12px;white-space:nowrap;background:#28a74580;">ログイン</button>
+            <span id="loginStatus" style="color:#00dd55;font-size:13px;text-shadow:0 1px 2px rgba(0,0,0,0.7);">ログインして下さい！</span>
         </div>
         <div id="chat-row">
             <textarea id="chatInput" placeholder="セリフを入力してEnterで送信..."></textarea>

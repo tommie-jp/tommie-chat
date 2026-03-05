@@ -79,3 +79,7 @@ docker-compose up -d
 
 ---
 
+- USERID制限
+  - Nakama の authenticateCustom の第1引数（custom ID）には絵文字が使えません（英数字と ._@+- のみ許可）
+
+---

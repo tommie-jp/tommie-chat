@@ -11,13 +11,15 @@ export class NakamaService {
 
     onChatMessage?: (username: string, text: string) => void;
     onPresenceJoin?: (userId: string, username: string) => void;
+    onPresenceNewJoin?: (userId: string, username: string) => void;
     onPresenceLeave?: (userId: string, username: string) => void;
 
     constructor(host = "127.0.0.1", port = "7350", useSSL = false) {
         this.client = new Client("defaultkey", host, port, useSSL);
     }
 
-    async login(loginName: string): Promise<Session> {
+    async login(loginName: string, host = "127.0.0.1", port = "7350"): Promise<Session> {
+        this.client = new Client("defaultkey", host, port, false);
         this.session = await this.client.authenticateCustom(loginName, true, loginName);
 
         this.socket = this.client.createSocket(false, false);
@@ -36,7 +38,10 @@ export class NakamaService {
         }
 
         this.socket.onchannelpresence = (event: ChannelPresenceEvent) => {
-            for (const p of event.joins  ?? []) this.onPresenceJoin?.(p.user_id, p.username);
+            for (const p of event.joins ?? []) {
+                this.onPresenceJoin?.(p.user_id, p.username);
+                this.onPresenceNewJoin?.(p.user_id, p.username);
+            }
             for (const p of event.leaves ?? []) this.onPresenceLeave?.(p.user_id, p.username);
         };
 
@@ -46,6 +51,15 @@ export class NakamaService {
     async sendChatMessage(text: string): Promise<void> {
         if (!this.socket || !this.channelId) return;
         await this.socket.writeChatMessage(this.channelId, { text });
+    }
+
+    logout(): void {
+        if (this.socket) {
+            this.socket.disconnect(true);
+            this.socket = null;
+        }
+        this.session   = null;
+        this.channelId = null;
     }
 
     getSession(): Session | null {
