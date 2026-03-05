@@ -19,10 +19,11 @@ import {
     VertexBuffer,
     VertexData,
     DefaultRenderingPipeline,
-    MultiMaterial
+    MultiMaterial,
+    DynamicTexture
 } from "@babylonjs/core";
 import { GridMaterial } from "@babylonjs/materials";
-import { AdvancedDynamicTexture, TextBlock, Rectangle, Control } from "@babylonjs/gui"; 
+import { AdvancedDynamicTexture, TextBlock, Rectangle } from "@babylonjs/gui";
 import "@babylonjs/loaders";
 import { NakamaService } from "./NakamaService";
 
@@ -55,6 +56,7 @@ export class GameScene {
     private npc003!: Mesh;
     private remoteAvatars = new Map<string, Mesh>();
     private remoteTargets = new Map<string, { x: number; z: number }>();
+    private remoteSpeeches = new Map<string, (text: string) => void>();
     private playerTextureUrl = "/textures/pic1.ktx2";
     private npc001BaseX = 0;
     private npc002BaseX = 1.5;
@@ -543,8 +545,16 @@ export class GameScene {
         };
 
         // Nakama コールバック設定
-        this.nakama.onChatMessage = (username, text) => {
+        this.nakama.onChatMessage = (username, text, userId) => {
             addChatHistory(username, text);
+            for (const [sid, user] of userMap) {
+                if (user.uuid !== userId) continue;
+                if (sid === this.nakama.selfSessionId) {
+                    this.updatePlayerSpeech(text);
+                } else {
+                    this.remoteSpeeches.get(sid)?.(text);
+                }
+            }
         };
         this.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, ry: number) => {
             const av = this.remoteAvatars.get(sessionId);
@@ -570,7 +580,14 @@ export class GameScene {
             if (standBase && standBase.material) {
                 (standBase.material as StandardMaterial).diffuseColor = new Color3(0.4, 0.7, 1.0);
             }
-            this.createNameTag(av, username);
+            const nameTag = this.createNameTag(av, username);
+            try {
+                const updater = this.createSpeechBubble(nameTag.plane, "");
+                this.remoteSpeeches.set(sessionId, updater);
+                console.log("[speech] created bubble for", username, sessionId);
+            } catch (e) {
+                console.error("[speech] createSpeechBubble failed for", username, e);
+            }
             this.remoteAvatars.set(sessionId, av);
         };
         const removeRemoteAvatar = (sessionId: string) => {
@@ -579,6 +596,7 @@ export class GameScene {
             av.dispose();
             this.remoteAvatars.delete(sessionId);
             this.remoteTargets.delete(sessionId);
+            this.remoteSpeeches.delete(sessionId);
         };
 
         this.nakama.onPresenceJoin = (sessionId, userId, username) => {
@@ -770,20 +788,13 @@ export class GameScene {
         const tex = new Texture(textureUrl, this.scene, false, false, Texture.TRILINEAR_SAMPLINGMODE);
         tex.hasAlpha = true;
         for (const child of av.getChildMeshes()) {
-            if (child.material instanceof MultiMaterial) {
-                for (const sub of child.material.subMaterials) {
-                    const mat = sub as StandardMaterial | null;
-                    if (mat?.diffuseTexture) {
-                        mat.diffuseTexture.dispose();
-                        mat.diffuseTexture = tex;
-                    }
-                }
-            } else {
-                const mat = child.material as StandardMaterial | null;
-                if (mat?.diffuseTexture) {
-                    mat.diffuseTexture.dispose();
-                    mat.diffuseTexture = tex;
-                }
+            if (!(child.material instanceof MultiMaterial)) continue;
+            let disposed = false;
+            for (const sub of child.material.subMaterials) {
+                const mat = sub as StandardMaterial | null;
+                if (!mat?.diffuseTexture) continue;
+                if (!disposed) { mat.diffuseTexture.dispose(); disposed = true; }
+                mat.diffuseTexture = tex;
             }
         }
     }
@@ -958,7 +969,7 @@ export class GameScene {
         return avatarRoot;
     }
 
-    private createNameTag(targetMesh: Mesh, nameText: string): (newName: string) => void {
+    private createNameTag(targetMesh: Mesh, nameText: string): { update: (newName: string) => void; plane: Mesh } {
         const namePlane = MeshBuilder.CreatePlane("nameTag_" + targetMesh.name, { width: 1.5, height: 0.40 }, this.scene);
         namePlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
         namePlane.isPickable = false;
@@ -978,7 +989,7 @@ export class GameScene {
 
         adt.addControl(textBlock);
 
-        return (newName: string) => { textBlock.text = newName; };
+        return { update: (newName: string) => { textBlock.text = newName; }, plane: namePlane };
     }
 
     private createObjects(): void {
@@ -1031,18 +1042,19 @@ export class GameScene {
         this.npc002.setEnabled(false);
         this.npc003.setEnabled(false);
 
-        this.updatePlayerNameTag = this.createNameTag(this.playerBox, "tommie.jp✅️");
-        this.createNameTag(player2, "npc001");
-        this.createNameTag(player3, "npc002");
-        this.createNameTag(player4, "npc003");
+        const playerNameTag  = this.createNameTag(this.playerBox, "tommie.jp✅️");
+        const npc001NameTag  = this.createNameTag(player2, "npc001");
+        const npc002NameTag  = this.createNameTag(player3, "npc002");
+        const npc003NameTag  = this.createNameTag(player4, "npc003");
+        this.updatePlayerNameTag = playerNameTag.update;
 
         this.createRoundedMinecraftClouds();
         this.createCoordinateLabels();
-        
-        this.updatePlayerSpeech = this.createSpeechBubble(this.playerBox, "こんにちは！");
-        const updateNpc001Speech = this.createSpeechBubble(player2, "キタちゃん１です。");
-        const updateNpc002Speech = this.createSpeechBubble(player3, "キターちゃん２です");
-        const updateNpc003Speech = this.createSpeechBubble(player4, "キタちゃん３です");
+
+        this.updatePlayerSpeech  = this.createSpeechBubble(playerNameTag.plane, "こんにちは！");
+        const updateNpc001Speech = this.createSpeechBubble(npc001NameTag.plane, "キタちゃん１です。");
+        const updateNpc002Speech = this.createSpeechBubble(npc002NameTag.plane, "キターちゃん２です");
+        const updateNpc003Speech = this.createSpeechBubble(npc003NameTag.plane, "キタちゃん３です");
 
         const getNpcMessage = (label: string) => {
             const now = new Date();
@@ -1281,48 +1293,85 @@ export class GameScene {
         }
     }
 
-    private createSpeechBubble(targetMesh: Mesh, speechText: string): (newText: string) => void {
-        const bubblePlane = MeshBuilder.CreatePlane("speechBubble_" + targetMesh.name, { width: 1.0, height: 0.20 }, this.scene);
-        bubblePlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    private createSpeechBubble(namePlane: Mesh, speechText: string): (newText: string) => void {
+        // 名前タグ平面の右隣に配置（namePlane は BILLBOARDMODE_ALL なのでローカル X = 画面右）
+        const nameW = 1.5;   // createNameTag の width と一致
+        const planeW = 1.5, planeH = 0.42;
+        const bubblePlane = MeshBuilder.CreatePlane("speechBubble_" + namePlane.name, { width: planeW, height: planeH }, this.scene);
+        // billboard は親から継承するので不要
         bubblePlane.isPickable = false;
-        
-        bubblePlane.parent = targetMesh;
-        bubblePlane.position = new Vector3(0, 2.05, 0); 
-        
-        const adt = AdvancedDynamicTexture.CreateForMesh(bubblePlane, 1024, 128);
+        bubblePlane.parent = namePlane;
+        // 名前タグの右端 + 吹き出し幅の半分 - オーバーラップ分
+        bubblePlane.position = new Vector3(nameW / 2 + planeW / 2 - 0.5, 0, 0);
 
-        const bg = new Rectangle();
-        bg.width = "100%"; bg.height = "100%";
-        bg.cornerRadius = 20;
-        bg.background = "rgba(255, 255, 255, 0.85)";
-        bg.thickness = 1;
-        bg.color = "#333333";
-        adt.addControl(bg);
+        const texW = 512, texH = 144;
+        const dynTex = new DynamicTexture("speechTex_" + namePlane.name, { width: texW, height: texH }, this.scene, true);
+        dynTex.hasAlpha = true;
 
-        const textBlock = new TextBlock();
-        textBlock.text = speechText;
-        textBlock.fontSize = "48px";
-        textBlock.color = "black";
+        const mat = new StandardMaterial("speechMat_" + namePlane.name, this.scene);
+        mat.diffuseTexture = dynTex;
+        mat.useAlphaFromDiffuseTexture = true;
+        mat.emissiveColor = new Color3(1, 1, 1);
+        mat.disableLighting = true;
+        mat.backFaceCulling = false;
+        bubblePlane.material = mat;
 
-        textBlock.textWrapping = true;
-        textBlock.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
-        textBlock.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
-        textBlock.paddingLeft = "20px";
-        textBlock.paddingRight = "20px";
-        textBlock.paddingTop = "8px";
-        textBlock.paddingBottom = "8px";
+        // 三角形の尖端は左下（アバター上部方向）
+        const bodyH = 108;          // 吹き出し本体の高さ(px)
+        const triTipX = 60;         // 尖端X
+        const triTipY = texH;       // 尖端Y（下端）
+        const triBaseL = 30;        // 三角形ベース左端X
+        const triBaseR = 90;        // 三角形ベース右端X
+        const r = 14;               // 角丸半径
 
-        bg.addControl(textBlock);
-        
+        bubblePlane.isVisible = false;
+
+        const drawBubble = (text: string) => {
+            const ctx = dynTex.getContext() as unknown as CanvasRenderingContext2D;
+            ctx.clearRect(0, 0, texW, texH);
+            if (!text || text.trim() === "") { return; }
+
+            // 吹き出し形状（角丸矩形 + 左下三角形）
+            ctx.beginPath();
+            ctx.moveTo(r, 0);
+            ctx.lineTo(texW - r, 0);
+            ctx.quadraticCurveTo(texW, 0, texW, r);
+            ctx.lineTo(texW, bodyH - r);
+            ctx.quadraticCurveTo(texW, bodyH, texW - r, bodyH);
+            ctx.lineTo(triBaseR, bodyH);
+            ctx.lineTo(triTipX, triTipY);   // 尖端（アバター上部方向）
+            ctx.lineTo(triBaseL, bodyH);
+            ctx.lineTo(r, bodyH);
+            ctx.quadraticCurveTo(0, bodyH, 0, bodyH - r);
+            ctx.lineTo(0, r);
+            ctx.quadraticCurveTo(0, 0, r, 0);
+            ctx.closePath();
+
+            ctx.fillStyle = "rgba(255,255,255,0.92)";
+            ctx.fill();
+            ctx.strokeStyle = "#444";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // テキスト
+            ctx.fillStyle = "#111";
+            ctx.font = "bold 38px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(text, texW / 2, bodyH / 2, texW - 24);
+
+            dynTex.update();
+        };
+
+        if (speechText && speechText.trim() !== "") {
+            bubblePlane.isVisible = true;
+            drawBubble(speechText);
+        }
+
         return (newText: string) => {
-            if (newText && newText.trim() !== "") {
-                textBlock.text = newText;
-                bubblePlane.isVisible = true;
-            } else {
-                textBlock.text = "";
-                bubblePlane.isVisible = false;
-            }
-            adt.markAsDirty();
+            console.log("[speech] updater called:", namePlane.name, JSON.stringify(newText));
+            bubblePlane.isVisible = !!(newText && newText.trim() !== "");
+            drawBubble(newText);
         };
     }
 

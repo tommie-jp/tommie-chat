@@ -16,7 +16,7 @@ export class NakamaService {
     private port = "7350";
     selfSessionId: string | null = null;
 
-    onChatMessage?: (username: string, text: string) => void;
+    onChatMessage?: (username: string, text: string, userId: string) => void;
     onPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onPresenceNewJoin?: (sessionId: string, userId: string, username: string) => void;
     onPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
@@ -39,7 +39,7 @@ export class NakamaService {
 
         this.socket.onchannelmessage = (msg: ChannelMessage) => {
             const content = msg.content as { text?: string };
-            if (content?.text) this.onChatMessage?.(msg.username ?? "", content.text);
+            if (content?.text) this.onChatMessage?.(msg.username ?? "", content.text, msg.sender_id ?? "");
         };
 
         const ch: Channel = await this.socket.joinChat(CHAT_ROOM, CHAT_TYPE, true, false);
