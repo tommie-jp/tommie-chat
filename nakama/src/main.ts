@@ -30,40 +30,21 @@ function rpcGetWorldMatch(
     nk: nkruntime.Nakama,
     _payload: string
 ): string {
-    // Nakama Storage からマッチIDを読む（全ランタイムインスタンスで共有）
+    // 稼動中のマッチを matchList で探す（Storage は再起動後に古くなるため使わない）
     try {
-        var objects = nk.storageRead([{
-            collection: WORLD_COLLECTION,
-            key: WORLD_KEY,
-            userId: SYSTEM_USER_ID,
-        }]);
-        if (objects && objects.length > 0) {
-            var storedId = objects[0].value["matchId"] as string;
-            if (storedId) {
-                logger.info("Reusing world match: " + storedId);
-                return JSON.stringify({ matchId: storedId });
-            }
+        var active = nk.matchList(1, true, "world", null, null, "");
+        if (active && active.length > 0) {
+            var activeId = active[0].matchId;
+            logger.info("Found active world match: " + activeId);
+            return JSON.stringify({ matchId: activeId });
         }
     } catch (e) {
-        logger.warn("storageRead failed: " + e);
+        logger.warn("matchList failed: " + e);
     }
 
+    // 存在しなければ新規作成
     var matchId = nk.matchCreate("world", {});
     logger.info("Created world match: " + matchId);
-
-    try {
-        nk.storageWrite([{
-            collection: WORLD_COLLECTION,
-            key: WORLD_KEY,
-            userId: SYSTEM_USER_ID,
-            value: { matchId: matchId },
-            permissionRead: 2,
-            permissionWrite: 1,
-        }]);
-    } catch (e) {
-        logger.warn("storageWrite failed: " + e);
-    }
-
     return JSON.stringify({ matchId: matchId });
 }
 
@@ -116,16 +97,21 @@ function worldMatchLeave(
 
 function worldMatchLoop(
     _ctx: nkruntime.Context,
-    _logger: nkruntime.Logger,
+    logger: nkruntime.Logger,
     _nk: nkruntime.Nakama,
     dispatcher: nkruntime.MatchDispatcher,
     _tick: number,
     state: object,
     messages: nkruntime.MatchMessage[]
 ) {
-    for (var i = 0; i < messages.length; i++) {
-        var msg = messages[i];
-        dispatcher.broadcastMessage(msg.opCode, msg.data, null, msg.sender, true);
+    try {
+        var msgs = messages || [];
+        for (var i = 0; i < msgs.length; i++) {
+            var msg = msgs[i];
+            dispatcher.broadcastMessage(msg.opCode, msg.data, null, msg.sender, true);
+        }
+    } catch (e) {
+        logger.warn("worldMatchLoop error: " + e);
     }
     return { state: state };
 }

@@ -18,7 +18,8 @@ import {
     PointerEventTypes,
     VertexBuffer,
     VertexData,
-    DefaultRenderingPipeline
+    DefaultRenderingPipeline,
+    MultiMaterial
 } from "@babylonjs/core";
 import { GridMaterial } from "@babylonjs/materials";
 import { AdvancedDynamicTexture, TextBlock, Rectangle, Control } from "@babylonjs/gui"; 
@@ -53,6 +54,7 @@ export class GameScene {
     private npc003!: Mesh;
     private remoteAvatars = new Map<string, Mesh>();
     private remoteTargets = new Map<string, { x: number; z: number }>();
+    private playerTextureUrl = "/textures/pic1.ktx2";
     private npc001BaseX = 0;
     private npc002BaseX = 1.5;
     private npc002BaseZ = 3;
@@ -207,12 +209,11 @@ export class GameScene {
 
             const histClose = document.getElementById("chat-history-close") as HTMLElement;
             if (histClose) {
-                const savedHistMin = getCookie("histMinimized");
-                if (savedHistMin === "1") historyPanel.classList.add("minimized");
-
                 histClose.addEventListener("click", () => {
-                    const min = historyPanel.classList.toggle("minimized");
-                    setCookie("histMinimized", min ? "1" : "0");
+                    historyPanel.style.display = "none";
+                    setCookie("showChatHist", "0");
+                    const mb = document.getElementById("menu-chathistory");
+                    if (mb) mb.textContent = "　 チャット履歴";
                 });
             }
         }
@@ -243,13 +244,8 @@ export class GameScene {
                 if (savedL !== null) { ulPanel.style.left = savedL + "px"; ulPanel.style.right = "auto"; }
                 if (savedT !== null)   ulPanel.style.top  = savedT + "px";
 
-                const savedMin = gCookieFn("ulMinimized");
-                if (savedMin === "1") {
-                    ulPanel.classList.add("minimized");
-                } else {
-                    if (savedW !== null) ulPanel.style.width  = savedW + "px";
-                    if (savedH !== null) ulPanel.style.height = savedH + "px";
-                }
+                if (savedW !== null) ulPanel.style.width  = savedW + "px";
+                if (savedH !== null) ulPanel.style.height = savedH + "px";
 
                 let isDrag = false, offX = 0, offY = 0;
                 ulHeader.addEventListener("mousedown", (e: MouseEvent) => {
@@ -282,8 +278,10 @@ export class GameScene {
 
                 if (ulClose) {
                     ulClose.addEventListener("click", () => {
-                        const min = ulPanel.classList.toggle("minimized");
-                        sCookieFn("ulMinimized", min ? "1" : "0");
+                        ulPanel.style.display = "none";
+                        sCookieFn("showUserList", "0");
+                        const mb = document.getElementById("menu-userlist");
+                        if (mb) mb.textContent = "　 ユーザリスト";
                     });
                 }
             }
@@ -324,9 +322,6 @@ export class GameScene {
                 if (savedL !== null) { srvPanel.style.left = savedL + "px"; srvPanel.style.right = "auto"; }
                 if (savedT !== null)   srvPanel.style.top  = savedT + "px";
 
-                // 最小化状態を復元
-                if (gCk("srvMinimized") === "1") srvPanel.classList.add("minimized");
-
                 // ドラッグ
                 let isDrag = false, offX = 0, offY = 0;
                 srvHeader.addEventListener("mousedown", (e: MouseEvent) => {
@@ -351,8 +346,10 @@ export class GameScene {
 
                 if (srvClose) {
                     srvClose.addEventListener("click", () => {
-                        const min = srvPanel.classList.toggle("minimized");
-                        sCk("srvMinimized", min ? "1" : "0");
+                        srvPanel.style.display = "none";
+                        sCk("showSrvSettings", "0");
+                        const mb = document.getElementById("menu-serversettings");
+                        if (mb) mb.textContent = "　 サーバ設定";
                     });
                 }
             }
@@ -380,13 +377,8 @@ export class GameScene {
                 const savedH = gCk("slHeight");
                 if (savedL !== null) { slPanel.style.left = savedL + "px"; slPanel.style.right = "auto"; }
                 if (savedT !== null)   slPanel.style.top   = savedT + "px";
-                const isMin = gCk("slMinimized") === "1";
-                if (isMin) {
-                    slPanel.classList.add("minimized");
-                } else {
-                    if (savedW !== null) slPanel.style.width  = savedW + "px";
-                    if (savedH !== null) slPanel.style.height = savedH + "px";
-                }
+                if (savedW !== null) slPanel.style.width  = savedW + "px";
+                if (savedH !== null) slPanel.style.height = savedH + "px";
 
                 let isDrag = false, offX = 0, offY = 0;
                 slHeader.addEventListener("mousedown", (e: MouseEvent) => {
@@ -418,8 +410,10 @@ export class GameScene {
 
                 if (slClose) {
                     slClose.addEventListener("click", () => {
-                        const min = slPanel.classList.toggle("minimized");
-                        sCk("slMinimized", min ? "1" : "0");
+                        slPanel.style.display = "none";
+                        sCk("showSrvLog", "0");
+                        const mb = document.getElementById("menu-serverlog");
+                        if (mb) mb.textContent = "　 サーバ接続ログ";
                     });
                 }
             }
@@ -559,6 +553,10 @@ export class GameScene {
         this.nakama.onAvatarMoveTarget = (sessionId: string, x: number, z: number) => {
             if (this.remoteAvatars.has(sessionId)) this.remoteTargets.set(sessionId, { x, z });
         };
+        this.nakama.onAvatarChange = (sessionId: string, textureUrl: string) => {
+            const av = this.remoteAvatars.get(sessionId);
+            if (av) this.changeAvatarTexture(av, textureUrl);
+        };
 
         const addRemoteAvatar = (sessionId: string, username: string) => {
             if (sessionId === this.nakama.selfSessionId) return;
@@ -594,8 +592,9 @@ export class GameScene {
             fetchAndSetLoginTime(sessionId, userId, username);
             addChatHistory("[system]", `${username}がログインしました。`);
             addRemoteAvatar(sessionId, username);
-            // 新規参加者へ自分の現在位置を通知
+            // 新規参加者へ自分の現在位置・アバターを通知
             { const p = this.playerBox; this.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y).catch(() => {}); }
+            this.nakama.sendAvatarChange(this.playerTextureUrl).catch(() => {});
         };
         this.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
             userMap.delete(sessionId);
@@ -764,6 +763,28 @@ export class GameScene {
                 sendMessage();
             }
         };
+    }
+
+    private changeAvatarTexture(av: Mesh, textureUrl: string): void {
+        const tex = new Texture(textureUrl, this.scene, false, false, Texture.TRILINEAR_SAMPLINGMODE);
+        tex.hasAlpha = true;
+        for (const child of av.getChildMeshes()) {
+            if (child.material instanceof MultiMaterial) {
+                for (const sub of child.material.subMaterials) {
+                    const mat = sub as StandardMaterial | null;
+                    if (mat?.diffuseTexture) {
+                        mat.diffuseTexture.dispose();
+                        mat.diffuseTexture = tex;
+                    }
+                }
+            } else {
+                const mat = child.material as StandardMaterial | null;
+                if (mat?.diffuseTexture) {
+                    mat.diffuseTexture.dispose();
+                    mat.diffuseTexture = tex;
+                }
+            }
+        }
     }
 
     private createAvatar(name: string, textureUrl: string, x: number, z: number): Mesh {
@@ -1777,6 +1798,16 @@ export class GameScene {
                 this.camera.alpha = Math.PI / 2;
                 this.camera.beta = Math.PI / 4;
                 this.camera.radius = 10.0;
+            });
+        }
+
+        const avatarSelect = document.getElementById("avatarSelect") as HTMLSelectElement | null;
+        if (avatarSelect) {
+            avatarSelect.value = this.playerTextureUrl;
+            avatarSelect.addEventListener("change", () => {
+                this.playerTextureUrl = avatarSelect.value;
+                this.changeAvatarTexture(this.playerBox, this.playerTextureUrl);
+                this.nakama.sendAvatarChange(this.playerTextureUrl).catch(() => {});
             });
         }
 

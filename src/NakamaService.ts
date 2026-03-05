@@ -2,8 +2,9 @@ import { Client, Session, Socket, Channel, ChannelMessage, ChannelPresenceEvent,
 
 const CHAT_ROOM = "world";
 const CHAT_TYPE = 1; // 1=Room, 2=DM, 3=Group
-const OP_INIT_POS    = 1; // ログイン時の初期位置
-const OP_MOVE_TARGET = 2; // クリック移動の目標位置
+const OP_INIT_POS      = 1; // ログイン時の初期位置
+const OP_MOVE_TARGET   = 2; // クリック移動の目標位置
+const OP_AVATAR_CHANGE = 3; // アバターテクスチャ変更
 
 export class NakamaService {
     private client: Client;
@@ -21,6 +22,7 @@ export class NakamaService {
     onPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number) => void;
     onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
+    onAvatarChange?:     (sessionId: string, textureUrl: string) => void;
 
     constructor(host = "127.0.0.1", port = "7350", useSSL = false) {
         this.client = new Client("defaultkey", host, port, useSSL);
@@ -76,22 +78,28 @@ export class NakamaService {
             const data = JSON.parse(raw) as { matchId?: string };
             if (!data.matchId) return;
             this.matchId = data.matchId;
+            console.log("joinWorldMatch: matchId =", this.matchId);
             await this.socket.joinMatch(this.matchId);
             this.socket.onmatchdata = (md: MatchData) => {
                 const sid = md.presence?.session_id;
                 if (!sid) return;
-                if (md.op_code === OP_INIT_POS || md.op_code === OP_MOVE_TARGET) {
-                    try {
-                        const pos = JSON.parse(new TextDecoder().decode(md.data)) as { x: number; z: number; ry?: number };
-                        if (md.op_code === OP_INIT_POS)
-                            this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0);
-                        else
-                            this.onAvatarMoveTarget?.(sid, pos.x, pos.z);
-                    } catch { /* ignore */ }
-                }
+                try {
+                    const payload = JSON.parse(new TextDecoder().decode(md.data));
+                    if (md.op_code === OP_INIT_POS) {
+                        const pos = payload as { x: number; z: number; ry?: number };
+                        this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0);
+                    } else if (md.op_code === OP_MOVE_TARGET) {
+                        const pos = payload as { x: number; z: number };
+                        this.onAvatarMoveTarget?.(sid, pos.x, pos.z);
+                    } else if (md.op_code === OP_AVATAR_CHANGE) {
+                        const av = payload as { textureUrl: string };
+                        this.onAvatarChange?.(sid, av.textureUrl);
+                    }
+                } catch { /* ignore */ }
             };
         } catch (e) {
-            console.warn("joinWorldMatch failed:", e);
+            const msg = (e instanceof Error) ? e.message : JSON.stringify(e);
+            console.warn("joinWorldMatch failed:", msg, e);
         }
     }
 
@@ -99,6 +107,13 @@ export class NakamaService {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_INIT_POS, JSON.stringify({ x, z, ry }));
+        } catch { /* ignore */ }
+    }
+
+    async sendAvatarChange(textureUrl: string): Promise<void> {
+        if (!this.socket || !this.matchId) return;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, JSON.stringify({ textureUrl }));
         } catch { /* ignore */ }
     }
 
