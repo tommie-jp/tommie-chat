@@ -36,6 +36,7 @@ export class GameScene {
     private readonly moveSpeed = 2.0; 
     
     private inputMap: { [key: string]: boolean } = {};
+    private lastKeyboardSendTime = 0;
     
     private hoverMarker!: Mesh;
     private clickMarker!: Mesh;
@@ -1001,7 +1002,10 @@ export class GameScene {
 
         this.npc001 = player2;
         this.npc002 = player3;
-        this.npc003 = player4;                    
+        this.npc003 = player4;
+        this.npc001.setEnabled(false);
+        this.npc002.setEnabled(false);
+        this.npc003.setEnabled(false);
 
         this.updatePlayerNameTag = this.createNameTag(this.playerBox, "tommie.jp✅️");
         this.createNameTag(player2, "npc001");
@@ -1142,14 +1146,21 @@ export class GameScene {
             if (moveDirection.lengthSquared() > 0) {
                 isKeyboardMoving = true;
                 moveDirection.normalize();
-                
+
                 this.playerBox.position.addInPlace(moveDirection.scale(moveDist));
-                
+
                 const targetAngle = Math.atan2(moveDirection.x, moveDirection.z) + Math.PI;
                 let diff = targetAngle - this.playerBox.rotation.y;
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 while (diff > Math.PI) diff -= Math.PI * 2;
                 this.playerBox.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
+
+                const now = performance.now();
+                if (now - this.lastKeyboardSendTime >= 100) {
+                    this.lastKeyboardSendTime = now;
+                    const p = this.playerBox.position;
+                    this.nakama.sendMoveTarget(p.x, p.z).catch(() => {});
+                }
             }
 
             if (!isKeyboardMoving && this.targetPosition) {
@@ -1426,6 +1437,7 @@ export class GameScene {
         const glossInput = document.getElementById("glossInput") as HTMLInputElement;
         const autoChatBtn = document.getElementById("autoChatBtn") as HTMLButtonElement;
         const npcAutoChatBtn = document.getElementById("npcAutoChatBtn") as HTMLButtonElement;
+        const npcVisBtn = document.getElementById("npcVisBtn") as HTMLButtonElement;
 
         const resetViewBtn   = document.getElementById("resetViewBtn")   as HTMLButtonElement;
         const topViewBtn     = document.getElementById("topViewBtn")     as HTMLButtonElement;
@@ -1751,6 +1763,18 @@ export class GameScene {
             });
         }
 
+        if (npcVisBtn) {
+            npcVisBtn.addEventListener("click", () => {
+                const visible = !this.npc001.isEnabled();
+                this.npc001.setEnabled(visible);
+                this.npc002.setEnabled(visible);
+                this.npc003.setEnabled(visible);
+                npcVisBtn.textContent = visible ? "On" : "Off";
+                if (visible) npcVisBtn.classList.remove("off");
+                else npcVisBtn.classList.add("off");
+            });
+        }
+
         if (dofBtn) {
             dofBtn.innerText = "Off";
             dofBtn.classList.add("off");
@@ -1779,12 +1803,12 @@ export class GameScene {
             });
         }
 
-        // 【修正】Top View ボタン押下時のカメラアングルを α=90°, β=0° に固定
+        // Top View: アバターの向きが画面上方向になるよう alpha を合わせる
         if (topViewBtn && this.camera && this.playerBox) {
             topViewBtn.addEventListener("click", () => {
-                this.camera.alpha = Math.PI / 2; // 90度
-                this.camera.beta = 0;           // 0度 (真上)
-                this.camera.radius = this.camera.upperRadiusLimit;
+                this.camera.alpha = Math.PI / 2 - this.playerBox.rotation.y;
+                this.camera.beta = 0;
+                this.camera.radius = this.camera.upperRadiusLimit ?? this.camera.radius;
             });
         }
 
