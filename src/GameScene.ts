@@ -50,7 +50,9 @@ export class GameScene {
     private isNpcChatOn = false;
     private npc001!: Mesh;
     private npc002!: Mesh;
-    private npc003!: Mesh;                    
+    private npc003!: Mesh;
+    private remoteAvatars = new Map<string, Mesh>();
+    private remoteTargets = new Map<string, { x: number; z: number }>();
     private npc001BaseX = 0;
     private npc002BaseX = 1.5;
     private npc002BaseZ = 3;
@@ -549,21 +551,51 @@ export class GameScene {
         this.nakama.onChatMessage = (username, text) => {
             addChatHistory(username, text);
         };
+        this.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number) => {
+            const av = this.remoteAvatars.get(sessionId);
+            if (av) { av.position.x = x; av.position.z = z; }
+        };
+        this.nakama.onAvatarMoveTarget = (sessionId: string, x: number, z: number) => {
+            if (this.remoteAvatars.has(sessionId)) this.remoteTargets.set(sessionId, { x, z });
+        };
+
+        const addRemoteAvatar = (sessionId: string, username: string) => {
+            if (sessionId === this.nakama.selfSessionId) return;
+            if (this.remoteAvatars.has(sessionId)) return;
+            const x = (Math.random() - 0.5) * 14;
+            const z = (Math.random() - 0.5) * 14;
+            const av = this.createAvatar("remote_" + sessionId, "/textures/pic2.ktx2", x, z);
+            this.createNameTag(av, username);
+            this.remoteAvatars.set(sessionId, av);
+        };
+        const removeRemoteAvatar = (sessionId: string) => {
+            const av = this.remoteAvatars.get(sessionId);
+            if (!av) return;
+            av.dispose();
+            this.remoteAvatars.delete(sessionId);
+            this.remoteTargets.delete(sessionId);
+        };
+
         this.nakama.onPresenceJoin = (sessionId, userId, username) => {
             userMap.set(sessionId, { username, uuid: userId, sessionId, loginTimestamp: Date.now(), loginTime: "…" });
             renderUserList();
             fetchAndSetLoginTime(sessionId, userId, username);
+            addRemoteAvatar(sessionId, username);
         };
         this.nakama.onPresenceNewJoin = (sessionId, userId, username) => {
             userMap.set(sessionId, { username, uuid: userId, sessionId, loginTimestamp: Date.now(), loginTime: "…" });
             renderUserList();
             fetchAndSetLoginTime(sessionId, userId, username);
             addChatHistory("[system]", `${username}がログインしました。`);
+            addRemoteAvatar(sessionId, username);
+            // 新規参加者へ自分の現在位置を通知
+            { const p = this.playerBox.position; this.nakama.sendInitPos(p.x, p.z).catch(() => {}); }
         };
         this.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
             userMap.delete(sessionId);
             renderUserList();
             addChatHistory("[system]", `${uname}がログアウトしました。`);
+            removeRemoteAvatar(sessionId);
         };
 
         const setLoginMode = () => {
@@ -632,6 +664,9 @@ export class GameScene {
             if (loginBtn)    loginBtn.disabled = true;
             try {
                 await this.nakama.login(name, host, port);
+                await this.nakama.joinWorldMatch();
+                // 自分の初期位置を全員へ送信
+                { const p = this.playerBox.position; this.nakama.sendInitPos(p.x, p.z).catch(() => {}); }
                 const srvInfo = await this.nakama.getServerInfo();
                 addServerLog(host, port, "ログイン成功", srvInfo);
                 if (loginStatus) {
@@ -680,6 +715,8 @@ export class GameScene {
             addServerLog(host, port, "ログアウト");
             userMap.clear();
             renderUserList();
+            this.remoteAvatars.forEach(av => av.dispose());
+            this.remoteAvatars.clear();
             if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.textContent = "ログインして下さい！"; }
             if (loginBtn) loginBtn.style.background = "#28a74580";
             setLoginMode();
@@ -1047,6 +1084,7 @@ export class GameScene {
                     this.clickMarker.position.x = snappedX;
                     this.clickMarker.position.z = snappedZ;
                     this.clickMarker.isVisible = true;
+                    this.nakama.sendMoveTarget(snappedX, snappedZ).catch(() => {});
                 }
             }
         });
@@ -1112,6 +1150,24 @@ export class GameScene {
                     this.playerBox.position.copyFrom(target);
                     this.targetPosition = null;
                     this.clickMarker.isVisible = false;
+                }
+            }
+
+            // リモートアバターを目標位置へ移動
+            for (const [sid, av] of this.remoteAvatars) {
+                const tgt = this.remoteTargets.get(sid);
+                if (!tgt) continue;
+                const dx = tgt.x - av.position.x, dz = tgt.z - av.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist > 0.05) {
+                    const step = Math.min(this.moveSpeed * deltaTime, dist);
+                    av.position.x += (dx / dist) * step;
+                    av.position.z += (dz / dist) * step;
+                    const targetAngle = Math.atan2(dx, dz) + Math.PI;
+                    let diff = targetAngle - av.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff >  Math.PI) diff -= Math.PI * 2;
+                    av.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
                 }
             }
 

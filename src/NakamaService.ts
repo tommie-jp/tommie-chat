@@ -1,13 +1,16 @@
-import { Client, Session, Socket, Channel, ChannelMessage, ChannelPresenceEvent } from "@heroiclabs/nakama-js";
+import { Client, Session, Socket, Channel, ChannelMessage, ChannelPresenceEvent, MatchData } from "@heroiclabs/nakama-js";
 
 const CHAT_ROOM = "world";
 const CHAT_TYPE = 1; // 1=Room, 2=DM, 3=Group
+const OP_INIT_POS    = 1; // ログイン時の初期位置
+const OP_MOVE_TARGET = 2; // クリック移動の目標位置
 
 export class NakamaService {
     private client: Client;
     private session: Session | null = null;
     private socket: Socket | null = null;
     private channelId: string | null = null;
+    private matchId: string | null = null;
     private host = "127.0.0.1";
     private port = "7350";
     selfSessionId: string | null = null;
@@ -16,6 +19,8 @@ export class NakamaService {
     onPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onPresenceNewJoin?: (sessionId: string, userId: string, username: string) => void;
     onPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
+    onAvatarInitPos?:    (sessionId: string, x: number, z: number) => void;
+    onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
 
     constructor(host = "127.0.0.1", port = "7350", useSSL = false) {
         this.client = new Client("defaultkey", host, port, useSSL);
@@ -62,6 +67,48 @@ export class NakamaService {
         return this.session;
     }
 
+    async joinWorldMatch(): Promise<void> {
+        if (!this.session || !this.socket) return;
+        try {
+            const result = await this.client.rpc(this.session, "getWorldMatch", "" as unknown as object);
+            if (!result?.payload) return;
+            const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
+            const data = JSON.parse(raw) as { matchId?: string };
+            if (!data.matchId) return;
+            this.matchId = data.matchId;
+            await this.socket.joinMatch(this.matchId);
+            this.socket.onmatchdata = (md: MatchData) => {
+                const sid = md.presence?.session_id;
+                if (!sid) return;
+                if (md.op_code === OP_INIT_POS || md.op_code === OP_MOVE_TARGET) {
+                    try {
+                        const pos = JSON.parse(new TextDecoder().decode(md.data)) as { x: number; z: number };
+                        if (md.op_code === OP_INIT_POS)
+                            this.onAvatarInitPos?.(sid, pos.x, pos.z);
+                        else
+                            this.onAvatarMoveTarget?.(sid, pos.x, pos.z);
+                    } catch { /* ignore */ }
+                }
+            };
+        } catch (e) {
+            console.warn("joinWorldMatch failed:", e);
+        }
+    }
+
+    async sendInitPos(x: number, z: number): Promise<void> {
+        if (!this.socket || !this.matchId) return;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, JSON.stringify({ x, z }));
+        } catch { /* ignore */ }
+    }
+
+    async sendMoveTarget(x: number, z: number): Promise<void> {
+        if (!this.socket || !this.matchId) return;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_MOVE_TARGET, JSON.stringify({ x, z }));
+        } catch { /* ignore */ }
+    }
+
     async sendChatMessage(text: string): Promise<void> {
         if (!this.socket || !this.channelId) return;
         await this.socket.writeChatMessage(this.channelId, { text });
@@ -74,6 +121,7 @@ export class NakamaService {
         }
         this.session       = null;
         this.channelId     = null;
+        this.matchId       = null;
         this.selfSessionId = null;
     }
 
