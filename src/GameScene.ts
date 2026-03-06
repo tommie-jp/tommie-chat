@@ -61,6 +61,7 @@ export class GameScene {
     private blockMeshes = new Map<number, Mesh>();
     private blockMat!: StandardMaterial;
     private buildMode = false;
+    private latestPingAvg: number | null = null;
     private playerTextureUrl = "/textures/pic1.ktx2";
     private avatarDepth = 0.05;
     private npc001BaseX = 0;
@@ -876,7 +877,6 @@ export class GameScene {
 
         const startPing = () => {
             if (pingTimer !== null) return;
-            if (pingDisplay) pingDisplay.style.display = "";
             const tick = async () => {
                 const ms = await this.nakama.measurePing();
                 if (ms !== null) {
@@ -884,8 +884,7 @@ export class GameScene {
                     if (pingSamples.length > PING_SAMPLES) pingSamples.shift();
                     pingHistory.push(ms);
                     if (pingHistory.length > PING_HISTORY_MAX) pingHistory.shift();
-                    const avg = Math.round(pingSamples.reduce((a, b) => a + b, 0) / pingSamples.length);
-                    if (pingDisplay) pingDisplay.textContent = `ping=${avg}ms`;
+                    this.latestPingAvg = Math.round(pingSamples.reduce((a, b) => a + b, 0) / pingSamples.length);
                     drawPingGraph();
                 }
             };
@@ -897,7 +896,7 @@ export class GameScene {
             if (pingTimer !== null) { clearInterval(pingTimer); pingTimer = null; }
             pingSamples.length = 0;
             pingHistory.length = 0;
-            if (pingDisplay) { pingDisplay.style.display = "none"; pingDisplay.textContent = ""; }
+            this.latestPingAvg = null;
             drawPingGraph();
         };
 
@@ -2275,7 +2274,10 @@ export class GameScene {
             
             if (frameCount % 10 !== 0) return;
 
-            if (fv) fv.innerText = this.engine.getFps().toFixed(0);
+            const fps = this.engine.getFps().toFixed(0);
+            if (fv) fv.innerText = fps;
+            const pd = document.getElementById("ping-display");
+            if (pd) pd.textContent = this.latestPingAvg !== null ? `ping=${this.latestPingAvg}ms, FPS=${fps}` : `FPS=${fps}`;
             
             if (sceneInstrumentation.frameTimeCounter && cv) {
                 cv.innerText = sceneInstrumentation.frameTimeCounter.lastSecAverage.toFixed(2);
