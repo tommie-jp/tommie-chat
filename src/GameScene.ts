@@ -1563,6 +1563,7 @@ export class GameScene {
             if (savedWidth !== null && savedMin !== "1") debugOverlay.style.width  = savedWidth + "px";
             if (savedHeight!== null && savedMin !== "1") debugOverlay.style.height = savedHeight + "px";
             if (savedMin === "1") debugOverlay.classList.add("minimized");
+            this.clampToViewport(debugOverlay);
 
             let isDragging = false;
             let dragOX = 0, dragOY = 0;
@@ -1660,13 +1661,43 @@ export class GameScene {
                     const name = c.trim().split("=")[0];
                     if (name) document.cookie = `${name}=;path=/;max-age=0`;
                 });
-                // リロード後もパネルが非表示になるようクッキーをセット
                 const maxAge = `path=/;max-age=${60 * 60 * 24 * 365}`;
+                // リロード後もパネルが非表示になるようクッキーをセット
                 document.cookie = `showSrvSettings=0;${maxAge}`;
                 document.cookie = `showSrvLog=0;${maxAge}`;
                 document.cookie = `showUserList=0;${maxAge}`;
                 document.cookie = `showChatHist=0;${maxAge}`;
                 document.cookie = `showDebug=0;${maxAge}`;
+                // 現在のビューポートに合わせたデフォルト配置をクッキーに書き込む
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const pad = 15;
+                const dbgW = 270,  dbgH = Math.min(vh - pad * 2, 600),
+                             dbgT = pad,        dbgL = Math.max(pad, vw - dbgW - pad);
+                const ulW  = 140,  ulH  = 200,         ulL  = Math.max(pad, vw - ulW  - pad),  ulT  = dbgT + 36 + 10;
+                const chW  = 280,  chH  = Math.min(360, vh - pad * 2), chL  = pad,             chT  = pad;
+                const ssL  = pad,                      ssT  = chT + chH + 10;
+                const slW  = Math.min(320, vw - chW - dbgW - pad * 3),
+                             slH  = 200,
+                             slL  = chL + chW + pad,   slT  = pad;
+                document.cookie = `dbgLeft=${dbgL};${maxAge}`;
+                document.cookie = `dbgTop=${dbgT};${maxAge}`;
+                document.cookie = `dbgWidth=${dbgW};${maxAge}`;
+                document.cookie = `dbgHeight=${dbgH};${maxAge}`;
+                document.cookie = `ulLeft=${ulL};${maxAge}`;
+                document.cookie = `ulTop=${ulT};${maxAge}`;
+                document.cookie = `ulWidth=${ulW};${maxAge}`;
+                document.cookie = `ulHeight=${ulH};${maxAge}`;
+                document.cookie = `chatHistLeft=${chL};${maxAge}`;
+                document.cookie = `chatHistTop=${chT};${maxAge}`;
+                document.cookie = `chatHistWidth=${chW};${maxAge}`;
+                document.cookie = `chatHistHeight=${chH};${maxAge}`;
+                document.cookie = `srvLeft=${ssL};${maxAge}`;
+                document.cookie = `srvTop=${ssT};${maxAge}`;
+                document.cookie = `slLeft=${slL};${maxAge}`;
+                document.cookie = `slTop=${slT};${maxAge}`;
+                document.cookie = `slWidth=${slW};${maxAge}`;
+                document.cookie = `slHeight=${slH};${maxAge}`;
                 location.reload();
             });
 
@@ -1693,7 +1724,19 @@ export class GameScene {
                     e.stopPropagation();
                     const visible = target.style.display !== "none";
                     target.style.display = visible ? "none" : "";
-                    if (!visible) this.clampToViewport(target);
+                    if (!visible) {
+                        if (targetId === "debug-overlay") {
+                            const pad = 15;
+                            const vw = window.innerWidth;
+                            const w = 270;
+                            target.style.width  = w + "px";
+                            target.style.height = "auto";
+                            target.style.left   = Math.max(pad, vw - w - pad) + "px";
+                            target.style.right  = "auto";
+                            target.style.top    = pad + "px";
+                        }
+                        this.clampToViewport(target);
+                    }
                     btn.textContent = (visible ? "　" : "✓") + " " + label;
                     sCk(cookieKey, visible ? "0" : "1");
                 });
@@ -2044,15 +2087,15 @@ export class GameScene {
     private clampToViewport(el: HTMLElement): void {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        // サイズが画面より大きければ縮める
+        // ① 位置をクランプ
         const r0 = el.getBoundingClientRect();
-        if (r0.width  > vw) { el.style.width  = vw + "px"; }
-        if (r0.height > vh) { el.style.height = vh + "px"; }
-        // 位置をクランプ（サイズ変更後に再取得）
+        const newLeft = Math.max(0, Math.min(r0.left, vw - r0.width));
+        const newTop  = Math.max(0, Math.min(r0.top,  vh - r0.height));
+        if (newLeft !== r0.left) { el.style.left = newLeft + "px"; el.style.right = "auto"; }
+        if (newTop  !== r0.top)  el.style.top   = newTop  + "px";
+        // ② 位置調整後に再取得し、右端・下端がはみ出す分だけサイズを縮める
         const r = el.getBoundingClientRect();
-        const newLeft = Math.max(0, Math.min(r.left, vw - r.width));
-        const newTop  = Math.max(0, Math.min(r.top,  vh - r.height));
-        if (newLeft !== r.left) { el.style.left = newLeft + "px"; el.style.right = "auto"; }
-        if (newTop  !== r.top)  el.style.top   = newTop  + "px";
+        if (r.right  > vw) el.style.width  = Math.max(100, vw - r.left) + "px";
+        if (r.bottom > vh) el.style.height = Math.max(60,  vh - r.top)  + "px";
     }
 }
