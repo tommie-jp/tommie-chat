@@ -1396,6 +1396,11 @@ export class GameScene {
                 this.buildMode = !this.buildMode;
                 const indicator = document.getElementById("build-mode-indicator");
                 if (indicator) indicator.style.display = this.buildMode ? "" : "none";
+                const btn = document.getElementById("buildModeBtn") as HTMLButtonElement | null;
+                if (btn) {
+                    btn.textContent = this.buildMode ? "On" : "Off";
+                    btn.classList.toggle("off", !this.buildMode);
+                }
             }
         });
 
@@ -1825,6 +1830,7 @@ export class GameScene {
         const autoChatBtn = document.getElementById("autoChatBtn") as HTMLButtonElement;
         const npcAutoChatBtn = document.getElementById("npcAutoChatBtn") as HTMLButtonElement;
         const npcVisBtn = document.getElementById("npcVisBtn") as HTMLButtonElement;
+        const buildModeBtn = document.getElementById("buildModeBtn") as HTMLButtonElement;
         const avatarThickInput = document.getElementById("avatarThickInput") as HTMLInputElement;
 
         const resetViewBtn   = document.getElementById("resetViewBtn")   as HTMLButtonElement;
@@ -2213,6 +2219,16 @@ export class GameScene {
                 npcVisBtn.textContent = visible ? "On" : "Off";
                 if (visible) npcVisBtn.classList.remove("off");
                 else npcVisBtn.classList.add("off");
+            });
+        }
+
+        if (buildModeBtn) {
+            buildModeBtn.addEventListener("click", () => {
+                this.buildMode = !this.buildMode;
+                buildModeBtn.textContent = this.buildMode ? "On" : "Off";
+                buildModeBtn.classList.toggle("off", !this.buildMode);
+                const indicator = document.getElementById("build-mode-indicator");
+                if (indicator) indicator.style.display = this.buildMode ? "" : "none";
             });
         }
 
