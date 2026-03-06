@@ -81,5 +81,48 @@ docker-compose up -d
 - USERID制限
   - Nakama の authenticateCustom の第1引数（custom ID）には絵文字が使えません（英数字と ._@+- のみ許可）
 
-  
+---
+
+## Postgres
+
+公式の docker-compose.yml をそのまま起動している場合、PostgreSQLの接続情報は以下のようになっています。
+
+ホスト: 127.0.0.1 (または localhost)
+ポート: 5432
+データベース名: nakama
+ユーザー名: nakama(postgresではないので注意)
+パスワード: localdb
+
+### PSQLコマンド
+
+```bash
+# 1. postgresコンテナ内でpsqlコマンドを実行してログインします
+docker compose exec postgres psql -U nakama -d nakama
+
+# --- ここからpsqlのプロンプト (nakama=#) に変わります ---
+
+# 2. テーブルの一覧を表示する
+\dt
+
+# 3. 特定のテーブル（例: users）の構造（カラム情報など）を確認する
+\d users
+
+# 4. psqlを終了して元のターミナルに戻る
+\q
+```
+
+---
+2. ユーザー「nakama」のパスワードを「localdb」に強制変更する
+
+SQL
+ALTER USER nakama WITH PASSWORD 'localdb';
+※ ALTER ROLE と表示されれば成功です。
+
+---
+
+## メモ
+
+地面をBキー＋クリックで立方体
+
+
 ---

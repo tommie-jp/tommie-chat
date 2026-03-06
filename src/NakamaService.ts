@@ -5,6 +5,7 @@ const CHAT_TYPE = 1; // 1=Room, 2=DM, 3=Group
 const OP_INIT_POS      = 1; // ログイン時の初期位置
 const OP_MOVE_TARGET   = 2; // クリック移動の目標位置
 const OP_AVATAR_CHANGE = 3; // アバターテクスチャ変更
+const OP_BLOCK_UPDATE  = 4; // ブロック設置/削除通知
 
 export class NakamaService {
     private client: Client;
@@ -23,6 +24,7 @@ export class NakamaService {
     onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number) => void;
     onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
     onAvatarChange?:     (sessionId: string, textureUrl: string) => void;
+    onBlockUpdate?:      (gx: number, gz: number, blockId: number) => void;
 
     constructor(host = "127.0.0.1", port = "7350", useSSL = false) {
         this.client = new Client("defaultkey", host, port, useSSL);
@@ -78,14 +80,17 @@ export class NakamaService {
             const data = JSON.parse(raw) as { matchId?: string };
             if (!data.matchId) return;
             this.matchId = data.matchId;
-            console.log("joinWorldMatch: matchId =", this.matchId);
             await this.socket.joinMatch(this.matchId);
             this.socket.onmatchdata = (md: MatchData) => {
                 const sid = md.presence?.session_id;
-                if (!sid) return;
                 try {
                     const payload = JSON.parse(new TextDecoder().decode(md.data));
-                    if (md.op_code === OP_INIT_POS) {
+                    if (md.op_code === OP_BLOCK_UPDATE) {
+                        const b = payload as { gx: number; gz: number; blockId: number };
+                        this.onBlockUpdate?.(b.gx, b.gz, b.blockId);
+                    } else if (!sid) {
+                        return;
+                    } else if (md.op_code === OP_INIT_POS) {
                         const pos = payload as { x: number; z: number; ry?: number };
                         this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0);
                     } else if (md.op_code === OP_MOVE_TARGET) {
@@ -97,10 +102,7 @@ export class NakamaService {
                     }
                 } catch { /* ignore */ }
             };
-        } catch (e) {
-            const msg = (e instanceof Error) ? e.message : JSON.stringify(e);
-            console.warn("joinWorldMatch failed:", msg, e);
-        }
+        } catch { /* ignore */ }
     }
 
     async sendInitPos(x: number, z: number, ry = 0): Promise<void> {
@@ -211,6 +213,22 @@ export class NakamaService {
             }
         } catch { /* ignore */ }
         return null;
+    }
+
+    async setBlock(gx: number, gz: number, blockId: number): Promise<void> {
+        if (!this.session) return;
+        await this.client.rpc(this.session, "setBlock", { gx, gz, blockId } as unknown as object);
+    }
+
+    async getGroundTable(): Promise<number[] | null> {
+        if (!this.session) return null;
+        try {
+            const result = await this.client.rpc(this.session, "getGroundTable", "" as unknown as object);
+            if (!result?.payload) return null;
+            const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
+            const data = JSON.parse(raw) as { table?: number[] };
+            return data.table ?? null;
+        } catch { return null; }
     }
 
     // サーバへの RPC ラウンドトリップ時間を計測する（ms）

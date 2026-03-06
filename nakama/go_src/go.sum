@@ -1,0 +1,4 @@
+github.com/heroiclabs/nakama-common v1.44.0 h1:xc+OUdKVsGCX43ULMbP59AAhTxGd9nYqZtYoUJzByYw=
+github.com/heroiclabs/nakama-common v1.44.0/go.mod h1:E4yiMQmn8KHQ77WqBLVUfazdiPnwFYWqUrfGOrqOXk8=
+google.golang.org/protobuf v1.36.8 h1:xHScyCOEuuwZEc6UtSOvPbAT4zRh0xcNRYekJwfqyMc=
+google.golang.org/protobuf v1.36.8/go.mod h1:fuxRtAxBytpl4zzqUh6/eyUujkJdNiuEkXntxiD/uRU=

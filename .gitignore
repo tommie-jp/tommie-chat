@@ -101,3 +101,6 @@ data/
 
 nakama/modules/main.js
 nakama/node_modules/
+
+*.so
+*.csv

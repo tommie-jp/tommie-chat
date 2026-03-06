@@ -4,6 +4,68 @@ var serverUpTime = new Date().toISOString();
 var STREAM_MODE_CHANNEL = 2;
 var CHAT_ROOM_LABEL = "world";
 
+// 地面テーブル (100x100、ブロックID を number で保持、初期値 0)
+var GROUND_SIZE = 100;
+var OP_BLOCK_UPDATE = 4;
+var groundTable = new Int32Array(GROUND_SIZE * GROUND_SIZE);
+
+var GROUND_COLLECTION = "world_data";
+var GROUND_KEY        = "ground_table";
+
+function saveGroundTable(nk: nkruntime.Nakama, logger: nkruntime.Logger): void {
+    try {
+        var flat: number[] = [];
+        for (var i = 0; i < groundTable.length; i++) flat.push(groundTable[i]);
+        nk.storageWrite([{
+            collection: GROUND_COLLECTION,
+            key: GROUND_KEY,
+            userId: SYSTEM_USER_ID,
+            value: { table: flat },
+            permissionRead: 2,
+            permissionWrite: 1,
+        }]);
+    } catch (e) {
+        logger.warn("saveGroundTable failed: " + e);
+    }
+}
+
+function rpcSetBlock(
+    _ctx: nkruntime.Context,
+    logger: nkruntime.Logger,
+    nk: nkruntime.Nakama,
+    payload: string
+): string {
+    var req = JSON.parse(payload) as { gx: number; gz: number; blockId: number };
+    var gx = req.gx, gz = req.gz, blockId = req.blockId;
+    if (gx < 0 || gx >= GROUND_SIZE || gz < 0 || gz >= GROUND_SIZE) {
+        throw new Error("setBlock: out of bounds gx=" + gx + " gz=" + gz);
+    }
+    groundTable[gx * GROUND_SIZE + gz] = blockId;
+    saveGroundTable(nk, logger);
+
+    // ワールドマッチへシグナルを送信 → worldMatchSignal が全員へブロードキャスト
+    try {
+        var active = nk.matchList(1, true, "world", null, null, "");
+        if (active && active.length > 0) {
+            (nk as any).matchSignal(active[0].matchId, JSON.stringify({ gx: gx, gz: gz, blockId: blockId }));
+        }
+    } catch (e) {
+        logger.warn("setBlock matchSignal failed: " + e);
+    }
+    return "{}";
+}
+
+function rpcGetGroundTable(
+    _ctx: nkruntime.Context,
+    _logger: nkruntime.Logger,
+    _nk: nkruntime.Nakama,
+    _payload: string
+): string {
+    var flat: number[] = [];
+    for (var i = 0; i < groundTable.length; i++) flat.push(groundTable[i]);
+    return JSON.stringify({ table: flat });
+}
+
 function rpcGetServerInfo(
     ctx: nkruntime.Context,
     _logger: nkruntime.Logger,
@@ -130,13 +192,19 @@ function worldMatchTerminate(
 
 function worldMatchSignal(
     _ctx: nkruntime.Context,
-    _logger: nkruntime.Logger,
+    logger: nkruntime.Logger,
     _nk: nkruntime.Nakama,
-    _dispatcher: nkruntime.MatchDispatcher,
+    dispatcher: nkruntime.MatchDispatcher,
     _tick: number,
     state: object,
     data: string
 ) {
+    // ブロック更新シグナルを全プレイヤーへブロードキャスト
+    try {
+        dispatcher.broadcastMessage(OP_BLOCK_UPDATE, data, null, null, false);
+    } catch (e) {
+        logger.warn("worldMatchSignal broadcastMessage failed: " + e);
+    }
     return { state: state, data: data };
 }
 
@@ -153,9 +221,23 @@ function rpcPing(
 function InitModule(
     _ctx: nkruntime.Context,
     logger: nkruntime.Logger,
-    _nk: nkruntime.Nakama,
+    nk: nkruntime.Nakama,
     initializer: nkruntime.Initializer
 ): void {
+    // 地面テーブルをストレージから復元
+    try {
+        var stored = nk.storageRead([{ collection: GROUND_COLLECTION, key: GROUND_KEY, userId: SYSTEM_USER_ID }]);
+        if (stored && stored.length > 0) {
+            var val = stored[0].value as { table?: number[] };
+            if (val && val.table && val.table.length === GROUND_SIZE * GROUND_SIZE) {
+                for (var i = 0; i < val.table.length; i++) groundTable[i] = val.table[i];
+                logger.info("ground_table loaded from storage");
+            }
+        }
+    } catch (e) {
+        logger.warn("failed to load ground_table: " + e);
+    }
+
     initializer.registerMatch("world", {
         matchInit: worldMatchInit,
         matchJoinAttempt: worldMatchJoinAttempt,
@@ -168,5 +250,6 @@ function InitModule(
     initializer.registerRpc("getServerInfo", rpcGetServerInfo);
     initializer.registerRpc("getWorldMatch", rpcGetWorldMatch);
     initializer.registerRpc("ping", rpcPing);
+    // setBlock / getGroundTable は Go プラグインが処理するため登録しない
     logger.info("server_info module loaded");
 }

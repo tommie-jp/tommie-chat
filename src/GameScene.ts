@@ -55,6 +55,12 @@ export class GameScene {
     private remoteAvatars = new Map<string, Mesh>();
     private remoteTargets = new Map<string, { x: number; z: number }>();
     private remoteSpeeches = new Map<string, (text: string) => void>();
+
+    // ===== 地面ブロック =====
+    private groundTable = new Uint16Array(100 * 100); // [gx*100+gz]
+    private blockMeshes = new Map<number, Mesh>();
+    private blockMat!: StandardMaterial;
+    private buildMode = false;
     private playerTextureUrl = "/textures/pic1.ktx2";
     private avatarDepth = 0.05;
     private npc001BaseX = 0;
@@ -590,9 +596,7 @@ export class GameScene {
             try {
                 const updater = this.createSpeechBubble(nameTag.plane, "");
                 this.remoteSpeeches.set(sessionId, updater);
-                console.log("[speech] created bubble for", username, sessionId);
             } catch (e) {
-                console.error("[speech] createSpeechBubble failed for", username, e);
             }
             this.remoteAvatars.set(sessionId, av);
         };
@@ -695,6 +699,26 @@ export class GameScene {
             try {
                 await this.nakama.login(name, host, port);
                 await this.nakama.joinWorldMatch();
+
+                // ブロック更新通知の受信
+                this.nakama.onBlockUpdate = (gx, gz, blockId) => {
+                    console.log(`[onBlockUpdate] gx=${gx} gz=${gz} blockId=${blockId}`);
+                    this.groundTable[gx * 100 + gz] = blockId;
+                    this.placeBlock(gx, gz, blockId);
+                };
+
+                // 初期地面テーブルをサーバから取得して反映
+                this.nakama.getGroundTable().then(table => {
+                    if (!table) return;
+                    for (let gx = 0; gx < 100; gx++) {
+                        for (let gz = 0; gz < 100; gz++) {
+                            const blockId = table[gx * 100 + gz];
+                            this.groundTable[gx * 100 + gz] = blockId;
+                            if (blockId !== 0) this.placeBlock(gx, gz, blockId);
+                        }
+                    }
+                }).catch(() => {});
+
                 // 自分の初期位置を全員へ送信
                 { const p = this.playerBox; this.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y).catch(() => {}); }
                 const srvInfo = await this.nakama.getServerInfo();
@@ -711,7 +735,6 @@ export class GameScene {
                 if (loginNameInput) loginNameInput.onkeydown = null;
                 startPing();
             } catch (e) {
-                console.error("Nakama login failed:", e);
                 let reason: string;
                 if (e instanceof Error) {
                     reason = e.message;
@@ -978,7 +1001,6 @@ export class GameScene {
                 try {
                     await this.nakama.sendChatMessage(text);
                 } catch (e) {
-                    console.error("sendChatMessage failed:", e);
                     // 送信失敗時はローカルで表示
                     const name = loginNameInput?.value.trim() || "tommie.jp";
                     addChatHistory(name, text);
@@ -1212,6 +1234,18 @@ export class GameScene {
         return { update: (newName: string) => { textBlock.text = newName; }, plane: namePlane };
     }
 
+    private placeBlock(gx: number, gz: number, blockId: number): void {
+        const key = gx * 100 + gz;
+        const existing = this.blockMeshes.get(key);
+        if (existing) { existing.dispose(); this.blockMeshes.delete(key); }
+        if (blockId === 0) return;
+        const box = MeshBuilder.CreateBox(`block_${gx}_${gz}`, { size: 1 }, this.scene);
+        box.position.set(gx - 50 + 0.5, 0.5, gz - 50 + 0.5);
+        box.material = this.blockMat;
+        box.isPickable = false;
+        this.blockMeshes.set(key, box);
+    }
+
     private createObjects(): void {
         const ground = MeshBuilder.CreateGround("ground", { width: 400, height: 400 }, this.scene);
         const gridMaterial = new GridMaterial("gridMaterial", this.scene);
@@ -1222,6 +1256,9 @@ export class GameScene {
         gridMaterial.freeze();
         ground.material = gridMaterial;
         ground.freezeWorldMatrix();
+
+        this.blockMat = new StandardMaterial("blockMat", this.scene);
+        this.blockMat.diffuseColor = new Color3(0.2, 0.4, 1.0);
 
         this.hoverMarker = MeshBuilder.CreatePlane("hoverMarker", { size: 1.0 }, this.scene);
         this.hoverMarker.rotation.x = Math.PI / 2;
@@ -1341,13 +1378,47 @@ export class GameScene {
             if (!e.key) return;
             const key = e.key.toLowerCase();
             this.inputMap[key] = false;
+            if (key === "b") {
+                this.buildMode = !this.buildMode;
+                const indicator = document.getElementById("build-mode-indicator");
+                if (indicator) indicator.style.display = this.buildMode ? "" : "none";
+            }
         });
+
+        // ビルドモード: ネイティブ canvas click でブロック設置/撤去
+        const _canvas = this.engine.getRenderingCanvas();
+        if (_canvas) {
+            _canvas.addEventListener("click", (_e: MouseEvent) => {
+                const indicator = document.getElementById("build-mode-indicator");
+                if (!this.buildMode) {
+                    if (indicator) indicator.textContent = "OFF (buildMode=false)";
+                    return;
+                }
+                if (indicator) indicator.textContent = `px=${this.scene.pointerX.toFixed(0)},py=${this.scene.pointerY.toFixed(0)} picking...`;
+                const pick = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => mesh.name === "ground");
+                if (pick?.hit && pick.pickedPoint) {
+                    const gx = Math.floor(pick.pickedPoint.x + 50);
+                    const gz = Math.floor(pick.pickedPoint.z + 50);
+                    if (gx >= 0 && gx < 100 && gz >= 0 && gz < 100) {
+                        const blockId = this.groundTable[gx * 100 + gz] === 0 ? 1 : 0;
+                        if (indicator) indicator.textContent = `gx=${gx} gz=${gz} blockId=${blockId} sending...`;
+                        this.nakama.setBlock(gx, gz, blockId)
+                            .then(() => { if (indicator) indicator.textContent = `gx=${gx} gz=${gz} OK`; })
+                            .catch((err: unknown) => { if (indicator) indicator.textContent = `ERR: ${String(err)}`; });
+                    } else {
+                        if (indicator) indicator.textContent = `out of bounds gx=${gx} gz=${gz}`;
+                    }
+                } else {
+                    if (indicator) indicator.textContent = `miss (hit=${pick?.hit})`;
+                }
+            });
+        }
 
         this.scene.onPointerObservable.add((pointerInfo) => {
             if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
                 const pick = this.scene.pick(
-                    this.scene.pointerX, 
-                    this.scene.pointerY, 
+                    this.scene.pointerX,
+                    this.scene.pointerY,
                     (mesh) => mesh.name === "ground"
                 );
 
@@ -1361,11 +1432,12 @@ export class GameScene {
             }
 
             if (pointerInfo.type === PointerEventTypes.POINTERTAP) {
+                if (this.buildMode) return; // ビルドモードはネイティブ click で処理
                 const pick = pointerInfo.pickInfo;
                 if (pick && pick.hit && pick.pickedMesh && pick.pickedMesh.name === "ground" && pick.pickedPoint) {
+                    // 通常クリック → 移動
                     const snappedX = Math.floor(pick.pickedPoint.x) + 0.5;
                     const snappedZ = Math.floor(pick.pickedPoint.z) + 0.5;
-
                     this.targetPosition = new Vector3(snappedX, 0, snappedZ);
                     this.clickMarker.position.x = snappedX;
                     this.clickMarker.position.z = snappedZ;
@@ -1588,7 +1660,6 @@ export class GameScene {
         }
 
         return (newText: string) => {
-            console.log("[speech] updater called:", namePlane.name, JSON.stringify(newText));
             bubblePlane.isVisible = !!(newText && newText.trim() !== "");
             drawBubble(newText);
         };
