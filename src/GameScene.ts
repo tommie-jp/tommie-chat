@@ -686,7 +686,13 @@ export class GameScene {
         const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
         const doLogin = async () => {
             const name = loginNameInput?.value.trim();
-            if (!name) return;
+            if (!name || name.length < 6) {
+                if (loginStatus) {
+                    loginStatus.style.color = "#ff8800";
+                    loginStatus.textContent = "名前(6文字以上)を入力して下さい";
+                }
+                return;
+            }
             if (!NAKAMA_ID_RE.test(name)) {
                 if (loginStatus) {
                     loginStatus.style.color = "#ff4444";
@@ -999,8 +1005,9 @@ export class GameScene {
         setLoginMode();
 
         const sendMessage = async () => {
-            const text = textarea.value.trim();
-            if (!text) return;
+            const trimEnabled = (document.getElementById("speechTrimBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? true;
+            const text = trimEnabled ? textarea.value.trim() : textarea.value;
+            if (!text.trim()) return;
             this.updatePlayerSpeech(text);
             textarea.value = "";
             if (this.nakama.getSession()) {
@@ -1031,6 +1038,19 @@ export class GameScene {
                 sendMessage();
             }
         };
+
+        // リサイズをマウス離し時に行単位へスナップ（ドラッグ中はスムーズ）
+        const lineH = 20; // line-height (CSSと一致)
+        const borderH = 4; // border-top + border-bottom
+        let lastH = textarea.offsetHeight;
+        document.addEventListener("mouseup", () => {
+            const h = textarea.offsetHeight;
+            if (h === lastH) return;
+            const lines = Math.max(1, Math.round((h - borderH) / lineH));
+            const snapped = lines * lineH + borderH;
+            textarea.style.height = snapped + "px";
+            lastH = snapped;
+        });
     }
 
     private changeAvatarTexture(av: Mesh, textureUrl: string): void {
@@ -1424,7 +1444,7 @@ export class GameScene {
             if (!e.key) return;
             const key = e.key.toLowerCase();
             this.inputMap[key] = false;
-            if (key === "b") {
+            if (key === "b" && document.activeElement?.tagName !== "TEXTAREA" && document.activeElement?.tagName !== "INPUT") {
                 this.buildMode = !this.buildMode;
                 const indicator = document.getElementById("build-mode-indicator");
                 if (indicator) {
@@ -1662,20 +1682,24 @@ export class GameScene {
     }
 
     private createSpeechBubble(namePlane: Mesh, speechText: string): (newText: string) => void {
-        // 名前タグ平面の右隣に配置（namePlane は BILLBOARDMODE_ALL なのでローカル X = 画面右）
-        const nameW = 1.5;   // createNameTag の width と一致
-        const planeW = 1.5, planeH = 0.42;
-        const bubblePlane = MeshBuilder.CreatePlane("speechBubble_" + namePlane.name, { width: planeW, height: planeH }, this.scene);
-        // billboard は親から継承するので不要
+        const nameW = 1.5;
+        // 半角43文字(40文字+...) × 22.8px(38px monospace 0.6em) + 左右パディング36px = 1016.4 → 1024
+        const texW = 1024, texH = 384;
+        const planeW = texW / 512 * 1.5; // 元比率を維持して3.0単位
+        // 1行のときの本体高さ・三角形高さ（元の比率を維持）
+        const bodyH1 = 108, triH = 36;
+        const baseTotalH = bodyH1 + triH; // = 144（元と同じ1行分）
+        // planeの最大高さ（texH全体を使う場合）
+        const maxPlaneH = texH * (0.42 / baseTotalH); // = 384 * 0.42/144 = 1.12
+        const bubblePlane = MeshBuilder.CreatePlane("speechBubble_" + namePlane.name, { width: planeW, height: maxPlaneH }, this.scene);
         bubblePlane.isPickable = false;
         bubblePlane.parent = namePlane;
-        // 名前タグの右端 + 吹き出し幅の半分 - オーバーラップ分
-        bubblePlane.position = new Vector3(nameW / 2 + planeW / 2 - 0.5, 0, 0);
+        const baseX = nameW / 2 + planeW / 2 - 0.5;
+        const fixedBottom = -(0.42 / 2); // 1行時のplane底端（三角形の先端）の位置を固定
+        bubblePlane.position = new Vector3(baseX, 0, 0);
 
-        const texW = 512, texH = 144;
         const dynTex = new DynamicTexture("speechTex_" + namePlane.name, { width: texW, height: texH }, this.scene, true);
         dynTex.hasAlpha = true;
-
         const mat = new StandardMaterial("speechMat_" + namePlane.name, this.scene);
         mat.diffuseTexture = dynTex;
         mat.useAlphaFromDiffuseTexture = true;
@@ -1684,49 +1708,106 @@ export class GameScene {
         mat.backFaceCulling = false;
         bubblePlane.material = mat;
 
-        // 三角形の尖端は左下（アバター上部方向）
-        const bodyH = 108;          // 吹き出し本体の高さ(px)
-        const triTipX = 60;         // 尖端X
-        const triTipY = texH;       // 尖端Y（下端）
-        const triBaseL = 30;        // 三角形ベース左端X
-        const triBaseR = 90;        // 三角形ベース右端X
-        const r = 14;               // 角丸半径
 
         bubblePlane.isVisible = false;
 
         const drawBubble = (text: string) => {
             const ctx = dynTex.getContext() as unknown as CanvasRenderingContext2D;
             ctx.clearRect(0, 0, texW, texH);
-            if (!text || text.trim() === "") { return; }
+            if (!text || text.trim() === "") return;
 
-            // 吹き出し形状（角丸矩形 + 左下三角形）
+            // 行分割（末尾の空行を除去・最大5行・1行最大40文字）
+            const MAX_CHARS = 40;
+            const rawLines = text.split('\n');
+            while (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === '') rawLines.pop();
+            if (rawLines.length > 5) rawLines.splice(5);
+            const clippedLines = rawLines.map(l => l.length > MAX_CHARS ? l.slice(0, MAX_CHARS) + '...' : l);
+            const n = Math.max(1, clippedLines.length);
+
+            // AAモード判定でフォント・サイズ・行間を決定
+            // フォントサイズ（pt→px）・フォント・行間を決定
+            const ptSize = parseInt((document.getElementById("speechSizeSelect") as HTMLSelectElement | null)?.value ?? "14", 10);
+            const fontSize = Math.round(ptSize * 96 / 72); // pt → canvas px
+            const aaMode = (document.getElementById("aaModeBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? false;
+            let fontFamily: string;
+            let leadingMult: number;
+            if (aaMode) {
+                fontFamily = "'ＭＳ Ｐゴシック', 'MS PGothic', 'Mona', sans-serif";
+                leadingMult = 1.125;
+            } else {
+                fontFamily = (document.getElementById("speechFontSelect") as HTMLSelectElement | null)?.value ?? "monospace";
+                leadingMult = parseFloat((document.getElementById("speechLeadingSelect") as HTMLSelectElement | null)?.value ?? "1.3");
+            }
+            const lineSpacing = Math.round(fontSize * leadingMult);
+
+            // バブル寸法をフォントサイズに合わせて調整（基準38px）
+            // 描画前にtotalHを見積もり、texHを超える場合はfit倍率で全座標を縮小
+            const vertPad = 35;
+            let bH1 = Math.max(108, lineSpacing + vertPad * 2);
+            let tH  = Math.max(36, Math.round(fontSize * 0.95));
+            let lH  = Math.max(lineSpacing, 48);
+            const rawTotalH = bH1 + (n - 1) * lH + tH;
+            const fit = rawTotalH > texH ? texH / rawTotalH : 1;
+            if (fit < 1) {
+                bH1 = Math.round(bH1 * fit);
+                tH  = Math.round(tH  * fit);
+                lH  = Math.round(lH  * fit);
+            }
+            const drawFontSize = Math.round(fontSize * fit);
+            const drawLineSpacing = Math.round(lineSpacing * fit);
+            const ttX = Math.round(60 * (bH1 / 108));
+            const tbL = Math.round(30 * (bH1 / 108));
+            const tbR = Math.round(90 * (bH1 / 108));
+            const rad = Math.max(4, Math.round(14 * (bH1 / 108)));
+            const leftPad  = Math.max(8, Math.round(fontSize * fit * 0.5));
+            const rightPad = leftPad;
+
+            ctx.font = `bold ${drawFontSize}px ${fontFamily}`;
+            const maxTextW = Math.max(...clippedLines.map(l => ctx.measureText(l).width));
+            const usedTexW = Math.min(texW, Math.max(60, Math.ceil(leftPad + maxTextW + rightPad)));
+
+            const bodyH  = bH1 + (n - 1) * lH;
+            const totalH = bodyH + tH;
+
+            // 縦横比1:1を保つため x/y を同率でスケール（planeW/texW ≈ maxPlaneH/texH なので均一スケールで正方ピクセル）
+            const s = totalH / texH;
+            bubblePlane.scaling.y = s;
+            bubblePlane.scaling.x = s;
+            // 三角形の先端を固定位置に保つ（下端固定で上方向に成長）
+            bubblePlane.position.y = fixedBottom + s * maxPlaneH / 2;
+            // 左端（三角形側）を固定したまま右方向へ伸縮
+            bubblePlane.position.x = (nameW / 2 - 0.5) + planeW * s / 2;
+
+            // 吹き出し形状（usedTexW 内に描画）
             ctx.beginPath();
-            ctx.moveTo(r, 0);
-            ctx.lineTo(texW - r, 0);
-            ctx.quadraticCurveTo(texW, 0, texW, r);
-            ctx.lineTo(texW, bodyH - r);
-            ctx.quadraticCurveTo(texW, bodyH, texW - r, bodyH);
-            ctx.lineTo(triBaseR, bodyH);
-            ctx.lineTo(triTipX, triTipY);   // 尖端（アバター上部方向）
-            ctx.lineTo(triBaseL, bodyH);
-            ctx.lineTo(r, bodyH);
-            ctx.quadraticCurveTo(0, bodyH, 0, bodyH - r);
-            ctx.lineTo(0, r);
-            ctx.quadraticCurveTo(0, 0, r, 0);
+            ctx.moveTo(rad, 0);
+            ctx.lineTo(usedTexW - rad, 0);
+            ctx.quadraticCurveTo(usedTexW, 0, usedTexW, rad);
+            ctx.lineTo(usedTexW, bodyH - rad);
+            ctx.quadraticCurveTo(usedTexW, bodyH, usedTexW - rad, bodyH);
+            ctx.lineTo(tbR, bodyH);
+            ctx.lineTo(ttX, totalH);
+            ctx.lineTo(tbL, bodyH);
+            ctx.lineTo(rad, bodyH);
+            ctx.quadraticCurveTo(0, bodyH, 0, bodyH - rad);
+            ctx.lineTo(0, rad);
+            ctx.quadraticCurveTo(0, 0, rad, 0);
             ctx.closePath();
-
             ctx.fillStyle = "rgba(255,255,255,0.92)";
             ctx.fill();
             ctx.strokeStyle = "#444";
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // テキスト
+            // テキスト（固定フォントサイズ・狭い行間・垂直センタリング）
             ctx.fillStyle = "#111";
-            ctx.font = "bold 38px sans-serif";
-            ctx.textAlign = "center";
+            ctx.textAlign = "left";
             ctx.textBaseline = "middle";
-            ctx.fillText(text, texW / 2, bodyH / 2, texW - 24);
+            const totalTextH = n * lineSpacing;
+            const textStartY = (bodyH - totalTextH) / 2 + lineSpacing / 2;
+            for (let i = 0; i < n; i++) {
+                ctx.fillText(clippedLines[i], leftPad, textStartY + i * lineSpacing);
+            }
 
             dynTex.update();
         };
@@ -1879,6 +1960,8 @@ export class GameScene {
         const npcAutoChatBtn = document.getElementById("npcAutoChatBtn") as HTMLButtonElement;
         const npcVisBtn = document.getElementById("npcVisBtn") as HTMLButtonElement;
         const buildModeBtn = document.getElementById("buildModeBtn") as HTMLButtonElement;
+        const speechTrimBtn = document.getElementById("speechTrimBtn") as HTMLButtonElement;
+        const aaModeBtn = document.getElementById("aaModeBtn") as HTMLButtonElement;
         const avatarThickInput = document.getElementById("avatarThickInput") as HTMLInputElement;
 
         const resetViewBtn   = document.getElementById("resetViewBtn")   as HTMLButtonElement;
@@ -2282,6 +2365,24 @@ export class GameScene {
                 }
                 if (this.buildMode) this.refreshPreviewBlock();
                 else this.previewBlock.isVisible = false;
+            });
+        }
+
+        if (speechTrimBtn) {
+            speechTrimBtn.addEventListener("click", () => {
+                const on = !speechTrimBtn.classList.contains("on");
+                speechTrimBtn.textContent = on ? "On" : "Off";
+                speechTrimBtn.classList.toggle("on", on);
+                speechTrimBtn.classList.toggle("off", !on);
+            });
+        }
+
+        if (aaModeBtn) {
+            aaModeBtn.addEventListener("click", () => {
+                const on = !aaModeBtn.classList.contains("on");
+                aaModeBtn.textContent = on ? "On" : "Off";
+                aaModeBtn.classList.toggle("on", on);
+                aaModeBtn.classList.toggle("off", !on);
             });
         }
 

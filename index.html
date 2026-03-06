@@ -34,12 +34,15 @@
         }
         #loginName {
             width: 160px;
-            height: 26px;
+            height: 22px;
             font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 6px;
+            padding: 1px 6px;
+            border-radius: 5px;
             border: 2px solid #555;
             background: rgba(255, 255, 255, 0.9);
+        }
+        #loginName::placeholder {
+            color: rgba(220, 80, 80, 0.7);
         }
         #chat-row {
             display: flex;
@@ -47,22 +50,25 @@
         }
         #chatInput {
             flex-grow: 1;
-            height: 30px;
-            font-size: 13px;
-            padding: 3px 6px;
-            border-radius: 6px;
+            height: 24px;
+            font-size: 12px;
+            padding: 0 6px;
+            line-height: 20px;
+            border-radius: 5px;
             border: 2px solid #555;
             background: rgba(255, 255, 255, 0.9);
-            resize: none;
+            resize: vertical;
+            min-height: 24px;
         }
         .ui-btn {
             width: 80px;
+            height: 24px;
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 5px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 13px;
+            font-size: 12px;
         }
         #sendBtn { background: #0076d752; }
         #clearBtn { background: #d7000034; }
@@ -585,18 +591,18 @@
             position: fixed;
             top: 15px;
             left: 15px;
-            width: 32px;
-            height: 32px;
+            width: 24px;
+            height: 24px;
             background: rgba(0, 0, 0, 0.55);
             border: none;
-            border-radius: 6px;
+            border-radius: 5px;
             cursor: pointer;
             z-index: 200;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 4px;
+            gap: 3px;
             padding: 0;
         }
         #menu-btn:hover {
@@ -604,7 +610,7 @@
         }
         #menu-btn span {
             display: block;
-            width: 16px;
+            width: 12px;
             height: 2px;
             background: #fff;
             border-radius: 2px;
@@ -854,6 +860,48 @@
                 </table>
                 </div>
             </td></tr>
+            <tr><td colspan="2" style="padding:4px 0 0 0;">
+                <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
+                <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Speech</div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <tr><td class="label" title="42.Speech Trim&#10;セリフ送信時に文字列前後の空白（半角・全角・タブ）をトリムします&#10;ON: 前後の空白を削除して送信&#10;OFF: 空白をそのまま送信（顔文字など向け）&#10;初期値: On">42.Speech Trim:</td><td class="value">
+                        <button id="speechTrimBtn" class="debug-btn on">On</button>
+                    </td></tr>
+                    <tr><td class="label" title="43.Speech Font&#10;アバターのセリフ表示に使うフォントを選択します&#10;AA Mode OFFのとき有効&#10;初期値: 固定幅">43.Speech Font:</td><td class="value">
+                        <select id="speechFontSelect" class="debug-select">
+                            <option value="monospace" selected>固定幅</option>
+                            <option value="sans-serif">プロポーショナル</option>
+                        </select>
+                    </td></tr>
+                    <tr><td class="label" title="44.Speech Leading&#10;アバターのセリフ表示の行間倍率&#10;AA Mode OFFのとき有効&#10;初期値: 1.3">44.Speech Leading:</td><td class="value">
+                        <select id="speechLeadingSelect" class="debug-select">
+                            <option value="1.0">1.0</option>
+                            <option value="1.125">1.125</option>
+                            <option value="1.25">1.25</option>
+                            <option value="1.3" selected>1.3</option>
+                            <option value="1.5">1.5</option>
+                        </select>
+                    </td></tr>
+                    <tr><td class="label" title="45.AA Mode&#10;アスキーアート(AA)表示モードのON/OFF&#10;ON: ＭＳ Ｐゴシック 行間1.125&#10;OFF: 43/44の設定を使用&#10;初期値: Off">45.AA Mode:</td><td class="value">
+                        <button id="aaModeBtn" class="debug-btn off">Off</button>
+                    </td></tr>
+                    <tr><td class="label" title="46.Speech Size&#10;アバターのセリフ表示のフォントサイズ（ポイント）&#10;初期値: 14pt">46.Speech Size:</td><td class="value">
+                        <select id="speechSizeSelect" class="debug-select">
+                            <option value="10">10pt</option>
+                            <option value="12">12pt</option>
+                            <option value="14">14pt</option>
+                            <option value="24">24pt</option>
+                            <option value="36">36pt</option>
+                            <option value="48">48pt</option>
+                            <option value="60">60pt</option>
+                            <option value="72" selected>72pt</option>
+                            <option value="84">84pt</option>
+                            <option value="96">96pt</option>
+                        </select>
+                    </td></tr>
+                </table>
+                </div>
+            </td></tr>
         </table>
         </div>
     </div>
@@ -922,12 +970,12 @@
     <div id="chat-container">
         <div id="login-row">
             <label for="loginName" style="color:#000;">ログイン名:</label>
-            <input id="loginName" type="text" placeholder="名前を入力..." title="使える文字: 英数字 (a-z A-Z 0-9) と . _ @ + -&#10;例: tommie, user01, my.name&#10;6〜128文字">
+            <input id="loginName" type="text" placeholder="名前を入力して下さい" title="使える文字: 英数字 (a-z A-Z 0-9) と . _ @ + -&#10;例: tommie, user01, my.name&#10;6〜128文字">
             <button id="loginBtn" class="ui-btn" style="width:auto;padding:0 12px;white-space:nowrap;background:#28a74580;">ログイン</button>
             <span id="loginStatus" style="color:#00dd55;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.7);">ログインして下さい！</span>
         </div>
         <div id="chat-row">
-            <textarea id="chatInput" placeholder="セリフを入力してEnterで送信..."></textarea>
+            <textarea id="chatInput" placeholder="セリフを入力してEnterで送信..." title="アバターのセリフを入力します&#10;Enter: 送信&#10;Shift+Enter: 改行&#10;縦方向にリサイズ可能（行単位）"></textarea>
             <button id="sendBtn" class="ui-btn">送信</button>
             <button id="clearBtn" class="ui-btn">クリア</button>
         </div>
