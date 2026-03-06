@@ -69,8 +69,7 @@ docker-compose up -d
 
 ```
 
-- ローカルURL
-  - <http://localhost:7351>
+- [nakamaサーバのダッシュボードURL](http://127.0.0.1:7351)
   - <http://127.0.0.1:7351>
 - ユーザー名
   - `admin`
@@ -82,4 +81,5 @@ docker-compose up -d
 - USERID制限
   - Nakama の authenticateCustom の第1引数（custom ID）には絵文字が使えません（英数字と ._@+- のみ許可）
 
+  
 ---

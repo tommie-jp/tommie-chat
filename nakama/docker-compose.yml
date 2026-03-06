@@ -1,34 +1,33 @@
 services:
-  cockroachdb:
-    image: cockroachdb/cockroach:latest-v24.1
-    command: start-single-node --insecure --store=attrs=ssd,path=/var/lib/cockroach/
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nakama
+      POSTGRES_USER: nakama
+      POSTGRES_PASSWORD: localdev
     restart: "no"
     volumes:
-      - data:/var/lib/cockroach
+      - data:/var/lib/postgresql/data
     expose:
-      - "8080"
-      - "26257"
+      - "5432"
     ports:
-      - "26257:26257"
-      - "8080:8080"
+      - "5432:5432"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
+      test: ["CMD-SHELL", "pg_isready -U nakama -d nakama"]
       interval: 3s
       timeout: 3s
-      retries: 5
+      retries: 10
   nakama:
     image: registry.heroiclabs.com/heroiclabs/nakama:3.35.0
     entrypoint:
       - "/bin/sh"
       - "-ecx"
       - >
-          /nakama/nakama migrate up --database.address root@cockroachdb:26257 &&
-          exec /nakama/nakama --name nakama1 --database.address root@cockroachdb:26257 --logger.level DEBUG --session.token_expiry_sec 7200 --metrics.prometheus_port 9100 --runtime.env NAKAMA_VERSION=3.35.0 --runtime.js_entrypoint main.js
+          /nakama/nakama migrate up --database.address nakama:localdev@postgres:5432/nakama &&
+          exec /nakama/nakama --name nakama1 --database.address nakama:localdev@postgres:5432/nakama --logger.level DEBUG --session.token_expiry_sec 7200 --metrics.prometheus_port 9100 --runtime.env NAKAMA_VERSION=3.35.0 --runtime.js_entrypoint main.js
     restart: "no"
-    links:
-      - "cockroachdb:db"
     depends_on:
-      cockroachdb:
+      postgres:
         condition: service_healthy
       prometheus:
         condition: service_started
