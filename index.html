@@ -817,8 +817,14 @@
             #server-log-header,
             #ping-header,
             #debug-title-bar {
-                font-size: 17px;
-                padding: 8px 10px;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                font-size: 13px !important;
+                font-weight: bold !important;
+                padding: 4px 10px !important;
+                height: 28px !important;
+                box-sizing: border-box !important;
                 background: rgba(255,255,255,0.1) !important;
                 color: #fff !important;
                 border-bottom-color: rgba(255,255,255,0.2) !important;
@@ -836,7 +842,7 @@
             #chat-history-list,
             .server-settings-row,
             .server-settings-row input {
-                font-size: 15px;
+                font-size: 13px;
                 color: #eee !important;
             }
             .server-settings-row input {
@@ -845,18 +851,18 @@
             }
             .srv-row label {
                 color: #eee !important;
-                font-size: 15px !important;
+                font-size: 13px !important;
                 margin-right: 8px !important;
             }
             .srv-row input {
                 color: #eee !important;
                 background: rgba(255,255,255,0.15) !important;
                 border-color: rgba(255,255,255,0.3) !important;
-                font-size: 15px !important;
+                font-size: 13px !important;
             }
             .srv-desc {
                 color: #eee !important;
-                font-size: 15px !important;
+                font-size: 13px !important;
             }
 
             /* --- チャット履歴暗背景対応 --- */
@@ -902,7 +908,7 @@
             #debug-title-text {
                 color: #fff !important;
                 text-align: left !important;
-                font-size: 15px !important;
+                font-size: 13px !important;
             }
             #debug-minimize-btn, #debug-restore-btn {
                 color: #fff !important;

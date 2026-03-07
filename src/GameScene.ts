@@ -189,6 +189,15 @@ export class GameScene {
             }
         }
 
+        // ===== クッキーヘルパー（デバイダー用） =====
+        const divCkMax = `path=/;max-age=${60 * 60 * 24 * 365}`;
+        const getDivCk = (k: string): string | null => {
+            const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+            return m ? decodeURIComponent(m[1]) : null;
+        };
+        const setDivCk = (k: string, v: string) =>
+            document.cookie = `${k}=${encodeURIComponent(v)};${divCkMax}`;
+
         // ===== ランドスケープ区切りコントロール =====
         {
             const divider = document.getElementById("landscape-divider");
@@ -199,6 +208,11 @@ export class GameScene {
                 const bottom = chatContainer.style.bottom ? parseInt(chatContainer.style.bottom) : 5;
                 document.documentElement.style.setProperty("--ls-panel-bottom", (h + bottom) + "px");
             };
+            // クッキーからデバイダー位置を復元
+            const savedLs = getDivCk("lsDivider");
+            if (savedLs) {
+                document.documentElement.style.setProperty("--ls-divider", savedLs);
+            }
             if (divider) {
                 let dragging = false;
                 divider.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -213,7 +227,11 @@ export class GameScene {
                     this.engine.resize();
                 });
                 document.addEventListener("pointerup", () => {
-                    if (dragging) dragging = false;
+                    if (dragging) {
+                        dragging = false;
+                        const v = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim();
+                        if (v) setDivCk("lsDivider", v);
+                    }
                 });
             }
             if (chatContainer) {
@@ -233,6 +251,11 @@ export class GameScene {
                 const bottom = chatContainer.style.bottom ? parseInt(chatContainer.style.bottom) : 10;
                 document.documentElement.style.setProperty("--pt-panel-bottom", (h + bottom) + "px");
             };
+            // クッキーからデバイダー位置を復元
+            const savedPt = getDivCk("ptDivider");
+            if (savedPt) {
+                document.documentElement.style.setProperty("--pt-divider", savedPt);
+            }
             if (ptDivider) {
                 let dragging = false;
                 ptDivider.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -247,7 +270,11 @@ export class GameScene {
                     this.engine.resize();
                 });
                 document.addEventListener("pointerup", () => {
-                    if (dragging) dragging = false;
+                    if (dragging) {
+                        dragging = false;
+                        const v = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim();
+                        if (v) setDivCk("ptDivider", v);
+                    }
                 });
             }
             if (chatContainer) {
@@ -2412,10 +2439,10 @@ export class GameScene {
 
             // ランドスケープ: パネル非表示時はデバイダー非表示＆canvas全画面
             // パネル非表示時に保存する元の --ls-divider 値
-            let savedDivider = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim() || "60%";
-            if (savedDivider === "100%") savedDivider = "60%"; // 全画面状態は保存しない
+            let savedDivider = gCk("lsDivider") || "60%";
+            if (savedDivider === "100%") savedDivider = "60%";
 
-            let savedPtDivider = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim() || "60%";
+            let savedPtDivider = gCk("ptDivider") || "60%";
             if (savedPtDivider === "100%") savedPtDivider = "60%";
 
             const updateMobileLayout = () => {
@@ -2429,6 +2456,7 @@ export class GameScene {
                     // --- ランドスケープ ---
                     const divider = document.getElementById("landscape-divider");
                     if (anyVisible) {
+                        savedDivider = gCk("lsDivider") || savedDivider;
                         if (divider) divider.style.display = "";
                         document.documentElement.style.setProperty("--ls-divider", savedDivider);
                     } else {
@@ -2447,6 +2475,7 @@ export class GameScene {
                     // --- ポートレート ---
                     const ptDiv = document.getElementById("portrait-divider");
                     if (anyVisible) {
+                        savedPtDivider = gCk("ptDivider") || savedPtDivider;
                         if (ptDiv) ptDiv.style.display = "";
                         document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
                     } else {
