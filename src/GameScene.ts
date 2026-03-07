@@ -173,11 +173,17 @@ export class GameScene {
                         allHidden = false;
                     }
                 }
-                // 全パネル非表示時: --ls-divider を先に設定してからガードを外す
-                if (allHidden && isMobileDev && matchMedia("(orientation:landscape)").matches) {
-                    document.documentElement.style.setProperty("--ls-divider", "100%");
-                    const div = document.getElementById("landscape-divider");
-                    if (div) div.style.display = "none";
+                // 全パネル非表示時: デバイダーを先に設定してからガードを外す
+                if (allHidden && isMobileDev) {
+                    if (matchMedia("(orientation:landscape)").matches) {
+                        document.documentElement.style.setProperty("--ls-divider", "100%");
+                        const div = document.getElementById("landscape-divider");
+                        if (div) div.style.display = "none";
+                    } else {
+                        document.documentElement.style.setProperty("--pt-divider", "100%");
+                        const div = document.getElementById("portrait-divider");
+                        if (div) div.style.display = "none";
+                    }
                 }
                 guard.remove();
             }
@@ -214,6 +220,40 @@ export class GameScene {
                 new ResizeObserver(updatePanelBottom).observe(chatContainer);
                 window.addEventListener("orientationchange", () => setTimeout(updatePanelBottom, 200));
                 updatePanelBottom();
+            }
+        }
+
+        // ===== ポートレート水平デバイダー =====
+        {
+            const ptDivider = document.getElementById("portrait-divider");
+            const chatContainer = document.getElementById("chat-container");
+            const updatePtPanelBottom = () => {
+                if (!chatContainer) return;
+                const h = chatContainer.getBoundingClientRect().height;
+                const bottom = chatContainer.style.bottom ? parseInt(chatContainer.style.bottom) : 10;
+                document.documentElement.style.setProperty("--pt-panel-bottom", (h + bottom) + "px");
+            };
+            if (ptDivider) {
+                let dragging = false;
+                ptDivider.addEventListener("pointerdown", (e: PointerEvent) => {
+                    dragging = true;
+                    ptDivider.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+                document.addEventListener("pointermove", (e: PointerEvent) => {
+                    if (!dragging) return;
+                    const pct = Math.max(30, Math.min(85, (e.clientY / window.innerHeight) * 100));
+                    document.documentElement.style.setProperty("--pt-divider", pct + "%");
+                    this.engine.resize();
+                });
+                document.addEventListener("pointerup", () => {
+                    if (dragging) dragging = false;
+                });
+            }
+            if (chatContainer) {
+                new ResizeObserver(updatePtPanelBottom).observe(chatContainer);
+                window.addEventListener("orientationchange", () => setTimeout(updatePtPanelBottom, 200));
+                updatePtPanelBottom();
             }
         }
 
@@ -2375,32 +2415,50 @@ export class GameScene {
             let savedDivider = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim() || "60%";
             if (savedDivider === "100%") savedDivider = "60%"; // 全画面状態は保存しない
 
-            const updateLandscapeLayout = () => {
+            let savedPtDivider = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim() || "60%";
+            if (savedPtDivider === "100%") savedPtDivider = "60%";
+
+            const updateMobileLayout = () => {
                 if (!isMobileMenu) return;
-                const isLandscape = matchMedia("(orientation:landscape)").matches;
-                if (!isLandscape) return;
                 const anyVisible = toggleRegistry.some(reg => {
                     const el = document.getElementById(reg.targetId);
                     return el && el.style.display !== "none";
                 });
-                const divider = document.getElementById("landscape-divider");
-                if (anyVisible) {
-                    // デバイダー復帰
-                    if (divider) divider.style.display = "";
-                    document.documentElement.style.setProperty("--ls-divider", savedDivider);
+                const isLandscape = matchMedia("(orientation:landscape)").matches;
+                if (isLandscape) {
+                    // --- ランドスケープ ---
+                    const divider = document.getElementById("landscape-divider");
+                    if (anyVisible) {
+                        if (divider) divider.style.display = "";
+                        document.documentElement.style.setProperty("--ls-divider", savedDivider);
+                    } else {
+                        const cur = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim();
+                        if (cur && cur !== "100%") savedDivider = cur;
+                        if (divider) divider.style.display = "none";
+                        document.documentElement.style.setProperty("--ls-divider", "100%");
+                    }
+                    const chatContainer = document.getElementById("chat-container");
+                    if (chatContainer) {
+                        chatContainer.style.left = anyVisible ? "" : "0";
+                        chatContainer.style.right = anyVisible ? "" : "0";
+                        chatContainer.style.background = anyVisible ? "" : "transparent";
+                    }
                 } else {
-                    // 現在の位置を保存してから全画面化
-                    const cur = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim();
-                    if (cur && cur !== "100%") savedDivider = cur;
-                    if (divider) divider.style.display = "none";
-                    document.documentElement.style.setProperty("--ls-divider", "100%");
-                }
-                // chat-container: 全画面時は左寄せ＆背景透明
-                const chatContainer = document.getElementById("chat-container");
-                if (chatContainer) {
-                    chatContainer.style.left = anyVisible ? "" : "0";
-                    chatContainer.style.right = anyVisible ? "" : "0";
-                    chatContainer.style.background = anyVisible ? "" : "transparent";
+                    // --- ポートレート ---
+                    const ptDiv = document.getElementById("portrait-divider");
+                    if (anyVisible) {
+                        if (ptDiv) ptDiv.style.display = "";
+                        document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
+                    } else {
+                        const cur = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim();
+                        if (cur && cur !== "100%") savedPtDivider = cur;
+                        if (ptDiv) ptDiv.style.display = "none";
+                        document.documentElement.style.setProperty("--pt-divider", "100%");
+                    }
+                    const chatContainer = document.getElementById("chat-container");
+                    if (chatContainer) {
+                        chatContainer.style.background = anyVisible ? "" : "transparent";
+                    }
                 }
                 this.engine.resize();
             };
@@ -2451,7 +2509,7 @@ export class GameScene {
                     }
                     btn.textContent = (visible ? "　" : "✓") + " " + label;
                     sCk(cookieKey, visible ? "0" : "1");
-                    updateLandscapeLayout();
+                    updateMobileLayout();
                 });
             };
             makeToggle("menu-serversettings", "server-settings-panel", "サーバ設定",    "showSrvSettings");
@@ -2461,11 +2519,11 @@ export class GameScene {
             makeToggle("menu-ping",           "ping-panel",            "Ping グラフ",   "showPing");
             makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
             // 初期状態 & 回転時にレイアウト更新
-            updateLandscapeLayout();
-            window.addEventListener("orientationchange", () => setTimeout(updateLandscapeLayout, 200));
+            updateMobileLayout();
+            window.addEventListener("orientationchange", () => setTimeout(updateMobileLayout, 200));
             // パネル閉じるボタン等でもレイアウト更新（style属性の変更を監視）
             if (isMobileMenu) {
-                const mo = new MutationObserver(updateLandscapeLayout);
+                const mo = new MutationObserver(updateMobileLayout);
                 for (const reg of toggleRegistry) {
                     const el = document.getElementById(reg.targetId);
                     if (el) mo.observe(el, { attributes: true, attributeFilter: ["style"] });
