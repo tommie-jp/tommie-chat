@@ -155,8 +155,44 @@ export class GameScene {
     }
 
     private setupHtmlUI(): void {
+        const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+        const isMobileLandscape = () => isMobileDev && matchMedia("(orientation:landscape)").matches;
         // フラッシュガード CSS を削除（JS側のインラインスタイルで制御するため）
         document.getElementById("panel-flash-guard")?.remove();
+
+        // ===== ランドスケープ区切りコントロール =====
+        {
+            const divider = document.getElementById("landscape-divider");
+            const chatContainer = document.getElementById("chat-container");
+            const updatePanelBottom = () => {
+                if (!chatContainer) return;
+                const h = chatContainer.getBoundingClientRect().height;
+                const bottom = chatContainer.style.bottom ? parseInt(chatContainer.style.bottom) : 5;
+                document.documentElement.style.setProperty("--ls-panel-bottom", (h + bottom) + "px");
+            };
+            if (divider) {
+                let dragging = false;
+                divider.addEventListener("pointerdown", (e: PointerEvent) => {
+                    dragging = true;
+                    divider.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+                document.addEventListener("pointermove", (e: PointerEvent) => {
+                    if (!dragging) return;
+                    const pct = Math.max(20, Math.min(80, (e.clientX / window.innerWidth) * 100));
+                    document.documentElement.style.setProperty("--ls-divider", pct + "%");
+                    this.engine.resize();
+                });
+                document.addEventListener("pointerup", () => {
+                    if (dragging) dragging = false;
+                });
+            }
+            if (chatContainer) {
+                new ResizeObserver(updatePanelBottom).observe(chatContainer);
+                window.addEventListener("orientationchange", () => setTimeout(updatePanelBottom, 200));
+                updatePanelBottom();
+            }
+        }
 
         const textarea = document.getElementById("chatInput") as HTMLTextAreaElement;
         const sendBtn = document.getElementById("sendBtn") as HTMLButtonElement;
@@ -187,17 +223,20 @@ export class GameScene {
             const savedTop    = getCookie("chatHistTop");
             const savedWidth  = getCookie("chatHistWidth");
             const savedHeight = getCookie("chatHistHeight");
-            if (savedLeft   !== null) historyPanel.style.left   = savedLeft   + "px";
-            if (savedTop    !== null) historyPanel.style.top    = savedTop    + "px";
-            if (savedWidth  !== null) historyPanel.style.width  = savedWidth  + "px";
-            if (savedHeight !== null) historyPanel.style.height = savedHeight + "px";
-            this.clampToViewport(historyPanel);
+            if (!isMobileDev) {
+                if (savedLeft   !== null) historyPanel.style.left   = savedLeft   + "px";
+                if (savedTop    !== null) historyPanel.style.top    = savedTop    + "px";
+                if (savedWidth  !== null) historyPanel.style.width  = savedWidth  + "px";
+                if (savedHeight !== null) historyPanel.style.height = savedHeight + "px";
+                this.clampToViewport(historyPanel);
+            }
 
             let isDragging = false;
             let dragOffsetX = 0;
             let dragOffsetY = 0;
 
             historyHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                if (isMobileLandscape()) return;
                 isDragging = true;
                 dragOffsetX = e.clientX - historyPanel.getBoundingClientRect().left;
                 dragOffsetY = e.clientY - historyPanel.getBoundingClientRect().top;
@@ -244,9 +283,11 @@ export class GameScene {
 
             if (ulPanel && ulHeader) {
                 // right ベースの初期位置を left ベースに変換（ドラッグのため）
-                const initRect = ulPanel.getBoundingClientRect();
-                ulPanel.style.left  = initRect.left + "px";
-                ulPanel.style.right = "auto";
+                if (!isMobileDev) {
+                    const initRect = ulPanel.getBoundingClientRect();
+                    ulPanel.style.left  = initRect.left + "px";
+                    ulPanel.style.right = "auto";
+                }
 
                 const sCookieFn = (k: string, v: string) =>
                     document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
@@ -259,16 +300,18 @@ export class GameScene {
                 const savedT = gCookieFn("ulTop");
                 const savedW = gCookieFn("ulWidth");
                 const savedH = gCookieFn("ulHeight");
-                if (savedL !== null) { ulPanel.style.left = savedL + "px"; ulPanel.style.right = "auto"; }
-                if (savedT !== null)   ulPanel.style.top  = savedT + "px";
-                this.clampToViewport(ulPanel);
-
-                if (savedW !== null) ulPanel.style.width  = savedW + "px";
-                if (savedH !== null) ulPanel.style.height = savedH + "px";
+                if (!isMobileDev) {
+                    if (savedL !== null) { ulPanel.style.left = savedL + "px"; ulPanel.style.right = "auto"; }
+                    if (savedT !== null)   ulPanel.style.top  = savedT + "px";
+                    this.clampToViewport(ulPanel);
+                    if (savedW !== null) ulPanel.style.width  = savedW + "px";
+                    if (savedH !== null) ulPanel.style.height = savedH + "px";
+                }
 
                 let isDrag = false, offX = 0, offY = 0;
                 ulHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                     if ((e.target as HTMLElement).id === "user-list-close") return;
+                    if (isMobileLandscape()) return;
                     isDrag = true;
                     offX = e.clientX - ulPanel.getBoundingClientRect().left;
                     offY = e.clientY - ulPanel.getBoundingClientRect().top;
@@ -334,19 +377,24 @@ export class GameScene {
                 srvPortInput?.addEventListener("change", () => sCk("srvPort", srvPortInput.value.trim()));
 
                 // 位置をクッキーから復元（right ベース → left ベースに変換）
-                const initRect = srvPanel.getBoundingClientRect();
-                srvPanel.style.left  = initRect.left + "px";
-                srvPanel.style.right = "auto";
-                const savedL = gCk("srvLeft");
-                const savedT = gCk("srvTop");
-                if (savedL !== null) { srvPanel.style.left = savedL + "px"; srvPanel.style.right = "auto"; }
-                if (savedT !== null)   srvPanel.style.top  = savedT + "px";
-                this.clampToViewport(srvPanel);
+                if (!isMobileDev) {
+                    const initRect = srvPanel.getBoundingClientRect();
+                    srvPanel.style.left  = initRect.left + "px";
+                    srvPanel.style.right = "auto";
+                }
+                if (!isMobileDev) {
+                    const savedL = gCk("srvLeft");
+                    const savedT = gCk("srvTop");
+                    if (savedL !== null) { srvPanel.style.left = savedL + "px"; srvPanel.style.right = "auto"; }
+                    if (savedT !== null)   srvPanel.style.top  = savedT + "px";
+                    this.clampToViewport(srvPanel);
+                }
 
                 // ドラッグ
                 let isDrag = false, offX = 0, offY = 0;
                 srvHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                     if ((e.target as HTMLElement).id === "server-settings-close") return;
+                    if (isMobileLandscape()) return;
                     isDrag = true;
                     offX = e.clientX - srvPanel.getBoundingClientRect().left;
                     offY = e.clientY - srvPanel.getBoundingClientRect().top;
@@ -390,22 +438,27 @@ export class GameScene {
                     return m ? decodeURIComponent(m[1]) : null;
                 };
 
-                const initRect = slPanel.getBoundingClientRect();
-                slPanel.style.left  = initRect.left + "px";
-                slPanel.style.right = "auto";
-                const savedL = gCk("slLeft");
-                const savedT = gCk("slTop");
-                const savedW = gCk("slWidth");
-                const savedH = gCk("slHeight");
-                if (savedL !== null) { slPanel.style.left = savedL + "px"; slPanel.style.right = "auto"; }
-                if (savedT !== null)   slPanel.style.top   = savedT + "px";
-                if (savedW !== null) slPanel.style.width  = savedW + "px";
-                if (savedH !== null) slPanel.style.height = savedH + "px";
-                this.clampToViewport(slPanel);
+                if (!isMobileDev) {
+                    const initRect = slPanel.getBoundingClientRect();
+                    slPanel.style.left  = initRect.left + "px";
+                    slPanel.style.right = "auto";
+                }
+                if (!isMobileDev) {
+                    const savedL = gCk("slLeft");
+                    const savedT = gCk("slTop");
+                    const savedW = gCk("slWidth");
+                    const savedH = gCk("slHeight");
+                    if (savedL !== null) { slPanel.style.left = savedL + "px"; slPanel.style.right = "auto"; }
+                    if (savedT !== null)   slPanel.style.top   = savedT + "px";
+                    if (savedW !== null) slPanel.style.width  = savedW + "px";
+                    if (savedH !== null) slPanel.style.height = savedH + "px";
+                    this.clampToViewport(slPanel);
+                }
 
                 let isDrag = false, offX = 0, offY = 0;
                 slHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                     if ((e.target as HTMLElement).id === "server-log-close") return;
+                    if (isMobileLandscape()) return;
                     isDrag = true;
                     offX = e.clientX - slPanel.getBoundingClientRect().left;
                     offY = e.clientY - slPanel.getBoundingClientRect().top;
@@ -462,7 +515,7 @@ export class GameScene {
                 `<span class="${nameClass}">${avatarName}</span>` +
                 `<span class="chat-history-text">${text}</span>`;
             list.appendChild(entry);
-            list.scrollTop = list.scrollHeight;
+            entry.scrollIntoView({ block: "end", behavior: "instant" });
         };
 
         const setCookie = (key: string, value: string) => {
@@ -571,7 +624,7 @@ export class GameScene {
             for (const [sid, user] of userMap) {
                 if (user.uuid !== userId) continue;
                 if (sid === this.nakama.selfSessionId) {
-                    this.updatePlayerSpeech(text);
+                    doUpdateSpeech(text);
                 } else {
                     this.remoteSpeeches.get(sid)?.(text);
                 }
@@ -666,6 +719,11 @@ export class GameScene {
         srvPortInput?.addEventListener("input", updateLoginTooltip);
         updateLoginTooltip();
 
+        const isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+        if (loginStatus) {
+            loginStatus.textContent = isMobile ? "" : "ログインして下さい！";
+        }
+
         // ===== サーバ接続ログ =====
         const addServerLog = (host: string, port: string, label: string, detail = "", hint = "") => {
             const list = document.getElementById("server-log-list");
@@ -696,14 +754,14 @@ export class GameScene {
             if (!name || name.length < 6) {
                 if (loginStatus) {
                     loginStatus.style.color = "#ff8800";
-                    loginStatus.textContent = "名前(6文字以上)を入力して下さい";
+                    loginStatus.textContent = isMobile ? "✗" : "名前(6文字以上)を入力して下さい";
                 }
                 return;
             }
             if (!NAKAMA_ID_RE.test(name)) {
                 if (loginStatus) {
                     loginStatus.style.color = "#ff4444";
-                    loginStatus.textContent = "✘ 使えない文字が含まれています。使える文字: 英数字と . _ @ + -（6〜128文字）";
+                    loginStatus.textContent = isMobile ? "✗" : "✗ 使えない文字が含まれています。使える文字: 英数字と . _ @ + -（6〜128文字）";
                 }
                 return;
             }
@@ -711,7 +769,7 @@ export class GameScene {
             const port = srvPortInput?.value.trim() || "7350";
             this.updatePlayerNameTag(name);
             setCookie("loginName", name);
-            if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = "接続中…"; }
+            if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : "接続中…"; }
             if (loginBtn)    loginBtn.disabled = true;
             try {
                 await this.nakama.login(name, host, port);
@@ -749,7 +807,7 @@ export class GameScene {
                 loggedInPort = port;
                 if (loginStatus) {
                     loginStatus.style.color = "#00dd55";
-                    loginStatus.textContent = "✔ログイン済み";
+                    loginStatus.textContent = isMobile ? "✓" : "✓ログイン済み";
                 }
                 if (loginBtn) {
                     loginBtn.textContent = "ログアウト";
@@ -779,7 +837,7 @@ export class GameScene {
                 addServerLog(host, port, "ログイン失敗", reason, hint);
                 if (loginStatus) {
                     loginStatus.style.color = "#ff4444";
-                    loginStatus.textContent = "✘ログイン失敗: " + reason;
+                    loginStatus.textContent = isMobile ? "✗" : "✗ログイン失敗: " + reason;
                 }
             } finally {
                 if (loginBtn) loginBtn.disabled = false;
@@ -798,26 +856,41 @@ export class GameScene {
         const drawPingGraph = () => {
             const canvas = document.getElementById("ping-canvas") as HTMLCanvasElement | null;
             if (!canvas) return;
-            const w = canvas.clientWidth, h = canvas.clientHeight;
-            if (w === 0 || h === 0) return;
+            const ppanel  = document.getElementById("ping-panel");
+            const pheader = document.getElementById("ping-header");
+            if (!ppanel || !pheader) return;
+            // position:absolute のcanvasをヘッダー下に配置し、パネル実寸に合わせる
+            const headerH = pheader.offsetHeight;
+            canvas.style.top = headerH + "px";
+            const w = ppanel.clientWidth, h = ppanel.clientHeight - headerH;
+            if (w <= 0 || h <= 0) return;
+            // canvas は replaced element なので CSS サイズを明示的に指定
+            canvas.style.width  = w + "px";
+            canvas.style.height = h + "px";
             const dpr = window.devicePixelRatio || 1;
-            const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
-            if (canvas.width !== pw || canvas.height !== ph) {
-                canvas.width = pw; canvas.height = ph;
-            }
+            canvas.width  = Math.round(w * dpr);
+            canvas.height = Math.round(h * dpr);
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-            const AXIS_H = 16;          // 横軸ラベル領域
-            const gh     = h - AXIS_H; // グラフ描画領域の高さ
+            // モバイル暗背景用の色・フォント
+            const dark = isMobileDev;
+            const FONT_SIZE = dark ? 15 : 12;
+            const FONT_MONO = '"Courier New", Courier, monospace';
+            const FONT_STR  = `${FONT_SIZE}px ${FONT_MONO}`;
+            const FONT_BOLD = `bold ${FONT_SIZE}px ${FONT_MONO}`;
+            const AXIS_H = dark ? 26 : 16;  // 横軸ラベル領域（モバイルは下マージン含む）
+            const gh     = h - AXIS_H;      // グラフ描画領域の高さ
             ctx.clearRect(0, 0, w, h);
 
             const validPings = pingHistory.filter(v => v >= 0);
             const maxPing = Math.max(100, ...(validPings.length ? validPings : [0])) * 1.1;
             const toY = (ms: number) => gh - Math.min(ms / maxPing, 1) * gh;
 
-            const FONT_MONO = '"Courier New", Courier, monospace';
+            const gridMajor = dark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.20)";
+            const gridSub   = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)";
+            const labelCol  = dark ? "#eee" : "#000";
 
             // 横罫線 — 10ms毎にサブ罫線、50ms毎にメジャー罫線（ラベル付き）
             ctx.lineWidth = 1;
@@ -826,12 +899,12 @@ export class GameScene {
                 const yp = toY(ms);
                 if (yp < 0) break;
                 const isMajor = ms % 50 === 0;
-                ctx.strokeStyle = isMajor ? "rgba(0,0,0,0.20)" : "rgba(0,0,0,0.08)";
+                ctx.strokeStyle = isMajor ? gridMajor : gridSub;
                 ctx.setLineDash(isMajor ? [4, 3] : [2, 5]);
                 ctx.beginPath(); ctx.moveTo(0, yp); ctx.lineTo(w, yp); ctx.stroke();
                 if (isMajor) {
-                    ctx.fillStyle = "#000";
-                    ctx.font = `12px ${FONT_MONO}`;
+                    ctx.fillStyle = labelCol;
+                    ctx.font = FONT_STR;
                     ctx.fillText(`${ms}ms`, 2, yp - 2);
                 }
             }
@@ -844,7 +917,7 @@ export class GameScene {
             for (let n = TICK_STEP; n < PING_HISTORY_MAX; n += TICK_STEP) {
                 const xp = Math.round((PING_HISTORY_MAX - 1 - n) * step);
                 if (xp < 0 || xp > w) continue;
-                ctx.strokeStyle = "rgba(0,0,0,0.12)";
+                ctx.strokeStyle = dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)";
                 ctx.setLineDash([2, 4]);
                 ctx.beginPath(); ctx.moveTo(xp, 0); ctx.lineTo(xp, gh); ctx.stroke();
                 ctx.setLineDash([]);
@@ -852,14 +925,14 @@ export class GameScene {
                 const label = sec >= 60
                     ? `-${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`
                     : `-${sec}s`;
-                ctx.fillStyle = "#000";
-                ctx.font = `12px ${FONT_MONO}`;
+                ctx.fillStyle = labelCol;
+                ctx.font = FONT_STR;
                 const lw = ctx.measureText(label).width;
                 ctx.fillText(label, Math.max(0, Math.min(xp - lw / 2, w - lw)), h - 2);
             }
 
             // 横軸境界線
-            ctx.strokeStyle = "rgba(0,0,0,0.20)";
+            ctx.strokeStyle = gridMajor;
             ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(0, gh); ctx.lineTo(w, gh); ctx.stroke();
 
@@ -905,22 +978,24 @@ export class GameScene {
             drawSegment(segStart, pingHistory.length - 1, segDisc);
 
             // avg テキスト（右上、背景付き）
-            ctx.font = `bold 12px ${FONT_MONO}`;
+            ctx.font = FONT_BOLD;
+            const avgBg = dark ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.65)";
+            const avgBoxH = FONT_SIZE + 4;
             if (pingDisconnected) {
                 const label = "回線切断中";
                 const lw = ctx.measureText(label).width;
-                ctx.fillStyle = "rgba(255,255,255,0.65)";
-                ctx.fillRect(w - lw - 8, 3, lw + 6, 16);
+                ctx.fillStyle = avgBg;
+                ctx.fillRect(w - lw - 8, 3, lw + 6, avgBoxH);
                 ctx.fillStyle = "#ff4444";
-                ctx.fillText(label, w - lw - 5, 15);
+                ctx.fillText(label, w - lw - 5, 3 + FONT_SIZE);
             } else if (pingSamples.length > 0) {
                 const avg = Math.round(pingSamples.reduce((a, b) => a + b, 0) / pingSamples.length);
                 const label = `avg ${avg}ms`;
                 const lw = ctx.measureText(label).width;
-                ctx.fillStyle = "rgba(255,255,255,0.65)";
-                ctx.fillRect(w - lw - 8, 3, lw + 6, 16);
-                ctx.fillStyle = "#000";
-                ctx.fillText(label, w - lw - 5, 15);
+                ctx.fillStyle = avgBg;
+                ctx.fillRect(w - lw - 8, 3, lw + 6, avgBoxH);
+                ctx.fillStyle = dark ? "#eee" : "#000";
+                ctx.fillText(label, w - lw - 5, 3 + FONT_SIZE);
             }
         };
 
@@ -941,7 +1016,7 @@ export class GameScene {
                         addServerLog(loggedInHost, loggedInPort, "回線復帰");
                         if (loginStatus) {
                             loginStatus.style.color = "#00dd55";
-                            loginStatus.textContent = "✔回線復帰";
+                            loginStatus.textContent = isMobile ? "✓" : "✓回線復帰";
                         }
                     }
                     pingSamples.push(ms);
@@ -961,7 +1036,7 @@ export class GameScene {
                         addServerLog(loggedInHost, loggedInPort, "回線切断", "ネットワーク障害またはサーバ停止により切断されました");
                         if (loginStatus) {
                             loginStatus.style.color = "#ff4444";
-                            loginStatus.textContent = "✘回線切断";
+                            loginStatus.textContent = isMobile ? "✗" : "✗回線切断";
                         }
                     }
                 }
@@ -1001,20 +1076,25 @@ export class GameScene {
                     return m ? decodeURIComponent(m[1]) : null;
                 };
 
-                const initRect = ppanel.getBoundingClientRect();
-                ppanel.style.left  = initRect.left + "px";
-                ppanel.style.right = "auto";
-                const savedL = gCkP("pgLeft"), savedT = gCkP("pgTop");
-                const savedW = gCkP("pgWidth"), savedH = gCkP("pgHeight");
-                if (savedL !== null) { ppanel.style.left = savedL + "px"; ppanel.style.right = "auto"; }
-                if (savedT !== null) ppanel.style.top    = savedT + "px";
-                if (savedW !== null) ppanel.style.width  = savedW + "px";
-                if (savedH !== null) ppanel.style.height = savedH + "px";
-                this.clampToViewport(ppanel);
+                if (!isMobileDev) {
+                    const initRect = ppanel.getBoundingClientRect();
+                    ppanel.style.left  = initRect.left + "px";
+                    ppanel.style.right = "auto";
+                }
+                if (!isMobileDev) {
+                    const savedL = gCkP("pgLeft"), savedT = gCkP("pgTop");
+                    const savedW = gCkP("pgWidth"), savedH = gCkP("pgHeight");
+                    if (savedL !== null) { ppanel.style.left = savedL + "px"; ppanel.style.right = "auto"; }
+                    if (savedT !== null) ppanel.style.top    = savedT + "px";
+                    if (savedW !== null) ppanel.style.width  = savedW + "px";
+                    if (savedH !== null) ppanel.style.height = savedH + "px";
+                    this.clampToViewport(ppanel);
+                }
 
                 let isDragP = false, offXP = 0, offYP = 0;
                 pheader.addEventListener("pointerdown", (e: PointerEvent) => {
                     if ((e.target as HTMLElement).id === "ping-close") return;
+                    if (isMobileLandscape()) return;
                     isDragP = true;
                     offXP = e.clientX - ppanel.getBoundingClientRect().left;
                     offYP = e.clientY - ppanel.getBoundingClientRect().top;
@@ -1040,6 +1120,11 @@ export class GameScene {
                     sCkP("pgHeight", String(Math.round(r.height)));
                     drawPingGraph();
                 }).observe(ppanel);
+                // canvas自体のリサイズも監視（ランドスケープ切替時など）
+                const pingCanvas = document.getElementById("ping-canvas");
+                if (pingCanvas) {
+                    new ResizeObserver(() => drawPingGraph()).observe(pingCanvas);
+                }
 
                 if (pclose) {
                     pclose.addEventListener("click", () => {
@@ -1062,7 +1147,7 @@ export class GameScene {
             renderUserList();
             this.remoteAvatars.forEach(av => av.dispose());
             this.remoteAvatars.clear();
-            if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.textContent = "ログインして下さい！"; }
+            if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.textContent = isMobile ? "" : "ログインして下さい！"; }
             if (loginBtn) loginBtn.style.background = "#28a74580";
             setLoginMode();
         };
@@ -1073,7 +1158,7 @@ export class GameScene {
             const trimEnabled = (document.getElementById("speechTrimBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? true;
             const text = trimEnabled ? textarea.value.trim() : textarea.value;
             if (!text.trim()) return;
-            this.updatePlayerSpeech(text);
+            doUpdateSpeech(text);
             textarea.value = "";
             if (this.nakama.getSession()) {
                 // ログイン済み: サーバー送信 → エコーで履歴反映
@@ -1091,9 +1176,32 @@ export class GameScene {
             }
         };
 
+        // セリフ吹き出しトグル
+        let lastSpeechText = "";    // 最後に表示したセリフ
+        let bubbleHidden = false;   // ユーザが手動で非表示にしたか
+        const spPc = clearBtn.querySelector(".btn-label-pc") as HTMLElement | null;
+        const spSp = clearBtn.querySelector(".btn-label-sp") as HTMLElement | null;
+        const updateClearBtnIcon = () => {
+            const showing = !bubbleHidden && lastSpeechText !== "";
+            if (spPc) spPc.textContent = showing ? "非表示" : "表示";
+            if (spSp) spSp.textContent = showing ? "🚫" : "💬";
+        };
+        // セリフ更新（lastSpeechText追跡＋非表示状態を考慮）
+        const doUpdateSpeech = (text: string) => {
+            lastSpeechText = text;
+            if (bubbleHidden && text) bubbleHidden = false;
+            if (this.updatePlayerSpeech) this.updatePlayerSpeech(bubbleHidden ? "" : text);
+            updateClearBtnIcon();
+        };
+
         clearBtn.onclick = () => {
-            if (this.updatePlayerSpeech) this.updatePlayerSpeech(""); 
-            textarea.value = "";
+            if (lastSpeechText) {
+                bubbleHidden = !bubbleHidden;
+                if (this.updatePlayerSpeech) this.updatePlayerSpeech(bubbleHidden ? "" : lastSpeechText);
+            } else {
+                textarea.value = "";
+            }
+            updateClearBtnIcon();
         };
 
         sendBtn.onclick = () => { sendMessage(); };
@@ -1439,7 +1547,7 @@ export class GameScene {
         this.createRoundedMinecraftClouds();
         this.createCoordinateLabels();
 
-        this.updatePlayerSpeech  = this.createSpeechBubble(playerNameTag.plane, "こんにちは！");
+        this.updatePlayerSpeech  = this.createSpeechBubble(playerNameTag.plane, "");
         const updateNpc001Speech = this.createSpeechBubble(npc001NameTag.plane, "キタちゃん１です。");
         const updateNpc002Speech = this.createSpeechBubble(npc002NameTag.plane, "キターちゃん２です");
         const updateNpc003Speech = this.createSpeechBubble(npc003NameTag.plane, "キタちゃん３です");
@@ -1464,7 +1572,7 @@ export class GameScene {
                 `<span class="chat-history-name">${avatarName}</span>` +
                 `<span class="chat-history-text">${text}</span>`;
             list.appendChild(entry);
-            list.scrollTop = list.scrollHeight;
+            entry.scrollIntoView({ block: "end", behavior: "instant" });
         };
 
         let npcIntervals: ReturnType<typeof setInterval>[] = [];
@@ -2020,6 +2128,7 @@ export class GameScene {
     }
 
     private createDebugOverlay(): void {
+        const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
         const scaleSelect = document.getElementById("scaleSelect") as HTMLSelectElement;
 
         const lodBtn = document.getElementById("lodBtn") as HTMLButtonElement;
@@ -2079,18 +2188,21 @@ export class GameScene {
             const savedMin   = getCookie("dbgMin");
 
             debugOverlay.style.right = "";
-            if (savedLeft  !== null) debugOverlay.style.left  = savedLeft  + "px";
-            if (savedTop   !== null) debugOverlay.style.top   = savedTop   + "px";
-            if (savedWidth !== null && savedMin !== "1") debugOverlay.style.width  = savedWidth + "px";
-            if (savedHeight!== null && savedMin !== "1") debugOverlay.style.height = savedHeight + "px";
-            if (savedMin === "1") debugOverlay.classList.add("minimized");
-            this.clampToViewport(debugOverlay);
+            if (!isMobileDev) {
+                if (savedLeft  !== null) debugOverlay.style.left  = savedLeft  + "px";
+                if (savedTop   !== null) debugOverlay.style.top   = savedTop   + "px";
+                if (savedWidth !== null && savedMin !== "1") debugOverlay.style.width  = savedWidth + "px";
+                if (savedHeight!== null && savedMin !== "1") debugOverlay.style.height = savedHeight + "px";
+                if (savedMin === "1") debugOverlay.classList.add("minimized");
+                this.clampToViewport(debugOverlay);
+            }
 
             let isDragging = false;
             let dragOX = 0, dragOY = 0;
 
             debugTitleBar.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).tagName === "BUTTON") return;
+                if (isMobileDev && matchMedia("(orientation:landscape)").matches) return;
                 isDragging = true;
                 const rect = debugOverlay.getBoundingClientRect();
                 dragOX = e.clientX - rect.left;
@@ -2232,10 +2344,48 @@ export class GameScene {
             const sCk = (k: string, v: string) =>
                 document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
 
+            const isMobileMenu = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+            const toggleRegistry: { btnId: string; targetId: string; label: string; cookieKey: string }[] = [];
+
+            // ランドスケープ: パネル非表示時はデバイダー非表示＆canvas全画面
+            // パネル非表示時に保存する元の --ls-divider 値
+            let savedDivider = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim() || "60%";
+
+            const updateLandscapeLayout = () => {
+                if (!isMobileMenu) return;
+                const isLandscape = matchMedia("(orientation:landscape)").matches;
+                if (!isLandscape) return;
+                const anyVisible = toggleRegistry.some(reg => {
+                    const el = document.getElementById(reg.targetId);
+                    return el && el.style.display !== "none";
+                });
+                const divider = document.getElementById("landscape-divider");
+                if (anyVisible) {
+                    // デバイダー復帰
+                    if (divider) divider.style.display = "";
+                    document.documentElement.style.setProperty("--ls-divider", savedDivider);
+                } else {
+                    // 現在の位置を保存してから全画面化
+                    const cur = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim();
+                    if (cur && cur !== "100%") savedDivider = cur;
+                    if (divider) divider.style.display = "none";
+                    document.documentElement.style.setProperty("--ls-divider", "100%");
+                }
+                // chat-container: 全画面時は左寄せ＆背景透明
+                const chatContainer = document.getElementById("chat-container");
+                if (chatContainer) {
+                    chatContainer.style.left = anyVisible ? "" : "0";
+                    chatContainer.style.right = anyVisible ? "" : "0";
+                    chatContainer.style.background = anyVisible ? "" : "transparent";
+                }
+                this.engine.resize();
+            };
+
             const makeToggle = (btnId: string, targetId: string, label: string, cookieKey: string) => {
                 const btn    = document.getElementById(btnId);
                 const target = document.getElementById(targetId);
                 if (!btn || !target) return;
+                toggleRegistry.push({ btnId, targetId, label, cookieKey });
 
                 // 初期状態をクッキーから復元
                 if (gCk(cookieKey) === "0") {
@@ -2246,6 +2396,21 @@ export class GameScene {
                 btn.addEventListener("click", (e) => {
                     e.stopPropagation();
                     const visible = target.style.display !== "none";
+
+                    // スマホ: 開くときは他パネルを全て閉じる
+                    if (isMobileMenu && !visible) {
+                        for (const reg of toggleRegistry) {
+                            if (reg.targetId === targetId) continue;
+                            const otherPanel = document.getElementById(reg.targetId);
+                            const otherBtn   = document.getElementById(reg.btnId);
+                            if (otherPanel && otherPanel.style.display !== "none") {
+                                otherPanel.style.display = "none";
+                                if (otherBtn) otherBtn.textContent = "　 " + reg.label;
+                                sCk(reg.cookieKey, "0");
+                            }
+                        }
+                    }
+
                     target.style.display = visible ? "none" : "";
                     if (!visible) {
                         if (targetId === "debug-overlay") {
@@ -2262,6 +2427,7 @@ export class GameScene {
                     }
                     btn.textContent = (visible ? "　" : "✓") + " " + label;
                     sCk(cookieKey, visible ? "0" : "1");
+                    updateLandscapeLayout();
                 });
             };
             makeToggle("menu-serversettings", "server-settings-panel", "サーバ設定",    "showSrvSettings");
@@ -2270,6 +2436,17 @@ export class GameScene {
             makeToggle("menu-chathistory",    "chat-history-panel",    "チャット履歴",  "showChatHist");
             makeToggle("menu-ping",           "ping-panel",            "Ping グラフ",   "showPing");
             makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
+            // 初期状態 & 回転時にレイアウト更新
+            updateLandscapeLayout();
+            window.addEventListener("orientationchange", () => setTimeout(updateLandscapeLayout, 200));
+            // パネル閉じるボタン等でもレイアウト更新（style属性の変更を監視）
+            if (isMobileMenu) {
+                const mo = new MutationObserver(updateLandscapeLayout);
+                for (const reg of toggleRegistry) {
+                    const el = document.getElementById(reg.targetId);
+                    if (el) mo.observe(el, { attributes: true, attributeFilter: ["style"] });
+                }
+            }
         }
 
         const playerPosVal = document.getElementById("val-player-pos");

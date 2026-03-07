@@ -2,11 +2,12 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="icon" type="image/png" href="/favicon.png">
     <title>tommieChat</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87ceeb; }
-        canvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
+        #renderCanvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
         
         #chat-container {
             position: fixed;
@@ -72,6 +73,7 @@
         }
         #sendBtn { background: #0076d752; }
         #clearBtn { background: #d7000034; }
+        .btn-label-sp { display: none; }
 
         /* ===== ユーザーリスト ===== */
         #user-list-panel {
@@ -551,8 +553,6 @@
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
-            display: flex;
-            flex-direction: column;
             overflow: hidden;
             resize: both;
             font-family: "Courier New", Courier, monospace;
@@ -584,10 +584,11 @@
         }
         #ping-close:hover { opacity: 1; }
         #ping-canvas {
-            flex: 1;
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
             display: block;
-            width: 100%;
-            min-height: 0;
             background: transparent;
         }
 
@@ -669,6 +670,322 @@
             word-break: break-word;
             pointer-events: none;
             display: none;
+        }
+        /* スマホ（タッチ＋高DPI）向けサイズ拡大 */
+        @media (pointer: coarse) and (min-resolution: 2dppx) {
+            /* --- 画面下部 ログイン行・チャット行 --- */
+            #chat-container {
+                bottom: 10px;
+                gap: 8px;
+            }
+            #login-row {
+                gap: 8px;
+            }
+            #loginName {
+                width: 40%;
+                height: 36px;
+                font-size: 16px;
+                padding: 4px 8px;
+                border-radius: 7px;
+                box-sizing: border-box;
+            }
+            .ui-btn {
+                width: auto;
+                min-width: 50px;
+                height: 36px;
+                font-size: 14px;
+                padding: 0 10px;
+                border-radius: 7px;
+                box-sizing: border-box;
+            }
+            #loginStatus {
+                font-size: 20px !important;
+                text-shadow: none !important;
+            }
+            #chatInput {
+                height: 36px;
+                font-size: 16px;
+                padding: 4px 8px;
+                min-height: 36px;
+                border-radius: 7px;
+                box-sizing: border-box;
+            }
+            #chat-row {
+                gap: 8px;
+            }
+            .btn-label-pc { display: none; }
+            .btn-label-sp { display: inline; }
+            #clearBtn {
+                min-width: 32px;
+                padding: 0 6px;
+            }
+
+            /* --- 右上表示 --- */
+            #ping-display {
+                font-size: 16px !important;
+            }
+
+            /* --- ツールチップ --- */
+            #mobile-tooltip {
+                font-size: 15px !important;
+            }
+
+            /* --- パネル共通 --- */
+            #user-list-panel,
+            #chat-history-panel,
+            #server-settings-panel,
+            #server-log-panel,
+            #ping-panel,
+            #debug-overlay {
+                font-size: 16px;
+                left: 0 !important;
+                right: auto !important;
+                width: 100vw !important;
+                max-width: 100vw !important;
+                height: 50vh !important;
+                border-radius: 0;
+                resize: none !important;
+                background: #111 !important;
+                color: #eee !important;
+                backdrop-filter: none !important;
+            }
+            #user-list-header,
+            #chat-history-header,
+            #server-settings-header,
+            #server-log-header,
+            #ping-header,
+            #debug-title-bar {
+                font-size: 17px;
+                padding: 8px 10px;
+                background: rgba(255,255,255,0.1) !important;
+                color: #fff !important;
+                border-bottom-color: rgba(255,255,255,0.2) !important;
+            }
+            #user-list-close,
+            #chat-history-close,
+            #server-settings-close,
+            #server-log-close,
+            #ping-close {
+                font-size: 15px;
+                padding: 6px 8px;
+                color: #fff !important;
+            }
+            #server-log-list .server-log-entry,
+            #chat-history-list,
+            .server-settings-row,
+            .server-settings-row input {
+                font-size: 15px;
+                color: #eee !important;
+            }
+            .server-settings-row input {
+                background: rgba(255,255,255,0.15) !important;
+                border-color: rgba(255,255,255,0.3) !important;
+            }
+            .srv-row label {
+                color: #eee !important;
+                font-size: 15px !important;
+                margin-right: 8px !important;
+            }
+            .srv-row input {
+                color: #eee !important;
+                background: rgba(255,255,255,0.15) !important;
+                border-color: rgba(255,255,255,0.3) !important;
+                font-size: 15px !important;
+            }
+            .srv-desc {
+                color: #eee !important;
+                font-size: 15px !important;
+            }
+
+            /* --- チャット履歴暗背景対応 --- */
+            #chat-history-list {
+                padding-bottom: 4px !important;
+            }
+            .chat-history-entry {
+                color: #eee !important;
+                border-bottom-color: rgba(255,255,255,0.15) !important;
+            }
+            .chat-history-time {
+                color: #aaa !important;
+            }
+            .chat-history-name {
+                color: #6cb4ff !important;
+            }
+            .chat-history-system {
+                color: #bbb !important;
+            }
+            .chat-history-text {
+                color: #eee !important;
+            }
+
+            /* --- ユーザリスト暗背景対応 --- */
+            #user-list thead th {
+                background: rgba(255,255,255,0.12) !important;
+                color: #eee !important;
+                border-bottom-color: rgba(255,255,255,0.2) !important;
+                font-size: 15px !important;
+            }
+            #user-list thead th:hover {
+                background: rgba(255,255,255,0.25) !important;
+            }
+            #user-list tbody td {
+                color: #eee !important;
+                font-size: 15px !important;
+            }
+
+            /* --- デバッグオーバーレイ暗背景対応 --- */
+            #debug-title-bar {
+                border-bottom-color: rgba(255,255,255,0.2) !important;
+            }
+            #debug-title-text {
+                color: #fff !important;
+            }
+            #debug-minimize-btn, #debug-restore-btn {
+                color: #fff !important;
+            }
+            #debug-overlay td.label {
+                color: #ccc !important;
+            }
+            #debug-overlay td.value {
+                color: #eee !important;
+            }
+            #debug-overlay td.label:hover {
+                background-color: rgba(255,255,255,0.1) !important;
+                color: #6cb4ff !important;
+            }
+            /* デバッグ項目グループ名 */
+            #debug-overlay td[colspan] div > div {
+                color: #fff !important;
+                border-bottom-color: rgba(255,255,255,0.3) !important;
+            }
+            #debug-overlay td[colspan] > div {
+                background: rgba(255,255,255,0.1) !important;
+            }
+            #debug-overlay td.label,
+            #debug-overlay td.value {
+                font-size: 15px !important;
+            }
+            #debug-overlay .debug-select,
+            #debug-overlay .debug-btn,
+            #debug-overlay .debug-input,
+            #debug-overlay .debug-color {
+                font-size: 15px !important;
+            }
+            #debug-overlay td[colspan] div > div {
+                font-size: 14px !important;
+            }
+
+            /* --- 画面下部コントロール背景 --- */
+            #chat-container {
+                background: rgba(0,0,0,0.85);
+                border-radius: 0;
+                padding: 6px 8px;
+            }
+
+            /* --- ハンバーガーメニュー --- */
+            #hamburger-btn {
+                font-size: 22px !important;
+                padding: 8px 12px !important;
+            }
+            #hamburger-menu {
+                font-size: 16px !important;
+            }
+
+            /* --- フッター --- */
+            #app-footer-version {
+                display: none !important;
+            }
+        }
+
+        /* 区切りコントロール（デフォルト非表示） */
+        #landscape-divider {
+            display: none;
+        }
+
+        /* スマホ横長（ランドスケープ） */
+        @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: landscape) {
+            #renderCanvas {
+                width: var(--ls-divider, 60%) !important;
+            }
+            #landscape-divider {
+                display: block;
+                position: fixed;
+                left: var(--ls-divider, 60%);
+                top: 0;
+                width: 12px;
+                height: 100vh;
+                background: rgba(0,0,0,0.15);
+                z-index: 200;
+                touch-action: none;
+                cursor: col-resize;
+            }
+            #landscape-divider-knob {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 20px;
+                color: #fff;
+                text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+                line-height: 1;
+                pointer-events: none;
+            }
+            /* デバイダー右側の白背景 */
+            body::after {
+                content: "";
+                position: fixed;
+                top: 0;
+                left: var(--ls-divider, 60%);
+                right: 0;
+                bottom: 0;
+                background: #fff;
+                z-index: 0;
+                pointer-events: none;
+            }
+            #chat-container {
+                left: calc(var(--ls-divider, 60%) + 12px);
+                right: 0;
+                transform: none;
+                width: auto;
+                max-width: none;
+                bottom: 5px;
+                margin-left: 0;
+            }
+            #login-row {
+                justify-content: flex-start;
+            }
+            #loginName {
+                width: 40%;
+            }
+            #chat-row {
+                justify-content: flex-end;
+            }
+            #chatInput {
+                flex-grow: 1;
+            }
+
+            /* ping/FPS表示はcanvasの右上 */
+            #ping-display {
+                right: calc(100% - var(--ls-divider, 60%) + 8px) !important;
+                text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+                color: #fff !important;
+            }
+
+            /* パネルは区切り位置から右 */
+            #user-list-panel,
+            #chat-history-panel,
+            #server-settings-panel,
+            #server-log-panel,
+            #ping-panel,
+            #debug-overlay {
+                left: calc(var(--ls-divider, 60%) + 12px) !important;
+                right: 0 !important;
+                top: 0 !important;
+                bottom: var(--ls-panel-bottom, 90px) !important;
+                height: auto !important;
+                width: auto !important;
+                max-width: none !important;
+            }
         }
     </style>
     <script>
@@ -1059,17 +1376,17 @@
         <button class="menu-item" id="menu-cookie-reset">全パネル非表示（クッキー初期化）</button>
     </div>
 
+    <div id="landscape-divider"><div id="landscape-divider-knob">⋮</div></div>
     <div id="chat-container">
         <div id="login-row">
-            <label for="loginName" style="color:#000;">ログイン名:</label>
             <input id="loginName" type="text" placeholder="名前を入力して下さい" title="使える文字: 英数字 (a-z A-Z 0-9) と . _ @ + -&#10;例: tommie, user01, my.name&#10;6〜128文字">
             <button id="loginBtn" class="ui-btn" style="width:auto;padding:0 12px;white-space:nowrap;background:#28a74580;">ログイン</button>
-            <span id="loginStatus" style="color:#00dd55;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.7);">ログインして下さい！</span>
+            <span id="loginStatus" style="color:#00dd55;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.3);"></span>
         </div>
         <div id="chat-row">
-            <textarea id="chatInput" placeholder="セリフを入力してEnterで送信..." title="アバターのセリフを入力します&#10;Enter: 送信&#10;Shift+Enter: 改行&#10;縦方向にリサイズ可能（行単位）"></textarea>
-            <button id="sendBtn" class="ui-btn">送信</button>
-            <button id="clearBtn" class="ui-btn">クリア</button>
+            <textarea id="chatInput" placeholder="セリフを入力" title="アバターのセリフを入力します&#10;Enter: 送信&#10;Shift+Enter: 改行&#10;縦方向にリサイズ可能（行単位）"></textarea>
+            <button id="sendBtn" class="ui-btn" title="セリフを送信します（Enter）">送信</button>
+            <button id="clearBtn" class="ui-btn" title="セリフ吹き出しの表示/非表示を切り替えます"><span class="btn-label-pc">クリア</span><span class="btn-label-sp">💬</span></button>
         </div>
     </div>
 
