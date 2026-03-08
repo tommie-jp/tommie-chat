@@ -31,21 +31,19 @@ type blockData struct {
 	R, G, B, A uint8
 }
 
-// 地面テーブル: groundTable[gx][gz] (256x256)
-var (
-	groundMu    sync.RWMutex
-	groundTable [worldSize][worldSize]blockData
-)
+// chunk はチャンク単位のデータとロックをまとめた構造体
+type chunk struct {
+	mu    sync.RWMutex
+	cells [chunkSize][chunkSize]blockData
+}
 
-// chunkToFlat: 指定チャンクの 16x16 セルを 6バイト/セル (lo,hi,R,G,B,A) へ変換。呼び出し元がRLock保持
-func chunkToFlat(cx, cz int) []uint8 {
+// toFlat: 16x16 セルを 6バイト/セル (lo,hi,R,G,B,A) へ変換。呼び出し元がRLock保持
+func (ch *chunk) toFlat() []uint8 {
 	flat := make([]uint8, chunkSize*chunkSize*6)
-	baseX := cx * chunkSize
-	baseZ := cz * chunkSize
 	for lx := 0; lx < chunkSize; lx++ {
 		for lz := 0; lz < chunkSize; lz++ {
 			i := (lx*chunkSize + lz) * 6
-			c := groundTable[baseX+lx][baseZ+lz]
+			c := ch.cells[lx][lz]
 			flat[i] = uint8(c.BlockID & 0xFF)
 			flat[i+1] = uint8(c.BlockID >> 8)
 			flat[i+2] = c.R
@@ -57,17 +55,15 @@ func chunkToFlat(cx, cz int) []uint8 {
 	return flat
 }
 
-// chunkFromFlat: 6バイト/セル の []uint8 からチャンクを復元。呼び出し元がLock保持
-func chunkFromFlat(cx, cz int, flat []uint8) bool {
+// fromFlat: 6バイト/セル の []uint8 からチャンクを復元。呼び出し元がLock保持
+func (ch *chunk) fromFlat(flat []uint8) bool {
 	if len(flat) != chunkSize*chunkSize*6 {
 		return false
 	}
-	baseX := cx * chunkSize
-	baseZ := cz * chunkSize
 	for lx := 0; lx < chunkSize; lx++ {
 		for lz := 0; lz < chunkSize; lz++ {
 			i := (lx*chunkSize + lz) * 6
-			groundTable[baseX+lx][baseZ+lz] = blockData{
+			ch.cells[lx][lz] = blockData{
 				BlockID: uint16(flat[i]) | uint16(flat[i+1])<<8,
 				R: flat[i+2], G: flat[i+3], B: flat[i+4], A: flat[i+5],
 			}
@@ -76,7 +72,10 @@ func chunkFromFlat(cx, cz int, flat []uint8) bool {
 	return true
 }
 
-// ストレージキー: チャンク座標からキーを生成
+// 地面テーブル: 16x16 チャンクの配列
+var chunks [chunkCount][chunkCount]chunk
+
+// ストレージキー
 const (
 	groundCollection = "world_data"
 	systemUserID     = "00000000-0000-0000-0000-000000000000"
@@ -97,9 +96,10 @@ func flatToInts(flat []uint8) []int {
 }
 
 func saveChunkToStorage(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger, cx, cz int) {
-	groundMu.RLock()
-	flat := chunkToFlat(cx, cz)
-	groundMu.RUnlock()
+	ch := &chunks[cx][cz]
+	ch.mu.RLock()
+	flat := ch.toFlat()
+	ch.mu.RUnlock()
 	data, err := json.Marshal(struct {
 		Table []int `json:"table"`
 	}{Table: flatToInts(flat)})
@@ -239,18 +239,29 @@ func dumpGroundTableCSV(logger runtime.Logger) {
 		logger.Warn("dumpGroundTableCSV MkdirAll: %v", err)
 		return
 	}
-	groundMu.RLock()
+	// チャンクごとにロックしてスナップショットを取る
+	var snapshot [worldSize][worldSize]uint16
+	for cx := 0; cx < chunkCount; cx++ {
+		for cz := 0; cz < chunkCount; cz++ {
+			ch := &chunks[cx][cz]
+			ch.mu.RLock()
+			for lx := 0; lx < chunkSize; lx++ {
+				for lz := 0; lz < chunkSize; lz++ {
+					snapshot[cx*chunkSize+lx][cz*chunkSize+lz] = ch.cells[lx][lz].BlockID
+				}
+			}
+			ch.mu.RUnlock()
+		}
+	}
 	var sb strings.Builder
 	for gz := 0; gz < worldSize; gz++ {
 		cols := make([]string, worldSize)
 		for gx := 0; gx < worldSize; gx++ {
-			c := groundTable[gx][gz]
-			cols[gx] = fmt.Sprintf("%d", c.BlockID)
+			cols[gx] = fmt.Sprintf("%d", snapshot[gx][gz])
 		}
 		sb.WriteString(strings.Join(cols, ","))
 		sb.WriteByte('\n')
 	}
-	groundMu.RUnlock()
 	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
 		logger.Warn("dumpGroundTableCSV WriteFile: %v", err)
 	}
@@ -270,13 +281,15 @@ func rpcSetBlock(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runt
 	if a == 0 {
 		a = 255
 	}
-	groundMu.Lock()
-	groundTable[req.GX][req.GZ] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
-	groundMu.Unlock()
-
-	// 該当チャンクのみ保存
+	// 該当チャンクのみロック
 	cx := req.GX / chunkSize
 	cz := req.GZ / chunkSize
+	lx := req.GX % chunkSize
+	lz := req.GZ % chunkSize
+	ch := &chunks[cx][cz]
+	ch.mu.Lock()
+	ch.cells[lx][lz] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
+	ch.mu.Unlock()
 	saveChunkToStorage(ctx, nk, logger, cx, cz)
 	dumpGroundTableCSV(logger)
 
@@ -306,9 +319,10 @@ func rpcGetGroundChunk(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime
 	if req.CX < 0 || req.CX >= chunkCount || req.CZ < 0 || req.CZ >= chunkCount {
 		return "", fmt.Errorf("getGroundChunk: out of bounds cx=%d cz=%d", req.CX, req.CZ)
 	}
-	groundMu.RLock()
-	flat := chunkToFlat(req.CX, req.CZ)
-	groundMu.RUnlock()
+	ch := &chunks[req.CX][req.CZ]
+	ch.mu.RLock()
+	flat := ch.toFlat()
+	ch.mu.RUnlock()
 	b, err := json.Marshal(map[string]interface{}{
 		"cx":    req.CX,
 		"cz":    req.CZ,
@@ -323,21 +337,28 @@ func rpcGetGroundChunk(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime
 // rpcGetGroundTable は全チャンクの地面テーブルをまとめて返す（後方互換）
 func rpcGetGroundTable(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ string) (string, error) {
 	fmt.Println("[getGroundTable]")
-	groundMu.RLock()
 	flat := make([]uint8, worldSize*worldSize*6)
-	for gx := 0; gx < worldSize; gx++ {
-		for gz := 0; gz < worldSize; gz++ {
-			i := (gx*worldSize + gz) * 6
-			c := groundTable[gx][gz]
-			flat[i] = uint8(c.BlockID & 0xFF)
-			flat[i+1] = uint8(c.BlockID >> 8)
-			flat[i+2] = c.R
-			flat[i+3] = c.G
-			flat[i+4] = c.B
-			flat[i+5] = c.A
+	for cx := 0; cx < chunkCount; cx++ {
+		for cz := 0; cz < chunkCount; cz++ {
+			ch := &chunks[cx][cz]
+			ch.mu.RLock()
+			for lx := 0; lx < chunkSize; lx++ {
+				for lz := 0; lz < chunkSize; lz++ {
+					gx := cx*chunkSize + lx
+					gz := cz*chunkSize + lz
+					i := (gx*worldSize + gz) * 6
+					c := ch.cells[lx][lz]
+					flat[i] = uint8(c.BlockID & 0xFF)
+					flat[i+1] = uint8(c.BlockID >> 8)
+					flat[i+2] = c.R
+					flat[i+3] = c.G
+					flat[i+4] = c.B
+					flat[i+5] = c.A
+				}
+			}
+			ch.mu.RUnlock()
 		}
 	}
-	groundMu.RUnlock()
 	b, err := json.Marshal(map[string]interface{}{"table": flatToInts(flat)})
 	if err != nil {
 		return "", err
@@ -369,9 +390,10 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 			for i, v := range chunkData.Table {
 				flat8[i] = uint8(v)
 			}
-			groundMu.Lock()
-			chunkFromFlat(cx, cz, flat8)
-			groundMu.Unlock()
+			ch := &chunks[cx][cz]
+			ch.mu.Lock()
+			ch.fromFlat(flat8)
+			ch.mu.Unlock()
 			loadedChunks++
 		}
 	}
@@ -390,20 +412,21 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 				Table []int `json:"table"`
 			}
 			if err := json.Unmarshal([]byte(objs[0].Value), &newData); err == nil && len(newData.Table) == oldSize*oldSize*6 {
-				groundMu.Lock()
 				for gx := 0; gx < oldSize; gx++ {
 					for gz := 0; gz < oldSize; gz++ {
 						i := (gx*oldSize + gz) * 6
-						groundTable[gx][gz] = blockData{
+						cx := gx / chunkSize
+						cz := gz / chunkSize
+						lx := gx % chunkSize
+						lz := gz % chunkSize
+						chunks[cx][cz].cells[lx][lz] = blockData{
 							BlockID: uint16(newData.Table[i]) | uint16(newData.Table[i+1])<<8,
 							R: uint8(newData.Table[i+2]), G: uint8(newData.Table[i+3]),
 							B: uint8(newData.Table[i+4]), A: uint8(newData.Table[i+5]),
 						}
 					}
 				}
-				groundMu.Unlock()
 				logger.Info("Migrated old ground_table (100x100) to chunk format")
-				// マイグレーション後、チャンク単位で保存
 				for cx := 0; cx < chunkCount; cx++ {
 					for cz := 0; cz < chunkCount; cz++ {
 						saveChunkToStorage(ctx, nk, logger, cx, cz)
@@ -415,13 +438,15 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 					Table []uint16 `json:"table"`
 				}
 				if err2 := json.Unmarshal([]byte(objs[0].Value), &oldData); err2 == nil && len(oldData.Table) == oldSize*oldSize {
-					groundMu.Lock()
 					for gx := 0; gx < oldSize; gx++ {
 						for gz := 0; gz < oldSize; gz++ {
-							groundTable[gx][gz] = blockData{BlockID: oldData.Table[gx*oldSize+gz], R: 51, G: 102, B: 255, A: 255}
+							cx := gx / chunkSize
+							cz := gz / chunkSize
+							lx := gx % chunkSize
+							lz := gz % chunkSize
+							chunks[cx][cz].cells[lx][lz] = blockData{BlockID: oldData.Table[gx*oldSize+gz], R: 51, G: 102, B: 255, A: 255}
 						}
 					}
-					groundMu.Unlock()
 					logger.Info("Migrated old ground_table (100x100, blockID only) to chunk format")
 					for cx := 0; cx < chunkCount; cx++ {
 						for cz := 0; cz < chunkCount; cz++ {

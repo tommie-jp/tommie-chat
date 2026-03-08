@@ -415,3 +415,22 @@ f2345678911234567892123456789312345678941
 | [nakama_db_total_open_conns](http://localhost:9090/query?g0.expr=nakama_db_total_open_conns&g0.tab=graph) | DB 総接続数 |
 
 ---
+
+## GOについて
+
+Nakama の場合、Go 一択がおすすめです。理由:
+
+Go は遅くない — 「JSと同程度」は誤解です。Go はコンパイル言語で、一般的にJSの2〜5倍高速です。Cより遅いのは事実ですが、ゲームサーバ用途では十分すぎる性能です。
+
+Nakama 公式の推奨 — Nakama 自体が Go で書かれており、Go プラグインはネイティブ実行されます。JS/Lua ランタイムはインタプリタ経由なので、Go プラグインの方が高速です。
+
+Go vs Lua vs JS（Nakama内）:
+
+Go: ネイティブ速度、型安全、並行処理が得意
+Lua: 軽量だが機能制限あり
+JS: TypeScript→JSにトランスパイル必要、VMオーバーヘッドあり
+今回のチャンク排他制御のように sync.RWMutex が使えるのも Go の強みです。JS/Lua ではこのレベルの並行制御はできません。
+
+結論: Nakama 拡張には Go が最適です。現在の選択は正しいです。
+
+---
