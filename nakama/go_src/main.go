@@ -17,6 +17,12 @@ import (
 
 var serverUpTime = time.Now().UTC().Format(time.RFC3339)
 
+// logf は時刻プレフィックス付きでログを出力する
+func logf(format string, a ...interface{}) {
+	ts := time.Now().Format("15:04:05")
+	fmt.Printf(ts+" "+format, a...)
+}
+
 const (
 	streamModeChannel uint8 = 2
 	chatRoomLabel           = "world"
@@ -145,7 +151,7 @@ func saveChunkToStorage(ctx context.Context, nk runtime.NakamaModule, logger run
 // rpcGetServerInfo はサーバ情報（ノード名・バージョン・起動時刻・プレイヤー数）を返す
 func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
-	fmt.Printf("[getServerInfo] uid=%s\n", uid)
+	logf("[getServerInfo] uid=%s\n", uid)
 	playerCount, err := nk.StreamCount(streamModeChannel, "", "", chatRoomLabel)
 	if err != nil {
 		logger.Warn("StreamCount error: %v", err)
@@ -179,7 +185,7 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 // rpcGetWorldMatch は稼働中の "world" マッチを探し、なければ新規作成して返す
 func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
-	fmt.Printf("[getWorldMatch] uid=%s\n", uid)
+	logf("[getWorldMatch] uid=%s\n", uid)
 	matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
 	if err != nil {
 		logger.Warn("MatchList failed: %v", err)
@@ -317,7 +323,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				nowVisible := newAOI.containsChunk(otherPos.CX, otherPos.CZ)
 				if nowVisible && !wasVisible {
 					// このプレイヤーが新しく見えるようになった → OP_AOI_ENTER を送信
-					fmt.Printf("[send:AOI_ENTER] to=%s target=%s x=%.1f z=%.1f tex=%s (aoiChange)\n", sid, otherSID, otherPos.X, otherPos.Z, otherPos.TextureUrl)
+					logf("[send:AOI_ENTER] to=%s target=%s x=%.1f z=%.1f tex=%s (aoiChange)\n", sid, otherSID, otherPos.X, otherPos.Z, otherPos.TextureUrl)
 					enterData, _ := json.Marshal(map[string]interface{}{
 						"sessionId":  otherSID,
 						"x":          otherPos.X,
@@ -328,7 +334,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{senderPresence}, nil, true)
 				} else if wasVisible && !nowVisible {
 					// このプレイヤーがAOI外に出た → OP_AOI_LEAVE を送信
-					fmt.Printf("[send:AOI_LEAVE] to=%s target=%s (aoiChange)\n", sid, otherSID)
+					logf("[send:AOI_LEAVE] to=%s target=%s (aoiChange)\n", sid, otherSID)
 					leaveData, _ := json.Marshal(map[string]interface{}{
 						"sessionId": otherSID,
 					})
@@ -362,7 +368,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			// 送信者のチャンク位置がAOI内のプレイヤーにだけ送信
 			if p, ok := ms.Positions[sid]; ok {
 				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
-				fmt.Printf("[send:INIT_POS] from=%s x=%.1f z=%.1f chunk=(%d,%d) targets=%d\n", sid, p.X, p.Z, p.CX, p.CZ, len(targets))
+				logf("[send:INIT_POS] from=%s x=%.1f z=%.1f chunk=(%d,%d) targets=%d\n", sid, p.X, p.Z, p.CX, p.CZ, len(targets))
 				if len(targets) > 0 {
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
 				}
@@ -395,7 +401,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				}
 				// チャンクが変わった場合、新しいチャンクのAOIに入っている他プレイヤーに通知
 				if cx != oldCX || cz != oldCZ {
-					fmt.Printf("[send:MOVE_TARGET] from=%s chunk=(%d,%d)->(%d,%d)\n", sid, oldCX, oldCZ, cx, cz)
+					logf("[send:MOVE_TARGET] from=%s chunk=(%d,%d)->(%d,%d)\n", sid, oldCX, oldCZ, cx, cz)
 					for otherSID, otherAOI := range ms.AOIs {
 						if otherSID == sid {
 							continue
@@ -406,7 +412,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 							// 他プレイヤーのAOIに自分が入った → OP_AOI_ENTER
 							if otherP, ok := ms.Presences[otherSID]; ok {
 								myPos := ms.Positions[sid]
-								fmt.Printf("[send:AOI_ENTER] to=%s target=%s x=%.1f z=%.1f tex=%s (move)\n", otherSID, sid, myPos.X, myPos.Z, myPos.TextureUrl)
+								logf("[send:AOI_ENTER] to=%s target=%s x=%.1f z=%.1f tex=%s (move)\n", otherSID, sid, myPos.X, myPos.Z, myPos.TextureUrl)
 								enterData, _ := json.Marshal(map[string]interface{}{
 									"sessionId":  sid,
 									"x":          myPos.X,
@@ -419,7 +425,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 						} else if wasVisible && !nowVisible {
 							// 他プレイヤーのAOIから自分が出た → OP_AOI_LEAVE
 							if otherP, ok := ms.Presences[otherSID]; ok {
-								fmt.Printf("[send:AOI_LEAVE] to=%s target=%s (move)\n", otherSID, sid)
+								logf("[send:AOI_LEAVE] to=%s target=%s (move)\n", otherSID, sid)
 								leaveData, _ := json.Marshal(map[string]interface{}{
 									"sessionId": sid,
 								})
@@ -445,7 +451,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				TextureUrl string `json:"textureUrl"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &av); err == nil {
-				fmt.Printf("[avatarChange] sid=%s textureUrl=%s\n", sid, av.TextureUrl)
+				logf("[avatarChange] sid=%s textureUrl=%s\n", sid, av.TextureUrl)
 				if p, ok := ms.Positions[sid]; ok {
 					p.TextureUrl = av.TextureUrl
 				}
@@ -453,7 +459,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			// 保存済みの位置でAOIフィルタ
 			if p, ok := ms.Positions[sid]; ok {
 				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
-				fmt.Printf("[send:AVATAR_CHANGE] from=%s tex=%s targets=%d\n", sid, av.TextureUrl, len(targets))
+				logf("[send:AVATAR_CHANGE] from=%s tex=%s targets=%d\n", sid, av.TextureUrl, len(targets))
 				if len(targets) > 0 {
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
 				}
@@ -506,7 +512,7 @@ func (m *worldMatch) MatchSignal(ctx context.Context, logger runtime.Logger, db 
 			}
 		}
 	}
-	fmt.Printf("[setBlock:signal] chunk=(%d,%d) targets=%d/%d\n", cx, cz, len(targets), len(ms.AOIs))
+	logf("[setBlock:signal] chunk=(%d,%d) targets=%d/%d\n", cx, cz, len(targets), len(ms.AOIs))
 	if len(targets) > 0 {
 		if err := dispatcher.BroadcastMessage(opBlockUpdate, []byte(data), targets, nil, false); err != nil {
 			logger.Warn("MatchSignal BroadcastMessage error: %v", err)
@@ -626,7 +632,7 @@ func rpcSetBlock(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runt
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return "", err
 	}
-	fmt.Printf("[setBlock] gx=%d gz=%d blockId=%d r=%d g=%d b=%d a=%d\n", req.GX, req.GZ, req.BlockID, req.R, req.G, req.B, req.A)
+	logf("[setBlock] gx=%d gz=%d blockId=%d r=%d g=%d b=%d a=%d\n", req.GX, req.GZ, req.BlockID, req.R, req.G, req.B, req.A)
 	if req.GX < 0 || req.GX >= worldSize || req.GZ < 0 || req.GZ >= worldSize {
 		return "", fmt.Errorf("setBlock: out of bounds gx=%d gz=%d", req.GX, req.GZ)
 	}
@@ -669,7 +675,7 @@ func rpcGetGroundChunk(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return "", err
 	}
-	fmt.Printf("[getGroundChunk] cx=%d cz=%d\n", req.CX, req.CZ)
+	logf("[getGroundChunk] cx=%d cz=%d\n", req.CX, req.CZ)
 	if req.CX < 0 || req.CX >= chunkCount || req.CZ < 0 || req.CZ >= chunkCount {
 		return "", fmt.Errorf("getGroundChunk: out of bounds cx=%d cz=%d", req.CX, req.CZ)
 	}
@@ -747,7 +753,7 @@ func rpcSyncChunks(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.Nak
 			})
 		}
 	}
-	fmt.Printf("[syncChunks] sent=%d/%d (range %d,%d-%d,%d)\n", len(diff), total, req.MinCX, req.MinCZ, req.MaxCX, req.MaxCZ)
+	logf("[syncChunks] sent=%d/%d (range %d,%d-%d,%d)\n", len(diff), total, req.MinCX, req.MinCZ, req.MaxCX, req.MaxCZ)
 	b, err := json.Marshal(map[string]interface{}{"chunks": diff})
 	if err != nil {
 		return "", err
@@ -888,7 +894,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	if err := initializer.RegisterAfterAuthenticateCustom(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, out *api.Session, in *api.AuthenticateCustomRequest) error {
 		uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 		username, _ := ctx.Value(runtime.RUNTIME_CTX_USERNAME).(string)
-		fmt.Printf("[login] uid=%s username=%s customId=%s\n", uid, username, in.GetAccount().GetId())
+		logf("[login] uid=%s username=%s customId=%s\n", uid, username, in.GetAccount().GetId())
 		return nil
 	}); err != nil {
 		return err
@@ -898,7 +904,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	if err := initializer.RegisterEventSessionEnd(func(ctx context.Context, logger runtime.Logger, evt *api.Event) {
 		uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 		username, _ := ctx.Value(runtime.RUNTIME_CTX_USERNAME).(string)
-		fmt.Printf("[logout] uid=%s username=%s\n", uid, username)
+		logf("[logout] uid=%s username=%s\n", uid, username)
 	}); err != nil {
 		return err
 	}

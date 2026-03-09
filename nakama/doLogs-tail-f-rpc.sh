@@ -1,1 +1,1 @@
-docker compose logs -f --tail 0 nakama 2>&1 | grep --line-buffered "\[login\]\|\[logout\]\|\[setBlock\]\|\[getWorldMatch\]\|\[getServerInfo\]\|\[getGroundTable\]\|\[getGroundChunk\]\|\[syncChunks\]\|\[setBlock:signal\]"
+docker compose logs -f --tail 0 nakama 2>&1 | grep --line-buffered "\[login\]\|\[logout\]\|\[setBlock\]\|\[getWorldMatch\]\|\[getServerInfo\]\|\[getGroundTable\]\|\[getGroundChunk\]\|\[syncChunks\]\|\[setBlock:signal\]" | sed -u 's/^[^ ]* *| *//'

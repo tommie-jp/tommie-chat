@@ -946,12 +946,30 @@ export function setupHtmlUI(game: GameScene): void {
             ctx.fillText(label, w - lw - 5, 3 + FONT_SIZE);
         } else if (pingSamples.length > 0) {
             const avg = Math.round(pingSamples.reduce((a, b) => a + b, 0) / pingSamples.length);
-            const label = `avg ${avg}ms`;
-            const lw = ctx.measureText(label).width;
+            const minP = Math.min(...validPings);
+            const maxP = Math.max(...validPings);
+            const rows = [
+                { label: "avg", value: `${avg}ms` },
+                { label: "min", value: `${minP}ms` },
+                { label: "max", value: `${maxP}ms` },
+            ];
+            const lineH = FONT_SIZE + 2;
+            const pad = 4;
+            const labelW = Math.max(...rows.map(r => ctx.measureText(r.label).width));
+            const valW = Math.max(...rows.map(r => ctx.measureText(r.value).width));
+            const boxW = labelW + valW + pad * 3;
+            const boxH = lineH * 3 + pad * 2;
+            const boxX = w - boxW - 4;
+            const boxY = 3;
             ctx.fillStyle = avgBg;
-            ctx.fillRect(w - lw - 8, 3, lw + 6, avgBoxH);
+            ctx.fillRect(boxX, boxY, boxW, boxH);
             ctx.fillStyle = dark ? "#eee" : "#000";
-            ctx.fillText(label, w - lw - 5, 3 + FONT_SIZE);
+            for (let li = 0; li < 3; li++) {
+                const y = boxY + pad + FONT_SIZE + li * lineH;
+                ctx.fillText(rows[li].label, boxX + pad, y);
+                const vw = ctx.measureText(rows[li].value).width;
+                ctx.fillText(rows[li].value, boxX + boxW - pad - vw, y);
+            }
         }
     };
 
