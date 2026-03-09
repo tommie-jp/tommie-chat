@@ -209,19 +209,17 @@ const (
 	systemUserID     = "00000000-0000-0000-0000-000000000000"
 )
 
-// saveCcuHistory1m は1分間隔の同接履歴をDBに保存する
-func saveCcuHistory1m(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger) {
+// marshalCcuHistory1m はccuHistory1mをJSON化して返す（ロック取得・解放込み）
+func marshalCcuHistory1m() ([]byte, int, error) {
 	ccuMu.Lock()
 	n := len(ccuHistory1m)
 	if n == 0 {
 		ccuMu.Unlock()
-		return
+		return nil, 0, nil
 	}
-	// タイムスタンプ配列と値配列の長さを揃える
 	if len(ccuHistory1mTs) != n {
 		ccuMu.Unlock()
-		logger.Warn("saveCcuHistory1m: length mismatch ts=%d vals=%d", len(ccuHistory1mTs), n)
-		return
+		return nil, 0, fmt.Errorf("length mismatch ts=%d vals=%d", len(ccuHistory1mTs), n)
 	}
 	ts := make([]int64, n)
 	vals := make([]int, n)
@@ -233,8 +231,16 @@ func saveCcuHistory1m(ctx context.Context, nk runtime.NakamaModule, logger runti
 		Timestamps []int64 `json:"timestamps"`
 		Values     []int   `json:"values"`
 	}{Timestamps: ts, Values: vals})
-	if err != nil {
-		logger.Warn("saveCcuHistory1m marshal: %v", err)
+	return data, n, err
+}
+
+// saveCcuHistory1m は1分間隔の同接履歴をNakama StorageAPIで保存する（通常時用）
+func saveCcuHistory1m(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger) {
+	data, n, err := marshalCcuHistory1m()
+	if n == 0 || err != nil {
+		if err != nil {
+			logger.Warn("saveCcuHistory1m: %v", err)
+		}
 		return
 	}
 	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
@@ -250,6 +256,7 @@ func saveCcuHistory1m(ctx context.Context, nk runtime.NakamaModule, logger runti
 	}
 	logger.Info("saveCcuHistory1m: saved %d samples", n)
 }
+
 
 // loadCcuHistory1m はDBから1分間隔の同接履歴を復元する（過去10日分のみ）
 func loadCcuHistory1m(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger) {
@@ -664,6 +671,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 }
 
 func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, graceSeconds int) interface{} {
+	logger.Info("MatchTerminate called: graceSeconds=%d tick=%d", graceSeconds, tick)
 	// シャットダウン時: 未フラッシュの1sデータを1mに追加してからDB保存
 	flushCcu1mSample()
 	saveCcuHistory1m(ctx, nk, logger)
