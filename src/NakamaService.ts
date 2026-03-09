@@ -42,7 +42,7 @@ export class NakamaService {
         this.session = await this.client.authenticateCustom(loginName, true, loginName);
 
         this.socket = this.client.createSocket(false, false);
-        this.socket.setHeartbeatTimeoutMs(30000);
+        this.socket.setHeartbeatTimeoutMs(60000);
         await this.socket.connect(this.session, true);
 
         this.socket.onchannelmessage = (msg: ChannelMessage) => {
