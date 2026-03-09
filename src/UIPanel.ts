@@ -703,6 +703,7 @@ export function setupHtmlUI(game: GameScene): void {
     const setLoginMode = () => {
         if (loginBtn) {
             loginBtn.textContent = "ログイン";
+            loginBtn.style.display = "";
             loginBtn.onclick = doLogin;
         }
         if (loginNameInput) {
@@ -711,6 +712,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (e.key === "Enter") { e.preventDefault(); doLogin(); }
             };
         }
+        { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
     };
 
     const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
@@ -845,10 +847,9 @@ export function setupHtmlUI(game: GameScene): void {
                 setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000);
             }
             if (loginBtn) {
-                loginBtn.textContent = "ログアウト";
-                loginBtn.style.background = "#e0509099";
-                loginBtn.onclick = doLogout;
+                loginBtn.style.display = "none";
             }
+            { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) di.disabled = false; }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
@@ -1665,7 +1666,7 @@ export function setupHtmlUI(game: GameScene): void {
         game.remoteAvatars.forEach(av => av.dispose());
         game.remoteAvatars.clear();
         if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.style.fontWeight = "bold"; loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)"; loginStatus.textContent = "ログアウトしました"; setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000); }
-        if (loginBtn) loginBtn.style.background = "#28a74580";
+        if (loginBtn) { loginBtn.style.background = "#28a74580"; loginBtn.style.display = ""; }
         { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = true; di.value = ""; } }
         { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
         confirmedDisplayName = "";
@@ -1674,6 +1675,24 @@ export function setupHtmlUI(game: GameScene): void {
     };
 
     setLoginMode();
+
+    {
+        const menuLogout = document.getElementById("menu-logout");
+        const logoutPanel = document.getElementById("logout-panel");
+        const logoutConfirm = document.getElementById("logout-confirm-btn");
+        const logoutCancel = document.getElementById("logout-cancel-btn");
+        const logoutClose = document.getElementById("logout-panel-close");
+        const hideLogoutPanel = () => { if (logoutPanel) logoutPanel.style.display = "none"; };
+        if (menuLogout && logoutPanel) {
+            menuLogout.addEventListener("click", (e) => {
+                e.stopPropagation();
+                logoutPanel.style.display = "block";
+            });
+        }
+        if (logoutConfirm) logoutConfirm.addEventListener("click", () => { hideLogoutPanel(); doLogout(); });
+        if (logoutCancel) logoutCancel.addEventListener("click", hideLogoutPanel);
+        if (logoutClose) logoutClose.addEventListener("click", hideLogoutPanel);
+    }
 
     const sendMessage = async () => {
         const trimEnabled = (document.getElementById("speechTrimBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? true;
