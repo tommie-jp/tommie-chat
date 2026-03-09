@@ -728,7 +728,7 @@ export function setupHtmlUI(game: GameScene): void {
 
     const isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
     if (loginStatus) {
-        loginStatus.textContent = isMobile ? "" : "ログインして下さい！";
+        loginStatus.textContent = "";
     }
 
     // ===== サーバ接続ログ =====
@@ -839,7 +839,10 @@ export function setupHtmlUI(game: GameScene): void {
             loggedInPort = port;
             if (loginStatus) {
                 loginStatus.style.color = "#00dd55";
-                loginStatus.textContent = isMobile ? "✓" : "✓ログイン済み";
+                loginStatus.style.fontWeight = "bold";
+                loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)";
+                loginStatus.textContent = isMobile ? "✓" : "✓ログイン成功しました";
+                setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000);
             }
             if (loginBtn) {
                 loginBtn.textContent = "ログアウト";
@@ -848,7 +851,7 @@ export function setupHtmlUI(game: GameScene): void {
             }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) di.disabled = false; }
-            { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) db.disabled = false; }
+            { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("[UIPanel] match disconnected, auto-reconnect in progress");
@@ -901,10 +904,41 @@ export function setupHtmlUI(game: GameScene): void {
         const displayNameInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
         const displayNameBtn = document.getElementById("displayNameBtn") as HTMLButtonElement | null;
         const displayNameStatus = document.getElementById("displayNameStatus") as HTMLSpanElement | null;
+        let dnStatusTimer: ReturnType<typeof setTimeout> | null = null;
+        const showDnStatus = (text: string, color: string) => {
+            if (!displayNameStatus) return;
+            if (dnStatusTimer) clearTimeout(dnStatusTimer);
+            displayNameStatus.style.color = color;
+            displayNameStatus.style.fontWeight = "bold";
+            displayNameStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)";
+            displayNameStatus.textContent = text;
+            dnStatusTimer = setTimeout(() => { displayNameStatus.textContent = ""; displayNameStatus.style.fontWeight = ""; displayNameStatus.style.textShadow = ""; dnStatusTimer = null; }, 3000);
+        };
         if (displayNameInput && displayNameBtn) {
+            displayNameInput.addEventListener("keydown", (e) => {
+                if (displayNameInput.value.length >= 10 && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+                    showDnStatus("表示名は10文字以内です。", "#ff4444");
+                }
+            });
             displayNameInput.addEventListener("input", () => {
-                const changed = !displayNameInput.disabled && displayNameInput.value.trim() !== confirmedDisplayName && displayNameInput.value.trim() !== "";
+                const val = displayNameInput.value.trim();
+                if (val.length === 0 && displayNameInput.value.length === 0 && confirmedDisplayName !== "") {
+                    showDnStatus("表示名は1～10文字です", "#ff4444");
+                    displayNameBtn.disabled = true;
+                    displayNameBtn.style.display = "none";
+                    displayNameBtn.style.background = "";
+                    return;
+                }
+                if (val.length > 10) {
+                    showDnStatus("表示名は10文字以内です。", "#ff4444");
+                    displayNameBtn.disabled = true;
+                    displayNameBtn.style.display = "none";
+                    displayNameBtn.style.background = "";
+                    return;
+                }
+                const changed = !displayNameInput.disabled && val !== confirmedDisplayName && val !== "";
                 displayNameBtn.disabled = !changed;
+                displayNameBtn.style.display = changed ? "" : "none";
                 displayNameBtn.style.background = changed ? "#28a745" : "";
             });
         }
@@ -931,8 +965,8 @@ export function setupHtmlUI(game: GameScene): void {
                     if (me) { userMap.set(mySid, { ...me, displayName: name }); renderUserList(); }
                 }
                 confirmedDisplayName = name;
-                if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.background = ""; }
-                if (displayNameStatus) { displayNameStatus.style.color = "#00dd55"; displayNameStatus.textContent = "✓ 設定完了"; }
+                if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.display = "none"; displayNameBtn.style.background = ""; }
+                showDnStatus("✓ 表示名変更しました！", "#00dd55");
                 addServerLog(loggedInHost || "127.0.0.1", loggedInPort || "7350", "表示名変更", `表示名を「${name}」に設定しました`);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
@@ -1630,10 +1664,10 @@ export function setupHtmlUI(game: GameScene): void {
         renderUserList();
         game.remoteAvatars.forEach(av => av.dispose());
         game.remoteAvatars.clear();
-        if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.textContent = isMobile ? "" : "ログインして下さい！"; }
+        if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.style.fontWeight = "bold"; loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)"; loginStatus.textContent = "ログアウトしました"; setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000); }
         if (loginBtn) loginBtn.style.background = "#28a74580";
         { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = true; di.value = ""; } }
-        { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) db.disabled = true; }
+        { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
         confirmedDisplayName = "";
         { const ds = document.getElementById("displayNameStatus") as HTMLSpanElement | null; if (ds) ds.textContent = ""; }
         setLoginMode();
