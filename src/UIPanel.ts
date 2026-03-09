@@ -713,6 +713,7 @@ export function setupHtmlUI(game: GameScene): void {
             };
         }
         { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
+        { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = ""; }
     };
 
     const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
@@ -850,6 +851,7 @@ export function setupHtmlUI(game: GameScene): void {
                 loginBtn.style.display = "none";
             }
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
+            { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = "none"; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) di.disabled = false; }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
@@ -1692,6 +1694,67 @@ export function setupHtmlUI(game: GameScene): void {
         if (logoutConfirm) logoutConfirm.addEventListener("click", () => { hideLogoutPanel(); doLogout(); });
         if (logoutCancel) logoutCancel.addEventListener("click", hideLogoutPanel);
         if (logoutClose) logoutClose.addEventListener("click", hideLogoutPanel);
+    }
+
+    {
+        const aboutPanel = document.getElementById("about-panel");
+        const aboutHeader = document.getElementById("about-panel-header");
+
+        // コンテンツ初期化
+        const ver = (window as any).APP_VERSION || "";
+        const date = (window as any).APP_DATE || "";
+        const nameEl = document.getElementById("about-app-name");
+        const verEl = document.getElementById("about-app-ver");
+        const dateEl = document.getElementById("about-app-date");
+        const creditsEl = document.getElementById("about-app-credits");
+        if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommieChat';
+        if (verEl) verEl.textContent = "Ver. " + ver;
+        if (dateEl) dateEl.textContent = "更新日 " + date;
+        if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
+            + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
+            + 'URL: 準備中<br>'
+            + 'X: <a href="https://x.com/tommie_nico" target="_blank" rel="noopener" style="color:#1d9bf0;">@tommie_nico</a><br>'
+            + 'GitHub: 準備中<br>'
+            + 'メール: 準備中'
+            + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
+            + '本ソフトウェアは現状のまま（AS IS）提供され、一切の保証はありません。<br>'
+            + '本ソフトウェアの使用により生じたいかなる損害についても、作者は責任を負いません。<br><br>'
+            + 'This software is provided "AS IS" without warranty of any kind.<br>'
+            + 'License: MIT'
+            + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
+            + 'このプロジェクトの開発を支援していただける方を募集しています。<br>'
+            + '☕ 開発支援（準備中）';
+
+        // 閉じるボタン
+        const aboutClose = document.getElementById("about-panel-close");
+        if (aboutClose && aboutPanel) {
+            aboutClose.addEventListener("click", () => {
+                aboutPanel.style.display = "none";
+                setDivCk("showAbout", "0");
+                const mb = document.getElementById("menu-about");
+                if (mb) mb.textContent = "　 このゲームについて";
+            });
+        }
+
+        // ドラッグ移動
+        if (aboutHeader && aboutPanel) {
+            let dragging = false;
+            let dx = 0, dy = 0;
+            aboutHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                if ((e.target as HTMLElement).id === "about-panel-close") return;
+                dragging = true;
+                dx = e.clientX - aboutPanel.getBoundingClientRect().left;
+                dy = e.clientY - aboutPanel.getBoundingClientRect().top;
+                aboutHeader.setPointerCapture(e.pointerId);
+                e.preventDefault();
+            });
+            document.addEventListener("pointermove", (e: PointerEvent) => {
+                if (!dragging) return;
+                aboutPanel.style.left = Math.max(0, e.clientX - dx) + "px";
+                aboutPanel.style.top  = Math.max(0, e.clientY - dy) + "px";
+            });
+            document.addEventListener("pointerup", () => { dragging = false; });
+        }
     }
 
     const sendMessage = async () => {

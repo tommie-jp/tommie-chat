@@ -661,7 +661,7 @@
             backdrop-filter: blur(6px);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
-            z-index: 300;
+            z-index: 400;
             overflow: hidden;
             font-family: "Courier New", Courier, monospace;
             font-size: 12px;
@@ -712,6 +712,54 @@
         #logout-confirm-btn:hover { background: #d03070; }
         #logout-cancel-btn { background: rgba(100,100,100,0.6); }
         #logout-cancel-btn:hover { background: rgba(100,100,100,0.8); }
+
+        /* ===== このゲームについてパネル ===== */
+        #about-panel {
+            position: fixed;
+            top: calc(50% - 100px);
+            left: calc(50% - 140px);
+            width: 280px;
+            background: rgba(255, 255, 255, 0.35);
+            backdrop-filter: blur(6px);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+            z-index: 300;
+            overflow: hidden;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            color: #000;
+        }
+        #about-panel-header {
+            padding: 4px 8px;
+            font-weight: bold;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(0,0,0,0.15);
+            background: rgba(255,255,255,0.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            cursor: grab;
+        }
+        #about-panel-close {
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            opacity: 0.6;
+            padding: 4px 6px;
+        }
+        #about-panel-close:hover { opacity: 1; }
+        #about-panel-body {
+            padding: 10px 16px;
+            line-height: 1.4;
+        }
+        #about-panel-body p {
+            margin: 0 0 4px 0;
+            font-size: 12px;
+        }
+        #about-panel-body p:last-child {
+            margin-bottom: 0;
+        }
 
         /* ===== ハンバーガーメニュー ===== */
         #menu-btn {
@@ -1098,6 +1146,21 @@
                 font-size: 15px;
             }
 
+            /* --- このゲームについてパネル --- */
+            #about-panel {
+                width: 280px;
+                background: #222 !important;
+                color: #eee !important;
+            }
+            #about-panel-header {
+                background: rgba(255,255,255,0.1) !important;
+                color: #fff !important;
+                border-bottom-color: rgba(255,255,255,0.2) !important;
+            }
+            #about-panel-body p {
+                color: #eee !important;
+            }
+
             /* --- フッター --- */
             #app-footer-version {
                 display: none !important;
@@ -1221,8 +1284,7 @@
             if (el) {
                 var dateDot = APP_DATE.replace(/\//g, ".");
                 el.innerHTML =
-                    '<div style="color:#000;">tommieChat ' + APP_VERSION + ' // ' + dateDot + '</div>' +
-                    '<div style="color:#000;">Architect: tommie.jp, AI: Claude/Gemini/Grok</div>';
+                    '<div style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + '</div>';
             }
 
             el = document.getElementById("label-ver");
@@ -1642,6 +1704,7 @@
         <button class="menu-item" id="menu-debug">✓ デバッグツール</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
         <button class="menu-item" id="menu-cookie-reset">全パネル非表示（クッキー初期化）</button>
+        <button class="menu-item" id="menu-about">　 このゲームについて</button>
         <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;">ログアウト</button>
     </div>
 
@@ -1656,6 +1719,19 @@
                 <button id="logout-confirm-btn">ログアウト</button>
                 <button id="logout-cancel-btn">キャンセル</button>
             </div>
+        </div>
+    </div>
+
+    <div id="about-panel" style="display:none;">
+        <div id="about-panel-header">
+            <span>このゲームについて</span>
+            <span id="about-panel-close">❌️</span>
+        </div>
+        <div id="about-panel-body">
+            <p style="font-size:15px;font-weight:bold;margin-bottom:4px;text-align:center;" id="about-app-name"></p>
+            <p id="about-app-ver"></p>
+            <p id="about-app-date"></p>
+            <p style="margin-top:8px;" id="about-app-credits"></p>
         </div>
     </div>
 

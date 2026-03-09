@@ -322,6 +322,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-ping",           "ping-panel",            "Ping グラフ",   "showPing");
         makeToggle("menu-ccu",            "ccu-panel",             "同接グラフ",    "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
+        makeToggle("menu-about",          "about-panel",           "このゲームについて", "showAbout");
         updateMobileLayout();
         window.addEventListener("orientationchange", () => setTimeout(updateMobileLayout, 200));
         if (isMobileMenu) {
