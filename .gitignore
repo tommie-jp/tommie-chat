@@ -28,6 +28,7 @@ Thumbs.db
 .idea/
 *.sw?
 *.Identifier
+*.code-workspace
 
 # --- Nakama ---
 .cookie

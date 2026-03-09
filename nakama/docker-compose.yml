@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: nakama
       POSTGRES_USER: nakama
-      POSTGRES_PASSWORD: localdev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
     restart: "no"
     volumes:
       - data:/var/lib/postgresql/data
@@ -23,8 +23,8 @@ services:
       - "/bin/sh"
       - "-ecx"
       - >
-          /nakama/nakama migrate up --database.address nakama:localdev@postgres:5432/nakama &&
-          exec /nakama/nakama --name nakama1 --database.address nakama:localdev@postgres:5432/nakama --logger.level DEBUG --session.token_expiry_sec 7200 --socket.ping_period_ms 5000 --socket.pong_wait_ms 8000 --socket.write_wait_ms 5000 --shutdown_grace_sec 5 --metrics.prometheus_port 9100 --runtime.env NAKAMA_VERSION=3.35.0
+          /nakama/nakama migrate up --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama &&
+          exec /nakama/nakama --name nakama1 --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama --logger.level DEBUG --session.token_expiry_sec 7200 --socket.ping_period_ms 5000 --socket.pong_wait_ms 8000 --socket.write_wait_ms 5000 --shutdown_grace_sec 5 --metrics.prometheus_port 9100 --runtime.env NAKAMA_VERSION=3.35.0
     restart: "no"
     stop_grace_period: 10s
     depends_on:
