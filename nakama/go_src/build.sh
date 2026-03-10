@@ -53,6 +53,7 @@ else
 fi
 
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   --entrypoint sh \
   -v "$SCRIPT_DIR":/go_src \
   -v nakama-go-cache:/go/pkg/mod \

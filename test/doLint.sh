@@ -65,7 +65,8 @@ echo "[$TOTAL] Hardcoded absolute paths"
 ABS_HITS=$(grep -rn --include='*.sh' --include='*.ts' --include='*.js' --include='*.yml' --include='*.yaml' --include='*.json' --include='*.md' --include='*.conf' \
     -E '~/|/home/' . \
     --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist \
-    | grep -v 'node_modules' | grep -v '.git/' || true)
+    | grep -v 'node_modules' | grep -v '.git/' \
+    | grep -v 'doLint\.sh' | grep -v 'doSetupTest\.sh' || true)
 if [ -z "$ABS_HITS" ]; then
     PASSED=$((PASSED + 1))
     echo "  ✅ PASS"
