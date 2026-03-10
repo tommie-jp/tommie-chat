@@ -10,20 +10,39 @@ mkdir -p "$OUT_DIR"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Nakama バイナリから google.golang.org/protobuf の正確なバージョンを取得して go.mod に固定する
-TMPDIR=$(mktemp -d)
-trap "rm -rf $TMPDIR" EXIT
-CNAME=$(docker create "registry.heroiclabs.com/heroiclabs/nakama:${NAKAMA_VERSION}" 2>/dev/null)
-docker cp "${CNAME}:/nakama/nakama" "$TMPDIR/nakama" 2>/dev/null || true
-docker rm "$CNAME" >/dev/null 2>&1 || true
+# キャッシュ: NAKAMA_VERSION が同じなら再取得をスキップ
+CACHE_FILE="$SCRIPT_DIR/.protobuf-version-cache"
+CACHED_NAKAMA_VER=""
+CACHED_PROTO_VER=""
+if [ -f "$CACHE_FILE" ]; then
+  CACHED_NAKAMA_VER=$(sed -n '1p' "$CACHE_FILE")
+  CACHED_PROTO_VER=$(sed -n '2p' "$CACHE_FILE")
+fi
 
-PROTO_VER=""
-if [ -f "$TMPDIR/nakama" ]; then
-  PROTO_VER=$(go version -m "$TMPDIR/nakama" 2>/dev/null \
-    | awk '/\s+google\.golang\.org\/protobuf\s/{print $3}' | head -1)
+if [ "$CACHED_NAKAMA_VER" = "$NAKAMA_VERSION" ] && [ -n "$CACHED_PROTO_VER" ]; then
+  PROTO_VER="$CACHED_PROTO_VER"
+  echo "Protobuf version from cache: $PROTO_VER"
+else
+  echo "Detecting protobuf version from Nakama $NAKAMA_VERSION binary..."
+  TMPDIR=$(mktemp -d)
+  trap "rm -rf $TMPDIR" EXIT
+  CNAME=$(docker create "registry.heroiclabs.com/heroiclabs/nakama:${NAKAMA_VERSION}" 2>/dev/null)
+  docker cp "${CNAME}:/nakama/nakama" "$TMPDIR/nakama" 2>/dev/null || true
+  docker rm "$CNAME" >/dev/null 2>&1 || true
+
+  PROTO_VER=""
+  if [ -f "$TMPDIR/nakama" ]; then
+    PROTO_VER=$(go version -m "$TMPDIR/nakama" 2>/dev/null \
+      | awk '/\s+google\.golang\.org\/protobuf\s/{print $3}' | head -1)
+  fi
+
+  if [ -n "$PROTO_VER" ]; then
+    printf '%s\n%s\n' "$NAKAMA_VERSION" "$PROTO_VER" > "$CACHE_FILE"
+    echo "Detected and cached: $PROTO_VER"
+  fi
 fi
 
 if [ -n "$PROTO_VER" ]; then
-  echo "Pinning google.golang.org/protobuf to $PROTO_VER"
   if grep -q "google.golang.org/protobuf" "$SCRIPT_DIR/go.mod"; then
     sed -i "s|google.golang.org/protobuf .*|google.golang.org/protobuf $PROTO_VER // indirect|" "$SCRIPT_DIR/go.mod"
   else

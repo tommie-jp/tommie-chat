@@ -52,4 +52,5 @@ pic1.png
 pic/ktx2_output/
 
 nakama/modules/world.so
+nakama/go_src/.protobuf-version-cache
 .claude/settings.json
