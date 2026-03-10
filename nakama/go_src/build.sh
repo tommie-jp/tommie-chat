@@ -36,6 +36,7 @@ fi
 docker run --rm \
   --entrypoint sh \
   -v "$SCRIPT_DIR":/go_src \
+  -v nakama-go-cache:/go/pkg/mod \
   -w /go_src \
   "registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:${NAKAMA_VERSION}" \
   -c "rm -f go.sum && GONOSUMDB='*' go build -mod=mod -buildmode=plugin -trimpath -o /go_src/world.so ."
