@@ -1199,7 +1199,6 @@ export function setupHtmlUI(game: GameScene): void {
             const labelW = Math.max(...rows.map(r => ctx.measureText(r.label).width));
             const valW = Math.max(...rows.map(r => ctx.measureText(r.value).width));
             const boxW = labelW + valW + pad * 3;
-            const boxH = lineH * 3 + pad * 2;
             const boxX = w - boxW - 4;
             const boxY = 3;
             ctx.fillStyle = dark ? "#eee" : "#000";
@@ -1567,7 +1566,6 @@ export function setupHtmlUI(game: GameScene): void {
         const labelW = Math.max(...rows.map(r => ctx.measureText(r.label).width));
         const valW = Math.max(...rows.map(r => ctx.measureText(r.value || "  ").width));
         const boxW = labelW + valW + pad * 3;
-        const boxH = lineH * rows.length + pad * 2;
         const boxX = w - boxW - 16;
         const boxY = 3;
         ctx.fillStyle = dark ? "#eee" : "#000";

@@ -99,10 +99,6 @@ function blockKey(gx: number, gz: number): number {
 }
 
 /** gx, gz からチャンク座標を計算 */
-function toChunk(gx: number, gz: number): { cx: number; cz: number } {
-    return { cx: Math.floor(gx / CHUNK_SIZE), cz: Math.floor(gz / CHUNK_SIZE) };
-}
-
 /** テスト用チャンクデータを作成（指定位置にブロックを配置） */
 function createChunkWithBlocks(blocks: { lx: number; lz: number; blockId: number; r?: number; g?: number; b?: number; a?: number }[]): ChunkData {
     const cells = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * 6);
@@ -309,7 +305,7 @@ describe('refreshBlocksForAOI キャッシュ描画テスト', () => {
 
     it('色情報が正しく渡される', () => {
         let capturedArgs: { r: number; g: number; b: number; a: number } | null = null;
-        const capturePlaceBlock = (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => {
+        const capturePlaceBlock = (gx: number, gz: number, _blockId: number, r: number, g: number, b: number, a: number) => {
             blockMeshes.set(blockKey(gx, gz), createMockMesh());
             capturedArgs = { r, g, b, a };
         };
