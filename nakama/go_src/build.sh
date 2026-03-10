@@ -52,21 +52,18 @@ else
   echo "Warning: could not detect Nakama protobuf version, using go.mod as-is"
 fi
 
-# root で実行し、出力ファイルを現在のユーザーに chown する
-# (--user フラグは Docker/WSL 環境で不安定なため使用しない)
+# modules/ に直接出力（mv 不要・権限問題を回避）
 BUILDER_IMG="registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:${NAKAMA_VERSION}"
-HOST_UID=$(id -u)
-HOST_GID=$(id -g)
 
 docker run --rm \
   --entrypoint sh \
   -v "$SCRIPT_DIR":/go_src \
+  -v "$OUT_DIR":/output \
   -v nakama-go-cache:/go/pkg/mod \
   -v nakama-go-build-cache:/tmp/go-build \
   -e GOCACHE=/tmp/go-build \
   -w /go_src \
   "$BUILDER_IMG" \
-  -c "rm -f go.sum && GONOSUMDB='*' go build -mod=mod -buildmode=plugin -trimpath -o /go_src/world.so . && chown ${HOST_UID}:${HOST_GID} /go_src/world.so"
+  -c "rm -f go.sum && GONOSUMDB='*' go build -mod=mod -buildmode=plugin -trimpath -o /output/world.so ."
 
-mv -f "$SCRIPT_DIR/world.so" "$OUT_DIR/world.so"
 echo "Built: $OUT_DIR/world.so"
