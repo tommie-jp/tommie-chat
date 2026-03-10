@@ -24,6 +24,7 @@ case "${1:-}" in
         echo "キャッシュをクリアします..."
         rm -f "$GO_SRC/.protobuf-version-cache"
         docker volume rm nakama-go-cache 2>/dev/null || true
+        docker volume rm nakama-go-build-cache 2>/dev/null || true
         echo "Done"
         FORCE=1
         ;;
