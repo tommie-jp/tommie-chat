@@ -37,9 +37,8 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    const result = await client.rpc(session, 'getWorldMatch', '' as unknown as object);
-    const raw = typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload);
-    const data = JSON.parse(raw) as { matchId?: string };
+    const result = await socket.rpc('getWorldMatch');
+    const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
     if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
 
     const match = await socket.joinMatch(data.matchId);
@@ -49,7 +48,6 @@ async function createPlayer(name: string): Promise<PlayerConn> {
 }
 
 async function cleanup(p: PlayerConn): Promise<void> {
-    try { await p.socket.leaveMatch(p.matchId); } catch { /* ignore */ }
     try { p.socket.disconnect(true); } catch { /* ignore */ }
 }
 

@@ -50,9 +50,8 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    const result = await client.rpc(session, 'getWorldMatch', '' as unknown as object);
-    const raw = typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload);
-    const data = JSON.parse(raw) as { matchId?: string };
+    const result = await socket.rpc('getWorldMatch');
+    const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
     if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
 
     await socket.joinMatch(data.matchId);
@@ -60,27 +59,30 @@ async function createPlayer(name: string): Promise<PlayerConn> {
 }
 
 async function cleanup(p: PlayerConn): Promise<void> {
-    try { await p.socket.leaveMatch(p.matchId); } catch { /* ignore */ }
     try { p.socket.disconnect(true); } catch { /* ignore */ }
 }
 
-async function rpcGetPlayerCount(client: Client, session: Session, range?: string): Promise<{ count: number; history: number[]; timestamps?: number[] }> {
-    const payload = range ? { range } : {};
-    const result = await client.rpc(session, 'getPlayerCount', payload as unknown as object);
-    const raw = typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload);
-    const data = JSON.parse(raw) as { count?: number; history?: number[]; timestamps?: number[] };
+async function rpcGetPlayerCount(socket: Socket, range?: string): Promise<{ count: number; history: number[]; timestamps?: number[] }> {
+    const payload = range ? JSON.stringify({ range }) : undefined;
+    const result = await socket.rpc('getPlayerCount', payload);
+    const data = JSON.parse(result.payload ?? '{}') as { count?: number; history?: number[]; timestamps?: number[] };
     return { count: data.count ?? 0, history: data.history ?? [], timestamps: data.timestamps };
 }
 
 async function waitForServer(maxMs = 30000): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < maxMs) {
+        let sock: Socket | null = null;
         try {
             const c = new Client(SERVER_KEY, HOST, PORT, false);
             const s = await c.authenticateCustom('__test_health_check', true, '__test_health_check');
-            await c.rpc(s, 'ping', {} as unknown as object);
+            sock = c.createSocket(false, false);
+            await sock.connect(s, true);
+            await sock.rpc('ping');
+            sock.disconnect(true);
             return;
         } catch {
+            try { sock?.disconnect(true); } catch { /* ignore */ }
             await sleep(1000);
         }
     }
@@ -102,22 +104,25 @@ async function restartServer(): Promise<void> {
     await waitForServer(60000);
 }
 
-async function newAdmin(): Promise<{ client: Client; session: Session }> {
+async function newAdmin(): Promise<{ client: Client; session: Session; socket: Socket }> {
     const client = new Client(SERVER_KEY, HOST, PORT, false);
     const session = await client.authenticateCustom('__test_ccu_admin', true, '__test_ccu_admin');
-    return { client, session };
+    const socket = client.createSocket(false, false);
+    socket.setHeartbeatTimeoutMs(60000);
+    await socket.connect(session, true);
+    return { client, session, socket };
 }
 
 /** 1mフラッシュをポーリングで待つ。既存件数より増えたら成功 */
-async function waitFor1mFlush(client: Client, session: Session, minCount: number, maxWaitMs = 70000): Promise<{ count: number; history: number[] }> {
+async function waitFor1mFlush(socket: Socket, minCount: number, maxWaitMs = 70000): Promise<{ count: number; history: number[] }> {
     const deadline = Date.now() + maxWaitMs;
     while (Date.now() < deadline) {
-        const result = await rpcGetPlayerCount(client, session, '1h');
+        const result = await rpcGetPlayerCount(socket, '1h');
         if (result.history.length > minCount) return result;
         await sleep(5000);
     }
     // 最終取得
-    return rpcGetPlayerCount(client, session, '1h');
+    return rpcGetPlayerCount(socket, '1h');
 }
 
 // ============================================================
@@ -136,13 +141,13 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         }
         console.log(`[1s] ${players.length}人 接続完了`);
 
-        const { client, session } = await newAdmin();
+        const { socket } = await newAdmin();
 
         // サンプリングタイミングによりcountが0になる場合があるためポーリング
         let result = { count: 0, history: [] as number[] };
         for (let attempt = 0; attempt < 10; attempt++) {
             await sleep(1000);
-            result = await rpcGetPlayerCount(client, session, '5m');
+            result = await rpcGetPlayerCount(socket, '5m');
             console.log(`[1s] attempt=${attempt} 1s履歴: ${result.history.length}件, count=${result.count}`);
             if (result.count >= 1 && result.history.length > 0) break;
         }
@@ -152,10 +157,10 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
 
     // ── 1m: 切断/再接続で同接数が正しく増減する ──
     it('切断/再接続でcountが正しく増減する', async () => {
-        const { client, session } = await newAdmin();
+        const { socket } = await newAdmin();
 
         // 現在のcount取得（前のテストのplayersが接続中）
-        const before = await rpcGetPlayerCount(client, session);
+        const before = await rpcGetPlayerCount(socket);
         const baseCount = before.count;
         console.log(`[reconn] ベースcount=${baseCount} (${players.length}人接続中)`);
         expect(baseCount).toBeGreaterThanOrEqual(players.length);
@@ -174,7 +179,7 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         let afterDisconnect = { count: 0 };
         for (let attempt = 0; attempt < 10; attempt++) {
             await sleep(1000);
-            afterDisconnect = await rpcGetPlayerCount(client, session);
+            afterDisconnect = await rpcGetPlayerCount(socket);
             console.log(`[reconn] 切断後 attempt=${attempt} count=${afterDisconnect.count} (期待: ${expectAfterDisconnect})`);
             if (afterDisconnect.count >= expectAfterDisconnect - 1 && afterDisconnect.count <= expectAfterDisconnect + 1) break;
         }
@@ -192,7 +197,7 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         let afterReconnect = { count: 0 };
         for (let attempt = 0; attempt < 10; attempt++) {
             await sleep(1000);
-            afterReconnect = await rpcGetPlayerCount(client, session);
+            afterReconnect = await rpcGetPlayerCount(socket);
             console.log(`[reconn] 再接続後 attempt=${attempt} count=${afterReconnect.count} (期待: ${baseCount})`);
             if (afterReconnect.count >= baseCount - 1 && afterReconnect.count <= baseCount + 1) break;
         }
@@ -202,9 +207,9 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
 
     // ── 1m: RPC各レンジ疎通 ──
     it('RPC全レンジが応答する', async () => {
-        const { client, session } = await newAdmin();
+        const { socket } = await newAdmin();
         for (const range of ['1m', '5m', '1h', '12h', '1d', '10d'] as const) {
-            const result = await rpcGetPlayerCount(client, session, range);
+            const result = await rpcGetPlayerCount(socket, range);
             console.log(`[rpc] range=${range} history=${result.history.length}件`);
             expect(result.count).toBeGreaterThanOrEqual(0);
             expect(Array.isArray(result.history)).toBe(true);
@@ -213,10 +218,10 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
 
     // ── 5m: 1mフラッシュ + 再起動 + 復元 ──
     it.skipIf(!levelAtLeast('5m'))('1mフラッシュ → 再起動 → 履歴復元', async () => {
-        const { client, session } = await newAdmin();
+        const { socket } = await newAdmin();
 
         console.log('[5m-1] 1分フラッシュを待機...');
-        const before1m = await waitFor1mFlush(client, session, 0);
+        const before1m = await waitFor1mFlush(socket, 0);
         console.log(`[5m-1] 1m履歴: ${before1m.history.length}件, 値=[${before1m.history.join(',')}]`);
         expect(before1m.history.length).toBeGreaterThan(0);
 
@@ -234,7 +239,7 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
 
         // 復元確認
         const admin2 = await newAdmin();
-        const after1m = await rpcGetPlayerCount(admin2.client, admin2.session, '1h');
+        const after1m = await rpcGetPlayerCount(admin2.socket, '1h');
         console.log(`[5m-3] 復元後1m履歴: ${after1m.history.length}件, 値=[${after1m.history.join(',')}]`);
         expect(after1m.history.length).toBeGreaterThanOrEqual(savedLen);
         expect(after1m.history).toContain(savedLast);
@@ -248,14 +253,14 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         console.log('[dedup-1] サーバ再起動（重複テスト用）...');
         await restartServer();
 
-        const { client, session } = await newAdmin();
+        const { socket } = await newAdmin();
 
         // 1mフラッシュを待つ（新規データが追加されるよう接続）
         for (let i = 0; i < 3; i++) {
             players.push(await createPlayer(`__test_ccu_dedup_${i}`));
         }
         console.log('[dedup-2] 1分フラッシュ待ち...');
-        await waitFor1mFlush(client, session, 0);
+        await waitFor1mFlush(socket, 0);
 
         // 再度再起動してロード
         for (const p of players) cleanup(p);
@@ -264,7 +269,7 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         await restartServer();
 
         const admin2 = await newAdmin();
-        const result = await rpcGetPlayerCount(admin2.client, admin2.session, '10d');
+        const result = await rpcGetPlayerCount(admin2.socket, '10d');
         const ts = result.timestamps;
         expect(ts).toBeDefined();
         expect(ts!.length).toBe(result.history.length);
@@ -280,8 +285,8 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
 
     // ── 5m: 1dレンジが24時間以内のデータのみ返す ──
     it.skipIf(!levelAtLeast('5m'))('1dレンジは24時間以内のデータのみ返す', async () => {
-        const { client, session } = await newAdmin();
-        const result = await rpcGetPlayerCount(client, session, '1d');
+        const { socket } = await newAdmin();
+        const result = await rpcGetPlayerCount(socket, '1d');
         const ts = result.timestamps;
 
         if (!ts || ts.length === 0) {
@@ -314,11 +319,11 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
                 players.push(await createPlayer(`__test_ccu_30m_c${cycle}_${i}`));
             }
 
-            const { client, session } = await newAdmin();
+            const { socket } = await newAdmin();
 
             // 1分フラッシュを2回分待つ（2分以上の履歴蓄積）
             console.log(`[30m] サイクル ${cycle}: フラッシュ待ち (最大130秒)...`);
-            const result = await waitFor1mFlush(client, session, prevLen, 130000);
+            const result = await waitFor1mFlush(socket, prevLen, 130000);
             console.log(`[30m] サイクル ${cycle}: 1m履歴=${result.history.length}件 (前回=${prevLen}件)`);
             expect(result.history.length).toBeGreaterThan(prevLen);
 
@@ -336,7 +341,7 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
 
                 // 復元確認
                 const admin2 = await newAdmin();
-                const restored = await rpcGetPlayerCount(admin2.client, admin2.session, '1h');
+                const restored = await rpcGetPlayerCount(admin2.socket, '1h');
                 console.log(`[30m] サイクル ${cycle}: 復元後=${restored.history.length}件`);
                 expect(restored.history.length).toBeGreaterThanOrEqual(prevLen);
                 prevLen = restored.history.length;
@@ -363,9 +368,9 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         while (Date.now() - start < TOTAL_DURATION_MS) {
             await sleep(CHECK_INTERVAL_MS);
 
-            const { client, session } = await newAdmin();
-            const r1s = await rpcGetPlayerCount(client, session, '5m');
-            const r1m = await rpcGetPlayerCount(client, session, '1h');
+            const { socket } = await newAdmin();
+            const r1s = await rpcGetPlayerCount(socket, '5m');
+            const r1m = await rpcGetPlayerCount(socket, '1h');
             const elapsed = ((Date.now() - start) / 60000).toFixed(1) + 'min';
 
             checks.push({ elapsed, h1s: r1s.history.length, h1m: r1m.history.length, count: r1s.count });
@@ -380,9 +385,9 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         }
 
         // レンジ間の整合性: 1h の件数 <= 10d の件数
-        const { client, session } = await newAdmin();
-        const r1h = await rpcGetPlayerCount(client, session, '1h');
-        const r10d = await rpcGetPlayerCount(client, session, '10d');
+        const { socket } = await newAdmin();
+        const r1h = await rpcGetPlayerCount(socket, '1h');
+        const r10d = await rpcGetPlayerCount(socket, '10d');
         console.log(`[1h] レンジ整合性: 1h=${r1h.history.length}件, 10d=${r10d.history.length}件`);
         expect(r10d.history.length).toBeGreaterThanOrEqual(r1h.history.length);
 
@@ -394,7 +399,7 @@ describe(`同接履歴 DB永続化 [${TEST_LEVEL}]`, () => {
         const beforeLen = r1h.history.length;
         await restartServer();
         const admin2 = await newAdmin();
-        const after = await rpcGetPlayerCount(admin2.client, admin2.session, '1h');
+        const after = await rpcGetPlayerCount(admin2.socket, '1h');
         console.log(`[1h] 最終復元: ${beforeLen}件 → ${after.history.length}件`);
         expect(after.history.length).toBeGreaterThanOrEqual(beforeLen);
 
