@@ -14,7 +14,7 @@ case "${1:-}" in
         exit 0 ;;
 esac
 
-set -e
+set -eo pipefail
 
 WORK_DIR="/tmp/tommie-chat-setup-test"
 REPO_URL="https://github.com/open-tommie/tommie-chat.git"
@@ -136,18 +136,34 @@ run_step "Nakama health check" bash -c '
 # 10. Go プラグインビルド
 run_step "doBuild.sh --fresh" bash nakama/doBuild.sh --fresh
 
-# 11. ビルド後のヘルスチェック
-run_step "Nakama health after restart" bash -c '
+# 11. ビルド後のヘルスチェック + RPC疎通確認
+run_step "Nakama health + RPC after restart" bash -c '
     sleep 5
     for i in $(seq 1 15); do
         if curl -sf http://127.0.0.1:7350/healthcheck > /dev/null 2>&1; then
             echo "  Nakama is healthy (${i}s)"
-            exit 0
+            break
         fi
         sleep 2
+        if [ $i -eq 15 ]; then
+            echo "  Nakama did not become healthy after restart"
+            docker compose -f nakama/docker-compose.yml logs nakama 2>/dev/null | tail -30
+            exit 1
+        fi
     done
-    echo "  Nakama did not become healthy after restart"
-    exit 1
+    # RPC疎通確認（Goプラグインが正しくロードされているか）
+    sleep 2
+    AUTH=$(echo -n "defaultkey:" | base64)
+    STATUS=$(curl -o /dev/null -w "%{http_code}" -s \
+        -H "Authorization: Basic ${AUTH}" \
+        http://127.0.0.1:7350/v2/rpc/getWorldMatch? 2>/dev/null || echo "000")
+    if [ "$STATUS" = "404" ]; then
+        echo "  ❌ RPC getWorldMatch returned HTTP $STATUS — Go plugin not loaded"
+        echo "  Nakama logs:"
+        docker compose -f nakama/docker-compose.yml logs nakama 2>/dev/null | tail -30
+        exit 1
+    fi
+    echo "  RPC getWorldMatch: HTTP $STATUS — Go plugin loaded"
 '
 
 # 12. 統合テスト (doAll.sh)

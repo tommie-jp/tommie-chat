@@ -110,7 +110,7 @@ if (failures.length > 0) {
         lines.push('');
         lines.push('\`\`\`');
         for (const msg of t.failureMessages || []) {
-            lines.push(msg.replace(/\x1b\[[0-9;]*m/g, '').split('\n').slice(0, 5).join('\n'));
+            if (msg) lines.push(msg.replace(/\x1b\[[0-9;]*m/g, '').split('\n').slice(0, 5).join('\n'));
         }
         lines.push('\`\`\`');
     }

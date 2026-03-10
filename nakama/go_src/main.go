@@ -413,23 +413,25 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	worldMatchMu.Lock()
 	defer worldMatchMu.Unlock()
 
-	// キャッシュが新しい場合はそのまま返す
-	if worldMatchID != "" && time.Since(worldMatchCachedAt) < worldMatchCacheTTL {
-		logger.Info("Cached world match: %s", worldMatchID)
-		b, _ := json.Marshal(map[string]string{"matchId": worldMatchID})
-		return string(b), nil
-	}
-
-	// MatchListで既存マッチを探す（キャッシュ期限切れ or 初回）
+	// MatchListで既存マッチを探す（常に検証 — キャッシュされたマッチが消失する場合に対応）
 	matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
 	if err != nil {
 		logger.Warn("MatchList failed: %v", err)
+		// MatchList失敗時はキャッシュを使用（フォールバック）
+		if worldMatchID != "" && time.Since(worldMatchCachedAt) < worldMatchCacheTTL {
+			logger.Info("Cached world match (fallback): %s", worldMatchID)
+			b, _ := json.Marshal(map[string]string{"matchId": worldMatchID})
+			return string(b), nil
+		}
 	} else if len(matches) > 0 {
 		worldMatchID = matches[0].GetMatchId()
 		worldMatchCachedAt = time.Now()
 		logger.Info("Found active world match: %s", worldMatchID)
 		b, _ := json.Marshal(map[string]string{"matchId": worldMatchID})
 		return string(b), nil
+	} else if worldMatchID != "" {
+		logger.Warn("Cached match %s no longer exists, creating new match", worldMatchID)
+		worldMatchID = ""
 	}
 
 	// マッチが見つからない場合は新規作成

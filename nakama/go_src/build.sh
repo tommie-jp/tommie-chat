@@ -52,6 +52,12 @@ else
   echo "Warning: could not detect Nakama protobuf version, using go.mod as-is"
 fi
 
+# ビルドキャッシュボリュームの権限を修正（新規作成時は root 所有のため）
+docker run --rm -v nakama-go-build-cache:/tmp/go-build alpine \
+  sh -c "chown $(id -u):$(id -g) /tmp/go-build" 2>/dev/null || true
+docker run --rm -v nakama-go-cache:/go/pkg/mod alpine \
+  sh -c "chown $(id -u):$(id -g) /go/pkg/mod" 2>/dev/null || true
+
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   --entrypoint sh \
