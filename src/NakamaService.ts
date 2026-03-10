@@ -39,6 +39,11 @@ export class NakamaService {
 
     private reconnecting = false;
     private loginName: string | null = null;
+    private readonly _decoder = new TextDecoder();
+
+    // onmatchdata プロファイル（呼び出し回数とコスト）
+    matchDataProfile = { calls: 0, totalMs: 0, maxMs: 0 };
+    private _mdProfileAccum = { calls: 0, totalMs: 0, maxMs: 0, lastReset: performance.now() };
 
     constructor(host = "127.0.0.1", port = "7350", useSSL = false) {
         this.client = new Client("defaultkey", host, port, useSSL);
@@ -154,10 +159,9 @@ export class NakamaService {
 
     async joinWorldMatch(): Promise<void> {
         if (!this.session || !this.socket) throw new Error("no session/socket");
-        const result = await this.client.rpc(this.session, "getWorldMatch", "" as unknown as object);
+        const result = await this.socket.rpc("getWorldMatch");
         if (!result?.payload) throw new Error("getWorldMatch: no payload");
-        const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
-        const data = JSON.parse(raw) as { matchId?: string };
+        const data = JSON.parse(result.payload) as { matchId?: string };
         if (!data.matchId) throw new Error("getWorldMatch: no matchId");
         this.matchId = data.matchId;
         const match = await this.socket.joinMatch(this.matchId);
@@ -173,39 +177,47 @@ export class NakamaService {
             for (const p of event.leaves ?? []) this.onMatchPresenceLeave?.(p.session_id, p.user_id, p.username);
         };
         this.socket.onmatchdata = (md: MatchData) => {
+            const _mt0 = performance.now();
             const sid = md.presence?.session_id;
             try {
-                const payload = JSON.parse(new TextDecoder().decode(md.data));
+                const payload = JSON.parse(this._decoder.decode(md.data));
                 if (md.op_code === OP_BLOCK_UPDATE) {
                     const blk = payload as { gx: number; gz: number; blockId: number; r: number; g: number; b: number; a: number };
                     this.onBlockUpdate?.(blk.gx, blk.gz, blk.blockId, blk.r ?? 255, blk.g ?? 255, blk.b ?? 255, blk.a ?? 255);
                 } else if (md.op_code === OP_AOI_ENTER) {
                     const e = payload as { sessionId: string; x: number; z: number; ry?: number; textureUrl?: string; displayName?: string };
-                    console.log(`[recv:AOI_ENTER] sid=${e.sessionId.slice(0, 8)} x=${(+e.x).toFixed(1)} z=${(+e.z).toFixed(1)} tex=${e.textureUrl ?? ""} dname=${e.displayName ?? ""}`);
                     this.onAOIEnter?.(e.sessionId, e.x, e.z, e.ry ?? 0, e.textureUrl ?? "", e.displayName ?? "");
                 } else if (md.op_code === OP_AOI_LEAVE) {
                     const e = payload as { sessionId: string };
-                    console.log(`[recv:AOI_LEAVE] sid=${e.sessionId.slice(0, 8)}`);
                     this.onAOILeave?.(e.sessionId);
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
                     const dn = payload as { displayName: string };
-                    console.log(`[recv:DISPLAY_NAME] sid=${sid.slice(0, 8)} dname=${dn.displayName}`);
                     this.onDisplayName?.(sid, dn.displayName);
                 } else if (!sid) {
                     return;
                 } else if (md.op_code === OP_INIT_POS) {
                     const pos = payload as { x: number; z: number; ry?: number };
-                    console.log(`[recv:INIT_POS] sid=${sid.slice(0, 8)} x=${(+pos.x).toFixed(1)} z=${(+pos.z).toFixed(1)} ry=${(+(pos.ry ?? 0)).toFixed(1)}`);
                     this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0);
                 } else if (md.op_code === OP_MOVE_TARGET) {
                     const pos = payload as { x: number; z: number };
                     this.onAvatarMoveTarget?.(sid, pos.x, pos.z);
                 } else if (md.op_code === OP_AVATAR_CHANGE) {
                     const av = payload as { textureUrl: string };
-                    console.log(`[recv:AVATAR_CHANGE] sid=${sid.slice(0, 8)} tex=${av.textureUrl}`);
                     this.onAvatarChange?.(sid, av.textureUrl);
                 }
             } catch { /* ignore */ }
+            // プロファイル集計（1秒ごとにリセット）
+            const _mt1 = performance.now();
+            const elapsed = _mt1 - _mt0;
+            const acc = this._mdProfileAccum;
+            acc.calls++;
+            acc.totalMs += elapsed;
+            if (elapsed > acc.maxMs) acc.maxMs = elapsed;
+            if (_mt1 - acc.lastReset >= 1000) {
+                this.matchDataProfile = { calls: acc.calls, totalMs: acc.totalMs, maxMs: acc.maxMs };
+                acc.calls = acc.totalMs = acc.maxMs = 0;
+                acc.lastReset = _mt1;
+            }
         };
     }
 
@@ -281,14 +293,12 @@ export class NakamaService {
     }
 
     async getServerInfo(): Promise<string> {
-        if (!this.session) return "不明";
-        // ① カスタム RPC "getServerInfo"
+        if (!this.socket) return "不明";
+        // ① カスタム RPC "getServerInfo" (WebSocket経由)
         try {
-            const result = await this.client.rpc(this.session, "getServerInfo", "" as unknown as object);
+            const result = await this.socket.rpc("getServerInfo");
             if (result?.payload) {
-                const raw = typeof result.payload === "string"
-                    ? result.payload : JSON.stringify(result.payload);
-                const data = JSON.parse(raw) as { name?: string; version?: string; serverUpTime?: string; playerCount?: number };
+                const data = JSON.parse(result.payload) as { name?: string; version?: string; serverUpTime?: string; playerCount?: number };
                 const toJst = (iso: string) => {
                     const d = new Date(iso);
                     const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
@@ -311,7 +321,7 @@ export class NakamaService {
         const base = `${proto}://${this.host}:${this.port}`;
         try {
             const res = await fetch(`${base}/v2/serverinfo`, {
-                headers: { "Authorization": `Bearer ${this.session.token}` }
+                headers: { "Authorization": `Bearer ${this.session?.token}` }
             });
             const text = await res.text();
             if (res.ok && text) {
@@ -350,48 +360,45 @@ export class NakamaService {
     }
 
     async setBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): Promise<void> {
-        if (!this.session) return;
-        await this.client.rpc(this.session, "setBlock", { gx, gz, blockId, r, g, b, a } as unknown as object);
+        if (!this.socket) return;
+        await this.socket.rpc("setBlock", JSON.stringify({ gx, gz, blockId, r, g, b, a }));
     }
 
     async getGroundTable(): Promise<number[] | null> {
-        if (!this.session) return null;
+        if (!this.socket) return null;
         try {
-            const result = await this.client.rpc(this.session, "getGroundTable", "" as unknown as object);
+            const result = await this.socket.rpc("getGroundTable");
             if (!result?.payload) return null;
-            const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
-            const data = JSON.parse(raw) as { table?: number[] };
+            const data = JSON.parse(result.payload) as { table?: number[] };
             return data.table ?? null;
         } catch { return null; }
     }
 
     async syncChunks(minCX: number, minCZ: number, maxCX: number, maxCZ: number, hashes: Record<string, string>): Promise<{ cx: number; cz: number; hash: string; table: number[] }[]> {
-        if (!this.session) return [];
+        if (!this.socket) return [];
         try {
-            const result = await this.client.rpc(this.session, "syncChunks", { minCX, minCZ, maxCX, maxCZ, hashes } as unknown as object);
+            const result = await this.socket.rpc("syncChunks", JSON.stringify({ minCX, minCZ, maxCX, maxCZ, hashes }));
             if (!result?.payload) return [];
-            const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
-            const data = JSON.parse(raw) as { chunks?: { cx: number; cz: number; hash: string; table: number[] }[] };
+            const data = JSON.parse(result.payload) as { chunks?: { cx: number; cz: number; hash: string; table: number[] }[] };
             return data.chunks ?? [];
         } catch { return []; }
     }
 
     async getGroundChunk(cx: number, cz: number): Promise<{ cx: number; cz: number; table: number[] } | null> {
-        if (!this.session) return null;
+        if (!this.socket) return null;
         try {
-            const result = await this.client.rpc(this.session, "getGroundChunk", { cx, cz } as unknown as object);
+            const result = await this.socket.rpc("getGroundChunk", JSON.stringify({ cx, cz }));
             if (!result?.payload) return null;
-            const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
-            return JSON.parse(raw) as { cx: number; cz: number; table: number[] };
+            return JSON.parse(result.payload) as { cx: number; cz: number; table: number[] };
         } catch { return null; }
     }
 
-    // サーバへの RPC ラウンドトリップ時間を計測する（ms）
+    // サーバへの WebSocket RPC ラウンドトリップ時間を計測する（ms）
     async measurePing(): Promise<number | null> {
-        if (!this.session) return null;
+        if (!this.socket) return null;
         try {
             const t0 = performance.now();
-            await this.client.rpc(this.session, "ping", "" as unknown as object);
+            await this.socket.rpc("ping");
             return Math.round(performance.now() - t0);
         } catch {
             return null;
@@ -400,13 +407,12 @@ export class NakamaService {
 
     // サーバの同接数を取得する（range指定で履歴も取得）
     async getPlayerCount(range?: string): Promise<{ count: number; history: number[] } | null> {
-        if (!this.session) return null;
+        if (!this.socket) return null;
         try {
-            const payload = range ? { range } : {};
-            const result = await this.client.rpc(this.session, "getPlayerCount", payload as unknown as object);
+            const payload = range ? JSON.stringify({ range }) : undefined;
+            const result = await this.socket.rpc("getPlayerCount", payload);
             if (!result?.payload) return null;
-            const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
-            const data = JSON.parse(raw) as { count?: number; history?: number[] };
+            const data = JSON.parse(result.payload) as { count?: number; history?: number[] };
             return { count: data.count ?? 0, history: data.history ?? [] };
         } catch {
             return null;
@@ -415,12 +421,11 @@ export class NakamaService {
 
     // 全プレイヤーのAOI情報を取得
     async getPlayersAOI(): Promise<{ sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]> {
-        if (!this.session) return [];
+        if (!this.socket) return [];
         try {
-            const result = await this.client.rpc(this.session, "getPlayersAOI", "" as unknown as object);
+            const result = await this.socket.rpc("getPlayersAOI");
             if (!result?.payload) return [];
-            const raw = typeof result.payload === "string" ? result.payload : JSON.stringify(result.payload);
-            const data = JSON.parse(raw) as { players?: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[] };
+            const data = JSON.parse(result.payload) as { players?: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[] };
             return data.players ?? [];
         } catch {
             return [];

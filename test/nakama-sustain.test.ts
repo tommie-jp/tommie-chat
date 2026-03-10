@@ -75,9 +75,8 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    const result = await client.rpc(session, 'getWorldMatch', '' as unknown as object);
-    const raw = typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload);
-    const data = JSON.parse(raw) as { matchId?: string };
+    const result = await socket.rpc('getWorldMatch');
+    const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
     if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
 
     const match = await socket.joinMatch(data.matchId);
@@ -131,7 +130,7 @@ async function reconnectDisconnected(players: PlayerConn[], concurrency = 20): P
 }
 
 async function cleanup(p: PlayerConn): Promise<void> {
-    try { await p.socket.leaveMatch(p.matchId); } catch { /* ignore */ }
+    // leaveMatch を待たずに disconnect — サーバ側で自動的に match から除外される
     try { p.socket.disconnect(true); } catch { /* ignore */ }
     p.connected = false;
 }
@@ -282,7 +281,7 @@ describe(`接続維持テスト (${PLAYER_COUNT}人, ${MAX_DURATION}秒)`, { tim
         globalPlayers = [];
         players = [];
         await sleep(500);
-    });
+    }, 60000);
 
     for (const sec of DURATIONS_SEC) {
         it(`${fmtDuration(sec)}間の接続維持が正常`, async () => {

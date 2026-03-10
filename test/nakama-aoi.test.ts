@@ -38,10 +38,9 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    // getWorldMatch RPC
-    const result = await client.rpc(session, 'getWorldMatch', '' as unknown as object);
-    const raw = typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload);
-    const data = JSON.parse(raw) as { matchId?: string };
+    // getWorldMatch RPC (WebSocket)
+    const result = await socket.rpc('getWorldMatch');
+    const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
     expect(data.matchId).toBeTruthy();
     const match = await socket.joinMatch(data.matchId!);
     const sessionId = match.self?.session_id ?? "";
@@ -106,7 +105,7 @@ describe('Nakama AOI 統合テスト', () => {
         };
 
         // チャンク(0,0)内のブロックを設置 (gx=1, gz=1)
-        await p1.client.rpc(p1.session, 'setBlock', { gx: 1, gz: 1, blockId: 1, r: 255, g: 0, b: 0, a: 255 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx: 1, gz: 1, blockId: 1, r: 255, g: 0, b: 0, a: 255 }));
         await sleep(500);
 
         expect(received.length).toBeGreaterThanOrEqual(1);
@@ -114,7 +113,7 @@ describe('Nakama AOI 統合テスト', () => {
         expect(received[0].gz).toBe(1);
 
         // 後片付け: ブロックを削除
-        await p1.client.rpc(p1.session, 'setBlock', { gx: 1, gz: 1, blockId: 0, r: 0, g: 0, b: 0, a: 0 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx: 1, gz: 1, blockId: 0, r: 0, g: 0, b: 0, a: 0 }));
     });
 
     it('AOI外のブロック更新を受信しない', async () => {
@@ -130,13 +129,13 @@ describe('Nakama AOI 統合テスト', () => {
         };
 
         // チャンク(0,0)内のブロックを設置
-        await p1.client.rpc(p1.session, 'setBlock', { gx: 2, gz: 2, blockId: 1, r: 0, g: 255, b: 0, a: 255 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx: 2, gz: 2, blockId: 1, r: 0, g: 255, b: 0, a: 255 }));
         await sleep(500);
 
         expect(received.length).toBe(0);
 
         // 後片付け
-        await p1.client.rpc(p1.session, 'setBlock', { gx: 2, gz: 2, blockId: 0, r: 0, g: 0, b: 0, a: 0 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx: 2, gz: 2, blockId: 0, r: 0, g: 0, b: 0, a: 0 }));
     });
 
     it('AOI変更後に新しいAOI内のブロック更新を受信する', async () => {
@@ -152,13 +151,13 @@ describe('Nakama AOI 統合テスト', () => {
         };
 
         // チャンク(0,0)内のブロックを設置 → 今度はp2も受信するはず
-        await p1.client.rpc(p1.session, 'setBlock', { gx: 3, gz: 3, blockId: 1, r: 0, g: 0, b: 255, a: 255 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx: 3, gz: 3, blockId: 1, r: 0, g: 0, b: 255, a: 255 }));
         await sleep(500);
 
         expect(received.length).toBeGreaterThanOrEqual(1);
 
         // 後片付け
-        await p1.client.rpc(p1.session, 'setBlock', { gx: 3, gz: 3, blockId: 0, r: 0, g: 0, b: 0, a: 0 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx: 3, gz: 3, blockId: 0, r: 0, g: 0, b: 0, a: 0 }));
     });
 
     it('syncChunks RPC（AOIベース）が正常に応答する', async () => {
@@ -169,10 +168,9 @@ describe('Nakama AOI 統合テスト', () => {
                 hashes[`${cx}_${cz}`] = '0';
             }
         }
-        const result = await p1.client.rpc(p1.session, 'syncChunks', { minCX: 0, minCZ: 0, maxCX: 3, maxCZ: 3, hashes } as unknown as object);
+        const result = await p1.socket.rpc('syncChunks', JSON.stringify({ minCX: 0, minCZ: 0, maxCX: 3, maxCZ: 3, hashes }));
         expect(result.payload).toBeTruthy();
-        const raw = typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload);
-        const data = JSON.parse(raw) as { chunks?: { cx: number; cz: number; hash: string; table: number[] }[] };
+        const data = JSON.parse(result.payload!) as { chunks?: { cx: number; cz: number; hash: string; table: number[] }[] };
         expect(data.chunks).toBeDefined();
         expect(Array.isArray(data.chunks)).toBe(true);
         // 返却されるチャンクはすべて指定範囲内
@@ -185,10 +183,9 @@ describe('Nakama AOI 統合テスト', () => {
     });
 
     it('getGroundChunk RPCが正常に応答する', async () => {
-        const result = await p1.client.rpc(p1.session, 'getGroundChunk', { cx: 0, cz: 0 } as unknown as object);
+        const result = await p1.socket.rpc('getGroundChunk', JSON.stringify({ cx: 0, cz: 0 }));
         expect(result.payload).toBeTruthy();
-        const raw = typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload);
-        const data = JSON.parse(raw) as { cx: number; cz: number; table: number[] };
+        const data = JSON.parse(result.payload!) as { cx: number; cz: number; table: number[] };
         expect(data.cx).toBe(0);
         expect(data.cz).toBe(0);
         expect(Array.isArray(data.table)).toBe(true);
@@ -197,7 +194,7 @@ describe('Nakama AOI 統合テスト', () => {
 
     it('ping RPCが正常に応答する', async () => {
         const t0 = performance.now();
-        await p1.client.rpc(p1.session, 'ping', '' as unknown as object);
+        await p1.socket.rpc('ping');
         const elapsed = performance.now() - t0;
         expect(elapsed).toBeLessThan(5000);
     });
@@ -833,12 +830,12 @@ describe('Nakama AOI 境界値テスト', () => {
         // 端のチャンク(63,63)内のブロック
         const gx = 63 * CHUNK_SIZE + 1; // = 1009
         const gz = 63 * CHUNK_SIZE + 1;
-        await p1.client.rpc(p1.session, 'setBlock', { gx, gz, blockId: 1, r: 128, g: 128, b: 128, a: 255 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx, gz, blockId: 1, r: 128, g: 128, b: 128, a: 255 }));
         await sleep(500);
 
         expect(received.length).toBeGreaterThanOrEqual(1);
 
         // 後片付け
-        await p1.client.rpc(p1.session, 'setBlock', { gx, gz, blockId: 0, r: 0, g: 0, b: 0, a: 0 } as unknown as object);
+        await p1.socket.rpc('setBlock', JSON.stringify({ gx, gz, blockId: 0, r: 0, g: 0, b: 0, a: 0 }));
     });
 });

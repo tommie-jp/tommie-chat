@@ -67,6 +67,15 @@ export class GameScene {
     playerTextureUrl = "/textures/pic1.ktx2";
     avatarDepth = 0.05;
 
+    // フレームプロファイル（ms単位、10フレーム移動平均）
+    frameProfile = { playerMove: 0, remoteAvatars: 0, npc: 0, total: 0 };
+    private _profileAccum = { playerMove: 0, remoteAvatars: 0, npc: 0, total: 0, frames: 0 };
+    /** DevTools Performance タブの Timings レーンに mark/measure を出すか */
+    profiling = false;
+    private _profileHistory: { ts: number; playerMove: number; remoteAvatars: number; npc: number; total: number; avatarCount: number }[] = [];
+    /** ユーザーリスト DOM 再構築プロファイル（UIPanel から書き込まれる） */
+    userListProfile = { calls: 0, totalMs: 0, maxMs: 0, userCount: 0 };
+
     // サブシステム
     avatarSystem!: AvatarSystem;
     cloudSystem!: CloudSystem;
@@ -524,6 +533,7 @@ export class GameScene {
 
         // レンダーループ
         this.scene.onBeforeRenderObservable.add(() => {
+            const _t0 = performance.now();
             const deltaTime = this.engine.getDeltaTime() / 1000;
 
             const currentPos = this.playerBox.position;
@@ -604,29 +614,72 @@ export class GameScene {
                 this.aoiManager.updateAOI();
             }
 
-            // リモートアバターを目標位置へ移動（表示制御はサーバのAOI_ENTER/LEAVEに任せる）
+            const _t1 = performance.now();
+            // リモートアバターを目標位置へ移動（視錐台カリング付き）
+            const frustumPlanes = this.scene.frustumPlanes;
             for (const [sid, av] of this.remoteAvatars) {
                 const tgt = this.remoteTargets.get(sid);
-                if (tgt) {
-                    const dx = tgt.x - av.position.x, dz = tgt.z - av.position.z;
-                    const dist = Math.sqrt(dx * dx + dz * dz);
-                    if (dist > 0.05) {
-                        const step = Math.min(this.moveSpeed * deltaTime, dist);
-                        av.position.x += (dx / dist) * step;
-                        av.position.z += (dz / dist) * step;
-                        const targetAngle = Math.atan2(dx, dz) + Math.PI;
-                        let diff = targetAngle - av.rotation.y;
-                        while (diff < -Math.PI) diff += Math.PI * 2;
-                        while (diff >  Math.PI) diff -= Math.PI * 2;
-                        av.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
-                    }
+                if (!tgt) continue;
+                const dx = tgt.x - av.position.x, dz = tgt.z - av.position.z;
+                const dist = dx * dx + dz * dz;
+                if (dist <= 0.0025) continue; // 0.05^2
+                // 視錐台外のアバターは位置をテレポート（補間スキップ）
+                if (frustumPlanes && !av.isInFrustum(frustumPlanes)) {
+                    av.position.x = tgt.x;
+                    av.position.z = tgt.z;
+                    continue;
                 }
+                const d = Math.sqrt(dist);
+                const step = Math.min(this.moveSpeed * deltaTime, d);
+                av.position.x += (dx / d) * step;
+                av.position.z += (dz / d) * step;
+                const targetAngle = Math.atan2(dx, dz) + Math.PI;
+                let diff = targetAngle - av.rotation.y;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff >  Math.PI) diff -= Math.PI * 2;
+                av.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
             }
 
+            const _t2 = performance.now();
             // NPC アニメーション
             this.npcSystem.update(deltaTime);
 
             this.camSpecLight.direction = this.camera.getDirection(Vector3.Forward());
+
+            // フレームプロファイル集計（10フレーム移動平均）
+            const _t3 = performance.now();
+            const pM = _t1 - _t0, rA = _t2 - _t1, nC = _t3 - _t2, tT = _t3 - _t0;
+
+            // DevTools Timings レーンへの mark/measure
+            if (this.profiling) {
+                performance.mark('frame-start');
+                performance.measure('playerMove', { start: _t0, end: _t1 });
+                performance.measure('remoteAvatars', { start: _t1, end: _t2 });
+                performance.measure('npc', { start: _t2, end: _t3 });
+                performance.measure('frame-total', { start: _t0, end: _t3 });
+                // 履歴に記録（最大600フレーム = 約10秒分）
+                this._profileHistory.push({ ts: _t0, playerMove: pM, remoteAvatars: rA, npc: nC, total: tT, avatarCount: this.remoteAvatars.size });
+                if (this._profileHistory.length > 600) this._profileHistory.shift();
+            }
+
+            const acc = this._profileAccum;
+            acc.playerMove += pM;
+            acc.remoteAvatars += rA;
+            acc.npc += nC;
+            acc.total += tT;
+            acc.frames++;
+            if (acc.frames >= 10) {
+                const n = acc.frames;
+                this.frameProfile = {
+                    playerMove: acc.playerMove / n,
+                    remoteAvatars: acc.remoteAvatars / n,
+                    npc: acc.npc / n,
+                    total: acc.total / n,
+                };
+                acc.playerMove = acc.remoteAvatars = acc.npc = acc.total = acc.frames = 0;
+            }
+
+
         });
 
         if (this.camera && this.playerBox) {

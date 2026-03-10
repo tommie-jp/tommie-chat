@@ -353,6 +353,7 @@ export function setupDebugOverlay(game: GameScene): void {
     const pv = document.getElementById("val-polys");
     const ov = document.getElementById("val-occlq");
     const apiv = document.getElementById("val-api");
+    const profv = document.getElementById("val-profile");
 
     const isWebGPU = (game.engine as any).isWebGPU || game.engine.name === "WebGPU";
     if (apiv) apiv.innerText = isWebGPU ? "WebGPU" : "WebGL2";
@@ -836,6 +837,13 @@ export function setupDebugOverlay(game: GameScene): void {
 
         const activeOcclusionQueries = game.scene.meshes.filter((m: any) => m.isOcclusionQueryInProgress).length;
         if (ov) ov.innerText = activeOcclusionQueries.toString();
+
+        if (profv) {
+            const p = game.frameProfile;
+            const md = game.nakama.matchDataProfile;
+            const ul = game.userListProfile;
+            profv.innerText = `pl=${p.playerMove.toFixed(2)} rm=${p.remoteAvatars.toFixed(2)} npc=${p.npc.toFixed(2)} tot=${p.total.toFixed(2)}ms | msg=${md.calls}/s ${md.totalMs.toFixed(1)}ms | ul=${ul.calls}/s ${ul.totalMs.toFixed(0)}ms n=${ul.userCount}`;
+        }
 
         if (playerPosVal && game.playerBox) {
             const pos = game.playerBox.position;

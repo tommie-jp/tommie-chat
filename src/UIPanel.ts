@@ -497,8 +497,21 @@ export function setupHtmlUI(game: GameScene): void {
         return `${Math.floor(hours / 24)}日`;
     };
 
+    // デバウンス付きrenderUserList — 短期間の連続呼び出しをまとめる
+    let _renderTimer: ReturnType<typeof setTimeout> | null = null;
+    let _renderCount = 0;
+    let _renderTotalMs = 0;
+    let _renderMaxMs = 0;
+    let _renderLastReport = performance.now();
+
+    const scheduleRenderUserList = () => {
+        if (_renderTimer !== null) return;
+        _renderTimer = setTimeout(() => { _renderTimer = null; renderUserList(); }, 1000);
+    };
+
     const renderUserList = () => {
         if (!userListBody) return;
+        const _rt0 = performance.now();
         userListBody.innerHTML = "";
         const entries = [...userMap.values()].sort((a, b) => {
             if (ulSortKey === "loginTimestamp")
@@ -536,6 +549,17 @@ export function setupHtmlUI(game: GameScene): void {
             });
             userListBody.appendChild(tr);
         }
+        // プロファイル集計（1秒ごとにリセット）
+        const _rt1 = performance.now();
+        const elapsed = _rt1 - _rt0;
+        _renderCount++;
+        _renderTotalMs += elapsed;
+        if (elapsed > _renderMaxMs) _renderMaxMs = elapsed;
+        if (_rt1 - _renderLastReport >= 1000) {
+            game.userListProfile = { calls: _renderCount, totalMs: _renderTotalMs, maxMs: _renderMaxMs, userCount: userMap.size };
+            _renderCount = _renderTotalMs = _renderMaxMs = 0;
+            _renderLastReport = _rt1;
+        }
     };
 
     const setUlSort = (key: UlSortKey) => {
@@ -551,7 +575,7 @@ export function setupHtmlUI(game: GameScene): void {
     if (thRel)   thRel.addEventListener("click",   () => setUlSort("loginTimestamp"));
     { const thCh = document.getElementById("ul-th-ch"); if (thCh) thCh.addEventListener("click", () => setUlSort("channel")); }
 
-    setInterval(renderUserList, 10000);
+    setInterval(scheduleRenderUserList, 10000);
 
     const fetchAndSetLoginTime = async (sessionId: string, userId: string, _username: string) => {
         const isoStr = await game.nakama.getSessionLoginTime(userId, sessionId);
@@ -559,7 +583,7 @@ export function setupHtmlUI(game: GameScene): void {
         const existing = userMap.get(sessionId);
         if (existing) {
             userMap.set(sessionId, { ...existing, loginTime: formatTimestamp(loginDate), loginTimestamp: loginDate.getTime() });
-            renderUserList();
+            scheduleRenderUserList();
         }
     };
 
@@ -619,7 +643,7 @@ export function setupHtmlUI(game: GameScene): void {
                 break;
             }
         }
-        renderUserList();
+        scheduleRenderUserList();
     };
     game.nakama.onAOILeave = (sessionId: string) => {
         console.log(`[AOI_LEAVE] sid=${sessionId.slice(0, 8)}`);
@@ -667,7 +691,7 @@ export function setupHtmlUI(game: GameScene): void {
             const existing = userMap.get(sessionId);
             if (existing) {
                 userMap.set(sessionId, { ...existing, displayName: dname });
-                renderUserList();
+                scheduleRenderUserList();
                 // アバターのnameTagをdisplay_nameで更新
                 if (dname) {
                     const updater = game.remoteNameUpdaters.get(sessionId);
@@ -701,7 +725,7 @@ export function setupHtmlUI(game: GameScene): void {
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
-        renderUserList();
+        scheduleRenderUserList();
         fetchAndSetLoginTime(sessionId, userId, username);
         fetchAndSetDisplayName(sessionId, userId);
         addRemoteAvatar(sessionId, username);
@@ -711,7 +735,7 @@ export function setupHtmlUI(game: GameScene): void {
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
-        renderUserList();
+        scheduleRenderUserList();
         fetchAndSetLoginTime(sessionId, userId, username);
         fetchAndSetDisplayName(sessionId, userId);
         addChatHistory("[system]", `${username}がログインしました。`);
@@ -730,7 +754,7 @@ export function setupHtmlUI(game: GameScene): void {
                 addChatHistory("[system]", `${uname}がログアウトしました。`);
             }
         }
-        renderUserList();
+        scheduleRenderUserList();
         removeRemoteAvatar(sessionId);
     };
     game.nakama.onMatchPresenceJoin = (sessionId, userId, username) => {
@@ -742,7 +766,7 @@ export function setupHtmlUI(game: GameScene): void {
             userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: Date.now(), loginTime: "…", channel: "match" });
             fetchAndSetDisplayName(sessionId, userId);
         }
-        renderUserList();
+        scheduleRenderUserList();
     };
     game.nakama.onMatchPresenceLeave = (sessionId, _userId, _uname) => {
         const existing = userMap.get(sessionId);
@@ -754,7 +778,8 @@ export function setupHtmlUI(game: GameScene): void {
                 userMap.delete(sessionId);
             }
         }
-        renderUserList();
+        removeRemoteAvatar(sessionId);
+        scheduleRenderUserList();
     };
 
     const setLoginMode = () => {
@@ -1024,7 +1049,7 @@ export function setupHtmlUI(game: GameScene): void {
                 const mySid = game.nakama.selfSessionId;
                 if (mySid) {
                     const me = userMap.get(mySid);
-                    if (me) { userMap.set(mySid, { ...me, displayName: name }); renderUserList(); }
+                    if (me) { userMap.set(mySid, { ...me, displayName: name }); scheduleRenderUserList(); }
                 }
                 confirmedDisplayName = name;
                 if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.display = "none"; displayNameBtn.style.background = ""; }
@@ -1725,7 +1750,7 @@ export function setupHtmlUI(game: GameScene): void {
         game.currentUserId = null;
         addServerLog(host, port, "ログアウト");
         userMap.clear();
-        renderUserList();
+        scheduleRenderUserList();
         game.remoteAvatars.forEach(av => av.dispose());
         game.remoteAvatars.clear();
         if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.style.fontWeight = "bold"; loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)"; loginStatus.textContent = "ログアウトしました"; setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000); }
