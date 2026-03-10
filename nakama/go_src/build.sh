@@ -53,10 +53,13 @@ else
 fi
 
 # ビルドキャッシュボリュームの権限を修正（新規作成時は root 所有のため）
-docker run --rm -v nakama-go-build-cache:/tmp/go-build alpine \
-  sh -c "chown $(id -u):$(id -g) /tmp/go-build" 2>/dev/null || true
-docker run --rm -v nakama-go-cache:/go/pkg/mod alpine \
-  sh -c "chown $(id -u):$(id -g) /go/pkg/mod" 2>/dev/null || true
+# pluginbuilder イメージを使用（alpine の別途 pull を回避）
+BUILDER_IMG="registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:${NAKAMA_VERSION}"
+docker run --rm --entrypoint sh \
+  -v nakama-go-build-cache:/tmp/go-build \
+  -v nakama-go-cache:/go/pkg/mod \
+  "$BUILDER_IMG" \
+  -c "chown $(id -u):$(id -g) /tmp/go-build /go/pkg/mod" 2>/dev/null || true
 
 docker run --rm \
   --user "$(id -u):$(id -g)" \
@@ -66,7 +69,7 @@ docker run --rm \
   -v nakama-go-build-cache:/tmp/go-build \
   -e GOCACHE=/tmp/go-build \
   -w /go_src \
-  "registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:${NAKAMA_VERSION}" \
+  "$BUILDER_IMG" \
   -c "rm -f go.sum && GONOSUMDB='*' go build -mod=mod -buildmode=plugin -trimpath -o /go_src/world.so ."
 
 mv -f "$SCRIPT_DIR/world.so" "$OUT_DIR/world.so"
