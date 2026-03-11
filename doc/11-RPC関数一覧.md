@@ -1,6 +1,6 @@
 # RPC関数一覧
 
-- 生成日時: 2026/03/11 13:15:49
+- 生成日時: 2026/03/11 23:44:43
 
 > このファイルは自動生成です。編集しないでください。
 > 再生成: `cd doc && bash 91-make-RPC-func-list.sh`
@@ -24,19 +24,19 @@
 
 ## Nakama組み込みAPI（HTTP `client.*`）
 
-| API | 用途 | 呼び出し箇所 |
-|-----|------|-------------|
-| `client.authenticateDevice()` | デバイス認証 | NakamaService.ts |
-| `client.updateAccount()` | ユーザ名・表示名更新 | NakamaService.ts |
-| `client.getUsers()` | ユーザ情報取得 | NakamaService.ts |
-| `client.writeStorageObjects()` | ストレージ書き込み | NakamaService.ts |
-| `client.readStorageObjects()` | ストレージ読み込み | NakamaService.ts |
+| API | 用途 | 呼び出し元関数 | 呼び出し箇所 |
+|-----|------|---------------|-------------|
+| `client.authenticateDevice()` | デバイス認証・セッション再取得 | `login()` | NakamaService.ts |
+| `client.updateAccount()` | ユーザ名設定 | `login()` | NakamaService.ts |
+| `client.updateAccount()` | 表示名更新 | `updateDisplayName()` | NakamaService.ts |
+| `client.getUsers()` | 自分の表示名取得（ログイン時） | `getDisplayNames()` ← `doLogin()` | NakamaService.ts ← UIPanel.ts |
+| `client.writeStorageObjects()` | ログイン時刻保存 | `storeLoginTime()` | NakamaService.ts |
 
 ## WebSocketリアルタイム通信（`socket.*`）
 
 | API | OpCode | 用途 |
 |-----|--------|------|
-| `socket.sendMatchState()` | `OP_INIT_POS` | 初期位置送信 |
+| `socket.sendMatchState()` | `OP_INIT_POS` | 初期位置・テクスチャ・表示名・ログイン時刻送信 |
 | `socket.sendMatchState()` | `OP_AVATAR_CHANGE` | アバター変更 |
 | `socket.sendMatchState()` | `OP_DISPLAY_NAME` | 表示名変更 |
 | `socket.sendMatchState()` | `OP_MOVE_TARGET` | 移動先送信 |
