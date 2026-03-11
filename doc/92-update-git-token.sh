@@ -4,6 +4,32 @@
 
 set -e
 
+# ヘルプ表示
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    cat <<'HELP'
+使い方: bash 92-update-git-token.sh
+
+GitHubのPersonal Access Token (classic)を更新するスクリプト。
+
+処理内容:
+  1. gh CLI の credential helper が設定されていれば無効化
+  2. ~/.git-credentials のユーザ名を自動検出
+  3. 新しいトークンを入力（マスク表示）
+  4. ~/.git-credentials を更新（権限600）
+  5. git ls-remote で接続テスト
+
+前提条件:
+  - git config credential.helper = store が設定済み
+  - GitHubでPersonal Access Token (classic)を生成済み
+    https://github.com/settings/tokens
+    スコープ: repo, workflow にチェック、Expiration: 90 days 推奨
+
+オプション:
+  -h, --help    このヘルプを表示
+HELP
+    exit 0
+fi
+
 CRED_FILE="$HOME/.git-credentials"
 HOST="github.com"
 
@@ -48,8 +74,31 @@ fi
 # 新しいトークンを入力
 echo ""
 echo "新しいPersonal Access Tokenを入力（ghp_で始まる文字列）:"
-read -rs NEW_TOKEN
+# 入力をマスク表示（1文字ごとに * を表示）
+NEW_TOKEN=""
+while IFS= read -rs -n1 char; do
+    # Enter で入力終了
+    if [ -z "$char" ]; then
+        break
+    fi
+    # Backspace 処理
+    if [ "$char" = $'\x7f' ] || [ "$char" = $'\b' ]; then
+        if [ -n "$NEW_TOKEN" ]; then
+            NEW_TOKEN="${NEW_TOKEN%?}"
+            printf '\b \b'
+        fi
+    else
+        NEW_TOKEN="${NEW_TOKEN}${char}"
+        printf '*'
+    fi
+done
 echo ""
+# 先頭4文字だけ表示して入力を確認
+if [ -n "$NEW_TOKEN" ]; then
+    LEN=$(echo -n "$NEW_TOKEN" | wc -c)
+    MASKED="${NEW_TOKEN:0:4}***（${LEN}文字）"
+    echo "入力されたトークン: $MASKED"
+fi
 
 if [ -z "$NEW_TOKEN" ]; then
     echo "エラー: トークンが空です。"
