@@ -1,4 +1,4 @@
-# tomChat
+# tommChat
 
 ブラウザで動く3D MMOチャットゲームです。
 Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー環境で、ブロックを置いたりチャットしたりできます。
@@ -103,7 +103,7 @@ bash test/doLint.sh
 ## ディレクトリ構成
 
 ```text
-tomChat/
+tommChat/
 ├── src/                # クライアント側ソースコード (TypeScript)
 │   ├── main.ts         # エントリーポイント
 │   ├── GameScene.ts    # Babylon.js ゲームシーン

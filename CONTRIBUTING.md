@@ -1,6 +1,6 @@
-# Contributing to tomChat
+# Contributing to tommChat
 
-tomChat への貢献に興味を持っていただきありがとうございます！
+tommChat への貢献に興味を持っていただきありがとうございます！
 
 ## 貢献の方法
 
@@ -33,8 +33,8 @@ tomChat への貢献に興味を持っていただきありがとうございま
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/open-tommie/tom-chat.git
-cd tom-chat
+git clone https://github.com/open-tommie/tommie-chat.git
+cd tommie-chat
 
 # 依存関係のインストール
 npm install

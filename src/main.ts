@@ -14,7 +14,7 @@ for (const method of ["log", "warn", "error"] as const) {
     };
 }
 
-console.log(`tomChat v${APP_VERSION} (${APP_DATE})`);
+console.log(`tommChat v${APP_VERSION} (${APP_DATE})`);
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 if (canvas) {
