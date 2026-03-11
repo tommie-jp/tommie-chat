@@ -586,18 +586,6 @@ export function setupHtmlUI(game: GameScene): void {
 
     setInterval(scheduleRenderUserList, 10000);
 
-    const fetchAndSetLoginTime = async (sessionId: string, userId: string, _username: string) => {
-        const _end = prof("UIPanel.fetchAndSetLoginTime");
-        try {
-        const isoStr = await game.nakama.getSessionLoginTime(userId, sessionId);
-        const loginDate = isoStr ? new Date(isoStr) : new Date();
-        const existing = userMap.get(sessionId);
-        if (existing) {
-            userMap.set(sessionId, { ...existing, loginTime: formatTimestamp(loginDate), loginTimestamp: loginDate.getTime() });
-            scheduleRenderUserList();
-        }
-        } finally { _end(); }
-    };
 
     // Nakama コールバック設定
     game.nakama.onChatMessage = (username, text, userId) => {
@@ -611,14 +599,37 @@ export function setupHtmlUI(game: GameScene): void {
             }
         }
     };
-    game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, ry: number) => {
+    game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string) => {
         console.log(`[onAvatarInitPos] sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} hasAvatar=${game.remoteAvatars.has(sessionId)}`);
         const av = game.remoteAvatars.get(sessionId);
         if (av) {
             av.position.x = x; av.position.z = z; av.rotation.y = ry;
             av.setEnabled(true);
+            if (textureUrl) game.avatarSystem.changeAvatarTexture(av, textureUrl);
         }
         game.remoteTargets.delete(sessionId);
+        // OP_INIT_POS に含まれるログイン時刻・表示名を userMap に反映
+        const existing = userMap.get(sessionId);
+        if (existing) {
+            const updates: Partial<typeof existing> = {};
+            if (loginTimeISO) {
+                const loginDate = new Date(loginTimeISO);
+                updates.loginTime = formatTimestamp(loginDate);
+                updates.loginTimestamp = loginDate.getTime();
+            }
+            if (displayName) {
+                updates.displayName = displayName;
+            }
+            if (Object.keys(updates).length) {
+                userMap.set(sessionId, { ...existing, ...updates });
+                scheduleRenderUserList();
+            }
+        }
+        // アバターのnameTagを表示名で更新
+        if (displayName) {
+            const updater = game.remoteNameUpdaters.get(sessionId);
+            if (updater) updater(displayName);
+        }
     };
     game.nakama.onAvatarMoveTarget = (sessionId: string, x: number, z: number) => {
         if (game.remoteAvatars.has(sessionId)) game.remoteTargets.set(sessionId, { x, z });
@@ -701,25 +712,6 @@ export function setupHtmlUI(game: GameScene): void {
         _end();
     };
 
-    const fetchAndSetDisplayName = async (sessionId: string, userId: string) => {
-        const _end = prof("UIPanel.fetchAndSetDisplayName");
-        try {
-            const names = await game.nakama.getDisplayNames([userId]);
-            const dname = names.get(userId) ?? "";
-            const existing = userMap.get(sessionId);
-            if (existing) {
-                userMap.set(sessionId, { ...existing, displayName: dname });
-                scheduleRenderUserList();
-                // アバターのnameTagをdisplay_nameで更新
-                if (dname) {
-                    const updater = game.remoteNameUpdaters.get(sessionId);
-                    if (updater) updater(dname);
-                }
-            }
-        } catch { /* ignore */ }
-        finally { _end(); }
-    };
-
     // 同じuserIdの古いセッションを削除（再接続時の重複防止）
     const removeStaleEntries = (newSessionId: string, userId: string) => {
         for (const [sid, entry] of userMap) {
@@ -746,8 +738,6 @@ export function setupHtmlUI(game: GameScene): void {
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
-        fetchAndSetLoginTime(sessionId, userId, username);
-        fetchAndSetDisplayName(sessionId, userId);
         addRemoteAvatar(sessionId, username);
     };
     game.nakama.onPresenceNewJoin = (sessionId, userId, username) => {
@@ -757,12 +747,9 @@ export function setupHtmlUI(game: GameScene): void {
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
-        fetchAndSetLoginTime(sessionId, userId, username);
-        fetchAndSetDisplayName(sessionId, userId);
         addChatHistory("[system]", `${username}がログインしました。`);
         addRemoteAvatar(sessionId, username);
-        { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y).catch(() => {}); }
-        game.nakama.sendAvatarChange(game.playerTextureUrl).catch(() => {});
+        { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
     };
     game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
         cc("onPresenceLeave");
@@ -787,7 +774,6 @@ export function setupHtmlUI(game: GameScene): void {
             addChannelFlag(sessionId, "match");
         } else {
             userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: Date.now(), loginTime: "…", channel: "match" });
-            fetchAndSetDisplayName(sessionId, userId);
         }
         scheduleRenderUserList();
     };
@@ -898,6 +884,7 @@ export function setupHtmlUI(game: GameScene): void {
                         game.updatePlayerNameTag(dname);
                         if (displayNameInput) displayNameInput.value = dname;
                         confirmedDisplayName = dname;
+                        game.nakama.selfDisplayName = dname;
                     }
                 }).catch(() => {});
             }
@@ -940,8 +927,7 @@ export function setupHtmlUI(game: GameScene): void {
                 game.syncAOIChunks().catch(() => {});
             }
 
-            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y).catch(() => {}); }
-            game.nakama.sendAvatarChange(game.playerTextureUrl).catch(() => {});
+            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
             game.aoiManager.updateAOI();
             const srvInfo = await game.nakama.getServerInfo();
             addServerLog(host, port, "ログイン成功", srvInfo);
@@ -972,8 +958,7 @@ export function setupHtmlUI(game: GameScene): void {
                 addServerLog(loggedInHost, loggedInPort, "マッチ再接続", "WebSocket復帰");
                 // 再接続後にInitPos・AOI・アバターを再送信
                 const p = game.playerBox;
-                game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y).catch(() => {});
-                game.nakama.sendAvatarChange(game.playerTextureUrl).catch(() => {});
+                game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {});
                 game.aoiManager.updateAOI();
                 // CCUグラフを再初期化（切断中の無効データをクリア）
                 restartCcu();
@@ -1071,6 +1056,7 @@ export function setupHtmlUI(game: GameScene): void {
             }
             try {
                 await game.nakama.updateDisplayName(name);
+                game.nakama.selfDisplayName = name;
                 game.nakama.sendDisplayName(name).catch(() => {});
                 game.updatePlayerNameTag(name);
                 // 自分のユーザリスト表示名も更新

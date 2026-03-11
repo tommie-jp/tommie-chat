@@ -28,7 +28,7 @@ export class NakamaService {
     onPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
-    onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number) => void;
+    onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string) => void;
     onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
     onAvatarChange?:     (sessionId: string, textureUrl: string) => void;
     onBlockUpdate?:      (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => void;
@@ -40,6 +40,8 @@ export class NakamaService {
 
     private reconnecting = false;
     private loginName: string | null = null;
+    private loginTimeISO: string = "";
+    selfDisplayName: string = "";
     private readonly _decoder = new TextDecoder();
 
     // onmatchdata プロファイル（呼び出し回数とコスト）
@@ -207,8 +209,8 @@ export class NakamaService {
                 } else if (!sid) {
                     return;
                 } else if (md.op_code === OP_INIT_POS) {
-                    const pos = payload as { x: number; z: number; ry?: number };
-                    this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0);
+                    const pos = payload as { x: number; z: number; ry?: number; lt?: string; dn?: string; tx?: string };
+                    this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0, pos.lt ?? "", pos.dn ?? "", pos.tx ?? "");
                 } else if (md.op_code === OP_MOVE_TARGET) {
                     const pos = payload as { x: number; z: number };
                     this.onAvatarMoveTarget?.(sid, pos.x, pos.z);
@@ -233,12 +235,12 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    async sendInitPos(x: number, z: number, ry = 0): Promise<void> {
+    async sendInitPos(x: number, z: number, ry = 0, textureUrl = ""): Promise<void> {
         const _end = prof("NakamaService.sendInitPos");
         try {
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, JSON.stringify({ x, z, ry }));
+            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl }));
         } catch { /* ignore */ }
         } finally { _end(); }
     }
@@ -378,33 +380,17 @@ export class NakamaService {
         const _end = prof("NakamaService.storeLoginTime");
         try {
         if (!this.session) return;
+        this.loginTimeISO = new Date().toISOString();
         await this.client.writeStorageObjects(this.session, [{
             collection: "user_status",
             key: `login_time_${sessionId}`,
-            value: { loginTime: new Date().toISOString() },
+            value: { loginTime: this.loginTimeISO },
             permission_read: 2,
             permission_write: 1,
         }]);
         } finally { _end(); }
     }
 
-    async getSessionLoginTime(userId: string, sessionId: string): Promise<string | null> {
-        const _end = prof("NakamaService.getSessionLoginTime");
-        try {
-        if (!this.session) return null;
-        try {
-            const result = await this.client.readStorageObjects(this.session, {
-                object_ids: [{ collection: "user_status", key: `login_time_${sessionId}`, user_id: userId }]
-            });
-            const obj = result.objects?.[0];
-            if (obj?.value) {
-                const val = obj.value as { loginTime?: string };
-                return val.loginTime ?? null;
-            }
-        } catch { /* ignore */ }
-        return null;
-        } finally { _end(); }
-    }
 
     async setBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): Promise<void> {
         const _end = prof("NakamaService.setBlock");
