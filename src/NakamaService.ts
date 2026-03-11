@@ -1,4 +1,5 @@
 import { Client, Session, Socket, Channel, ChannelMessage, ChannelPresenceEvent, MatchData, MatchPresenceEvent } from "@heroiclabs/nakama-js";
+import { prof } from "./Profiler";
 
 const CHAT_ROOM = "world";
 const CHAT_TYPE = 1; // 1=Room, 2=DM, 3=Group
@@ -60,6 +61,8 @@ export class NakamaService {
     }
 
     async login(loginName: string, host = "127.0.0.1", port = "7350"): Promise<Session> {
+        const _end = prof("NakamaService.login");
+        try {
         this.host = host;
         this.port = port;
         this.loginName = loginName;
@@ -104,10 +107,12 @@ export class NakamaService {
         };
 
         return this.session;
+        } finally { _end(); }
     }
 
     private setupSocketHandlers(): void {
-        if (!this.socket) return;
+        const _end = prof("NakamaService.setupSocketHandlers");
+        if (!this.socket) { _end(); return; }
         this.socket.onchannelmessage = (msg: ChannelMessage) => {
             const content = msg.content as { text?: string };
             if (content?.text) this.onChatMessage?.(msg.username ?? "", content.text, msg.sender_id ?? "");
@@ -117,9 +122,12 @@ export class NakamaService {
             this.onMatchDisconnect?.();
             this.tryReconnect();
         };
+        _end();
     }
 
     private async tryReconnect(): Promise<void> {
+        const _end = prof("NakamaService.tryReconnect");
+        try {
         if (this.reconnecting || !this.session || !this.loginName) return;
         this.reconnecting = true;
         const delays = [1000, 2000, 4000, 8000, 15000];
@@ -155,9 +163,12 @@ export class NakamaService {
         }
         console.error("[NakamaService] all reconnect attempts failed");
         this.reconnecting = false;
+        } finally { _end(); }
     }
 
     async joinWorldMatch(): Promise<void> {
+        const _end = prof("NakamaService.joinWorldMatch");
+        try {
         if (!this.session || !this.socket) throw new Error("no session/socket");
         const result = await this.socket.rpc("getWorldMatch");
         if (!result?.payload) throw new Error("getWorldMatch: no payload");
@@ -219,50 +230,70 @@ export class NakamaService {
                 acc.lastReset = _mt1;
             }
         };
+        } finally { _end(); }
     }
 
     async sendInitPos(x: number, z: number, ry = 0): Promise<void> {
+        const _end = prof("NakamaService.sendInitPos");
+        try {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_INIT_POS, JSON.stringify({ x, z, ry }));
         } catch { /* ignore */ }
+        } finally { _end(); }
     }
 
     async sendAvatarChange(textureUrl: string): Promise<void> {
+        const _end = prof("NakamaService.sendAvatarChange");
+        try {
         console.log(`[sendAvatarChange] textureUrl=${textureUrl}`);
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, JSON.stringify({ textureUrl }));
         } catch { /* ignore */ }
+        } finally { _end(); }
     }
 
     async sendDisplayName(displayName: string): Promise<void> {
+        const _end = prof("NakamaService.sendDisplayName");
+        try {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName })));
         } catch { /* ignore */ }
+        } finally { _end(); }
     }
 
     async sendMoveTarget(x: number, z: number): Promise<void> {
+        const _end = prof("NakamaService.sendMoveTarget");
+        try {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_MOVE_TARGET, JSON.stringify({ x, z }));
         } catch { /* ignore */ }
+        } finally { _end(); }
     }
 
     async sendAOI(minCX: number, minCZ: number, maxCX: number, maxCZ: number): Promise<void> {
+        const _end = prof("NakamaService.sendAOI");
+        try {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_AOI_UPDATE, JSON.stringify({ minCX, minCZ, maxCX, maxCZ }));
         } catch { /* ignore */ }
+        } finally { _end(); }
     }
 
     async sendChatMessage(text: string): Promise<void> {
+        const _end = prof("NakamaService.sendChatMessage");
+        try {
         if (!this.socket || !this.channelId) return;
         await this.socket.writeChatMessage(this.channelId, { text });
+        } finally { _end(); }
     }
 
     logout(): void {
+        const _end = prof("NakamaService.logout");
         if (this.socket) {
             this.socket.disconnect(true);
             this.socket = null;
@@ -271,6 +302,7 @@ export class NakamaService {
         this.channelId     = null;
         this.matchId       = null;
         this.selfSessionId = null;
+        _end();
     }
 
     getSession(): Session | null {
@@ -278,11 +310,16 @@ export class NakamaService {
     }
 
     async updateDisplayName(displayName: string): Promise<void> {
+        const _end = prof("NakamaService.updateDisplayName");
+        try {
         if (!this.session) throw new Error("not logged in");
         await this.client.updateAccount(this.session, { display_name: displayName });
+        } finally { _end(); }
     }
 
     async getDisplayNames(userIds: string[]): Promise<Map<string, string>> {
+        const _end = prof("NakamaService.getDisplayNames");
+        try {
         const result = new Map<string, string>();
         if (!this.session || userIds.length === 0) return result;
         const users = await this.client.getUsers(this.session, userIds);
@@ -290,9 +327,12 @@ export class NakamaService {
             result.set(u.id!, u.display_name ?? "");
         }
         return result;
+        } finally { _end(); }
     }
 
     async getServerInfo(): Promise<string> {
+        const _end = prof("NakamaService.getServerInfo");
+        try {
         if (!this.socket) return "不明";
         // ① カスタム RPC "getServerInfo" (WebSocket経由)
         try {
@@ -331,9 +371,12 @@ export class NakamaService {
             }
         } catch { /* ignore */ }
         return "不明";
+        } finally { _end(); }
     }
 
     private async storeLoginTime(sessionId: string): Promise<void> {
+        const _end = prof("NakamaService.storeLoginTime");
+        try {
         if (!this.session) return;
         await this.client.writeStorageObjects(this.session, [{
             collection: "user_status",
@@ -342,9 +385,12 @@ export class NakamaService {
             permission_read: 2,
             permission_write: 1,
         }]);
+        } finally { _end(); }
     }
 
     async getSessionLoginTime(userId: string, sessionId: string): Promise<string | null> {
+        const _end = prof("NakamaService.getSessionLoginTime");
+        try {
         if (!this.session) return null;
         try {
             const result = await this.client.readStorageObjects(this.session, {
@@ -357,11 +403,15 @@ export class NakamaService {
             }
         } catch { /* ignore */ }
         return null;
+        } finally { _end(); }
     }
 
     async setBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): Promise<void> {
+        const _end = prof("NakamaService.setBlock");
+        try {
         if (!this.socket) return;
         await this.socket.rpc("setBlock", JSON.stringify({ gx, gz, blockId, r, g, b, a }));
+        } finally { _end(); }
     }
 
     async getGroundTable(): Promise<number[] | null> {
@@ -375,6 +425,8 @@ export class NakamaService {
     }
 
     async syncChunks(minCX: number, minCZ: number, maxCX: number, maxCZ: number, hashes: Record<string, string>): Promise<{ cx: number; cz: number; hash: string; table: number[] }[]> {
+        const _end = prof("NakamaService.syncChunks");
+        try {
         if (!this.socket) return [];
         try {
             const result = await this.socket.rpc("syncChunks", JSON.stringify({ minCX, minCZ, maxCX, maxCZ, hashes }));
@@ -382,19 +434,25 @@ export class NakamaService {
             const data = JSON.parse(result.payload) as { chunks?: { cx: number; cz: number; hash: string; table: number[] }[] };
             return data.chunks ?? [];
         } catch { return []; }
+        } finally { _end(); }
     }
 
     async getGroundChunk(cx: number, cz: number): Promise<{ cx: number; cz: number; table: number[] } | null> {
+        const _end = prof("NakamaService.getGroundChunk");
+        try {
         if (!this.socket) return null;
         try {
             const result = await this.socket.rpc("getGroundChunk", JSON.stringify({ cx, cz }));
             if (!result?.payload) return null;
             return JSON.parse(result.payload) as { cx: number; cz: number; table: number[] };
         } catch { return null; }
+        } finally { _end(); }
     }
 
     // サーバへの WebSocket RPC ラウンドトリップ時間を計測する（ms）
     async measurePing(): Promise<number | null> {
+        const _end = prof("NakamaService.measurePing");
+        try {
         if (!this.socket) return null;
         try {
             const t0 = performance.now();
@@ -403,10 +461,13 @@ export class NakamaService {
         } catch {
             return null;
         }
+        } finally { _end(); }
     }
 
     // サーバの同接数を取得する（range指定で履歴も取得）
     async getPlayerCount(range?: string): Promise<{ count: number; history: number[] } | null> {
+        const _end = prof("NakamaService.getPlayerCount");
+        try {
         if (!this.socket) return null;
         try {
             const payload = range ? JSON.stringify({ range }) : undefined;
@@ -417,10 +478,13 @@ export class NakamaService {
         } catch {
             return null;
         }
+        } finally { _end(); }
     }
 
     // 全プレイヤーのAOI情報を取得
     async getPlayersAOI(): Promise<{ sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]> {
+        const _end = prof("NakamaService.getPlayersAOI");
+        try {
         if (!this.socket) return [];
         try {
             const result = await this.socket.rpc("getPlayersAOI");
@@ -430,5 +494,13 @@ export class NakamaService {
         } catch {
             return [];
         }
+        } finally { _end(); }
+    }
+
+    /** サーバ側プロファイル RPC を呼び出す */
+    async profileRpc(method: "profileStart" | "profileStop" | "profileDump"): Promise<string | null> {
+        if (!this.socket) { console.warn(`[profileRpc] socket is null`); return null; }
+        const res = await this.socket.rpc(method);
+        return res?.payload ?? null;
     }
 }

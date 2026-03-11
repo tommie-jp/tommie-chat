@@ -1,6 +1,7 @@
 import { Scene, Mesh, MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
 import { NakamaService } from "./NakamaService";
 import { CHUNK_SIZE, CHUNK_COUNT, WORLD_SIZE } from "./WorldConstants";
+import { prof } from "./Profiler";
 
 export class AOIManager {
     aoiRadius = 48;
@@ -23,6 +24,7 @@ export class AOIManager {
     ) {}
 
     updateAOI(): void {
+        const _end = prof("AOIManager.updateAOI");
         const half = WORLD_SIZE / 2;
         const CS = CHUNK_SIZE;
         const CC = CHUNK_COUNT;
@@ -43,9 +45,12 @@ export class AOIManager {
             this.syncThrottleTimer = setTimeout(() => this.onSyncChunks(), 300);
             this.updateAOILines();
         }
+        _end();
     }
 
     updateAOILines(): void {
+        const _end = prof("AOIManager.updateAOILines");
+        try {
         if (this.aoiBox) { this.aoiBox.dispose(); this.aoiBox = null; }
         if (!this.aoiVisEnabled) return;
         const a = this.lastAOI;
@@ -72,6 +77,7 @@ export class AOIManager {
         }
         this.aoiBox.material = this.aoiBoxMat;
         this.aoiBox.isPickable = false;
+        } finally { _end(); }
     }
 
     clearRemoteAoiBoxes(): void {
@@ -80,6 +86,8 @@ export class AOIManager {
     }
 
     async refreshRemoteAOI(): Promise<void> {
+        const _end = prof("AOIManager.refreshRemoteAOI");
+        try {
         if (!this.remoteAoiEnabled) { this.clearRemoteAoiBoxes(); return; }
         const players = await this.nakama.getPlayersAOI();
         this.clearRemoteAoiBoxes();
@@ -111,6 +119,7 @@ export class AOIManager {
             box.isPickable = false;
             this.remoteAoiBoxes.push(box);
         }
+        } finally { _end(); }
     }
 
     setRemoteAoiEnabled(enabled: boolean): void {

@@ -3,11 +3,13 @@ import {
     Texture, VertexBuffer, VertexData, Vector3, DynamicTexture
 } from "@babylonjs/core";
 import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
+import { prof } from "./Profiler";
 
 export class AvatarSystem {
     constructor(private scene: Scene) {}
 
     changeAvatarTexture(av: Mesh, textureUrl: string): void {
+        const _end = prof("AvatarSystem.changeAvatarTexture");
         const tex = new Texture(textureUrl, this.scene, false, false, Texture.TRILINEAR_SAMPLINGMODE);
         tex.hasAlpha = true;
         for (const child of av.getChildMeshes()) {
@@ -20,9 +22,11 @@ export class AvatarSystem {
                 mat.diffuseTexture = tex;
             }
         }
+        _end();
     }
 
     createAvatar(name: string, textureUrl: string, x: number, z: number, depth = 0.05): Mesh {
+        const _end = prof("AvatarSystem.createAvatar");
         const width = 1.0;
         const height = 1.5;
         const layerCount = 5;
@@ -186,10 +190,12 @@ export class AvatarSystem {
         baseMat.needDepthPrePass = true;
         standBase.material = baseMat;
 
+        _end();
         return avatarRoot;
     }
 
     createNameTag(targetMesh: Mesh, nameText: string): { update: (newName: string) => void; plane: Mesh } {
+        const _end = prof("AvatarSystem.createNameTag");
         const namePlane = MeshBuilder.CreatePlane("nameTag_" + targetMesh.name, { width: 1.5, height: 0.40 }, this.scene);
         namePlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
         namePlane.isPickable = false;
@@ -209,10 +215,12 @@ export class AvatarSystem {
 
         adt.addControl(textBlock);
 
+        _end();
         return { update: (newName: string) => { textBlock.text = newName; }, plane: namePlane };
     }
 
     createSpeechBubble(namePlane: Mesh, speechText: string): (newText: string) => void {
+        const _end = prof("AvatarSystem.createSpeechBubble");
         const nameW = 1.5;
         const texW = 1024, texH = 384;
         const planeW = texW / 512 * 1.5;
@@ -346,6 +354,7 @@ export class AvatarSystem {
             drawBubble(speechText);
         }
 
+        _end();
         return (newText: string) => {
             bubblePlane.isVisible = !!(newText && newText.trim() !== "");
             drawBubble(newText);
@@ -353,10 +362,12 @@ export class AvatarSystem {
     }
 
     applyAvatarDepth(avatars: Mesh[], depth: number): void {
+        const _end = prof("AvatarSystem.applyAvatarDepth");
         const scale = depth / 0.05;
         for (const av of avatars) {
             const body = av.getChildMeshes(false).find(m => m.material instanceof MultiMaterial);
             if (body) body.scaling.z = scale;
         }
+        _end();
     }
 }
