@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="icon" type="image/png" href="/favicon.png">
-    <title>tommieChat</title>
+    <title>tomChat</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87ceeb; height: 100vh; }
         #renderCanvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
@@ -713,7 +713,7 @@
         #logout-cancel-btn { background: rgba(100,100,100,0.6); }
         #logout-cancel-btn:hover { background: rgba(100,100,100,0.8); }
 
-        /* ===== このゲームについてパネル ===== */
+        /* ===== tomChatについてパネル ===== */
         #about-panel {
             position: fixed;
             top: calc(50% - 100px);
@@ -1169,7 +1169,7 @@
                 padding: 8px 20px !important;
             }
 
-            /* --- このゲームについてパネル --- */
+            /* --- tomChatについてパネル --- */
             #about-panel-body p {
                 color: #eee !important;
             }
@@ -1288,7 +1288,7 @@
         var APP_VERSION = "0.1.2";
         var APP_DATE    = "2026/03/11";
 
-        document.title = "tommieChat " + APP_VERSION;
+        document.title = "tomChat " + APP_VERSION;
 
         document.addEventListener("DOMContentLoaded", function() {
             var el;
@@ -1302,7 +1302,7 @@
             if (el) {
                 var dateDot = APP_DATE.replace(/\//g, ".");
                 el.innerHTML =
-                    '<div style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + '</div>';
+                    '<div style="color:#000;">tomChat ' + APP_VERSION + ' ' + dateDot + '</div>';
             }
 
             el = document.getElementById("label-ver");
@@ -1429,7 +1429,7 @@
     
     <div id="debug-overlay">
         <div id="debug-title-bar">
-            <span id="debug-title-text" title="TommieChatはアバターチャットです。">デバッグツール</span>
+            <span id="debug-title-text" title="TomChatはアバターチャットです。">デバッグツール</span>
             <button id="debug-minimize-btn" title="非表示">❌️</button>
             <button id="debug-restore-btn" title="復元">□</button>
         </div>
@@ -1686,7 +1686,7 @@
             <span id="server-settings-close">❌️</span>
         </div>
         <div id="server-settings-body">
-            <div class="srv-desc">接続するtommieChatサーバの設定<br>ローカルデバッグ時URL<br>127.0.0.1:7350</div>
+            <div class="srv-desc">接続するtomChatサーバの設定<br>ローカルデバッグ時URL<br>127.0.0.1:7350</div>
             <div class="srv-row">
                 <label for="serverUrl">サーバURL:</label>
                 <input id="serverUrl" type="text" value="127.0.0.1">
@@ -1742,7 +1742,7 @@
         <button class="menu-item" id="menu-debug">✓ デバッグツール</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
         <button class="menu-item" id="menu-cookie-reset">全パネル非表示（クッキー初期化）</button>
-        <button class="menu-item" id="menu-about">　 このゲームについて</button>
+        <button class="menu-item" id="menu-about">　 tomChatについて</button>
         <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;">ログアウト</button>
     </div>
 
@@ -1762,7 +1762,7 @@
 
     <div id="about-panel" style="display:none;">
         <div id="about-panel-header">
-            <span>このゲームについて</span>
+            <span>tomChatについて</span>
             <span id="about-panel-close">❌️</span>
         </div>
         <div id="about-panel-body">

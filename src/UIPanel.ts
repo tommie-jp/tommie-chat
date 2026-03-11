@@ -829,7 +829,7 @@ export function setupHtmlUI(game: GameScene): void {
         const url  = srvUrlInput?.value.trim()  || "127.0.0.1";
         const port = srvPortInput?.value.trim() || "7350";
         if (loginBtn) loginBtn.title =
-            "tommieChatサーバへログインします。\nサーバURL: " + url + "\nポート番号: " + port;
+            "tomChatサーバへログインします。\nサーバURL: " + url + "\nポート番号: " + port;
     };
     srvUrlInput?.addEventListener("input",  updateLoginTooltip);
     srvPortInput?.addEventListener("input", updateLoginTooltip);
@@ -1827,7 +1827,7 @@ export function setupHtmlUI(game: GameScene): void {
         const verEl = document.getElementById("about-app-ver");
         const dateEl = document.getElementById("about-app-date");
         const creditsEl = document.getElementById("about-app-credits");
-        if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommieChat';
+        if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tomChat';
         if (verEl) verEl.textContent = "Ver. " + ver;
         if (dateEl) dateEl.textContent = "更新日 " + date;
         if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
@@ -1852,7 +1852,7 @@ export function setupHtmlUI(game: GameScene): void {
                 aboutPanel.style.display = "none";
                 setDivCk("showAbout", "0");
                 const mb = document.getElementById("menu-about");
-                if (mb) mb.textContent = "　 このゲームについて";
+                if (mb) mb.textContent = "　 tomChatについて";
             });
         }
 
