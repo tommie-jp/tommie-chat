@@ -1,5 +1,6 @@
 import { Mesh, Vector3 } from "@babylonjs/core";
 import { AvatarSystem } from "./AvatarSystem";
+import { prof } from "./Profiler";
 
 export class NPCSystem {
     npc001!: Mesh;
@@ -18,6 +19,7 @@ export class NPCSystem {
     constructor(private avatarSystem: AvatarSystem) {}
 
     create(avatarDepth: number): void {
+        const _end = prof("NPCSystem.create");
         this.npc001 = this.avatarSystem.createAvatar("npc001", "/textures/pic2.ktx2", 0, 3, avatarDepth);
         this.npc002 = this.avatarSystem.createAvatar("npc002", "/textures/pic2.ktx2", 1.5, 3, avatarDepth);
         this.npc003 = this.avatarSystem.createAvatar("npc003", "/textures/pic2.ktx2", 3, 3, avatarDepth);
@@ -34,6 +36,7 @@ export class NPCSystem {
         const update003 = this.avatarSystem.createSpeechBubble(npc003Tag.plane, "キタちゃん３です");
 
         this.startIntervals(update001, update002, update003);
+        _end();
     }
 
     private addChatHistory(name: string, text: string): void {
@@ -79,6 +82,7 @@ export class NPCSystem {
     }
 
     update(deltaTime: number): void {
+        const _end = prof("NPCSystem.update");
         this.time += deltaTime;
 
         // npc001: X軸サイン波移動
@@ -123,6 +127,7 @@ export class NPCSystem {
             while (diff3 > Math.PI) diff3 -= Math.PI * 2;
             this.npc003.rotation.y += diff3 * 0.25;
         }
+        _end();
     }
 
     setEnabled(visible: boolean): void {

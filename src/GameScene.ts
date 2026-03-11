@@ -25,6 +25,7 @@ import { NPCSystem } from "./NPCSystem";
 import { AOIManager } from "./AOIManager";
 import { setupHtmlUI } from "./UIPanel";
 import { setupDebugOverlay } from "./DebugOverlay";
+import { prof } from "./Profiler";
 
 export class GameScene {
     engine: Engine;
@@ -75,6 +76,8 @@ export class GameScene {
     private _profileHistory: { ts: number; playerMove: number; remoteAvatars: number; npc: number; total: number; avatarCount: number }[] = [];
     /** ユーザーリスト DOM 再構築プロファイル（UIPanel から書き込まれる） */
     userListProfile = { calls: 0, totalMs: 0, maxMs: 0, userCount: 0 };
+    /** 関数呼び出しカウンタ（プロファイル期間中に加算、profileDump で表示） */
+    callCounts: Record<string, number> = {};
 
     // サブシステム
     avatarSystem!: AvatarSystem;
@@ -115,6 +118,7 @@ export class GameScene {
     }
 
     private setupScene(): void {
+        const _end = prof("GameScene.setupScene");
         this.camera = new ArcRotateCamera(
             "camera",
             Math.PI / 2,
@@ -165,12 +169,14 @@ export class GameScene {
         this.scene.fogColor = skyColor;
         this.scene.fogStart = 30.0;
         this.scene.fogEnd = this.camera.maxZ;
+        _end();
     }
 
     // AOI変更時にAOI外のブロックメッシュを破棄し、AOI内のキャッシュ済みチャンクを描画
     refreshBlocksForAOI(): void {
+        const _end = prof("GameScene.refreshBlocksForAOI");
         const aoi = this.aoiManager.lastAOI;
-        if (aoi.minCX < 0) return;
+        if (aoi.minCX < 0) { _end(); return; }
         const CS = CHUNK_SIZE;
         const WS = WORLD_SIZE;
 
@@ -206,10 +212,13 @@ export class GameScene {
                 }
             }
         }
+        _end();
     }
 
     // AOI範囲内のチャンクをサーバと差分同期
     async syncAOIChunks(): Promise<void> {
+        const _end = prof("GameScene.syncAOIChunks");
+        try {
         const CS = CHUNK_SIZE;
         const aoi = this.aoiManager.lastAOI;
         if (aoi.minCX < 0) return; // センチネル
@@ -241,10 +250,13 @@ export class GameScene {
             ch.hash = BigInt(d.hash || "0");
         }
         if (diffs.length > 0) console.log(`[syncChunks] updated ${diffs.length} chunks (AOI ${aoi.minCX},${aoi.minCZ}-${aoi.maxCX},${aoi.maxCZ})`);
+        } finally { _end(); }
     }
 
     // IndexedDBからチャンクをメモリに復元（ログイン後）
     async loadChunksFromDB(userId: string): Promise<void> {
+        const _end = prof("GameScene.loadChunksFromDB");
+        try {
         const CS = CHUNK_SIZE;
         const CC = CHUNK_COUNT;
         try {
@@ -264,12 +276,14 @@ export class GameScene {
         } catch (e) {
             console.warn("[ChunkDB] load failed:", e);
         }
+        } finally { _end(); }
     }
 
     // ログアウト時にハッシュが変わったチャンクだけIndexedDBに保存
     saveChunksToDB(): void {
+        const _end = prof("GameScene.saveChunksToDB");
         const userId = this.currentUserId;
-        if (!userId) return;
+        if (!userId) { _end(); return; }
         const dirty: ChunkRecord[] = [];
         for (const [key, ch] of this.chunks) {
             const hashStr = ch.hash.toString();
@@ -282,9 +296,11 @@ export class GameScene {
             saveChunks(userId, dirty).then(() => console.log(`[ChunkDB] saved ${dirty.length} chunks`))
                 .catch(e => console.warn("[ChunkDB] save failed:", e));
         }
+        _end();
     }
 
     refreshPreviewBlock(): void {
+        const _end = prof("GameScene.refreshPreviewBlock");
         const pick = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => mesh.name === "ground");
         if (pick?.hit && pick.pickedPoint) {
             const px = Math.floor(pick.pickedPoint.x) + 0.5;
@@ -304,6 +320,7 @@ export class GameScene {
         } else {
             this.previewBlock.isVisible = false;
         }
+        _end();
     }
 
     private getOrCreateBlockMat(r: number, g: number, b: number, a: number): StandardMaterial {
@@ -318,16 +335,18 @@ export class GameScene {
     }
 
     placeBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): void {
+        const _end = prof("GameScene.placeBlock");
         const key = gx * WORLD_SIZE + gz;
         const existing = this.blockMeshes.get(key);
         if (existing) { existing.dispose(); this.blockMeshes.delete(key); }
-        if (blockId === 0) return;
+        if (blockId === 0) { _end(); return; }
         const half = WORLD_SIZE / 2;
         const box = MeshBuilder.CreateBox(`block_${gx}_${gz}`, { size: 1 }, this.scene);
         box.position.set(gx - half + 0.5, 0.5, gz - half + 0.5);
         box.material = this.getOrCreateBlockMat(r, g, b, a);
         box.isPickable = false;
         this.blockMeshes.set(key, box);
+        _end();
     }
 
     private createObjects(): void {
@@ -688,6 +707,7 @@ export class GameScene {
     }
 
     setMSAA(samples: number): void {
+        const _end = prof("GameScene.setMSAA");
         if (samples <= 1) {
             if (this.renderingPipeline) {
                 this.renderingPipeline.dispose();
@@ -699,6 +719,7 @@ export class GameScene {
             }
             this.renderingPipeline.samples = samples;
         }
+        _end();
     }
 
     private createCoordinateLabels(): void {
@@ -733,12 +754,15 @@ export class GameScene {
     }
 
     applyAvatarDepth(): void {
+        const _end = prof("GameScene.applyAvatarDepth");
         const avatars = [this.playerBox, this.npcSystem.npc001, this.npcSystem.npc002, this.npcSystem.npc003,
                          ...this.remoteAvatars.values()];
         this.avatarSystem.applyAvatarDepth(avatars, this.avatarDepth);
+        _end();
     }
 
     clampToViewport(el: HTMLElement): void {
+        const _end = prof("GameScene.clampToViewport");
         const vw = window.innerWidth;
         const vh = window.innerHeight;
         // ① 位置をクランプ
@@ -751,5 +775,6 @@ export class GameScene {
         const r = el.getBoundingClientRect();
         if (r.right  > vw) el.style.width  = Math.max(100, vw - r.left) + "px";
         if (r.bottom > vh) el.style.height = Math.max(60,  vh - r.top)  + "px";
+        _end();
     }
 }

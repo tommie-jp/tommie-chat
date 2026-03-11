@@ -1,6 +1,7 @@
 import type { GameScene } from "./GameScene";
 import { Scene, Color3, Color4, SceneInstrumentation, EngineInstrumentation } from "@babylonjs/core";
 import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
+import { profSetEnabled, profReset } from "./Profiler";
 
 export function setupDebugOverlay(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
@@ -22,6 +23,10 @@ export function setupDebugOverlay(game: GameScene): void {
     const speechTrimBtn = document.getElementById("speechTrimBtn") as HTMLButtonElement;
     const aaModeBtn = document.getElementById("aaModeBtn") as HTMLButtonElement;
     const avatarThickInput = document.getElementById("avatarThickInput") as HTMLInputElement;
+    const profileStartBtn = document.getElementById("profileStartBtn") as HTMLButtonElement;
+    const profileStopBtn = document.getElementById("profileStopBtn") as HTMLButtonElement;
+    const profileLogBtn = document.getElementById("profileLogBtn") as HTMLButtonElement;
+    const serverProfileBtn = document.getElementById("serverProfileBtn") as HTMLButtonElement;
 
     const resetViewBtn   = document.getElementById("resetViewBtn")   as HTMLButtonElement;
     const topViewBtn     = document.getElementById("topViewBtn")     as HTMLButtonElement;
@@ -664,6 +669,77 @@ export function setupDebugOverlay(game: GameScene): void {
             const v = Math.max(1, Math.min(50, parseInt(avatarThickInput.value, 10) || 5));
             game.avatarDepth = v / 100;
             game.applyAvatarDepth();
+        });
+    }
+
+    // --- Profile ボタン ---
+    const profileStatus = document.getElementById("profileStatus") as HTMLSpanElement;
+    if (profileStartBtn) {
+        profileStartBtn.addEventListener("click", () => {
+            game.profiling = true;
+            (game as any)._profileHistory.length = 0;
+            game.callCounts = {};
+            profSetEnabled(true);
+            profReset();
+            profileStartBtn.disabled = true;
+            profileStartBtn.classList.add("off");
+            profileStopBtn.disabled = false;
+            profileStopBtn.classList.remove("off");
+            if (profileStatus) profileStatus.style.display = "";
+            console.log("[Profile] started");
+        });
+    }
+    if (profileStopBtn) {
+        profileStopBtn.addEventListener("click", () => {
+            game.profiling = false;
+            profSetEnabled(false);
+            profileStopBtn.disabled = true;
+            profileStopBtn.classList.add("off");
+            profileStartBtn.disabled = false;
+            profileStartBtn.classList.remove("off");
+            if (profileStatus) profileStatus.style.display = "none";
+            console.log(`[Profile] stopped — ${(game as any)._profileHistory.length} frames captured`);
+        });
+    }
+    if (profileLogBtn) {
+        profileLogBtn.addEventListener("click", () => {
+            const w = window as unknown as Record<string, unknown>;
+            if (typeof w.profileDump === "function") (w.profileDump as () => void)();
+            // サーバ側プロファイルもダンプ
+            game.nakama.profileRpc("profileDump").then(payload => {
+                if (!payload) { console.log("[Profile:Server] no response (not logged in?)"); return; }
+                const data = JSON.parse(payload);
+                console.log(`[Profile:Server] profiling=${data.profiling}`);
+                if (data.functions?.length > 0) {
+                    const rows = data.functions
+                        .sort((a: any, b: any) => b.totalMs - a.totalMs)
+                        .map((f: any) => ({ name: f.name, calls: f.calls, totalMs: Math.round(f.totalMs * 100) / 100, avgUs: Math.round(f.avgUs * 10) / 10, maxUs: Math.round(f.maxUs) }));
+                    console.table(rows);
+                } else {
+                    console.log("[Profile:Server] no data");
+                }
+            }).catch(e => { console.warn("[Profile:Server] error:", e); });
+        });
+    }
+
+    // --- Server Profile ON/OFF ボタン ---
+    let serverProfOn = false;
+    if (serverProfileBtn) {
+        serverProfileBtn.addEventListener("click", () => {
+            serverProfOn = !serverProfOn;
+            serverProfileBtn.textContent = serverProfOn ? "On" : "Off";
+            serverProfileBtn.classList.toggle("on", serverProfOn);
+            serverProfileBtn.classList.toggle("off", !serverProfOn);
+            const method = serverProfOn ? "profileStart" : "profileStop";
+            game.nakama.profileRpc(method).then(res => {
+                console.log(`[Profile:Server] ${method} → ${res ?? "no response"}`);
+            }).catch(e => {
+                console.warn(`[Profile:Server] ${method} error:`, e);
+                serverProfOn = !serverProfOn;
+                serverProfileBtn.textContent = serverProfOn ? "On" : "Off";
+                serverProfileBtn.classList.toggle("on", serverProfOn);
+                serverProfileBtn.classList.toggle("off", !serverProfOn);
+            });
         });
     }
 

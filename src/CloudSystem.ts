@@ -1,4 +1,5 @@
 import { Scene, Engine, Mesh, MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
+import { prof } from "./Profiler";
 
 export class CloudSystem {
     private cloudMesh: Mesh | null = null;
@@ -15,6 +16,7 @@ export class CloudSystem {
     }
 
     create(): void {
+        const _end = prof("CloudSystem.create");
         const cloudMaterial = new StandardMaterial("roundedMinecraftCloudMat", this.scene);
         cloudMaterial.diffuseColor = new Color3(1, 1, 1);
         cloudMaterial.specularColor = new Color3(0, 0, 0);
@@ -93,5 +95,6 @@ export class CloudSystem {
                 });
             }
         }
+        _end();
     }
 }

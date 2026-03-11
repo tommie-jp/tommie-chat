@@ -1,3 +1,5 @@
+import { prof } from "./Profiler";
+
 const DB_VERSION = 1;
 const STORE_NAME = "chunks";
 
@@ -23,6 +25,8 @@ export interface ChunkRecord {
 }
 
 export async function loadAllChunks(userId: string): Promise<ChunkRecord[]> {
+    const _end = prof("ChunkDB.loadAllChunks");
+    try {
     const db = await openDB(userId);
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readonly");
@@ -45,9 +49,12 @@ export async function loadAllChunks(userId: string): Promise<ChunkRecord[]> {
         };
         req.onerror = () => reject(req.error);
     });
+    } finally { _end(); }
 }
 
 export async function saveChunks(userId: string, records: ChunkRecord[]): Promise<void> {
+    const _end = prof("ChunkDB.saveChunks");
+    try {
     if (records.length === 0) return;
     const db = await openDB(userId);
     return new Promise((resolve, reject) => {
@@ -59,4 +66,5 @@ export async function saveChunks(userId: string, records: ChunkRecord[]): Promis
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
+    } finally { _end(); }
 }

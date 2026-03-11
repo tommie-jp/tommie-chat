@@ -1658,6 +1658,24 @@
                 </table>
                 </div>
             </td></tr>
+            <tr><td colspan="2" style="padding:4px 0 0 0;">
+                <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
+                <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Profile</div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <tr><td class="label" title="50.Profile&#10;パフォーマンス計測の開始/停止/ログ出力&#10;開始: profileStart() — DevTools Timings に mark/measure 出力&#10;停止: profileStop()&#10;ログ: profileDump() — コンソールにサマリ表示">50.Profile:</td><td class="value">
+                        <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+                            <span id="profileStatus" style="display:none;color:red;font-size:11px;font-weight:bold;">計測中</span>
+                            <button id="profileStartBtn" class="debug-btn" style="float:none;">Start</button>
+                        </div>
+                        <button id="profileStopBtn" class="debug-btn off" style="float:none;display:block;margin-left:auto;" disabled>Stop</button>
+                        <button id="profileLogBtn" class="debug-btn" style="float:none;display:block;margin-left:auto;">Log</button>
+                    </td></tr>
+                    <tr><td class="label" title="51.Server Profile&#10;サーバ側プロファイルのON/OFF">51.Server:</td><td class="value">
+                        <button id="serverProfileBtn" class="debug-btn off" style="float:none;display:block;margin-left:auto;">Off</button>
+                    </td></tr>
+                </table>
+                </div>
+            </td></tr>
         </table>
         </div>
     </div>

@@ -25,6 +25,87 @@ func logf(format string, a ...interface{}) {
 	fmt.Printf(ts+" "+format, a...)
 }
 
+// ─── サーバサイド プロファイラ ───
+
+type funcProfile struct {
+	Calls   int64   `json:"calls"`
+	TotalUs int64   `json:"totalUs"` // マイクロ秒
+	MaxUs   int64   `json:"maxUs"`
+}
+
+var (
+	profileMu   sync.RWMutex
+	profileData = make(map[string]*funcProfile)
+	profileOn   int32 // atomic: 0=off, 1=on
+)
+
+// prof はプロファイル計測を開始し、deferで呼ぶクロージャを返す
+// 使い方: defer prof("funcName")()
+func prof(name string) func() {
+	if atomic.LoadInt32(&profileOn) == 0 {
+		return func() {}
+	}
+	t0 := time.Now()
+	return func() {
+		us := time.Since(t0).Microseconds()
+		profileMu.Lock()
+		p, ok := profileData[name]
+		if !ok {
+			p = &funcProfile{}
+			profileData[name] = p
+		}
+		p.Calls++
+		p.TotalUs += us
+		if us > p.MaxUs {
+			p.MaxUs = us
+		}
+		profileMu.Unlock()
+	}
+}
+
+func rpcProfileStart(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ string) (string, error) {
+	profileMu.Lock()
+	profileData = make(map[string]*funcProfile)
+	profileMu.Unlock()
+	atomic.StoreInt32(&profileOn, 1)
+	logf("[Profile] started\n")
+	return `{"status":"started"}`, nil
+}
+
+func rpcProfileStop(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ string) (string, error) {
+	atomic.StoreInt32(&profileOn, 0)
+	logf("[Profile] stopped\n")
+	return `{"status":"stopped"}`, nil
+}
+
+func rpcProfileDump(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ string) (string, error) {
+	profileMu.RLock()
+	defer profileMu.RUnlock()
+	type entry struct {
+		Name    string  `json:"name"`
+		Calls   int64   `json:"calls"`
+		TotalMs float64 `json:"totalMs"`
+		AvgUs   float64 `json:"avgUs"`
+		MaxUs   int64   `json:"maxUs"`
+	}
+	var entries []entry
+	for name, p := range profileData {
+		avgUs := float64(0)
+		if p.Calls > 0 {
+			avgUs = float64(p.TotalUs) / float64(p.Calls)
+		}
+		entries = append(entries, entry{
+			Name:    name,
+			Calls:   p.Calls,
+			TotalMs: float64(p.TotalUs) / 1000.0,
+			AvgUs:   avgUs,
+			MaxUs:   p.MaxUs,
+		})
+	}
+	b, _ := json.Marshal(map[string]interface{}{"profiling": atomic.LoadInt32(&profileOn) == 1, "functions": entries})
+	return string(b), nil
+}
+
 const (
 	streamModeChannel uint8 = 2
 	chatRoomLabel           = "world"
@@ -339,6 +420,7 @@ func flatToInts(flat []uint8) []int {
 }
 
 func saveChunkToStorage(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger, cx, cz int) {
+	defer prof("saveChunkToStorage")()
 	ch := &chunks[cx][cz]
 	ch.mu.RLock()
 	flat := ch.toFlat()
@@ -364,6 +446,7 @@ func saveChunkToStorage(ctx context.Context, nk runtime.NakamaModule, logger run
 
 // rpcGetServerInfo はサーバ情報（ノード名・バージョン・起動時刻・プレイヤー数）を返す
 func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcGetServerInfo")()
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 	logf("[getServerInfo] uid=%s\n", uid)
 	playerCount, err := nk.StreamCount(streamModeChannel, "", "", chatRoomLabel)
@@ -407,6 +490,7 @@ const worldMatchCacheTTL = 10 * time.Second
 
 // rpcGetWorldMatch は稼働中の "world" マッチを探し、なければ新規作成して返す
 func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcGetWorldMatch")()
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 	logf("[getWorldMatch] uid=%s\n", uid)
 
@@ -476,6 +560,7 @@ type matchState struct {
 type worldMatch struct{}
 
 func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, params map[string]interface{}) (interface{}, int, string) {
+	defer prof("MatchInit")()
 	return &matchState{
 		AOIs:      make(map[string]*playerAOI),
 		Presences: make(map[string]runtime.Presence),
@@ -492,10 +577,12 @@ func shortSID(sid string) string {
 }
 
 func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presence runtime.Presence, metadata map[string]string) (interface{}, bool, string) {
+	defer prof("MatchJoinAttempt")()
 	return state, true, ""
 }
 
 func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
+	defer prof("MatchJoin")()
 	ms := state.(*matchState)
 	for _, p := range presences {
 		sid := p.GetSessionId()
@@ -507,6 +594,7 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 }
 
 func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
+	defer prof("MatchLeave")()
 	ms := state.(*matchState)
 	for _, p := range presences {
 		sid := p.GetSessionId()
@@ -520,6 +608,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 // collectAOITargets は送信者のチャンク位置(cx,cz)がAOI内にある他プレイヤーを収集する
 // AOI未登録のプレイヤーは全体可視とみなす（参加直後でまだsendAOIしていない場合）
 func (ms *matchState) collectAOITargets(senderSID string, cx, cz int) []runtime.Presence {
+	defer prof("collectAOITargets")()
 	var targets []runtime.Presence
 	for sid, p := range ms.Presences {
 		if sid == senderSID {
@@ -534,6 +623,7 @@ func (ms *matchState) collectAOITargets(senderSID string, cx, cz int) []runtime.
 }
 
 func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, messages []runtime.MatchData) interface{} {
+	defer prof("MatchLoop")()
 	ms := state.(*matchState)
 	for _, msg := range messages {
 		sid := msg.GetSessionId()
@@ -747,6 +837,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 }
 
 func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, graceSeconds int) interface{} {
+	defer prof("MatchTerminate")()
 	logger.Info("MatchTerminate called: graceSeconds=%d tick=%d", graceSeconds, tick)
 	// シャットダウン時: 未フラッシュの1sデータを1mに追加してからDB保存
 	flushCcu1mSample()
@@ -755,6 +846,7 @@ func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, 
 }
 
 func (m *worldMatch) MatchSignal(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, data string) (interface{}, string) {
+	defer prof("MatchSignal")()
 	ms := state.(*matchState)
 
 	// シグナルタイプをルーティング
@@ -798,6 +890,7 @@ func (m *worldMatch) MatchSignal(ctx context.Context, logger runtime.Logger, db 
 
 // handleGetPlayersAOI は全プレイヤーのAOI情報を返す
 func (m *worldMatch) handleGetPlayersAOI(ms *matchState, data string) (interface{}, string) {
+	defer prof("handleGetPlayersAOI")()
 	type aoiEntry struct {
 		SessionID  string  `json:"sessionId"`
 		Username   string  `json:"username"`
@@ -836,12 +929,14 @@ func (m *worldMatch) handleGetPlayersAOI(ms *matchState, data string) (interface
 
 // rpcPing はクライアントのラウンドトリップ時間計測用 RPC
 func rpcPing(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ string) (string, error) {
+	defer prof("rpcPing")()
 	return "{}", nil
 }
 
 // rpcGetPlayerCount は現在の同接数を返す RPC
 // payload: {"range":"5m"} で履歴も返す。range省略時は count のみ。
 func rpcGetPlayerCount(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcGetPlayerCount")()
 	var req struct {
 		Range string `json:"range"`
 	}
@@ -866,6 +961,7 @@ func rpcGetPlayerCount(ctx context.Context, logger runtime.Logger, db *sql.DB, n
 
 // rpcGetPlayersAOI は全プレイヤーのAOI情報を返す（MatchSignal経由）
 func rpcGetPlayersAOI(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcGetPlayersAOI")()
 	matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
 	if err != nil || len(matches) == 0 {
 		return `{"players":[]}`, nil
@@ -927,6 +1023,7 @@ func dumpGroundTableCSV(logger runtime.Logger) {
 
 // rpcSetBlock はブロックを地面テーブルに書き込み、全プレイヤーへ通知する
 func rpcSetBlock(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcSetBlock")()
 	var req blockReq
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return "", err
@@ -967,6 +1064,7 @@ func rpcSetBlock(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runt
 // rpcGetGroundChunk は指定チャンクの地面テーブルを返す
 // payload: {"cx":0,"cz":0}
 func rpcGetGroundChunk(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcGetGroundChunk")()
 	var req struct {
 		CX int `json:"cx"`
 		CZ int `json:"cz"`
@@ -995,6 +1093,7 @@ func rpcGetGroundChunk(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime
 
 // rpcGetGroundTable は廃止（ワールドが1024x1024になり全チャンク一括返却は非現実的）
 func rpcGetGroundTable(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ string) (string, error) {
+	defer prof("rpcGetGroundTable")()
 	// deprecated: use syncChunks
 	return `{"error":"deprecated: use syncChunks with AOI range"}`, nil
 }
@@ -1003,6 +1102,7 @@ func rpcGetGroundTable(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime
 // payload: {"minCX":0,"minCZ":0,"maxCX":15,"maxCZ":15,"hashes":{"0_0":"12345",...}}
 // AOI範囲内のチャンクのみ比較し、差分を返す
 func rpcSyncChunks(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcSyncChunks")()
 	var req struct {
 		MinCX  int               `json:"minCX"`
 		MinCZ  int               `json:"minCZ"`
@@ -1192,6 +1292,15 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 	if err := initializer.RegisterRpc("getPlayerCount", rpcGetPlayerCount); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("profileStart", rpcProfileStart); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("profileStop", rpcProfileStop); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("profileDump", rpcProfileDump); err != nil {
 		return err
 	}
 

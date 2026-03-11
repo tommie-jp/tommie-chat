@@ -1,6 +1,7 @@
 import type { GameScene } from "./GameScene";
 import { Color3, StandardMaterial } from "@babylonjs/core";
 import { fnv1a64, CHUNK_SIZE } from "./WorldConstants";
+import { prof } from "./Profiler";
 
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
@@ -428,9 +429,10 @@ export function setupHtmlUI(game: GameScene): void {
     // ===============================================
 
     const addChatHistory = (avatarName: string, text: string) => {
-        if (!text) return;
+        const _end = prof("UIPanel.addChatHistory");
+        if (!text) { _end(); return; }
         const list = document.getElementById("chat-history-list");
-        if (!list) return;
+        if (!list) { _end(); return; }
 
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, "0");
@@ -446,6 +448,7 @@ export function setupHtmlUI(game: GameScene): void {
             `<span class="chat-history-text">${text}</span>`;
         list.appendChild(entry);
         entry.scrollIntoView({ block: "end", behavior: "instant" });
+        _end();
     };
 
     const setCookie = (key: string, value: string) => {
@@ -504,13 +507,18 @@ export function setupHtmlUI(game: GameScene): void {
     let _renderMaxMs = 0;
     let _renderLastReport = performance.now();
 
+    const cc = (name: string) => { if (game.profiling) game.callCounts[name] = (game.callCounts[name] ?? 0) + 1; };
+
     const scheduleRenderUserList = () => {
+        cc("scheduleRenderUserList");
         if (_renderTimer !== null) return;
         _renderTimer = setTimeout(() => { _renderTimer = null; renderUserList(); }, 1000);
     };
 
     const renderUserList = () => {
-        if (!userListBody) return;
+        cc("renderUserList");
+        const _end = prof("UIPanel.renderUserList");
+        if (!userListBody) { _end(); return; }
         const _rt0 = performance.now();
         userListBody.innerHTML = "";
         const entries = [...userMap.values()].sort((a, b) => {
@@ -560,6 +568,7 @@ export function setupHtmlUI(game: GameScene): void {
             _renderCount = _renderTotalMs = _renderMaxMs = 0;
             _renderLastReport = _rt1;
         }
+        _end();
     };
 
     const setUlSort = (key: UlSortKey) => {
@@ -578,6 +587,8 @@ export function setupHtmlUI(game: GameScene): void {
     setInterval(scheduleRenderUserList, 10000);
 
     const fetchAndSetLoginTime = async (sessionId: string, userId: string, _username: string) => {
+        const _end = prof("UIPanel.fetchAndSetLoginTime");
+        try {
         const isoStr = await game.nakama.getSessionLoginTime(userId, sessionId);
         const loginDate = isoStr ? new Date(isoStr) : new Date();
         const existing = userMap.get(sessionId);
@@ -585,6 +596,7 @@ export function setupHtmlUI(game: GameScene): void {
             userMap.set(sessionId, { ...existing, loginTime: formatTimestamp(loginDate), loginTimestamp: loginDate.getTime() });
             scheduleRenderUserList();
         }
+        } finally { _end(); }
     };
 
     // Nakama コールバック設定
@@ -654,8 +666,9 @@ export function setupHtmlUI(game: GameScene): void {
     };
 
     const addRemoteAvatar = (sessionId: string, username: string) => {
-        if (sessionId === game.nakama.selfSessionId) return;
-        if (game.remoteAvatars.has(sessionId)) return;
+        const _end = prof("UIPanel.addRemoteAvatar");
+        if (sessionId === game.nakama.selfSessionId) { _end(); return; }
+        if (game.remoteAvatars.has(sessionId)) { _end(); return; }
         const x = (Math.random() - 0.5) * 14;
         const z = (Math.random() - 0.5) * 14;
         const avName = "remote_" + sessionId;
@@ -673,18 +686,23 @@ export function setupHtmlUI(game: GameScene): void {
         }
         game.remoteAvatars.set(sessionId, av);
         av.setEnabled(false);
+        _end();
     };
     const removeRemoteAvatar = (sessionId: string) => {
+        cc("removeRemoteAvatar");
+        const _end = prof("UIPanel.removeRemoteAvatar");
         const av = game.remoteAvatars.get(sessionId);
-        if (!av) return;
+        if (!av) { _end(); return; }
         av.dispose();
         game.remoteAvatars.delete(sessionId);
         game.remoteTargets.delete(sessionId);
         game.remoteSpeeches.delete(sessionId);
         game.remoteNameUpdaters.delete(sessionId);
+        _end();
     };
 
     const fetchAndSetDisplayName = async (sessionId: string, userId: string) => {
+        const _end = prof("UIPanel.fetchAndSetDisplayName");
         try {
             const names = await game.nakama.getDisplayNames([userId]);
             const dname = names.get(userId) ?? "";
@@ -699,6 +717,7 @@ export function setupHtmlUI(game: GameScene): void {
                 }
             }
         } catch { /* ignore */ }
+        finally { _end(); }
     };
 
     // 同じuserIdの古いセッションを削除（再接続時の重複防止）
@@ -721,6 +740,7 @@ export function setupHtmlUI(game: GameScene): void {
     };
 
     game.nakama.onPresenceJoin = (sessionId, userId, username) => {
+        cc("onPresenceJoin");
         removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
@@ -731,6 +751,7 @@ export function setupHtmlUI(game: GameScene): void {
         addRemoteAvatar(sessionId, username);
     };
     game.nakama.onPresenceNewJoin = (sessionId, userId, username) => {
+        cc("onPresenceNewJoin");
         removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
@@ -744,6 +765,7 @@ export function setupHtmlUI(game: GameScene): void {
         game.nakama.sendAvatarChange(game.playerTextureUrl).catch(() => {});
     };
     game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
+        cc("onPresenceLeave");
         const existing = userMap.get(sessionId);
         if (existing) {
             if (existing.channel === "chat+match") {
@@ -758,6 +780,7 @@ export function setupHtmlUI(game: GameScene): void {
         removeRemoteAvatar(sessionId);
     };
     game.nakama.onMatchPresenceJoin = (sessionId, userId, username) => {
+        cc("onMatchPresenceJoin");
         removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         if (existing) {
@@ -769,6 +792,7 @@ export function setupHtmlUI(game: GameScene): void {
         scheduleRenderUserList();
     };
     game.nakama.onMatchPresenceLeave = (sessionId, _userId, _uname) => {
+        cc("onMatchPresenceLeave");
         const existing = userMap.get(sessionId);
         if (existing) {
             if (existing.channel === "chat+match") {
@@ -840,20 +864,21 @@ export function setupHtmlUI(game: GameScene): void {
     let loggedInPort = "";
     const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
     const doLogin = async () => {
+        const _end = prof("UIPanel.doLogin");
         const name = loginNameInput?.value.trim();
         if (!name || name.length < 6) {
             if (loginStatus) {
                 loginStatus.style.color = "#ff8800";
                 loginStatus.textContent = isMobile ? "✗" : "名前(6文字以上)を入力して下さい";
             }
-            return;
+            _end(); return;
         }
         if (!NAKAMA_ID_RE.test(name)) {
             if (loginStatus) {
                 loginStatus.style.color = "#ff4444";
                 loginStatus.textContent = isMobile ? "✗" : "✗ 使えない文字が含まれています。使える文字: 英数字と . _ @ + -（6〜128文字）";
             }
-            return;
+            _end(); return;
         }
         const host = srvUrlInput?.value.trim()  || "127.0.0.1";
         const port = srvPortInput?.value.trim() || "7350";
@@ -982,6 +1007,7 @@ export function setupHtmlUI(game: GameScene): void {
             }
         } finally {
             if (loginBtn) loginBtn.disabled = false;
+            _end();
         }
     };
 
@@ -1030,6 +1056,8 @@ export function setupHtmlUI(game: GameScene): void {
             });
         }
         const doChangeDisplayName = async () => {
+            const _end = prof("UIPanel.doChangeDisplayName");
+            try {
             if (!displayNameInput) return;
             const name = displayNameInput.value.trim();
             if (!name) return;
@@ -1060,6 +1088,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ " + msg; }
                 addServerLog(loggedInHost || "127.0.0.1", loggedInPort || "7350", "表示名変更失敗", msg);
             }
+            } finally { _end(); }
         };
         if (displayNameInput) {
             displayNameInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); doChangeDisplayName(); } };
@@ -1079,6 +1108,8 @@ export function setupHtmlUI(game: GameScene): void {
     let pingTimer: ReturnType<typeof setInterval> | null = null;
 
     const drawPingGraph = () => {
+        const _end = prof("UIPanel.drawPingGraph");
+        try {
         const canvas = document.getElementById("ping-canvas") as HTMLCanvasElement | null;
         if (!canvas) return;
         const ppanel  = document.getElementById("ping-panel");
@@ -1234,6 +1265,7 @@ export function setupHtmlUI(game: GameScene): void {
                 ctx.fillText(rows[li].value, boxX + boxW - pad - vw, y);
             }
         }
+        } finally { _end(); }
     };
 
     let pingFailCount = 0;
@@ -1410,8 +1442,9 @@ export function setupHtmlUI(game: GameScene): void {
     const getCcuConfig = () => CCU_RANGES[ccuRange] || CCU_RANGES["5m"];
 
     const drawCcuGraph = () => {
+        const _end = prof("UIPanel.drawCcuGraph");
         const canvas = document.getElementById("ccu-canvas") as HTMLCanvasElement | null;
-        if (!canvas) return;
+        if (!canvas) { _end(); return; }
         const cpanel  = document.getElementById("ccu-panel");
         const cheader = document.getElementById("ccu-header");
         if (!cpanel || !cheader) return;
@@ -1600,6 +1633,7 @@ export function setupHtmlUI(game: GameScene): void {
             const vw = ctx.measureText(rows[li].value).width;
             ctx.fillText(rows[li].value, boxX + boxW - pad - vw, y);
         }
+        _end();
     };
 
     const startCcu = () => {
