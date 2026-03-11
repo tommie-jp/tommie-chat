@@ -10,6 +10,25 @@ HOST="github.com"
 echo "=== GitHub Token 更新 ==="
 echo ""
 
+# gh CLI の credential helper が設定されている場合は無効化
+if git config --get-all credential.https://github.com.helper 2>/dev/null | grep -q "gh auth git-credential"; then
+    echo "gh CLI の credential helper を検出しました。無効化します..."
+    # gh CLIからログアウト
+    if command -v gh >/dev/null 2>&1; then
+        GH_USER=$(gh auth status 2>&1 | grep "account" | head -1 | awk '{print $7}')
+        if [ -n "$GH_USER" ]; then
+            gh auth logout -h github.com -u "$GH_USER" 2>/dev/null || true
+            echo "  gh auth logout 完了: $GH_USER"
+        fi
+    fi
+    # gitconfigからgh credential helperを削除
+    git config --global --unset-all credential.https://github.com.helper 2>/dev/null || true
+    git config --global --unset-all credential.https://gist.github.com.helper 2>/dev/null || true
+    echo "  gh credential helper を削除しました。"
+    echo "  以降は ~/.git-credentials (store) が使われます。"
+    echo ""
+fi
+
 # 現在の設定を確認
 if [ ! -f "$CRED_FILE" ]; then
     echo "エラー: $CRED_FILE が見つかりません。"
