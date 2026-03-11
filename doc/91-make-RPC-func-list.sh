@@ -6,11 +6,16 @@ cd "$(dirname "$0")"
 
 OUT="./11-RPC関数一覧.md"
 
-cat > "$OUT" << 'EOF'
+cat > "$OUT" <<EOH
 # RPC関数一覧
 
+- 生成日時: $(date '+%Y/%m/%d %H:%M:%S')
+
 > このファイルは自動生成です。編集しないでください。
-> 再生成: `cd doc && bash 91-make-RPC-func-list.sh`
+> 再生成: \`cd doc && bash 91-make-RPC-func-list.sh\`
+EOH
+
+cat >> "$OUT" << 'EOF'
 
 ## カスタムRPC（WebSocket `socket.rpc()`）
 
