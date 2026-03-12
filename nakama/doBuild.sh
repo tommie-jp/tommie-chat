@@ -39,9 +39,10 @@ esac
 if [ "$FORCE" -eq 0 ] && [ -f "$TARGET" ]; then
     NEWER=$(find "$GO_SRC" -name '*.go' -o -name 'go.mod' -o -name 'go.sum' | xargs -I{} find {} -newer "$TARGET" 2>/dev/null)
     if [ -z "$NEWER" ]; then
-        echo "world.so is up to date — スキップ"
+        echo "world.so is up to date — スキップ ($(date -r "$TARGET" '+%Y/%m/%d %H:%M:%S'))"
         exit 0
     fi
 fi
 
 cd "$GO_SRC" && bash build.sh && cd "$SCRIPT_DIR" && docker compose restart nakama
+echo "world.so updated — $(date -r "$TARGET" '+%Y/%m/%d %H:%M:%S')"

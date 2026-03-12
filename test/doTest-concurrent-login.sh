@@ -13,6 +13,12 @@ case "${1:-}" in
 esac
 cd "$(dirname "$0")/.."
 mkdir -p test/log
+echo "========================================="
+echo "Nakama 同時接続テスト"
+echo "========================================="
+echo ""
+echo "--- Go プラグインビルド ---"
+./nakama/doBuild.sh
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="test/log/concurrent-${TIMESTAMP}.md"
 

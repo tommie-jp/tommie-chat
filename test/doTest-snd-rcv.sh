@@ -122,6 +122,15 @@ GREP_FILTER="rcv login\|rcv logout\|rcv setBlock\|rcv getWorldMatch\|rcv getServ
 
 TOTAL_ERRORS=0
 
+echo "========================================="
+echo "snd/rcv 整合性テスト"
+echo "========================================="
+
+# ── Go プラグインビルド ──
+echo ""
+echo "--- Go プラグインビルド ---"
+"$ROOT_DIR/nakama/doBuild.sh"
+
 # ── サーバ再起動 ──
 restart_server() {
     echo "  nakama サーバ再起動..."
@@ -167,11 +176,6 @@ run_consistency_check() {
 
 # ── ANSI除去 ──
 strip_ansi() { sed 's/\x1b\[[0-9;]*[mGKHF]//g'; }
-
-# =========================================
-echo "========================================="
-echo "snd/rcv 整合性テスト"
-echo "========================================="
 
 # =========================================
 echo ""

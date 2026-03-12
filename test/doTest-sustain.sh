@@ -23,6 +23,12 @@ while [[ $# -gt 0 ]]; do
 done
 cd "$(dirname "$0")/.."
 mkdir -p test/log
+echo "========================================="
+echo "Nakama 接続維持テスト"
+echo "========================================="
+echo ""
+echo "--- Go プラグインビルド ---"
+./nakama/doBuild.sh
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="test/log/sustain-${TIMESTAMP}.md"
 

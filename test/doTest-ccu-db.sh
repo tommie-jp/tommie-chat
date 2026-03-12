@@ -7,6 +7,12 @@
 #   --1h  1時間以内: 長時間安定稼働 + レンジ整合性
 cd "$(dirname "$0")/.."
 mkdir -p test/log
+echo "========================================="
+echo "同接履歴 DB永続化テスト"
+echo "========================================="
+echo ""
+echo "--- Go プラグインビルド ---"
+./nakama/doBuild.sh
 
 # フラグ解析
 LEVEL="1m"
@@ -36,7 +42,6 @@ declare -A LEVEL_DESC=(
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="test/log/ccu-db-${TIMESTAMP}.md"
 
-echo "=== 同接履歴 DB永続化テスト ==="
 echo "テストレベル: ${LEVEL} — ${LEVEL_DESC[$LEVEL]}"
 echo ""
 
