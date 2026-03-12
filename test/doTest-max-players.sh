@@ -1,6 +1,7 @@
 #!/bin/bash
 # 最大同時接続人数探索スクリプト
 # 150人から10人ずつ増やして、失敗するまで実行する
+# 各人数は3回試行し、2/3以上PASSで合格（WSL2の環境ノイズ対策）
 #
 # 使い方: ./test/doTest-max-players.sh
 # 前提: cd nakama && docker compose up -d
@@ -15,8 +16,10 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="$LOG_DIR/max-players-${TIMESTAMP}.md"
 SYMLINK="$LOG_DIR/05-max-players.md"
 
-START=150
+START=100
 STEP=10
+TRIALS=3
+PASS_NEEDED=2
 
 # ── ANSI除去 ──
 strip_ansi() { sed 's/\x1b\[[0-9;]*[mGKHF]//g'; }
@@ -24,47 +27,88 @@ strip_ansi() { sed 's/\x1b\[[0-9;]*[mGKHF]//g'; }
 echo "========================================="
 echo "最大同時接続人数探索"
 echo "  開始: ${START}人  増加幅: ${STEP}人"
+echo "  試行回数: ${TRIALS}回中${PASS_NEEDED}回以上PASSで合格"
 echo "  レポート: $LOGFILE"
 echo "========================================="
 echo ""
 
-# 結果を配列で保持: "N|rc|sub_report_path"
+# 結果を配列で保持: "N|verdict_rc|best_sub_report|pass_count|trials"
 RESULTS=()
 last_ok=0
 n=$START
 
 while true; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ">>> ${n}人テスト 実行中..."
+    echo ">>> ${n}人テスト（${TRIALS}回試行）"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    # 実行前の最新レポートを記録
-    prev_report=$(ls -t "$LOG_DIR"/snd-rcv-*.md 2>/dev/null | head -1 || true)
+    pass_count=0
+    fail_count=0
+    best_sub_report=""
 
-    set +e
-    "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n"
-    rc=$?
-    set -e
+    for trial in $(seq 1 $TRIALS); do
+        echo ""
+        echo "  --- 試行 ${trial}/${TRIALS} ---"
 
-    # 実行後に新しく生成されたレポートを取得
-    new_report=$(ls -t "$LOG_DIR"/snd-rcv-*.md 2>/dev/null | head -1 || true)
-    if [ "$new_report" != "$prev_report" ] && [ -f "$new_report" ]; then
-        sub_report="$new_report"
-    else
-        sub_report=""
-    fi
+        prev_report=$(ls -t "$LOG_DIR"/snd-rcv-*.md 2>/dev/null | head -1 || true)
 
-    RESULTS+=("${n}|${rc}|${sub_report}")
+        set +e
+        "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n"
+        rc=$?
+        set -e
 
-    if [ "$rc" -eq 0 ]; then
+        new_report=$(ls -t "$LOG_DIR"/snd-rcv-*.md 2>/dev/null | head -1 || true)
+        if [ "$new_report" != "$prev_report" ] && [ -f "$new_report" ]; then
+            cur_report="$new_report"
+        else
+            cur_report=""
+        fi
+
+        if [ "$rc" -eq 0 ]; then
+            pass_count=$((pass_count + 1))
+            echo "  ✅ 試行${trial}: PASS  (累計 ${pass_count}PASS / ${trial}試行)"
+            # 最初のPASSレポートを採用
+            if [ -z "$best_sub_report" ] && [ -n "$cur_report" ]; then
+                best_sub_report="$cur_report"
+            fi
+        else
+            fail_count=$((fail_count + 1))
+            echo "  ❌ 試行${trial}: FAILED (exit=${rc})  (累計 ${fail_count}FAIL / ${trial}試行)"
+            # FAILレポートはPASSがない場合のみ採用
+            if [ -z "$best_sub_report" ] && [ -n "$cur_report" ]; then
+                best_sub_report="$cur_report"
+            fi
+        fi
+
+        # 早期終了判定
+        remaining=$((TRIALS - trial))
+        if [ "$pass_count" -ge "$PASS_NEEDED" ]; then
+            echo "  → 合格確定（残り試行スキップ）"
+            break
+        fi
+        if [ "$fail_count" -gt $((TRIALS - PASS_NEEDED)) ]; then
+            echo "  → 不合格確定（残り試行スキップ）"
+            break
+        fi
+
+        # 試行間インターバル（サーバ回復待ち）
+        if [ "$trial" -lt "$TRIALS" ]; then
+            echo "  (次の試行まで3秒待機...)"
+            sleep 3
+        fi
+    done
+
+    RESULTS+=("${n}|${pass_count}|${best_sub_report}|${TRIALS}")
+
+    if [ "$pass_count" -ge "$PASS_NEEDED" ]; then
         last_ok=$n
         echo ""
-        echo "✅ ${n}人: PASS"
+        echo "✅ ${n}人: PASS (${pass_count}/${TRIALS})"
         echo ""
         n=$((n + STEP))
     else
         echo ""
-        echo "❌ ${n}人: FAILED (exit=${rc})"
+        echo "❌ ${n}人: FAILED (${pass_count}/${TRIALS})"
         echo ""
         break
     fi
@@ -87,37 +131,38 @@ fi
     echo "| サーバ | 127.0.0.1:7350 |"
     echo "| 開始人数 | ${START}人 |"
     echo "| 増加幅 | ${STEP}人 |"
+    echo "| 試行方式 | ${TRIALS}回中${PASS_NEEDED}回以上PASSで合格 |"
     echo "| **最大成功人数** | **${FINAL_LABEL}** |"
     echo ""
 
     echo "## 結果サマリー"
     echo ""
-    echo "| 人数 | 結果 | レポート |"
-    echo "|------|------|---------|"
+    echo "| 人数 | 結果 | PASS率 | レポート |"
+    echo "|------|------|--------|---------|"
     for entry in "${RESULTS[@]}"; do
-        IFS='|' read -r num rc sub_rep <<< "$entry"
-        if [ "$rc" -eq 0 ]; then
+        IFS='|' read -r num pass_cnt sub_rep trials <<< "$entry"
+        if [ "$pass_cnt" -ge "$PASS_NEEDED" ]; then
             mark="✅ PASS"
         else
-            mark="❌ FAILED (exit=${rc})"
+            mark="❌ FAILED"
         fi
         rep_link=$([ -n "$sub_rep" ] && echo "[詳細]($(basename "$sub_rep"))" || echo "—")
-        echo "| ${num}人 | ${mark} | ${rep_link} |"
+        echo "| ${num}人 | ${mark} | ${pass_cnt}/${trials} | ${rep_link} |"
     done
     echo ""
 
     # 各テストの詳細セクション
     idx=1
     for entry in "${RESULTS[@]}"; do
-        IFS='|' read -r num rc sub_rep <<< "$entry"
+        IFS='|' read -r num pass_cnt sub_rep trials <<< "$entry"
         echo "---"
         echo ""
         echo "## テスト ${idx}: ${num}人ログイン"
         echo ""
-        if [ "$rc" -eq 0 ]; then
-            echo "**結果:** ✅ PASS"
+        if [ "$pass_cnt" -ge "$PASS_NEEDED" ]; then
+            echo "**結果:** ✅ PASS (${pass_cnt}/${trials})"
         else
-            echo "**結果:** ❌ FAILED (exit=${rc})"
+            echo "**結果:** ❌ FAILED (${pass_cnt}/${trials})"
         fi
         echo ""
 

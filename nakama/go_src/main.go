@@ -601,9 +601,10 @@ type playerPos struct {
 
 // matchState はマッチの状態（プレイヤーごとのAOI管理）
 type matchState struct {
-	AOIs      map[string]*playerAOI      // sessionID -> AOI
-	Presences map[string]runtime.Presence // sessionID -> Presence
-	Positions map[string]*playerPos      // sessionID -> 位置
+	AOIs             map[string]*playerAOI               // sessionID -> AOI
+	Presences        map[string]runtime.Presence          // sessionID -> Presence
+	Positions        map[string]*playerPos               // sessionID -> 位置
+	PendingAOIEnter  map[string][]map[string]interface{} // recipientSID -> 未送信 AOI_ENTER エントリ
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -612,9 +613,10 @@ type worldMatch struct{}
 func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, params map[string]interface{}) (interface{}, int, string) {
 	defer prof("MatchInit")()
 	return &matchState{
-		AOIs:      make(map[string]*playerAOI),
-		Presences: make(map[string]runtime.Presence),
-		Positions: make(map[string]*playerPos),
+		AOIs:            make(map[string]*playerAOI),
+		Presences:       make(map[string]runtime.Presence),
+		Positions:       make(map[string]*playerPos),
+		PendingAOIEnter: make(map[string][]map[string]interface{}),
 	}, 10, "world"
 }
 
@@ -773,10 +775,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					dispatcher.BroadcastMessage(opAOILeave, leaveData, []runtime.Presence{senderPresence}, nil, true)
 				}
 			}
-			// バルク AOI_ENTER を1回のBroadcastMessageで送信
-			if len(enterBulk) > 0 {
-				enterData, _ := json.Marshal(enterBulk)
-				dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{senderPresence}, nil, true)
+			// AOI_ENTER をバッファに積む（aoiEnterFlushTicks 後にバルクフラッシュ）
+			for _, entry := range enterBulk {
+				ms.PendingAOIEnter[sid] = append(ms.PendingAOIEnter[sid], entry)
 			}
 			continue
 		}
@@ -831,15 +832,19 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					}
 					if len(enterTargets) > 0 {
 						myPos := ms.Positions[sid]
-						enterData, _ := json.Marshal(map[string]interface{}{
+						entry := map[string]interface{}{
 							"sessionId":   sid,
 							"x":           myPos.X,
 							"z":           myPos.Z,
 							"ry":          myPos.RY,
 							"textureUrl":  myPos.TextureUrl,
 							"displayName": myPos.DisplayName,
-						})
-						dispatcher.BroadcastMessage(opAOIEnter, enterData, enterTargets, nil, true)
+						}
+						// AOI_ENTER をバッファに積む（aoiEnterFlushTicks 後にバルクフラッシュ）
+						for _, otherP := range enterTargets {
+							recipSID := otherP.GetSessionId()
+							ms.PendingAOIEnter[recipSID] = append(ms.PendingAOIEnter[recipSID], entry)
+						}
 					}
 				}
 			}
@@ -974,6 +979,17 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		if err := dispatcher.BroadcastMessage(op, msg.GetData(), nil, msg, true); err != nil {
 			logger.Warn("BroadcastMessage error: %v", err)
 		}
+	}
+
+	// AOI_ENTER バッファ: 同一tick内の通知をバルクにまとめて送信
+	if len(ms.PendingAOIEnter) > 0 {
+		for recipSID, entries := range ms.PendingAOIEnter {
+			if p, ok := ms.Presences[recipSID]; ok && len(entries) > 0 {
+				data, _ := json.Marshal(entries)
+				dispatcher.BroadcastMessage(opAOIEnter, data, []runtime.Presence{p}, nil, true)
+			}
+		}
+		ms.PendingAOIEnter = make(map[string][]map[string]interface{})
 	}
 
 	// 同接数サンプリング（1秒ごと）
