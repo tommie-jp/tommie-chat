@@ -857,6 +857,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				Z float64 `json:"z"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &pos); err == nil {
+				moveUID := ""
+				if p, ok := ms.Presences[sid]; ok { moveUID = p.GetUserId() }
+				logf("rcv moveTarget uid=%s%s sid=%s x=%.1f z=%.1f\n", moveUID, dn(moveUID), shortSID(sid), pos.X, pos.Z)
 				half := float64(worldSize) / 2
 				oldCX, oldCZ := -1, -1
 				if p, ok := ms.Positions[sid]; ok {
@@ -886,12 +889,12 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 							if otherP, ok := ms.Presences[otherSID]; ok {
 								myPos := ms.Positions[sid]
 								enterData, _ := json.Marshal(map[string]interface{}{
-									"sessionId":  sid,
-									"x":          myPos.X,
-									"z":          myPos.Z,
-									"ry":         myPos.RY,
+									"sessionId":   sid,
+									"x":           myPos.X,
+									"z":           myPos.Z,
+									"ry":          myPos.RY,
 									"textureUrl":  myPos.TextureUrl,
-								"displayName": myPos.DisplayName,
+									"displayName": myPos.DisplayName,
 								})
 								dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{otherP}, nil, true)
 							}
@@ -911,6 +914,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if p, ok := ms.Positions[sid]; ok {
 				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
 				if len(targets) > 0 {
+					logf("snd moveTarget:signal sid=%s targets=%d\n", shortSID(sid), len(targets))
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
 				}
 			}
@@ -923,6 +927,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				TextureUrl string `json:"textureUrl"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &av); err == nil {
+				avatarUID := ""
+				if p, ok := ms.Presences[sid]; ok { avatarUID = p.GetUserId() }
+				logf("rcv avatarChange uid=%s%s sid=%s\n", avatarUID, dn(avatarUID), shortSID(sid))
 				if p, ok := ms.Positions[sid]; ok {
 					p.TextureUrl = av.TextureUrl
 				}
@@ -931,6 +938,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if p, ok := ms.Positions[sid]; ok {
 				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
 				if len(targets) > 0 {
+					logf("snd avatarChange:signal sid=%s targets=%d\n", shortSID(sid), len(targets))
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
 				}
 			}

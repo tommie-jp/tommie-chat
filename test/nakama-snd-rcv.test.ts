@@ -20,11 +20,13 @@ const SERVER_KEY  = 'defaultkey';
 const TEXTURE_URL = '/textures/pic1.ktx2';
 const CHAT_ROOM   = 'world';
 
-const OP_INIT_POS    = 1;
+const OP_INIT_POS     = 1;
+const OP_MOVE_TARGET  = 2;
+const OP_AVATAR_CHANGE = 3;
 const OP_BLOCK_UPDATE = 4;
-const OP_AOI_UPDATE  = 5;
-const OP_AOI_ENTER   = 6;
-const OP_AOI_LEAVE   = 7;
+const OP_AOI_UPDATE   = 5;
+const OP_AOI_ENTER    = 6;
+const OP_AOI_LEAVE    = 7;
 
 const CHUNK_SIZE  = 16;
 const CHUNK_COUNT = 64;
@@ -309,5 +311,67 @@ describe('AOI_LEAVE テスト', { timeout: 30_000 }, () => {
         expect(ev, 'leave1 should receive AOI_LEAVE from leave2').toBeTruthy();
         const payload = ev as { sessionId: string };
         expect(payload.sessionId, 'AOI_LEAVE sessionId matches leave2').toBe(p2.sessionId);
+    });
+});
+
+// ── opMoveTarget テスト ──
+describe('opMoveTarget テスト', { timeout: 30_000 }, () => {
+    let p1: PlayerConn;
+    let p2: PlayerConn;
+
+    beforeAll(async () => {
+        p1 = await loginAndJoin('move1', 0, 0);
+        await sleep(200);
+        p2 = await loginAndJoin('move2', 5, 1);
+        await sleep(500);
+    });
+
+    afterAll(async () => {
+        clog('move1', 'snd logout');
+        try { p1?.socket.disconnect(true); } catch { /* */ }
+        clog('move2', 'snd logout');
+        try { p2?.socket.disconnect(true); } catch { /* */ }
+        console.log('\n========== move1 client log ==========');
+        clientLogs.filter(l => l.player === 'move1').forEach(l => console.log(l.line));
+        console.log('\n========== move2 client log ==========');
+        clientLogs.filter(l => l.player === 'move2').forEach(l => console.log(l.line));
+    });
+
+    it('move1 が moveTarget を送信すると move2 が op=2 を受信する', async () => {
+        clog('move1', 'snd moveTarget x=20.0 z=10.0');
+        await p1.socket.sendMatchState(p1.matchId, OP_MOVE_TARGET, JSON.stringify({ x: 20, z: 10 }));
+        const ev = await waitForEvent(p2, OP_MOVE_TARGET, 3000);
+        expect(ev, 'move2 should receive moveTarget (op=2)').toBeTruthy();
+    });
+});
+
+// ── opAvatarChange テスト ──
+describe('opAvatarChange テスト', { timeout: 30_000 }, () => {
+    let p1: PlayerConn;
+    let p2: PlayerConn;
+
+    beforeAll(async () => {
+        p1 = await loginAndJoin('avatar1', 0, 0);
+        await sleep(200);
+        p2 = await loginAndJoin('avatar2', 5, 1);
+        await sleep(500);
+    });
+
+    afterAll(async () => {
+        clog('avatar1', 'snd logout');
+        try { p1?.socket.disconnect(true); } catch { /* */ }
+        clog('avatar2', 'snd logout');
+        try { p2?.socket.disconnect(true); } catch { /* */ }
+        console.log('\n========== avatar1 client log ==========');
+        clientLogs.filter(l => l.player === 'avatar1').forEach(l => console.log(l.line));
+        console.log('\n========== avatar2 client log ==========');
+        clientLogs.filter(l => l.player === 'avatar2').forEach(l => console.log(l.line));
+    });
+
+    it('avatar1 が avatarChange を送信すると avatar2 が op=3 を受信する', async () => {
+        clog('avatar1', 'snd avatarChange textureUrl=/textures/pic2.ktx2');
+        await p1.socket.sendMatchState(p1.matchId, OP_AVATAR_CHANGE, JSON.stringify({ textureUrl: '/textures/pic2.ktx2' }));
+        const ev = await waitForEvent(p2, OP_AVATAR_CHANGE, 3000);
+        expect(ev, 'avatar2 should receive avatarChange (op=3)').toBeTruthy();
     });
 });

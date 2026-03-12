@@ -49,6 +49,16 @@ PAIRS_SETBLOCK = [
     ('snd getGroundChunk',  'rcv getGroundChunk',  'getGroundChunk',    'cs'),
     ('rcv matchdata op=4',  'snd setBlock:signal', 'setBlock:signal',   'sc'),
 ]
+# --movetarget: opMoveTarget テスト
+PAIRS_MOVETARGET = [
+    ('snd moveTarget',      'rcv moveTarget',      'moveTarget',        'cs'),
+    ('rcv matchdata op=2',  'snd moveTarget:signal', 'moveTarget:signal', 'sc'),
+]
+# --avatarchange: opAvatarChange テスト
+PAIRS_AVATARCHANGE = [
+    ('snd avatarChange',    'rcv avatarChange',    'avatarChange',      'cs'),
+    ('rcv matchdata op=3',  'snd avatarChange:signal', 'avatarChange:signal', 'sc'),
+]
 
 # ── ANSI エスケープ除去 ────────────────────────────────
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
@@ -206,14 +216,20 @@ def main() -> int:
                         help='AOI_ENTER(双方向) チェックも実施（2人ログインテスト用）')
     parser.add_argument('--aoi-leave', action='store_true',
                         help='AOI_LEAVE チェックも実施（AOI_LEAVE テスト用）')
-    parser.add_argument('--setblock',  action='store_true',
+    parser.add_argument('--setblock',    action='store_true',
                         help='setBlock/getGroundChunk/setBlock:signal チェックも実施（setBlock テスト用）')
+    parser.add_argument('--movetarget',  action='store_true',
+                        help='moveTarget/moveTarget:signal チェックも実施（opMoveTarget テスト用）')
+    parser.add_argument('--avatarchange', action='store_true',
+                        help='avatarChange/avatarChange:signal チェックも実施（opAvatarChange テスト用）')
     args = parser.parse_args()
 
     enabled = []
-    if args.duo:       enabled.append('--duo')
-    if args.aoi_leave: enabled.append('--aoi-leave')
-    if args.setblock:  enabled.append('--setblock')
+    if args.duo:          enabled.append('--duo')
+    if args.aoi_leave:    enabled.append('--aoi-leave')
+    if args.setblock:     enabled.append('--setblock')
+    if args.movetarget:   enabled.append('--movetarget')
+    if args.avatarchange: enabled.append('--avatarchange')
 
     print(f'  クライアントログ: {args.client_log}')
     print(f'  サーバログ:       {args.server_log}')
@@ -227,9 +243,11 @@ def main() -> int:
     server_events = parse_server_log(args.server_log)
 
     pairs = (PAIRS_COMMON
-             + (PAIRS_AOI_ENTER if args.duo       else [])
-             + (PAIRS_AOI_LEAVE if args.aoi_leave else [])
-             + (PAIRS_SETBLOCK  if args.setblock  else []))
+             + (PAIRS_AOI_ENTER   if args.duo          else [])
+             + (PAIRS_AOI_LEAVE   if args.aoi_leave    else [])
+             + (PAIRS_SETBLOCK    if args.setblock     else [])
+             + (PAIRS_MOVETARGET  if args.movetarget   else [])
+             + (PAIRS_AVATARCHANGE if args.avatarchange else []))
 
     errors = 0
     for c_pat, s_pat, label, direction in pairs:
