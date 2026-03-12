@@ -737,6 +737,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			logf("rcv AOI_UPDATE uid=%s%s sid=%s (%d,%d)-(%d,%d)\n", aoiUID, dn(aoiUID), shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ)
 			logf("rcv DBG AOI_UPDATE sid=%s newAOI=(%d,%d)-(%d,%d) checking %d other players\n", shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ, len(ms.Positions)-1)
 			half := float64(worldSize) / 2
+			// AOI_ENTER はバルク送信（N-1件→1件に削減）
+			var enterBulk []map[string]interface{}
+			toUID := senderPresence.GetUserId()
 			for otherSID, otherPos := range ms.Positions {
 				if otherSID == sid {
 					continue
@@ -751,10 +754,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				nowVisible := newAOI.containsChunk(effectiveCX, effectiveCZ)
 				logf("rcv DBG AOI_UPDATE sid=%s other=%s CX=%d CZ=%d effCX=%d effCZ=%d nowVisible=%v wasVisible=%v\n", shortSID(sid), shortSID(otherSID), otherPos.CX, otherPos.CZ, effectiveCX, effectiveCZ, nowVisible, wasVisible)
 				if nowVisible && !wasVisible {
-					// このプレイヤーが新しく見えるようになった → OP_AOI_ENTER を送信
-					toUID := senderPresence.GetUserId()
+					// このプレイヤーが新しく見えるようになった → バルクリストに追加
 					logf("snd AOI_ENTER uid=%s%s sid=%s about=%s\n", toUID, dn(toUID), shortSID(sid), shortSID(otherSID))
-					enterData, _ := json.Marshal(map[string]interface{}{
+					enterBulk = append(enterBulk, map[string]interface{}{
 						"sessionId":   otherSID,
 						"x":           otherPos.X,
 						"z":           otherPos.Z,
@@ -762,16 +764,19 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 						"textureUrl":  otherPos.TextureUrl,
 						"displayName": otherPos.DisplayName,
 					})
-					dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{senderPresence}, nil, true)
 				} else if wasVisible && !nowVisible {
 					// このプレイヤーがAOI外に出た → OP_AOI_LEAVE を送信
-					toUID := senderPresence.GetUserId()
 					logf("snd AOI_LEAVE uid=%s%s sid=%s about=%s\n", toUID, dn(toUID), shortSID(sid), shortSID(otherSID))
 					leaveData, _ := json.Marshal(map[string]interface{}{
 						"sessionId": otherSID,
 					})
 					dispatcher.BroadcastMessage(opAOILeave, leaveData, []runtime.Presence{senderPresence}, nil, true)
 				}
+			}
+			// バルク AOI_ENTER を1回のBroadcastMessageで送信
+			if len(enterBulk) > 0 {
+				enterData, _ := json.Marshal(enterBulk)
+				dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{senderPresence}, nil, true)
 			}
 			continue
 		}
@@ -809,6 +814,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				// チャンクが変わった場合、他プレイヤーのAOIへの入退場を通知（opMoveTargetと同様）
 				logf("rcv DBG INIT_POS sid=%s cx=%d cz=%d oldCX=%d oldCZ=%d chunkChanged=%v\n", shortSID(sid), cx, cz, oldCX, oldCZ, cx != oldCX || cz != oldCZ)
 				if cx != oldCX || cz != oldCZ {
+					// AOI_ENTER: 自分の参加を他プレイヤーへ通知（presencesをまとめてBroadcastMessage1回）
+					var enterTargets []runtime.Presence
 					for otherSID, otherAOI := range ms.AOIs {
 						if otherSID == sid { continue }
 						wasVisible := oldCX >= 0 && otherAOI.containsChunk(oldCX, oldCZ)
@@ -816,20 +823,23 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 						logf("rcv DBG INIT_POS sid=%s other=%s AOI=(%d,%d)-(%d,%d) nowVisible=%v\n", shortSID(sid), shortSID(otherSID), otherAOI.MinCX, otherAOI.MinCZ, otherAOI.MaxCX, otherAOI.MaxCZ, nowVisible)
 						if nowVisible && !wasVisible {
 							if otherP, ok := ms.Presences[otherSID]; ok {
-								myPos := ms.Positions[sid]
 								toUID := otherP.GetUserId()
-							logf("snd AOI_ENTER uid=%s%s sid=%s about=%s\n", toUID, dn(toUID), shortSID(otherSID), shortSID(sid))
-								enterData, _ := json.Marshal(map[string]interface{}{
-									"sessionId":   sid,
-									"x":           myPos.X,
-									"z":           myPos.Z,
-									"ry":          myPos.RY,
-									"textureUrl":  myPos.TextureUrl,
-									"displayName": myPos.DisplayName,
-								})
-								dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{otherP}, nil, true)
+								logf("snd AOI_ENTER uid=%s%s sid=%s about=%s\n", toUID, dn(toUID), shortSID(otherSID), shortSID(sid))
+								enterTargets = append(enterTargets, otherP)
 							}
 						}
+					}
+					if len(enterTargets) > 0 {
+						myPos := ms.Positions[sid]
+						enterData, _ := json.Marshal(map[string]interface{}{
+							"sessionId":   sid,
+							"x":           myPos.X,
+							"z":           myPos.Z,
+							"ry":          myPos.RY,
+							"textureUrl":  myPos.TextureUrl,
+							"displayName": myPos.DisplayName,
+						})
+						dispatcher.BroadcastMessage(opAOIEnter, enterData, enterTargets, nil, true)
 					}
 				}
 			}

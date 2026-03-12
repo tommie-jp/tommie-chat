@@ -104,10 +104,16 @@ async function loginAndJoin(name: string, x = 0, z = 0): Promise<PlayerConn> {
         clog(name, `rcv matchdata op=${md.op_code} sid=${shortSnd}`);
         try {
             const payload = JSON.parse(new TextDecoder().decode(md.data));
-            receivedEvents.push({ op: md.op_code, payload, senderSid });
             if (md.op_code === OP_AOI_ENTER) {
-                const e = payload as { sessionId: string; x: number; z: number; ry?: number; textureUrl?: string; displayName?: string };
-                clog(name, `rcv AOI_ENTER sid=${e.sessionId.slice(0,8)} x=${e.x.toFixed(1)} z=${e.z.toFixed(1)} dname=${e.displayName ?? ''}`);
+                // バルク対応: サーバーは配列で送信、後方互換のため単一オブジェクトも受け付ける
+                type AoiEnterEntry = { sessionId: string; x: number; z: number; ry?: number; textureUrl?: string; displayName?: string };
+                const entries: AoiEnterEntry[] = Array.isArray(payload) ? payload : [payload];
+                for (const e of entries) {
+                    receivedEvents.push({ op: OP_AOI_ENTER, payload: e, senderSid });
+                    clog(name, `rcv AOI_ENTER sid=${e.sessionId.slice(0,8)} x=${e.x.toFixed(1)} z=${e.z.toFixed(1)} dname=${e.displayName ?? ''}`);
+                }
+            } else {
+                receivedEvents.push({ op: md.op_code, payload, senderSid });
             }
         } catch { /* ignore */ }
     };
@@ -375,3 +381,72 @@ describe('opAvatarChange テスト', { timeout: 30_000 }, () => {
         expect(ev, 'avatar2 should receive avatarChange (op=3)').toBeTruthy();
     });
 });
+
+// ── N人ログインテスト（汎用） ──
+
+async function loginNPlayers(label: string, count: number): Promise<PlayerConn[]> {
+    if (count <= 10) {
+        const players: PlayerConn[] = [];
+        for (let i = 0; i < count; i++) {
+            players.push(await loginAndJoin(`${label}${i + 1}`, 0, 0));
+            if (i < count - 1) await sleep(50);
+        }
+        return players;
+    }
+    // 大人数: 並列ログイン
+    const results = await Promise.allSettled(
+        Array.from({ length: count }, (_, i) => loginAndJoin(`${label}${i + 1}`, 0, 0))
+    );
+    return results.flatMap(r => r.status === 'fulfilled' ? [r.value] : []);
+}
+
+function makeNPlayerLoginTest(count: number): void {
+    const label = `multi${count}_`;
+    const timeoutMs = count <= 10 ? 30_000 : count <= 100 ? 120_000 : 360_000;
+
+    describe(`${count}人ログインテスト`, { timeout: timeoutMs }, () => {
+        let players: PlayerConn[] = [];
+
+        beforeAll(async () => {
+            players = await loginNPlayers(label, count);
+            await sleep(count <= 10 ? 500 : 5000);
+        });
+
+        afterAll(async () => {
+            for (const p of players) {
+                clog(p.name, 'snd logout');
+                try { p.socket.disconnect(true); } catch { /* */ }
+            }
+            const loginCount = clientLogs.filter(l => l.player.startsWith(label) && l.line.includes('snd Login')).length;
+            console.log(`\n========== ${count}人 client summary: logins=${loginCount} ==========`);
+        });
+
+        it(`${count}人全員がログインできる`, () => {
+            expect(players.length, `${count}人ログインできる`).toBe(count);
+            for (const p of players) {
+                expect(p.sessionId, `${p.name} sessionId が存在する`).toBeTruthy();
+            }
+        });
+
+        if (count <= 100) {
+            it(`${count}人が互いに AOI_ENTER を受信する`, async () => {
+                await sleep(500);
+                for (const p of players) {
+                    const enters = p.receivedEvents.filter(e => e.op === OP_AOI_ENTER);
+                    expect(enters.length, `${p.name} AOI_ENTER >= ${count - 1}`).toBeGreaterThanOrEqual(count - 1);
+                }
+            });
+        }
+    });
+}
+
+makeNPlayerLoginTest(3);
+makeNPlayerLoginTest(10);
+makeNPlayerLoginTest(100);
+makeNPlayerLoginTest(1000);
+
+// 環境変数 MULTI_N_COUNT で任意人数テストを追加（-n N オプション用）
+const _customN = parseInt(process.env['MULTI_N_COUNT'] ?? '0', 10);
+if (_customN > 0 && ![3, 10, 100, 1000].includes(_customN)) {
+    makeNPlayerLoginTest(_customN);
+}
