@@ -24,7 +24,7 @@ services:
       - "-ecx"
       - >
           /nakama/nakama migrate up --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama &&
-          exec /nakama/nakama --name nakama1 --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama --logger.level DEBUG --session.token_expiry_sec 7200 --socket.ping_period_ms 5000 --socket.pong_wait_ms 8000 --socket.write_wait_ms 5000 --shutdown_grace_sec 5 --metrics.prometheus_port 9100 --runtime.env NAKAMA_VERSION=3.35.0
+          exec /nakama/nakama --name nakama1 --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama --logger.level DEBUG --session.token_expiry_sec 7200 --socket.ping_period_ms 5000 --socket.pong_wait_ms 8000 --socket.write_wait_ms 5000 --shutdown_grace_sec 5 --metrics.prometheus_port 9100 --runtime.env NAKAMA_VERSION=3.35.0 --match.input_queue_size 4096 --match.call_stack_size 1024 --socket.outgoing_queue_size 1024 --runtime.max_count 4096
     restart: "no"
     stop_grace_period: 10s
     depends_on:
