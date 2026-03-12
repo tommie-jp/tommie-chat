@@ -39,11 +39,13 @@ export class AOIManager {
         if (minCX !== this.lastAOI.minCX || minCZ !== this.lastAOI.minCZ ||
             maxCX !== this.lastAOI.maxCX || maxCZ !== this.lastAOI.maxCZ) {
             this.lastAOI = { minCX, minCZ, maxCX, maxCZ };
-            console.log(`[AOI_UPDATE] (${minCX},${minCZ})-(${maxCX},${maxCZ})`);
-            this.nakama.sendAOI(minCX, minCZ, maxCX, maxCZ).catch(() => {});
-            if (this.syncThrottleTimer) clearTimeout(this.syncThrottleTimer);
-            this.syncThrottleTimer = setTimeout(() => this.onSyncChunks(), 300);
             this.updateAOILines();
+            if (this.nakama.selfMatchId) {
+                console.log(`snd AOI_UPDATE (${minCX},${minCZ})-(${maxCX},${maxCZ})`);
+                this.nakama.sendAOI(minCX, minCZ, maxCX, maxCZ).catch(() => {});
+                if (this.syncThrottleTimer) clearTimeout(this.syncThrottleTimer);
+                this.syncThrottleTimer = setTimeout(() => this.onSyncChunks(), 300);
+            }
         }
         _end();
     }

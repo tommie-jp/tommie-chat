@@ -249,7 +249,7 @@ export class GameScene {
             }
             ch.hash = BigInt(d.hash || "0");
         }
-        if (diffs.length > 0) console.log(`[syncChunks] updated ${diffs.length} chunks (AOI ${aoi.minCX},${aoi.minCZ}-${aoi.maxCX},${aoi.maxCZ})`);
+        if (diffs.length > 0) console.log(`syncChunks updated ${diffs.length} chunks (AOI ${aoi.minCX},${aoi.minCZ}-${aoi.maxCX},${aoi.maxCZ})`);
         } finally { _end(); }
     }
 
@@ -272,9 +272,9 @@ export class GameScene {
                 this.chunks.set(key, { cells: new Uint8Array(rec.cells), hash: BigInt(rec.hash || "0") });
                 this.dbHashes.set(key, rec.hash || "0");
             }
-            console.log(`[ChunkDB] loaded ${records.length} chunks from IndexedDB (user=${userId.slice(0, 8)})`);
+            console.log(`ChunkDB loaded ${records.length} chunks from IndexedDB (user=${userId.slice(0, 8)})`);
         } catch (e) {
-            console.warn("[ChunkDB] load failed:", e);
+            console.warn("ChunkDB load failed:", e);
         }
         } finally { _end(); }
     }
@@ -293,8 +293,8 @@ export class GameScene {
             }
         }
         if (dirty.length > 0) {
-            saveChunks(userId, dirty).then(() => console.log(`[ChunkDB] saved ${dirty.length} chunks`))
-                .catch(e => console.warn("[ChunkDB] save failed:", e));
+            saveChunks(userId, dirty).then(() => console.log(`ChunkDB saved ${dirty.length} chunks`))
+                .catch(e => console.warn("ChunkDB save failed:", e));
         }
         _end();
     }

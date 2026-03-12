@@ -607,7 +607,7 @@ export function setupHtmlUI(game: GameScene): void {
     const initPosGuard = new Map<string, number>(); // sessionId → timestamp
 
     game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string) => {
-        console.log(`[onAvatarInitPos] sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} hasAvatar=${game.remoteAvatars.has(sessionId)}`);
+        console.log(`rcv onAvatarInitPos sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} hasAvatar=${game.remoteAvatars.has(sessionId)}`);
         initPosGuard.set(sessionId, performance.now());
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const av = ensureRemoteAvatar(sessionId, displayName || username);
@@ -644,12 +644,12 @@ export function setupHtmlUI(game: GameScene): void {
         if (game.remoteAvatars.has(sessionId)) game.remoteTargets.set(sessionId, { x, z });
     };
     game.nakama.onAvatarChange = (sessionId: string, textureUrl: string) => {
-        console.log(`[avatarChange] sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl}`);
+        console.log(`rcv avatarChange sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl}`);
         const av = game.remoteAvatars.get(sessionId);
         if (av) game.avatarSystem.changeAvatarTexture(av, textureUrl);
     };
     game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number, textureUrl: string, displayName: string) => {
-        console.log(`[AOI_ENTER] sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tex=${textureUrl} dname=${displayName}`);
+        console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tex=${textureUrl} dname=${displayName}`);
         if (sessionId === game.nakama.selfSessionId) return;
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const av = ensureRemoteAvatar(sessionId, displayName || username);
@@ -665,7 +665,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
     };
     game.nakama.onDisplayName = (sessionId: string, displayName: string) => {
-        console.log(`[onDisplayName] sid=${sessionId.slice(0, 8)} displayName=${displayName}`);
+        console.log(`rcv onDisplayName sid=${sessionId.slice(0, 8)} displayName=${displayName}`);
         // アバターのnameTag更新
         const updater = game.remoteNameUpdaters.get(sessionId);
         if (updater) updater(displayName);
@@ -679,7 +679,7 @@ export function setupHtmlUI(game: GameScene): void {
         scheduleRenderUserList();
     };
     game.nakama.onAOILeave = (sessionId: string) => {
-        console.log(`[AOI_LEAVE] sid=${sessionId.slice(0, 8)}`);
+        console.log(`rcv AOI_LEAVE sid=${sessionId.slice(0, 8)}`);
         if (sessionId === game.nakama.selfSessionId) return;
         const av = game.remoteAvatars.get(sessionId);
         if (av) av.setEnabled(false);
@@ -932,10 +932,13 @@ export function setupHtmlUI(game: GameScene): void {
             }
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             await game.nakama.joinWorldMatch();
+            // matchId確定後にAOIを強制送信（selfMatchIdガードで未送信になったAOI_UPDATEを再実行）
+            game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+            game.aoiManager.updateAOI();
 
             // ブロック更新通知の受信
             game.nakama.onBlockUpdate = (gx, gz, blockId, r, g, b, a) => {
-                console.log(`[onBlockUpdate] gx=${gx} gz=${gz} blockId=${blockId} rgb=(${r},${g},${b})`);
+                console.log(`rcv onBlockUpdate gx=${gx} gz=${gz} blockId=${blockId} rgb=(${r},${g},${b})`);
                 const CS = CHUNK_SIZE;
                 const cx = Math.floor(gx / CS), cz = Math.floor(gz / CS);
                 const lx = gx % CS, lz = gz % CS;
@@ -992,15 +995,16 @@ export function setupHtmlUI(game: GameScene): void {
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
-                console.warn("[UIPanel] match disconnected, auto-reconnect in progress");
+                console.warn("UIPanel match disconnected, auto-reconnect in progress");
                 addServerLog(loggedInHost, loggedInPort, "マッチ切断", "WebSocket切断 — 自動再接続中…");
             };
             game.nakama.onMatchReconnect = () => {
-                console.log("[UIPanel] match reconnected");
+                console.log("UIPanel match reconnected");
                 addServerLog(loggedInHost, loggedInPort, "マッチ再接続", "WebSocket復帰");
                 // 再接続後にInitPos・AOI・アバターを再送信
                 const p = game.playerBox;
                 game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {});
+                game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
                 game.aoiManager.updateAOI();
                 // CCUグラフを再初期化（切断中の無効データをクリア）
                 restartCcu();
