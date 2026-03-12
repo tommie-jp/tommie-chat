@@ -16,23 +16,31 @@ snd/rcv 整合性テストを実行します。
   -h    このヘルプを表示して終了
 
 テスト内容:
-  [1人ログインテスト]
+  [Phase 1: 1人ログインテスト]
     1クライアント（solo1）がブラウザのログインフローを再現し、
     initPos・AOI_UPDATE・syncChunks・getServerInfo が正しく送信できるかを検証します。
 
-  [2人ログインテスト]
+  [Phase 2: 2人ログインテスト]
     2つのブラウザクライアント（tommie1, tommie2）が nakama-js で同時にログインし、
     互いの AOI 範囲に入った際に AOI_ENTER を正しく受信できるかを検証します。
-    各クライアントはブラウザのログインフロー（認証 → getWorldMatch → joinMatch →
-    initPos → AOI_UPDATE → syncChunks → getServerInfo）を再現します。
+
+  [Phase 3: setBlock テスト]
+    1クライアント（block1）がブロック設置を行い、getGroundChunk と
+    setBlock:signal (op=4) の受信を検証します。
+
+  [Phase 4: AOI_LEAVE テスト]
+    2クライアント（leave1, leave2）がログインし、leave2 切断後に
+    leave1 が AOI_LEAVE (op=7) を受信することを検証します。
 
   各テストの前に nakama サーバを再起動してクリーンな状態で実行します。
 
 処理の流れ:
   1. nakama サーバ再起動 → サーバログ取得開始 → 1人ログインテスト実行
   2. nakama サーバ再起動 → サーバログ取得開始 → 2人ログインテスト実行
-  3. 各テストの snd/rcv ペア整合性チェックを実施
-  4. Markdown レポート生成・シンボリックリンク更新
+  3. nakama サーバ再起動 → サーバログ取得開始 → setBlock テスト実行
+  4. nakama サーバ再起動 → サーバログ取得開始 → AOI_LEAVE テスト実行
+  5. 各テストの snd/rcv ペア整合性チェックを実施
+  6. Markdown レポート生成・シンボリックリンク更新
 
 整合性チェック対象:
   [共通]
@@ -43,16 +51,26 @@ snd/rcv 整合性テストを実行します。
   AOI_UPDATE       クライアント snd AOI_UPDATE     ↔ サーバ rcv AOI_UPDATE
   syncChunks       クライアント snd syncChunks     ↔ サーバ rcv syncChunks
   getServerInfo    クライアント snd getServerInfo  ↔ サーバ rcv getServerInfo
-  [2人のみ]
+  [Phase 2 のみ]
   AOI_ENTER(双方向) クライアント rcv AOI_ENTER     ↔ サーバ snd AOI_ENTER
+  [Phase 3 のみ]
+  setBlock         クライアント snd setBlock       ↔ サーバ rcv setBlock
+  getGroundChunk   クライアント snd getGroundChunk ↔ サーバ rcv getGroundChunk
+  setBlock:signal  クライアント rcv matchdata op=4 ↔ サーバ snd setBlock:signal
+  [Phase 4 のみ]
+  AOI_LEAVE        クライアント rcv matchdata op=7 ↔ サーバ snd AOI_LEAVE
 
 ログ出力先:
-  test/log/doTest-snd-rcv-solo-server.log    1人テスト サーバログ
-  test/log/doTest-snd-rcv-solo-client.log    1人テスト クライアントログ
-  test/log/doTest-snd-rcv-duo-server.log     2人テスト サーバログ
-  test/log/doTest-snd-rcv-duo-client.log     2人テスト クライアントログ
-  test/log/snd-rcv-YYYYMMDD-HHMMSS.md       Markdownレポート（タイムスタンプ付き）
-  test/log/04-snd-rcv.md                    最新レポートへのシンボリックリンク
+  test/log/doTest-snd-rcv-solo-server.log      Phase 1 サーバログ
+  test/log/doTest-snd-rcv-solo-client.log      Phase 1 クライアントログ
+  test/log/doTest-snd-rcv-duo-server.log       Phase 2 サーバログ
+  test/log/doTest-snd-rcv-duo-client.log       Phase 2 クライアントログ
+  test/log/doTest-snd-rcv-setblock-server.log  Phase 3 サーバログ
+  test/log/doTest-snd-rcv-setblock-client.log  Phase 3 クライアントログ
+  test/log/doTest-snd-rcv-aileave-server.log   Phase 4 サーバログ
+  test/log/doTest-snd-rcv-aileave-client.log   Phase 4 クライアントログ
+  test/log/snd-rcv-YYYYMMDD-HHMMSS.md         Markdownレポート（タイムスタンプ付き）
+  test/log/04-snd-rcv.md                       最新レポートへのシンボリックリンク
 
 前提:
   cd nakama && docker compose up -d
@@ -70,7 +88,9 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="$LOG_DIR/snd-rcv-${TIMESTAMP}.md"
 SOLO_CHECK_OUT="/tmp/snd-rcv-solo-check-$$.txt"
 DUO_CHECK_OUT="/tmp/snd-rcv-duo-check-$$.txt"
-trap 'rm -f "$SOLO_CHECK_OUT" "$DUO_CHECK_OUT"' EXIT
+SETBLOCK_CHECK_OUT="/tmp/snd-rcv-setblock-check-$$.txt"
+AILEAVE_CHECK_OUT="/tmp/snd-rcv-aileave-check-$$.txt"
+trap 'rm -f "$SOLO_CHECK_OUT" "$DUO_CHECK_OUT" "$SETBLOCK_CHECK_OUT" "$AILEAVE_CHECK_OUT"' EXIT
 
 GREP_FILTER="rcv login\|rcv logout\|rcv setBlock\|rcv getWorldMatch\|rcv getServerInfo\
 \|rcv getGroundChunk\|rcv syncChunks\|rcv storeLoginTime\|rcv initPos\|rcv AOI_UPDATE\
@@ -198,18 +218,90 @@ echo "  整合性チェック (2人ログインテスト):"
 run_consistency_check "$DUO_CLIENT_LOG" "$DUO_SERVER_LOG" "--duo" "$DUO_CHECK_OUT"
 
 # =========================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[Phase 3] setBlock テスト"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+SETBLOCK_SERVER_LOG="$LOG_DIR/doTest-snd-rcv-setblock-server.log"
+SETBLOCK_CLIENT_LOG="$LOG_DIR/doTest-snd-rcv-setblock-client.log"
+
+restart_server
+
+echo "  サーバログ取得開始..."
+SETBLOCK_LOG_PID=$(start_server_log "$SETBLOCK_SERVER_LOG")
+echo "  PID=$SETBLOCK_LOG_PID -> $SETBLOCK_SERVER_LOG"
+
+echo "  Vitest 実行 (setBlock テスト)..."
+cd "$ROOT_DIR"
+set +e
+npx vitest run test/nakama-snd-rcv.test.ts -t "setBlock テスト" 2>&1 | tee "$SETBLOCK_CLIENT_LOG"
+SETBLOCK_RC=${PIPESTATUS[0]}
+set -e
+
+sleep 1
+kill "$SETBLOCK_LOG_PID" 2>/dev/null || true
+
+echo ""
+echo "  サーバログ: $SETBLOCK_SERVER_LOG"
+echo "  -----------------------------------------"
+cat "$SETBLOCK_SERVER_LOG"
+
+echo ""
+echo "  整合性チェック (setBlock テスト):"
+run_consistency_check "$SETBLOCK_CLIENT_LOG" "$SETBLOCK_SERVER_LOG" "--setblock" "$SETBLOCK_CHECK_OUT"
+
+# =========================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[Phase 4] AOI_LEAVE テスト"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+AILEAVE_SERVER_LOG="$LOG_DIR/doTest-snd-rcv-aileave-server.log"
+AILEAVE_CLIENT_LOG="$LOG_DIR/doTest-snd-rcv-aileave-client.log"
+
+restart_server
+
+echo "  サーバログ取得開始..."
+AILEAVE_LOG_PID=$(start_server_log "$AILEAVE_SERVER_LOG")
+echo "  PID=$AILEAVE_LOG_PID -> $AILEAVE_SERVER_LOG"
+
+echo "  Vitest 実行 (AOI_LEAVE テスト)..."
+cd "$ROOT_DIR"
+set +e
+npx vitest run test/nakama-snd-rcv.test.ts -t "AOI_LEAVE テスト" 2>&1 | tee "$AILEAVE_CLIENT_LOG"
+AILEAVE_RC=${PIPESTATUS[0]}
+set -e
+
+sleep 1
+kill "$AILEAVE_LOG_PID" 2>/dev/null || true
+
+echo ""
+echo "  サーバログ: $AILEAVE_SERVER_LOG"
+echo "  -----------------------------------------"
+cat "$AILEAVE_SERVER_LOG"
+
+echo ""
+echo "  整合性チェック (AOI_LEAVE テスト):"
+run_consistency_check "$AILEAVE_CLIENT_LOG" "$AILEAVE_SERVER_LOG" "--aoi-leave" "$AILEAVE_CHECK_OUT"
+
+# =========================================
 # ── 最終結果判定 ──
 FINAL_RC=0
-[ "$SOLO_RC" -ne 0 ] && FINAL_RC=1
-[ "$DUO_RC"  -ne 0 ] && FINAL_RC=1
+[ "$SOLO_RC"     -ne 0 ] && FINAL_RC=1
+[ "$DUO_RC"      -ne 0 ] && FINAL_RC=1
+[ "$SETBLOCK_RC" -ne 0 ] && FINAL_RC=1
+[ "$AILEAVE_RC"  -ne 0 ] && FINAL_RC=1
 [ "$TOTAL_ERRORS" -gt 0 ] && FINAL_RC=1
 
 echo ""
 echo "========================================="
 echo "最終結果"
 echo "========================================="
-[ "$SOLO_RC" -ne 0 ]     && echo "❌ 1人ログインテスト Vitest 失敗 (exit=$SOLO_RC)"
-[ "$DUO_RC"  -ne 0 ]     && echo "❌ 2人ログインテスト Vitest 失敗 (exit=$DUO_RC)"
+[ "$SOLO_RC"     -ne 0 ] && echo "❌ 1人ログインテスト Vitest 失敗 (exit=$SOLO_RC)"
+[ "$DUO_RC"      -ne 0 ] && echo "❌ 2人ログインテスト Vitest 失敗 (exit=$DUO_RC)"
+[ "$SETBLOCK_RC" -ne 0 ] && echo "❌ setBlock テスト Vitest 失敗 (exit=$SETBLOCK_RC)"
+[ "$AILEAVE_RC"  -ne 0 ] && echo "❌ AOI_LEAVE テスト Vitest 失敗 (exit=$AILEAVE_RC)"
 [ "$TOTAL_ERRORS" -gt 0 ] && echo "❌ 整合性エラー: ${TOTAL_ERRORS}件"
 [ "$FINAL_RC" -eq 0 ]     && echo "✅ 全チェック通過"
 
@@ -266,6 +358,44 @@ DATE_FMT=$(echo "$TIMESTAMP" | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)
     echo '```'
     echo ""
 
+    # ── Phase 3 ──
+    echo "## Phase 3: setBlock テスト"
+    echo ""
+    SETBLOCK_VITEST_RESULT=$([ "$SETBLOCK_RC" -eq 0 ] && echo "✅ PASS" || echo "❌ FAILED (exit=$SETBLOCK_RC)")
+    echo "**Vitest:** ${SETBLOCK_VITEST_RESULT}"
+    echo ""
+    echo "### 整合性チェック"
+    echo ""
+    echo '```'
+    cat "$SETBLOCK_CHECK_OUT"
+    echo '```'
+    echo ""
+    echo "### サーバログ"
+    echo ""
+    echo '```'
+    cat "$SETBLOCK_SERVER_LOG"
+    echo '```'
+    echo ""
+
+    # ── Phase 4 ──
+    echo "## Phase 4: AOI_LEAVE テスト"
+    echo ""
+    AILEAVE_VITEST_RESULT=$([ "$AILEAVE_RC" -eq 0 ] && echo "✅ PASS" || echo "❌ FAILED (exit=$AILEAVE_RC)")
+    echo "**Vitest:** ${AILEAVE_VITEST_RESULT}"
+    echo ""
+    echo "### 整合性チェック"
+    echo ""
+    echo '```'
+    cat "$AILEAVE_CHECK_OUT"
+    echo '```'
+    echo ""
+    echo "### サーバログ"
+    echo ""
+    echo '```'
+    cat "$AILEAVE_SERVER_LOG"
+    echo '```'
+    echo ""
+
     # ── Vitest 詳細 ──
     echo "## Vitest 詳細"
     echo ""
@@ -279,6 +409,18 @@ DATE_FMT=$(echo "$TIMESTAMP" | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)
     echo ""
     echo '```'
     cat "$DUO_CLIENT_LOG" | strip_ansi | grep -E "✓|×|PASS|FAIL|Tests|Duration" || true
+    echo '```'
+    echo ""
+    echo "### Phase 3: setBlock テスト"
+    echo ""
+    echo '```'
+    cat "$SETBLOCK_CLIENT_LOG" | strip_ansi | grep -E "✓|×|PASS|FAIL|Tests|Duration" || true
+    echo '```'
+    echo ""
+    echo "### Phase 4: AOI_LEAVE テスト"
+    echo ""
+    echo '```'
+    cat "$AILEAVE_CLIENT_LOG" | strip_ansi | grep -E "✓|×|PASS|FAIL|Tests|Duration" || true
     echo '```'
     echo ""
 } > "$LOGFILE"

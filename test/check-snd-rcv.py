@@ -25,16 +25,29 @@ CLOCK_SLACK = 2   # 秒精度ログの丸め誤差許容（秒）
 # 方向 'cs': client→server（clientが先）
 #      'sc': server→client（serverが先）
 PAIRS_COMMON = [
-    ('snd Login',          'rcv login',          'Login',          'cs'),
-    ('snd storeLoginTime', 'rcv storeLoginTime', 'storeLoginTime', 'cs'),
-    ('snd getWorldMatch',  'rcv getWorldMatch',  'getWorldMatch',  'cs'),
-    ('snd initPos',        'rcv initPos',        'initPos',        'cs'),
-    ('snd AOI_UPDATE',     'rcv AOI_UPDATE',     'AOI_UPDATE',     'cs'),
-    ('snd syncChunks',     'rcv syncChunks',     'syncChunks',     'cs'),
-    ('snd getServerInfo',  'rcv getServerInfo',  'getServerInfo',  'cs'),
+    # ── client → server ──
+    ('snd Login',           'rcv login',           'Login',           'cs'),
+    ('snd logout',          'rcv logout',          'logout',          'cs'),
+    ('snd storeLoginTime',  'rcv storeLoginTime',  'storeLoginTime',  'cs'),
+    ('snd getWorldMatch',   'rcv getWorldMatch',   'getWorldMatch',   'cs'),
+    ('snd initPos',         'rcv initPos',         'initPos',         'cs'),
+    ('snd AOI_UPDATE',      'rcv AOI_UPDATE',      'AOI_UPDATE',      'cs'),
+    ('snd syncChunks',      'rcv syncChunks',      'syncChunks',      'cs'),
+    ('snd getServerInfo',   'rcv getServerInfo',   'getServerInfo',   'cs'),
 ]
-PAIRS_DUO = [
-    ('rcv AOI_ENTER',      'snd AOI_ENTER',      'AOI_ENTER(双方向)', 'sc'),
+# --duo: 2人ログインテスト（AOI_ENTER 双方向）
+PAIRS_AOI_ENTER = [
+    ('rcv AOI_ENTER',       'snd AOI_ENTER',       'AOI_ENTER(双方向)', 'sc'),
+]
+# --aoi-leave: AOI_LEAVE テスト
+PAIRS_AOI_LEAVE = [
+    ('rcv matchdata op=7',  'snd AOI_LEAVE',       'AOI_LEAVE',         'sc'),
+]
+# --setblock: setBlock テスト
+PAIRS_SETBLOCK = [
+    ('snd setBlock',        'rcv setBlock',        'setBlock',          'cs'),
+    ('snd getGroundChunk',  'rcv getGroundChunk',  'getGroundChunk',    'cs'),
+    ('rcv matchdata op=4',  'snd setBlock:signal', 'setBlock:signal',   'sc'),
 ]
 
 # ── ANSI エスケープ除去 ────────────────────────────────
@@ -189,20 +202,34 @@ def main() -> int:
     )
     parser.add_argument('client_log', help='クライアントログファイル')
     parser.add_argument('server_log', help='サーバログファイル')
-    parser.add_argument('--duo', action='store_true',
+    parser.add_argument('--duo',       action='store_true',
                         help='AOI_ENTER(双方向) チェックも実施（2人ログインテスト用）')
+    parser.add_argument('--aoi-leave', action='store_true',
+                        help='AOI_LEAVE チェックも実施（AOI_LEAVE テスト用）')
+    parser.add_argument('--setblock',  action='store_true',
+                        help='setBlock/getGroundChunk/setBlock:signal チェックも実施（setBlock テスト用）')
     args = parser.parse_args()
+
+    enabled = []
+    if args.duo:       enabled.append('--duo')
+    if args.aoi_leave: enabled.append('--aoi-leave')
+    if args.setblock:  enabled.append('--setblock')
 
     print(f'  クライアントログ: {args.client_log}')
     print(f'  サーバログ:       {args.server_log}')
     print(f'  UTC オフセット:   {-_UTC_OFFSET // 3600:+d}h'
           f' (ローカル {sec_to_hms(hms_to_sec(0,0,0) - _UTC_OFFSET)[:2]}時 = UTC 00:00)')
+    if enabled:
+        print(f'  オプション:       {" ".join(enabled)}')
     print()
 
     client_events = parse_client_log(args.client_log)
     server_events = parse_server_log(args.server_log)
 
-    pairs = PAIRS_COMMON + (PAIRS_DUO if args.duo else [])
+    pairs = (PAIRS_COMMON
+             + (PAIRS_AOI_ENTER if args.duo       else [])
+             + (PAIRS_AOI_LEAVE if args.aoi_leave else [])
+             + (PAIRS_SETBLOCK  if args.setblock  else []))
 
     errors = 0
     for c_pat, s_pat, label, direction in pairs:

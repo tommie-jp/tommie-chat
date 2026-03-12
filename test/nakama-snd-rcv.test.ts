@@ -20,9 +20,11 @@ const SERVER_KEY  = 'defaultkey';
 const TEXTURE_URL = '/textures/pic1.ktx2';
 const CHAT_ROOM   = 'world';
 
-const OP_INIT_POS  = 1;
-const OP_AOI_ENTER = 6;
-const OP_AOI_UPDATE = 5;
+const OP_INIT_POS    = 1;
+const OP_BLOCK_UPDATE = 4;
+const OP_AOI_UPDATE  = 5;
+const OP_AOI_ENTER   = 6;
+const OP_AOI_LEAVE   = 7;
 
 const CHUNK_SIZE  = 16;
 const CHUNK_COUNT = 64;
@@ -170,6 +172,7 @@ describe('1人ログインテスト', { timeout: 30_000 }, () => {
     });
 
     afterAll(async () => {
+        clog('solo1', 'snd logout');
         try { p1?.socket.disconnect(true); } catch { /* */ }
         console.log('\n========== solo1 client log ==========');
         clientLogs.filter(l => l.player === 'solo1').forEach(l => console.log(l.line));
@@ -205,7 +208,9 @@ describe('2人ログインテスト', { timeout: 30_000 }, () => {
     });
 
     afterAll(async () => {
+        clog('tommie1', 'snd logout');
         try { p1?.socket.disconnect(true); } catch { /* */ }
+        clog('tommie2', 'snd logout');
         try { p2?.socket.disconnect(true); } catch { /* */ }
 
         // ── ログ出力 ──
@@ -236,5 +241,73 @@ describe('2人ログインテスト', { timeout: 30_000 }, () => {
         const p2GotP1 = p2Got.some(e => (e.payload as { sessionId: string }).sessionId === p1.sessionId);
         expect(p1GotP2, 'p1 got AOI_ENTER about p2').toBe(true);
         expect(p2GotP1, 'p2 got AOI_ENTER about p1').toBe(true);
+    });
+});
+
+// ── setBlock テスト ──
+describe('setBlock テスト', { timeout: 30_000 }, () => {
+    let p1: PlayerConn;
+
+    beforeAll(async () => {
+        // x=0,z=0 → chunk(32,32) が AOI に含まれる
+        p1 = await loginAndJoin('block1', 0, 0);
+        await sleep(500);
+    });
+
+    afterAll(async () => {
+        clog('block1', 'snd logout');
+        try { p1?.socket.disconnect(true); } catch { /* */ }
+        console.log('\n========== block1 client log ==========');
+        clientLogs.filter(l => l.player === 'block1').forEach(l => console.log(l.line));
+    });
+
+    it('getGroundChunk が成功する', async () => {
+        clog('block1', 'snd getGroundChunk cx=32 cz=32');
+        const result = await p1.socket.rpc('getGroundChunk', JSON.stringify({ cx: 32, cz: 32 }));
+        expect(result.payload, 'getGroundChunk payload exists').toBeTruthy();
+        const data = JSON.parse(result.payload ?? '{}') as { cx?: number };
+        expect(data.cx, 'cx=32').toBe(32);
+    });
+
+    it('setBlock 後に setBlock:signal (op=4) を受信する', async () => {
+        // gx=512,gz=512 → chunk(32,32) → p1 の AOI 内
+        clog('block1', 'snd setBlock gx=512 gz=512 blockId=1 rgba=(255,0,0,255)');
+        await p1.socket.rpc('setBlock', JSON.stringify({
+            gx: 512, gz: 512, blockId: 1, r: 255, g: 0, b: 0, a: 255,
+        }));
+        const ev = await waitForEvent(p1, OP_BLOCK_UPDATE, 5000);
+        expect(ev, 'setBlock:signal (op=4) received').toBeTruthy();
+    });
+});
+
+// ── AOI_LEAVE テスト ──
+describe('AOI_LEAVE テスト', { timeout: 30_000 }, () => {
+    let p1: PlayerConn;
+    let p2: PlayerConn;
+
+    beforeAll(async () => {
+        p1 = await loginAndJoin('leave1', 0, 0);
+        await sleep(200);
+        p2 = await loginAndJoin('leave2', 5, 1);
+        // AOI_ENTER 到着を待つ
+        await sleep(1000);
+    });
+
+    afterAll(async () => {
+        clog('leave1', 'snd logout');
+        try { p1?.socket.disconnect(true); } catch { /* */ }
+        console.log('\n========== leave1 client log ==========');
+        clientLogs.filter(l => l.player === 'leave1').forEach(l => console.log(l.line));
+        console.log('\n========== leave2 client log ==========');
+        clientLogs.filter(l => l.player === 'leave2').forEach(l => console.log(l.line));
+    });
+
+    it('leave2 切断後に leave1 が AOI_LEAVE (op=7) を受信する', async () => {
+        clog('leave2', 'snd logout');
+        try { p2?.socket.disconnect(true); } catch { /* */ }
+        const ev = await waitForEvent(p1, OP_AOI_LEAVE, 5000);
+        expect(ev, 'leave1 should receive AOI_LEAVE from leave2').toBeTruthy();
+        const payload = ev as { sessionId: string };
+        expect(payload.sessionId, 'AOI_LEAVE sessionId matches leave2').toBe(p2.sessionId);
     });
 });

@@ -647,8 +647,31 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
 	defer prof("MatchLeave")()
 	ms := state.(*matchState)
+	half := float64(worldSize / 2)
 	for _, p := range presences {
 		sid := p.GetSessionId()
+		// 退出プレイヤーの位置を取得し、そのチャンクをAOIに含む他プレイヤーへAOI_LEAVEを通知
+		if pos, ok := ms.Positions[sid]; ok {
+			cx, cz := pos.CX, pos.CZ
+			if cx < 0 {
+				// initPos未受信の場合はX/Z座標からチャンクを算出
+				cx = int((pos.X + half) / chunkSize)
+				cz = int((pos.Z + half) / chunkSize)
+			}
+			leaveData, _ := json.Marshal(map[string]interface{}{"sessionId": sid})
+			for otherSID, otherAOI := range ms.AOIs {
+				if otherSID == sid {
+					continue
+				}
+				if otherAOI.containsChunk(cx, cz) {
+					if otherP, ok := ms.Presences[otherSID]; ok {
+						toUID := otherP.GetUserId()
+						logf("snd AOI_LEAVE uid=%s%s sid=%s about=%s\n", toUID, dn(toUID), shortSID(otherSID), shortSID(sid))
+						dispatcher.BroadcastMessage(opAOILeave, leaveData, []runtime.Presence{otherP}, nil, true)
+					}
+				}
+			}
+		}
 		delete(ms.AOIs, sid)
 		delete(ms.Presences, sid)
 		delete(ms.Positions, sid)
@@ -1164,13 +1187,19 @@ func rpcSetBlock(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runt
 	saveChunkToStorage(ctx, nk, logger, cx, cz)
 	// dumpGroundTableCSV(logger)
 
-	// ワールドマッチへシグナル送信
-	matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
-	if err != nil || len(matches) == 0 {
-		return "{}", nil
+	// ワールドマッチへシグナル送信（MatchListはミリ秒以内に作成されたマッチを返さない場合があるためキャッシュ優先）
+	worldMatchMu.Lock()
+	matchID := worldMatchID
+	worldMatchMu.Unlock()
+	if matchID == "" {
+		matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
+		if err != nil || len(matches) == 0 {
+			return "{}", nil
+		}
+		matchID = matches[0].GetMatchId()
 	}
 	sigData, _ := json.Marshal(req)
-	if _, err := nk.MatchSignal(ctx, matches[0].GetMatchId(), string(sigData)); err != nil {
+	if _, err := nk.MatchSignal(ctx, matchID, string(sigData)); err != nil {
 		logger.Warn("setBlock MatchSignal error: %v", err)
 	}
 	return "{}", nil
