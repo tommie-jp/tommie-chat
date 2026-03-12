@@ -56,3 +56,4 @@ nakama/go_src/.protobuf-version-cache
 .claude/settings.json
 nakama/go_src/build.sh
 nakama/go_src/world.so
+nakama/go_src/nakama-tommie-chat.so

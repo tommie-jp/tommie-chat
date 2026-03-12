@@ -686,7 +686,7 @@ export function setupDebugOverlay(game: GameScene): void {
             profileStopBtn.disabled = false;
             profileStopBtn.classList.remove("off");
             if (profileStatus) profileStatus.style.display = "";
-            console.log("[Profile] started");
+            console.log("Profile started");
         });
     }
     if (profileStopBtn) {
@@ -698,7 +698,7 @@ export function setupDebugOverlay(game: GameScene): void {
             profileStartBtn.disabled = false;
             profileStartBtn.classList.remove("off");
             if (profileStatus) profileStatus.style.display = "none";
-            console.log(`[Profile] stopped — ${(game as any)._profileHistory.length} frames captured`);
+            console.log(`Profile stopped — ${(game as any)._profileHistory.length} frames captured`);
         });
     }
     if (profileLogBtn) {
@@ -707,18 +707,18 @@ export function setupDebugOverlay(game: GameScene): void {
             if (typeof w.profileDump === "function") (w.profileDump as () => void)();
             // サーバ側プロファイルもダンプ
             game.nakama.profileRpc("profileDump").then(payload => {
-                if (!payload) { console.log("[Profile:Server] no response (not logged in?)"); return; }
+                if (!payload) { console.log("Profile:Server no response (not logged in?)"); return; }
                 const data = JSON.parse(payload);
-                console.log(`[Profile:Server] profiling=${data.profiling}`);
+                console.log(`Profile:Server profiling=${data.profiling}`);
                 if (data.functions?.length > 0) {
                     const rows = data.functions
                         .sort((a: any, b: any) => b.totalMs - a.totalMs)
                         .map((f: any) => ({ name: f.name, calls: f.calls, totalMs: Math.round(f.totalMs * 100) / 100, avgUs: Math.round(f.avgUs * 10) / 10, maxUs: Math.round(f.maxUs) }));
                     console.table(rows);
                 } else {
-                    console.log("[Profile:Server] no data");
+                    console.log("Profile:Server no data");
                 }
-            }).catch(e => { console.warn("[Profile:Server] error:", e); });
+            }).catch(e => { console.warn("Profile:Server error:", e); });
         });
     }
 
@@ -732,9 +732,9 @@ export function setupDebugOverlay(game: GameScene): void {
             serverProfileBtn.classList.toggle("off", !serverProfOn);
             const method = serverProfOn ? "profileStart" : "profileStop";
             game.nakama.profileRpc(method).then(res => {
-                console.log(`[Profile:Server] ${method} → ${res ?? "no response"}`);
+                console.log(`Profile:Server ${method} → ${res ?? "no response"}`);
             }).catch(e => {
-                console.warn(`[Profile:Server] ${method} error:`, e);
+                console.warn(`Profile:Server ${method} error:`, e);
                 serverProfOn = !serverProfOn;
                 serverProfileBtn.textContent = serverProfOn ? "On" : "Off";
                 serverProfileBtn.classList.toggle("on", serverProfOn);

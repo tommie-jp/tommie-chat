@@ -31,17 +31,17 @@ if (canvas) {
         game.callCounts = {};
         profSetEnabled(true);
         profReset();
-        console.log('[Profile] started');
+        console.log('Profile started');
     };
     w.profileStop = () => {
         game.profiling = false;
         profSetEnabled(false);
-        console.log(`[Profile] stopped — ${game['_profileHistory'].length} frames captured`);
+        console.log(`Profile stopped — ${game['_profileHistory'].length} frames captured`);
     };
     w.profileDump = () => {
         type PH = { ts: number; playerMove: number; remoteAvatars: number; npc: number; total: number; avatarCount: number };
         const h = game['_profileHistory'] as PH[];
-        if (h.length === 0) { console.log('[Profile] no data — run profileStart() first'); return; }
+        if (h.length === 0) { console.log('Profile no data — run profileStart() first'); return; }
         const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
         const p95 = (arr: number[]) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length * 0.95)]; };
         const max = (arr: number[]) => Math.max(...arr);
@@ -53,18 +53,18 @@ if (canvas) {
             max: max(h.map(r => r[f])).toFixed(3) + 'ms',
         }));
         rows.push({ name: 'avatarCount', avg: avg(h.map(r => r.avatarCount)).toFixed(0), p95: '-', max: max(h.map(r => r.avatarCount)).toFixed(0) });
-        console.log(`[Profile] ${h.length} frames`);
+        console.log(`Profile ${h.length} frames`);
         console.table(rows);
         const md = game.nakama.matchDataProfile;
-        console.log(`[Profile] onmatchdata: ${md.calls} calls/s, total=${md.totalMs.toFixed(1)}ms/s, max=${md.maxMs.toFixed(2)}ms`);
+        console.log(`Profile onmatchdata: ${md.calls} calls/s, total=${md.totalMs.toFixed(1)}ms/s, max=${md.maxMs.toFixed(2)}ms`);
         const ul = game.userListProfile;
-        console.log(`[Profile] userList: ${ul.calls} renders/s, total=${ul.totalMs.toFixed(1)}ms/s, max=${ul.maxMs.toFixed(2)}ms, users=${ul.userCount}`);
+        console.log(`Profile userList: ${ul.calls} renders/s, total=${ul.totalMs.toFixed(1)}ms/s, max=${ul.maxMs.toFixed(2)}ms, users=${ul.userCount}`);
         // 関数呼び出し回数（イベント系）
         const cc = game.callCounts;
         const allFuncs = ['onPresenceJoin', 'onPresenceNewJoin', 'onPresenceLeave', 'onMatchPresenceJoin', 'onMatchPresenceLeave', 'removeRemoteAvatar', 'scheduleRenderUserList', 'renderUserList'];
         const elapsed = h.length > 1 ? (h[h.length - 1].ts - h[0].ts) / 1000 : 0;
         const ccRows = allFuncs.map(k => ({ function: k, calls: cc[k] ?? 0, 'calls/s': elapsed > 0 ? Math.round(((cc[k] ?? 0) / elapsed) * 10) / 10 : 0 }));
-        console.log('[Profile] function call counts:');
+        console.log('Profile function call counts:');
         console.table(ccRows);
         // 全関数プロファイル（時間計測）
         const fp = profDump();
@@ -76,7 +76,7 @@ if (canvas) {
                 avgUs: Math.round(f.avgUs * 10) / 10,
                 maxUs: Math.round(f.maxUs),
             }));
-            console.log('[Profile] browser function profile (totalMs desc):');
+            console.log('Profile browser function profile (totalMs desc):');
             console.table(fpRows);
         }
     };
