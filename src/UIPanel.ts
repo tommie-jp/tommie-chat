@@ -538,11 +538,15 @@ export function setupHtmlUI(game: GameScene): void {
         const thCh = document.getElementById("ul-th-ch");
         if (thCh)    thCh.dataset.sort    = ulSortKey === "channel"        ? arrow : "";
         const myId = game.nakama.selfSessionId ?? "";
+        const myMatchId  = game.nakama.selfMatchId  ?? "";
+        const myChatId   = game.nakama.selfChannelId ?? "";
+        const matchShort = myMatchId  ? myMatchId.slice(0, 8)  : "-";
+        const chatShort  = myChatId   ? myChatId.slice(0, 8)   : "-";
         for (const { username, displayName, uuid, sessionId, loginTimestamp, loginTime, channel } of entries) {
             const tr = document.createElement("tr");
             const bold = sessionId === myId ? " class=\"ul-self\"" : "";
             const rel = relativeTime(loginTimestamp);
-            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${displayName}">${displayName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
+            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${displayName}">${displayName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td class="uuid-cell" data-copy="${myChatId}" title="${myChatId}&#10;クリックでコピー">${chatShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
             // uuid-cell click to copy
             tr.querySelectorAll(".uuid-cell").forEach(td => {
                 td.addEventListener("click", () => {
@@ -599,9 +603,14 @@ export function setupHtmlUI(game: GameScene): void {
             }
         }
     };
+    // OP_INIT_POS受信後、サーバーAOI追跡が追いつくまでAOI_LEAVEを無視するガード
+    const initPosGuard = new Map<string, number>(); // sessionId → timestamp
+
     game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string) => {
         console.log(`[onAvatarInitPos] sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} hasAvatar=${game.remoteAvatars.has(sessionId)}`);
-        const av = game.remoteAvatars.get(sessionId);
+        initPosGuard.set(sessionId, performance.now());
+        const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
+        const av = ensureRemoteAvatar(sessionId, displayName || username);
         if (av) {
             av.position.x = x; av.position.z = z; av.rotation.y = ry;
             av.setEnabled(true);
@@ -642,7 +651,8 @@ export function setupHtmlUI(game: GameScene): void {
     game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number, textureUrl: string, displayName: string) => {
         console.log(`[AOI_ENTER] sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tex=${textureUrl} dname=${displayName}`);
         if (sessionId === game.nakama.selfSessionId) return;
-        const av = game.remoteAvatars.get(sessionId);
+        const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
+        const av = ensureRemoteAvatar(sessionId, displayName || username);
         if (av) {
             av.position.x = x; av.position.z = z; av.rotation.y = ry;
             av.setEnabled(true);
@@ -676,14 +686,33 @@ export function setupHtmlUI(game: GameScene): void {
         game.remoteTargets.delete(sessionId);
     };
 
-    const addRemoteAvatar = (sessionId: string, username: string) => {
-        const _end = prof("UIPanel.addRemoteAvatar");
-        if (sessionId === game.nakama.selfSessionId) { _end(); return; }
-        if (game.remoteAvatars.has(sessionId)) { _end(); return; }
-        const x = (Math.random() - 0.5) * 14;
-        const z = (Math.random() - 0.5) * 14;
+    // --- アバター・オブジェクトプール ---
+    const avatarPool: { av: import("@babylonjs/core").Mesh; nameUpdate: (n: string) => void; speechUpdate: (t: string) => void }[] = [];
+    const MAX_POOL_SIZE = 32;
+
+    /** 遅延生成 + プール再利用でリモートアバターを確保する */
+    const ensureRemoteAvatar = (sessionId: string, username: string): import("@babylonjs/core").Mesh | null => {
+        const _end = prof("UIPanel.ensureRemoteAvatar");
+        if (sessionId === game.nakama.selfSessionId) { _end(); return null; }
+        if (game.remoteAvatars.has(sessionId)) { _end(); return game.remoteAvatars.get(sessionId)!; }
+
+        // プールから再利用
+        const pooled = avatarPool.pop();
+        if (pooled) {
+            const av = pooled.av;
+            game.remoteAvatars.set(sessionId, av);
+            game.remoteNameUpdaters.set(sessionId, pooled.nameUpdate);
+            game.remoteSpeeches.set(sessionId, pooled.speechUpdate);
+            pooled.nameUpdate(username);
+            pooled.speechUpdate("");
+            av.setEnabled(false);
+            _end();
+            return av;
+        }
+
+        // 新規作成
         const avName = "remote_" + sessionId;
-        const av = game.avatarSystem.createAvatar(avName, "/textures/pic1.ktx2", x, z, game.avatarDepth);
+        const av = game.avatarSystem.createAvatar(avName, "/textures/pic1.ktx2", 0, 0, game.avatarDepth);
         const standBase = av.getChildMeshes().find(m => m.name === avName + "_standBase");
         if (standBase && standBase.material) {
             (standBase.material as StandardMaterial).diffuseColor = new Color3(0.4, 0.7, 1.0);
@@ -693,22 +722,31 @@ export function setupHtmlUI(game: GameScene): void {
         try {
             const updater = game.avatarSystem.createSpeechBubble(nameTag.plane, "");
             game.remoteSpeeches.set(sessionId, updater);
-        } catch (e) {
-        }
+        } catch { /* ignore */ }
         game.remoteAvatars.set(sessionId, av);
         av.setEnabled(false);
         _end();
+        return av;
     };
+
     const removeRemoteAvatar = (sessionId: string) => {
         cc("removeRemoteAvatar");
         const _end = prof("UIPanel.removeRemoteAvatar");
         const av = game.remoteAvatars.get(sessionId);
         if (!av) { _end(); return; }
-        av.dispose();
+        const nameUpdate = game.remoteNameUpdaters.get(sessionId);
+        const speechUpdate = game.remoteSpeeches.get(sessionId);
         game.remoteAvatars.delete(sessionId);
         game.remoteTargets.delete(sessionId);
         game.remoteSpeeches.delete(sessionId);
         game.remoteNameUpdaters.delete(sessionId);
+        // プールに回収（上限超えたらdispose）
+        if (nameUpdate && speechUpdate && avatarPool.length < MAX_POOL_SIZE) {
+            av.setEnabled(false);
+            avatarPool.push({ av, nameUpdate, speechUpdate });
+        } else {
+            av.dispose();
+        }
         _end();
     };
 
@@ -738,7 +776,7 @@ export function setupHtmlUI(game: GameScene): void {
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
-        addRemoteAvatar(sessionId, username);
+        ensureRemoteAvatar(sessionId, username);
     };
     game.nakama.onPresenceNewJoin = (sessionId, userId, username) => {
         cc("onPresenceNewJoin");
@@ -748,7 +786,6 @@ export function setupHtmlUI(game: GameScene): void {
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
         addChatHistory("[system]", `${username}がログインしました。`);
-        addRemoteAvatar(sessionId, username);
         { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
     };
     game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
@@ -776,6 +813,11 @@ export function setupHtmlUI(game: GameScene): void {
             userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: Date.now(), loginTime: "…", channel: "match" });
         }
         scheduleRenderUserList();
+        // 相手がマッチ参加した時点で自分のInitPosを送る（チャットチャンネル参加時はまだマッチ未参加で届かないため）
+        if (sessionId !== game.nakama.selfSessionId) {
+            const p = game.playerBox;
+            game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {});
+        }
     };
     game.nakama.onMatchPresenceLeave = (sessionId, _userId, _uname) => {
         cc("onMatchPresenceLeave");

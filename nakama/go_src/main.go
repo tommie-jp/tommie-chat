@@ -486,7 +486,32 @@ var (
 	worldMatchCachedAt time.Time
 )
 
+// worldPlayersCache は getWorldMatch RPC 用のプレイヤー情報キャッシュ
+type worldPlayerEntry struct {
+	SessionID   string  `json:"sessionId"`
+	X           float64 `json:"x"`
+	Z           float64 `json:"z"`
+	RY          float64 `json:"ry"`
+	TextureUrl  string  `json:"textureUrl"`
+	DisplayName string  `json:"displayName"`
+}
+var (
+	worldPlayersMu    sync.RWMutex
+	worldPlayersCache map[string]*worldPlayerEntry // sessionID -> entry
+)
+
 const worldMatchCacheTTL = 10 * time.Second
+
+// buildWorldMatchResponse は matchId と現在のプレイヤーリストを含むレスポンスを構築する
+func buildWorldMatchResponse(matchId string) map[string]interface{} {
+	worldPlayersMu.RLock()
+	players := make([]*worldPlayerEntry, 0, len(worldPlayersCache))
+	for _, e := range worldPlayersCache {
+		players = append(players, e)
+	}
+	worldPlayersMu.RUnlock()
+	return map[string]interface{}{"matchId": matchId, "players": players}
+}
 
 // rpcGetWorldMatch は稼働中の "world" マッチを探し、なければ新規作成して返す
 func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
@@ -497,25 +522,23 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	worldMatchMu.Lock()
 	defer worldMatchMu.Unlock()
 
-	// MatchListで既存マッチを探す（常に検証 — キャッシュされたマッチが消失する場合に対応）
+	// キャッシュを最優先で確認（MatchListはミリ秒以内に作成されたマッチを返さない場合がある）
+	if worldMatchID != "" && time.Since(worldMatchCachedAt) < worldMatchCacheTTL {
+		logger.Info("Returning cached world match: %s", worldMatchID)
+		b, _ := json.Marshal(buildWorldMatchResponse(worldMatchID))
+		return string(b), nil
+	}
+
+	// キャッシュが古い or 空の場合はMatchListで確認
 	matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
 	if err != nil {
 		logger.Warn("MatchList failed: %v", err)
-		// MatchList失敗時はキャッシュを使用（フォールバック）
-		if worldMatchID != "" && time.Since(worldMatchCachedAt) < worldMatchCacheTTL {
-			logger.Info("Cached world match (fallback): %s", worldMatchID)
-			b, _ := json.Marshal(map[string]string{"matchId": worldMatchID})
-			return string(b), nil
-		}
 	} else if len(matches) > 0 {
 		worldMatchID = matches[0].GetMatchId()
 		worldMatchCachedAt = time.Now()
 		logger.Info("Found active world match: %s", worldMatchID)
-		b, _ := json.Marshal(map[string]string{"matchId": worldMatchID})
+		b, _ := json.Marshal(buildWorldMatchResponse(worldMatchID))
 		return string(b), nil
-	} else if worldMatchID != "" {
-		logger.Warn("Cached match %s no longer exists, creating new match", worldMatchID)
-		worldMatchID = ""
 	}
 
 	// マッチが見つからない場合は新規作成
@@ -526,7 +549,7 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}
 	worldMatchCachedAt = time.Now()
 	logger.Info("Created world match: %s", worldMatchID)
-	b, _ := json.Marshal(map[string]string{"matchId": worldMatchID})
+	b, _ := json.Marshal(buildWorldMatchResponse(worldMatchID))
 	return string(b), nil
 }
 
@@ -586,9 +609,10 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 	ms := state.(*matchState)
 	for _, p := range presences {
 		sid := p.GetSessionId()
-		ms.AOIs[sid] = &playerAOI{0, 0, chunkCount - 1, chunkCount - 1}
+		// 初期AOIを空にする: 最初のAOI_UPDATEでAOI内プレイヤーにAOI_ENTERが送られる
+		ms.AOIs[sid] = &playerAOI{-1, -1, -1, -1}
 		ms.Presences[sid] = p
-		ms.Positions[sid] = &playerPos{CX: 0, CZ: 0, X: 0, Z: 0, RY: 0, TextureUrl: ""}
+		ms.Positions[sid] = &playerPos{CX: -1, CZ: -1, X: 0, Z: 0, RY: 0, TextureUrl: ""} // CX=-1はopInitPos未受信のセンチネル
 	}
 	return ms
 }
@@ -601,6 +625,9 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		delete(ms.AOIs, sid)
 		delete(ms.Presences, sid)
 		delete(ms.Positions, sid)
+		worldPlayersMu.Lock()
+		delete(worldPlayersCache, sid)
+		worldPlayersMu.Unlock()
 	}
 	return ms
 }
@@ -655,14 +682,24 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if !hasSender {
 				continue
 			}
+			logf("[DBG AOI_UPDATE] sid=%s newAOI=(%d,%d)-(%d,%d) checking %d other players\n", shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ, len(ms.Positions)-1)
+			half := float64(worldSize) / 2
 			for otherSID, otherPos := range ms.Positions {
 				if otherSID == sid {
 					continue
 				}
-				wasVisible := oldAOI != nil && oldAOI.containsChunk(otherPos.CX, otherPos.CZ)
-				nowVisible := newAOI.containsChunk(otherPos.CX, otherPos.CZ)
+				// CX<0はopInitPos未受信（センチネル）→ X/Z座標から正確なchunkを算出
+				effectiveCX, effectiveCZ := otherPos.CX, otherPos.CZ
+				if effectiveCX < 0 {
+					effectiveCX = int((otherPos.X + half) / chunkSize)
+					effectiveCZ = int((otherPos.Z + half) / chunkSize)
+				}
+				wasVisible := oldAOI != nil && oldAOI.containsChunk(effectiveCX, effectiveCZ)
+				nowVisible := newAOI.containsChunk(effectiveCX, effectiveCZ)
+				logf("[DBG AOI_UPDATE] sid=%s other=%s CX=%d CZ=%d effCX=%d effCZ=%d nowVisible=%v wasVisible=%v\n", shortSID(sid), shortSID(otherSID), otherPos.CX, otherPos.CZ, effectiveCX, effectiveCZ, nowVisible, wasVisible)
 				if nowVisible && !wasVisible {
 					// このプレイヤーが新しく見えるようになった → OP_AOI_ENTER を送信
+					logf("[DBG AOI_ENTER] sending to sid=%s about other=%s\n", shortSID(sid), shortSID(otherSID))
 					enterData, _ := json.Marshal(map[string]interface{}{
 						"sessionId":   otherSID,
 						"x":           otherPos.X,
@@ -684,11 +721,13 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 
 		if op == opInitPos {
-			// 初期位置: {"x":..., "z":..., "ry":...}
+			// 初期位置: {"x":..., "z":..., "ry":..., "lt":..., "dn":..., "tx":...}
 			var pos struct {
-				X  float64 `json:"x"`
-				Z  float64 `json:"z"`
-				RY float64 `json:"ry"`
+				X           float64 `json:"x"`
+				Z           float64 `json:"z"`
+				RY          float64 `json:"ry"`
+				TextureUrl  string  `json:"tx"`
+				DisplayName string  `json:"dn"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &pos); err == nil {
 				half := float64(worldSize) / 2
@@ -698,11 +737,48 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				if cz < 0 { cz = 0 }
 				if cx >= chunkCount { cx = chunkCount - 1 }
 				if cz >= chunkCount { cz = chunkCount - 1 }
+				oldCX, oldCZ := -1, -1
 				if p, ok := ms.Positions[sid]; ok {
+					oldCX, oldCZ = p.CX, p.CZ
 					p.CX = cx; p.CZ = cz; p.X = pos.X; p.Z = pos.Z; p.RY = pos.RY
+					if pos.TextureUrl != "" { p.TextureUrl = pos.TextureUrl }
+					if pos.DisplayName != "" { p.DisplayName = pos.DisplayName }
 				} else {
-					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY}
+					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, DisplayName: pos.DisplayName}
 				}
+				logf("[DBG INIT_POS] sid=%s oldCX=%d newCX=%d oldCZ=%d newCZ=%d\n", shortSID(sid), oldCX, cx, oldCZ, cz)
+				// チャンクが変わった場合、他プレイヤーのAOIへの入退場を通知（opMoveTargetと同様）
+				logf("[DBG INIT_POS] sid=%s cx=%d cz=%d oldCX=%d oldCZ=%d chunkChanged=%v\n", shortSID(sid), cx, cz, oldCX, oldCZ, cx != oldCX || cz != oldCZ)
+				if cx != oldCX || cz != oldCZ {
+					for otherSID, otherAOI := range ms.AOIs {
+						if otherSID == sid { continue }
+						wasVisible := oldCX >= 0 && otherAOI.containsChunk(oldCX, oldCZ)
+						nowVisible := otherAOI.containsChunk(cx, cz)
+						logf("[DBG INIT_POS] sid=%s other=%s AOI=(%d,%d)-(%d,%d) nowVisible=%v\n", shortSID(sid), shortSID(otherSID), otherAOI.MinCX, otherAOI.MinCZ, otherAOI.MaxCX, otherAOI.MaxCZ, nowVisible)
+						if nowVisible && !wasVisible {
+							if otherP, ok := ms.Presences[otherSID]; ok {
+								myPos := ms.Positions[sid]
+								logf("[DBG INIT_POS] AOI_ENTER sending to other=%s about sid=%s\n", shortSID(otherSID), shortSID(sid))
+								enterData, _ := json.Marshal(map[string]interface{}{
+									"sessionId":   sid,
+									"x":           myPos.X,
+									"z":           myPos.Z,
+									"ry":          myPos.RY,
+									"textureUrl":  myPos.TextureUrl,
+									"displayName": myPos.DisplayName,
+								})
+								dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{otherP}, nil, true)
+							}
+						}
+					}
+				}
+			}
+			// RPC用グローバルキャッシュを更新
+			if p, ok := ms.Positions[sid]; ok && p.TextureUrl != "" {
+				worldPlayersMu.Lock()
+				if worldPlayersCache == nil { worldPlayersCache = make(map[string]*worldPlayerEntry) }
+				worldPlayersCache[sid] = &worldPlayerEntry{SessionID: sid, X: p.X, Z: p.Z, RY: p.RY, TextureUrl: p.TextureUrl, DisplayName: p.DisplayName}
+				worldPlayersMu.Unlock()
 			}
 			// 送信者のチャンク位置がAOI内のプレイヤーにだけ送信
 			if p, ok := ms.Positions[sid]; ok {

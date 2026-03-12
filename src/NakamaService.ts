@@ -21,6 +21,8 @@ export class NakamaService {
     private host = "127.0.0.1";
     private port = "7350";
     selfSessionId: string | null = null;
+    get selfMatchId(): string | null { return this.matchId; }
+    get selfChannelId(): string | null { return this.channelId; }
 
     onChatMessage?: (username: string, text: string, userId: string) => void;
     onPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
@@ -174,24 +176,14 @@ export class NakamaService {
         if (!this.session || !this.socket) throw new Error("no session/socket");
         const result = await this.socket.rpc("getWorldMatch");
         if (!result?.payload) throw new Error("getWorldMatch: no payload");
-        const data = JSON.parse(result.payload) as { matchId?: string };
+        const data = JSON.parse(result.payload) as { matchId?: string; players?: { sessionId: string; x: number; z: number; ry: number; textureUrl: string; displayName: string }[] };
         if (!data.matchId) throw new Error("getWorldMatch: no matchId");
         this.matchId = data.matchId;
-        const match = await this.socket.joinMatch(this.matchId);
-        // マッチ初期プレゼンス通知
-        if (match.self) {
-            this.onMatchPresenceJoin?.(this.selfSessionId ?? match.self.session_id, match.self.user_id, match.self.username);
-        }
-        for (const p of match.presences ?? []) {
-            this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
-        }
-        this.socket.onmatchpresence = (event: MatchPresenceEvent) => {
-            for (const p of event.joins ?? []) this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
-            for (const p of event.leaves ?? []) this.onMatchPresenceLeave?.(p.session_id, p.user_id, p.username);
-        };
+        // joinMatch() より前にハンドラを登録する（MatchJoin直後のサーバー通知を取りこぼさないため）
         this.socket.onmatchdata = (md: MatchData) => {
             const _mt0 = performance.now();
             const sid = md.presence?.session_id;
+            console.log(`[matchdata] op=${md.op_code} sid=${(sid ?? "").slice(0,8)}`);
             try {
                 const payload = JSON.parse(this._decoder.decode(md.data));
                 if (md.op_code === OP_BLOCK_UPDATE) {
@@ -231,6 +223,18 @@ export class NakamaService {
                 acc.calls = acc.totalMs = acc.maxMs = 0;
                 acc.lastReset = _mt1;
             }
+        };
+        const match = await this.socket.joinMatch(this.matchId);
+        // マッチ初期プレゼンス通知
+        if (match.self) {
+            this.onMatchPresenceJoin?.(this.selfSessionId ?? match.self.session_id, match.self.user_id, match.self.username);
+        }
+        for (const p of match.presences ?? []) {
+            this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
+        }
+        this.socket.onmatchpresence = (event: MatchPresenceEvent) => {
+            for (const p of event.joins ?? []) this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
+            for (const p of event.leaves ?? []) this.onMatchPresenceLeave?.(p.session_id, p.user_id, p.username);
         };
         } finally { _end(); }
     }
