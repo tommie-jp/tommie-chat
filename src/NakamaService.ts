@@ -250,7 +250,7 @@ export class NakamaService {
         console.log(`snd initPos x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tx=${textureUrl}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl }));
+            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl })));
         } catch { /* ignore */ }
         } finally { _end(); }
     }
@@ -261,7 +261,7 @@ export class NakamaService {
         console.log(`snd sendAvatarChange textureUrl=${textureUrl}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, JSON.stringify({ textureUrl }));
+            await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, new TextEncoder().encode(JSON.stringify({ textureUrl })));
         } catch { /* ignore */ }
         } finally { _end(); }
     }
