@@ -650,6 +650,14 @@ export function setupHtmlUI(game: GameScene): void {
     };
     game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number, textureUrl: string, displayName: string) => {
         console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tex=${textureUrl} dname=${displayName}`);
+        // プレイヤーリストの表示名は自分自身も含めて更新
+        if (displayName) {
+            const existing = userMap.get(sessionId);
+            if (existing) {
+                userMap.set(sessionId, { ...existing, displayName });
+                scheduleRenderUserList();
+            }
+        }
         if (sessionId === game.nakama.selfSessionId) return;
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const av = ensureRemoteAvatar(sessionId, displayName || username);
@@ -917,21 +925,33 @@ export function setupHtmlUI(game: GameScene): void {
         try {
             await game.nakama.login(name, host, port);
             game.currentUserId = game.nakama.getSession()?.user_id ?? null;
-            // 自分のdisplay_nameでアバター名を更新
+            // 自分のdisplay_nameでアバター名を更新（joinWorldMatch前にawaitしてselfDisplayNameを確定）
             if (game.currentUserId) {
                 const displayNameInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
-                game.nakama.getDisplayNames([game.currentUserId]).then(names => {
+                try {
+                    const names = await game.nakama.getDisplayNames([game.currentUserId]);
                     const dname = names.get(game.currentUserId!) ?? "";
                     if (dname) {
                         game.updatePlayerNameTag(dname);
                         if (displayNameInput) displayNameInput.value = dname;
                         confirmedDisplayName = dname;
                         game.nakama.selfDisplayName = dname;
+                        // プレイヤーリストの自分の表示名も更新
+                        const sid = game.nakama.selfSessionId;
+                        if (sid) {
+                            const existing = userMap.get(sid);
+                            if (existing) {
+                                userMap.set(sid, { ...existing, displayName: dname });
+                                scheduleRenderUserList();
+                            }
+                        }
                     }
-                }).catch(() => {});
+                } catch (_) {}
             }
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             await game.nakama.joinWorldMatch();
+            // matchId確定後にinitPosを送信（joinWorldMatch前のpresenceイベントではmatchId未設定のため送信されない）
+            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
             // matchId確定後にAOIを強制送信（selfMatchIdガードで未送信になったAOI_UPDATEを再実行）
             game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
             game.aoiManager.updateAOI();
