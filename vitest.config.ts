@@ -4,10 +4,6 @@ export default defineConfig({
     test: {
         include: ['test/**/*.test.ts'],
         testTimeout: 30000,
-        poolOptions: {
-            forks: {
-                execArgv: ['--max-old-space-size=8192'],
-            },
-        },
+        execArgv: ['--max-old-space-size=8192'],
     },
 });
