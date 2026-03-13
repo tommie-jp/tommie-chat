@@ -19,8 +19,10 @@ from typing import List, Tuple
 
 # ── 設定 ──────────────────────────────────────────────
 WINDOW_SEC  = 2.0   # snd→rcv の最大許容遅延（秒）
+WINDOW_SEC_LARGE = 5.0  # 大人数(1000人超)用: サーバ負荷による遅延を許容
 CLOCK_SLACK = 0.5   # 0.1秒精度ログの丸め誤差許容（秒）
 LOGOUT_WINDOW_SEC = 15.0  # logout用: 一斉切断時のサーバ処理遅延を許容
+LARGE_THRESHOLD = 1000  # この人数以上でWINDOW_SEC_LARGEを使用
 
 # 警告扱い（エラーカウントに含めない）ペアのラベル
 WARN_ONLY_LABELS = {'logout'}
@@ -181,10 +183,17 @@ def check_pair(
 ) -> Tuple[bool, bool]:
     """返り値: (ok, is_warn_only) — is_warn_only=True なら失敗でもエラーカウントしない"""
     warn_only = label in WARN_ONLY_LABELS
-    # logout は広い窓を使用
-    win = LOGOUT_WINDOW_SEC if label in WARN_ONLY_LABELS else WINDOW_SEC
+    # イベント数に応じて窓を選択
+    c_evs_pre = [(t, m) for t, m in client_events if c_pattern in m]
+    is_large = len(c_evs_pre) >= LARGE_THRESHOLD
+    if label in WARN_ONLY_LABELS:
+        win = LOGOUT_WINDOW_SEC
+    elif is_large:
+        win = WINDOW_SEC_LARGE
+    else:
+        win = WINDOW_SEC
 
-    c_evs = [(t, m) for t, m in client_events if c_pattern in m]
+    c_evs = c_evs_pre
     s_evs = [(t, m) for t, m in server_events if s_pattern in m]
 
     if not c_evs and not s_evs:
