@@ -1,16 +1,28 @@
 #!/bin/bash
 # Nakama 同時接続テスト
-# Usage: ./test/doTest-concurrent-login.sh [-h]
-case "${1:-}" in
-    -h|--help)
-        echo "Usage: $0"
-        echo "  Nakama 同時接続テスト (1/10/100/1000人)"
-        echo "  ログイン・移動のパフォーマンスを計測"
-        echo "  前提: nakama サーバが 127.0.0.1:7350 で起動していること"
-        exit 0 ;;
-    "") ;;
-    *)  echo "Usage: $0 (-h for help)"; exit 1 ;;
-esac
+# Usage: ./test/doTest-concurrent-login.sh [-n N] [-h]
+PLAYERS_FILTER=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--players)
+            PLAYERS_FILTER="${2:-}"
+            shift 2 ;;
+        -h|--help)
+            echo "Usage: $0 [-n N] [-h]"
+            echo "  Nakama 同時接続テスト (デフォルト: 1/10/100/1000/2000人)"
+            echo "  -n N, --players N  N人テストのみ実行"
+            echo "  ログイン・移動のパフォーマンスを計測"
+            echo "  前提: nakama サーバが 127.0.0.1:7350 で起動していること"
+            exit 0 ;;
+        *)  echo "Usage: $0 [-n N] (-h for help)"; exit 1 ;;
+    esac
+done
+
+# -n 指定時は環境変数で vitest に通知
+if [ -n "$PLAYERS_FILTER" ]; then
+    export CONCURRENT_N_COUNT="$PLAYERS_FILTER"
+fi
 cd "$(dirname "$0")/.."
 mkdir -p test/log
 echo "========================================="
@@ -19,11 +31,26 @@ echo "========================================="
 echo ""
 echo "--- Go プラグインビルド ---"
 ./nakama/doBuild.sh
+
+echo ""
+echo "--- nakama サーバ再起動 ---"
+cd nakama
+docker compose restart -t 3 nakama
+for _i in $(seq 1 30); do
+    if docker compose logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
+        echo "  起動確認 (${_i}s)"
+        break
+    fi
+    sleep 1
+done
+sleep 1
+cd ..
+
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="test/log/concurrent-${TIMESTAMP}.md"
 
 # vitest実行（コンソール出力とJSON結果を同時に取得）
-npx vitest run test/nakama-concurrent.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/vitest-result.json 2>&1 | tee /tmp/vitest-console.txt
+npx vitest run test/nakama-concurrent.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/vitest-result.json 2>&1 | stdbuf -oL tee /tmp/vitest-console.txt
 EXIT_CODE=${PIPESTATUS[0]}
 
 # JSONからMarkdownレポート生成

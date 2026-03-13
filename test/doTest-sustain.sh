@@ -29,11 +29,26 @@ echo "========================================="
 echo ""
 echo "--- Go プラグインビルド ---"
 ./nakama/doBuild.sh
+
+echo ""
+echo "--- nakama サーバ再起動 ---"
+cd nakama
+docker compose restart -t 3 nakama
+for _i in $(seq 1 30); do
+    if docker compose logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
+        echo "  起動確認 (${_i}s)"
+        break
+    fi
+    sleep 1
+done
+sleep 1
+cd ..
+
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="test/log/sustain-${TIMESTAMP}.md"
 
 # vitest実行（コンソール出力とJSON結果を同時に取得）
-SUSTAIN_PLAYER_COUNT=${PLAYERS} SUSTAIN_DURATION=${DURATION} npx vitest run test/nakama-sustain.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/vitest-sustain-result.json 2>&1 | tee /tmp/vitest-sustain-console.txt
+SUSTAIN_PLAYER_COUNT=${PLAYERS} SUSTAIN_DURATION=${DURATION} npx vitest run test/nakama-sustain.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/vitest-sustain-result.json 2>&1 | stdbuf -oL tee /tmp/vitest-sustain-console.txt
 EXIT_CODE=${PIPESTATUS[0]}
 
 # JSONからMarkdownレポート生成

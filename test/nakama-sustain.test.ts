@@ -154,7 +154,8 @@ async function createPlayers(prefix: string, count: number, batchSize = 40): Pro
                 players.push(r.value);
             } else {
                 rejected++;
-                const msg = String(r.reason);
+                const err = r.reason;
+                const msg = err instanceof Error ? err.message : JSON.stringify(err);
                 if (msg.includes('too many logins')) {
                     console.error(`⚠️ RATE LIMITED: ${msg}`);
                 } else {

@@ -22,6 +22,7 @@ const TEXTURE_URL = '/textures/pic1.ktx2';
 const CHAT_ROOM   = 'world';
 
 const OP_INIT_POS          = 1;
+const OP_AVATAR_CHANGE     = 3;
 const OP_AOI_UPDATE        = 5;
 const OP_AOI_ENTER         = 6;
 const OP_DISPLAY_NAME      = 8;
@@ -179,7 +180,8 @@ async function loginNPlayers(prefix: string, count: number): Promise<PlayerConn[
             if (r.status === 'fulfilled') {
                 players.push(r.value);
             } else {
-                const msg = String(r.reason);
+                const err = r.reason;
+                const msg = err instanceof Error ? err.message : JSON.stringify(err);
                 if (msg.includes('too many logins')) {
                     rateLimited++;
                     console.error(`RATE LIMITED: ${msg}`);
@@ -360,19 +362,212 @@ function makeDisplayNameTest(count: number): void {
     });
 }
 
+// ── 存在しないsessionIdのprofileRequest テスト ──
+
+function makeInvalidSidTest(count: number): void {
+    const prefix = `invsid${count}_`;
+    const _envTimeout = parseInt(process.env['TEST_TIMEOUT_MS'] ?? '0', 10);
+    const timeoutMs = _envTimeout > 0 ? _envTimeout : count <= 10 ? 30_000 : count <= 100 ? 180_000 : 600_000;
+
+    describe(`${count}人 不正sessionIdプロフィール要求`, { timeout: timeoutMs }, () => {
+        let players: PlayerConn[] = [];
+
+        beforeAll(async () => {
+            players = await loginNPlayers(prefix, count);
+            await sleep(count <= 10 ? 500 : 3000);
+        }, timeoutMs);
+
+        afterAll(async () => {
+            for (const p of players) {
+                try { p.socket.disconnect(true); } catch { /* */ }
+            }
+        });
+
+        it(`${count}人全員がログインできる`, () => {
+            expect(players.length).toBe(count);
+        });
+
+        it('存在しないsessionIdはスキップされ、有効なもののみ返る', async () => {
+            const fakeSid = '00000000-0000-0000-0000-000000000000';
+            const validSid = players[0].sessionId;
+            const requestSids = [fakeSid, validSid, 'invalid-not-uuid'];
+
+            const beforeCount = players[0].receivedProfiles.length;
+            await players[0].socket.sendMatchState(players[0].matchId, OP_PROFILE_REQUEST,
+                new TextEncoder().encode(JSON.stringify({ sessionIds: requestSids })));
+
+            // 有効な1件のみ返るのを待つ
+            const deadline = Date.now() + 5000;
+            while (Date.now() < deadline) {
+                if (players[0].receivedProfiles.length >= beforeCount + 1) break;
+                await sleep(50);
+            }
+            // 少し追加待ち（余計なレスポンスが来ないことを確認）
+            await sleep(500);
+
+            const profiles = players[0].receivedProfiles.slice(beforeCount);
+            expect(profiles.length, '有効な1件のみ返る').toBe(1);
+            expect(profiles[0].sessionId, '有効なsessionId').toBe(validSid);
+            expect(profiles[0].displayName).toBe(players[0].name);
+        });
+
+        if (count >= 2) {
+            it('ログアウト済みプレイヤーのsessionIdはスキップされる', async () => {
+                const leavingPlayer = players[players.length - 1];
+                const leavingSid = leavingPlayer.sessionId;
+                clog(leavingPlayer.name, 'snd logout');
+                leavingPlayer.socket.disconnect(true);
+                await sleep(1000);
+
+                const beforeCount = players[0].receivedProfiles.length;
+                await players[0].socket.sendMatchState(players[0].matchId, OP_PROFILE_REQUEST,
+                    new TextEncoder().encode(JSON.stringify({ sessionIds: [leavingSid, players[0].sessionId] })));
+
+                const deadline = Date.now() + 5000;
+                while (Date.now() < deadline) {
+                    if (players[0].receivedProfiles.length >= beforeCount + 1) break;
+                    await sleep(50);
+                }
+                await sleep(500);
+
+                const profiles = players[0].receivedProfiles.slice(beforeCount);
+                expect(profiles.length, 'ログアウト済みを除く1件のみ返る').toBe(1);
+                expect(profiles[0].sessionId).toBe(players[0].sessionId);
+
+                // afterAll でdisconnectしないよう除外
+                players = players.slice(0, -1);
+            });
+        }
+    });
+}
+
+// ── textureUrl変更後のプロフィール反映テスト ──
+
+function makeTextureChangeTest(count: number): void {
+    const prefix = `txchg${count}_`;
+    const _envTimeout = parseInt(process.env['TEST_TIMEOUT_MS'] ?? '0', 10);
+    const timeoutMs = _envTimeout > 0 ? _envTimeout : count <= 10 ? 30_000 : count <= 100 ? 180_000 : 600_000;
+
+    describe(`${count}人 テクスチャ変更プロフィール反映`, { timeout: timeoutMs }, () => {
+        let players: PlayerConn[] = [];
+
+        beforeAll(async () => {
+            players = await loginNPlayers(prefix, count);
+            await sleep(count <= 10 ? 500 : 3000);
+        }, timeoutMs);
+
+        afterAll(async () => {
+            for (const p of players) {
+                try { p.socket.disconnect(true); } catch { /* */ }
+            }
+        });
+
+        it(`${count}人全員がログインできる`, () => {
+            expect(players.length).toBe(count);
+        });
+
+        it('avatarChange 後にプロフィール取得すると新しい textureUrl が反映されている', async () => {
+            const newTexture = '/textures/changed.ktx2';
+            clog(players[0].name, `snd avatarChange textureUrl=${newTexture}`);
+            await players[0].socket.sendMatchState(players[0].matchId, OP_AVATAR_CHANGE,
+                JSON.stringify({ textureUrl: newTexture }));
+            await sleep(500);
+
+            const requester = count >= 2 ? players[1] : players[0];
+            const profiles = await requestAndWaitProfiles(requester, [players[0].sessionId]);
+            expect(profiles.length, '1件のプロフィール').toBe(1);
+            expect(profiles[0].textureUrl, 'textureUrl が更新済み').toBe(newTexture);
+        });
+
+        it('元のプレイヤーの textureUrl は変わっていない', async () => {
+            if (count < 2) return;
+            const requester = players[0];
+            const profiles = await requestAndWaitProfiles(requester, [players[1].sessionId]);
+            expect(profiles.length).toBe(1);
+            expect(profiles[0].textureUrl, '未変更プレイヤーは元のまま').toBe(TEXTURE_URL);
+        });
+    });
+}
+
+// ── 途中参加者のプロフィール取得テスト ──
+
+function makeLateJoinTest(count: number): void {
+    const prefix = `late${count}_`;
+    const _envTimeout = parseInt(process.env['TEST_TIMEOUT_MS'] ?? '0', 10);
+    const timeoutMs = _envTimeout > 0 ? _envTimeout : count <= 10 ? 30_000 : count <= 100 ? 180_000 : 600_000;
+
+    describe(`${count}人 途中参加プロフィール取得`, { timeout: timeoutMs }, () => {
+        let players: PlayerConn[] = [];
+        let latePlayer: PlayerConn;
+
+        beforeAll(async () => {
+            players = await loginNPlayers(prefix, count);
+            await sleep(count <= 10 ? 500 : 3000);
+            // 途中参加: 全員ログイン完了後に1人追加
+            latePlayer = await loginAndJoin(`${prefix}late`, 0, 0);
+            await sleep(500);
+        }, timeoutMs);
+
+        afterAll(async () => {
+            try { latePlayer?.socket.disconnect(true); } catch { /* */ }
+            for (const p of players) {
+                try { p.socket.disconnect(true); } catch { /* */ }
+            }
+        });
+
+        it(`${count}人+途中参加1人 全員ログイン成功`, () => {
+            expect(players.length).toBe(count);
+            expect(latePlayer.sessionId).toBeTruthy();
+        });
+
+        it('途中参加者が既存全員のプロフィールを取得できる', async () => {
+            const allSids = players.map(p => p.sessionId);
+            const profiles = await requestAndWaitProfiles(latePlayer, allSids);
+            expect(profiles.length, `${count}件のプロフィール`).toBe(count);
+
+            for (const p of players) {
+                const prof = profiles.find(pr => pr.sessionId === p.sessionId);
+                expect(prof, `${p.name} のプロフィールが存在`).toBeTruthy();
+                expect(prof!.displayName).toBe(p.name);
+                expect(prof!.textureUrl).toBe(TEXTURE_URL);
+            }
+        });
+
+        it('既存プレイヤーが途中参加者のプロフィールを取得できる', async () => {
+            const profiles = await requestAndWaitProfiles(players[0], [latePlayer.sessionId]);
+            expect(profiles.length, '1件のプロフィール').toBe(1);
+            expect(profiles[0].displayName).toBe(`${prefix}late`);
+            expect(profiles[0].textureUrl).toBe(TEXTURE_URL);
+        });
+    });
+}
+
 // ── テスト実行 ──
 
 makeProfileTest(1);
 makeProfileTest(10);
 makeProfileTest(100);
+makeProfileTest(1000);
+makeProfileTest(2000);
 
 makeDisplayNameTest(1);
 makeDisplayNameTest(10);
 makeDisplayNameTest(100);
+makeDisplayNameTest(1000);
+makeDisplayNameTest(2000);
+
+makeInvalidSidTest(1);
+makeInvalidSidTest(10);
+
+makeTextureChangeTest(1);
+makeTextureChangeTest(10);
+
+makeLateJoinTest(1);
+makeLateJoinTest(10);
 
 // 環境変数 PLAYER_LIST_N_COUNT で任意人数テストを追加（-n N オプション用）
 const _customN = parseInt(process.env['PLAYER_LIST_N_COUNT'] ?? '0', 10);
-if (_customN > 0 && ![1, 10, 100].includes(_customN)) {
+if (_customN > 0 && ![1, 10, 100, 1000, 2000].includes(_customN)) {
     makeProfileTest(_customN);
     makeDisplayNameTest(_customN);
 }

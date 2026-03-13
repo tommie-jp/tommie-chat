@@ -32,6 +32,10 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "使い方: ./test/doTest-max-players.sh [-r R] [--trials N] [-s S] [--step D] [-v] [-h]"
             echo ""
+            echo "各人数で以下の2テストを実行し、両方PASSで合格とします:"
+            echo "  1. 送受信整合性テスト (doTest-snd-rcv.sh)"
+            echo "  2. プレイヤーリスト通知テスト (doTest-player-list.sh)"
+            echo ""
             echo "オプション:"
             echo "  -r R, --rate R     秒あたりのログイン数 (デフォルト: 40)"
             echo "  --trials N         試行回数、過半数PASSで合格 (デフォルト: 1=多数決なし)"
@@ -155,11 +159,13 @@ while true; do
     pass_count=0
     fail_count=0
     best_sub_report=""
+    best_pl_report=""
 
     for trial in $(seq 1 $TRIALS); do
         echo ""
         echo "  --- 試行 ${trial}/${TRIALS} ---"
 
+        # ── 送受信整合性テスト ──
         prev_report=$(ls -t "$LOG_DIR"/snd-rcv-*.md 2>/dev/null | head -1 || true)
 
         set +e
@@ -169,9 +175,9 @@ while true; do
             # 予測時間: ログイン(n/rate) + 固定オーバーヘッド(40秒) + 人数比例オーバーヘッド(n/50秒)
             # AOI処理・logout・整合性チェック等が人数に比例して増加
             est_sec=$(( n / (LOGIN_RATE > 0 ? LOGIN_RATE : 40) + 40 + n / 50 ))
-            run_with_throttle "${n}人 試行${trial}/${TRIALS}" "$est_sec" "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE"
+            run_with_throttle "${n}人 snd-rcv 試行${trial}/${TRIALS}" "$est_sec" "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE"
         fi
-        rc=$?
+        snd_rcv_rc=$?
         set -e
 
         new_report=$(ls -t "$LOG_DIR"/snd-rcv-*.md 2>/dev/null | head -1 || true)
@@ -180,21 +186,43 @@ while true; do
         else
             cur_report=""
         fi
+        if [ -z "$best_sub_report" ] && [ -n "$cur_report" ]; then
+            best_sub_report="$cur_report"
+        fi
 
-        if [ "$rc" -eq 0 ]; then
+        # ── プレイヤーリスト通知テスト ──
+        prev_pl_report=$(ls -t "$LOG_DIR"/player-list-*.md 2>/dev/null | head -1 || true)
+
+        set +e
+        if [ "$VERBOSE" -eq 1 ]; then
+            "$SCRIPT_DIR/doTest-player-list.sh" -n "$n" -r "$LOGIN_RATE"
+        else
+            est_pl_sec=$(( n / (LOGIN_RATE > 0 ? LOGIN_RATE : 40) + 30 + n / 50 ))
+            run_with_throttle "${n}人 player-list 試行${trial}/${TRIALS}" "$est_pl_sec" "$SCRIPT_DIR/doTest-player-list.sh" -n "$n" -r "$LOGIN_RATE"
+        fi
+        pl_rc=$?
+        set -e
+
+        new_pl_report=$(ls -t "$LOG_DIR"/player-list-*.md 2>/dev/null | head -1 || true)
+        if [ "$new_pl_report" != "$prev_pl_report" ] && [ -f "$new_pl_report" ]; then
+            cur_pl_report="$new_pl_report"
+        else
+            cur_pl_report=""
+        fi
+        if [ -z "$best_pl_report" ] && [ -n "$cur_pl_report" ]; then
+            best_pl_report="$cur_pl_report"
+        fi
+
+        # ── 試行結果判定（両方PASSで合格） ──
+        if [ "$snd_rcv_rc" -eq 0 ] && [ "$pl_rc" -eq 0 ]; then
             pass_count=$((pass_count + 1))
-            echo "  ✅ 試行${trial}: PASS  (累計 ${pass_count}PASS / ${trial}試行)"
-            # 最初のPASSレポートを採用
-            if [ -z "$best_sub_report" ] && [ -n "$cur_report" ]; then
-                best_sub_report="$cur_report"
-            fi
+            echo "  ✅ 試行${trial}: PASS (snd-rcv✅ player-list✅)  (累計 ${pass_count}PASS / ${trial}試行)"
         else
             fail_count=$((fail_count + 1))
-            echo "  ❌ 試行${trial}: FAILED (exit=${rc})  (累計 ${fail_count}FAIL / ${trial}試行)"
-            # FAILレポートはPASSがない場合のみ採用
-            if [ -z "$best_sub_report" ] && [ -n "$cur_report" ]; then
-                best_sub_report="$cur_report"
-            fi
+            local_detail=""
+            if [ "$snd_rcv_rc" -ne 0 ]; then local_detail="snd-rcv❌"; fi
+            if [ "$pl_rc" -ne 0 ]; then local_detail="${local_detail:+$local_detail }player-list❌"; fi
+            echo "  ❌ 試行${trial}: FAILED (${local_detail})  (累計 ${fail_count}FAIL / ${trial}試行)"
         fi
 
         # 早期終了判定
@@ -215,7 +243,7 @@ while true; do
         fi
     done
 
-    RESULTS+=("${n}|${pass_count}|${best_sub_report}|${TRIALS}")
+    RESULTS+=("${n}|${pass_count}|${best_sub_report}|${TRIALS}|${best_pl_report}")
 
     if [ "$pass_count" -ge "$PASS_NEEDED" ]; then
         last_ok=$n
@@ -255,24 +283,25 @@ fi
 
     echo "## 結果サマリー"
     echo ""
-    echo "| 人数 | 結果 | PASS率 | レポート |"
-    echo "|------|------|--------|---------|"
+    echo "| 人数 | 結果 | PASS率 | snd-rcvレポート | player-listレポート |"
+    echo "|------|------|--------|----------------|-------------------|"
     for entry in "${RESULTS[@]}"; do
-        IFS='|' read -r num pass_cnt sub_rep trials <<< "$entry"
+        IFS='|' read -r num pass_cnt sub_rep trials pl_rep <<< "$entry"
         if [ "$pass_cnt" -ge "$PASS_NEEDED" ]; then
             mark="✅ PASS"
         else
             mark="❌ FAILED"
         fi
-        rep_link=$([ -n "$sub_rep" ] && echo "[詳細]($(basename "$sub_rep"))" || echo "—")
-        echo "| ${num}人 | ${mark} | ${pass_cnt}/${trials} | ${rep_link} |"
+        sr_link=$([ -n "$sub_rep" ] && echo "[詳細]($(basename "$sub_rep"))" || echo "—")
+        pl_link=$([ -n "$pl_rep" ] && echo "[詳細]($(basename "$pl_rep"))" || echo "—")
+        echo "| ${num}人 | ${mark} | ${pass_cnt}/${trials} | ${sr_link} | ${pl_link} |"
     done
     echo ""
 
     # 各テストの詳細セクション
     idx=1
     for entry in "${RESULTS[@]}"; do
-        IFS='|' read -r num pass_cnt sub_rep trials <<< "$entry"
+        IFS='|' read -r num pass_cnt sub_rep trials pl_rep <<< "$entry"
         echo "---"
         echo ""
         echo "## テスト ${idx}: ${num}人ログイン"
@@ -284,14 +313,29 @@ fi
         fi
         echo ""
 
+        echo "### 送受信整合性テスト (snd-rcv)"
+        echo ""
         if [ -n "$sub_rep" ] && [ -f "$sub_rep" ]; then
-            # サブレポートからサーバログ以外を抽出（サーバログは大きいため除外）
             awk '
                 /^### サーバログ/ { in_server=1; next }
                 /^### / && in_server { in_server=0 }
                 /^## Phase / { in_server=0 }
                 !in_server { print }
             ' "$sub_rep"
+        else
+            echo "*(サブレポートなし)*"
+        fi
+        echo ""
+
+        echo "### プレイヤーリスト通知テスト (player-list)"
+        echo ""
+        if [ -n "$pl_rep" ] && [ -f "$pl_rep" ]; then
+            awk '
+                /^### サーバログ/ { in_server=1; next }
+                /^### / && in_server { in_server=0 }
+                /^## P[0-9]/ { in_server=0 }
+                !in_server { print }
+            ' "$pl_rep"
         else
             echo "*(サブレポートなし)*"
         fi

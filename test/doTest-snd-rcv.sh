@@ -40,7 +40,7 @@ snd/rcv 整合性テストを実行します。
 
   [Phase 3: setBlock テスト]
     1クライアント（block1）がブロック設置を行い、getGroundChunk と
-    setBlock:signal (op=4) の受信を検証します。
+    setBlock (op=4) のブロードキャスト受信を検証します。
 
   [Phase 4: AOI_LEAVE テスト]
     2クライアント（leave1, leave2）がログインし、leave2 切断後に
@@ -68,12 +68,11 @@ snd/rcv 整合性テストを実行します。
 
   各テストの前に nakama サーバを再起動してクリーンな状態で実行します。
 
-デフォルト実行フェーズ: 1, 2, 3, 4, 5, 6, 7, 8, 9 (1000人は --1000 で追加)
+デフォルト実行フェーズ: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 (1〜2000人)
 
 整合性チェック対象:
   [共通]
   Login            クライアント snd Login        ↔ サーバ rcv login
-  storeLoginTime   クライアント snd storeLoginTime ↔ サーバ rcv storeLoginTime
   getWorldMatch    クライアント snd getWorldMatch  ↔ サーバ rcv getWorldMatch
   initPos          クライアント snd initPos        ↔ サーバ rcv initPos
   AOI_UPDATE       クライアント snd AOI_UPDATE     ↔ サーバ rcv AOI_UPDATE
@@ -82,13 +81,13 @@ snd/rcv 整合性テストを実行します。
   [Phase 2, 7, 8, 9, 10]
   AOI_ENTER(双方向) クライアント rcv AOI_ENTER     ↔ サーバ snd AOI_ENTER
   [Phase 3 のみ]
-  setBlock/getGroundChunk/setBlock:signal
+  setBlock/getGroundChunk
   [Phase 4 のみ]
   AOI_LEAVE
   [Phase 5 のみ]
-  moveTarget/moveTarget:signal
+  moveTarget (C→S, S→C)
   [Phase 6 のみ]
-  avatarChange/avatarChange:signal
+  avatarChange (C→S, S→C)
 
 ログ出力先:
   test/log/doTest-snd-rcv-*-server.log  各フェーズのサーバログ
@@ -139,17 +138,18 @@ MULTI3_CHECK_OUT="/tmp/snd-rcv-multi3-check-$$.txt"
 MULTI10_CHECK_OUT="/tmp/snd-rcv-multi10-check-$$.txt"
 MULTI100_CHECK_OUT="/tmp/snd-rcv-multi100-check-$$.txt"
 MULTI1000_CHECK_OUT="/tmp/snd-rcv-multi1000-check-$$.txt"
+MULTI2000_CHECK_OUT="/tmp/snd-rcv-multi2000-check-$$.txt"
 CUSTOM_CHECK_OUT="/tmp/snd-rcv-custom-check-$$.txt"
 trap 'rm -f "$SOLO_CHECK_OUT" "$DUO_CHECK_OUT" "$SETBLOCK_CHECK_OUT" "$AILEAVE_CHECK_OUT" \
           "$MOVETARGET_CHECK_OUT" "$AVATARCHANGE_CHECK_OUT" \
           "$MULTI3_CHECK_OUT" "$MULTI10_CHECK_OUT" "$MULTI100_CHECK_OUT" "$MULTI1000_CHECK_OUT" \
-          "$CUSTOM_CHECK_OUT"' EXIT
+          "$MULTI2000_CHECK_OUT" "$CUSTOM_CHECK_OUT"' EXIT
 
 GREP_FILTER="rcv login\|rcv logout\|rcv setBlock\|rcv getWorldMatch\|rcv getServerInfo\
-\|rcv getGroundChunk\|rcv syncChunks\|rcv storeLoginTime\|rcv initPos\|rcv AOI_UPDATE\
-\|snd AOI_ENTER\|snd AOI_LEAVE\|snd setBlock:signal\
-\|rcv moveTarget\|snd moveTarget:signal\
-\|rcv avatarChange\|snd avatarChange:signal"
+\|rcv getGroundChunk\|rcv syncChunks\|rcv initPos\|rcv AOI_UPDATE\
+\|snd AOI_ENTER\|snd AOI_LEAVE\
+\|rcv moveTarget\|snd moveTarget\
+\|rcv avatarChange\|snd avatarChange"
 
 TOTAL_ERRORS=0
 
@@ -164,6 +164,7 @@ if [ -n "$PLAYERS_FILTER" ]; then
         10)   PHASES_TO_RUN="P8" ;;
         100)  PHASES_TO_RUN="P9" ;;
         1000) PHASES_TO_RUN="P10" ;;
+        2000) PHASES_TO_RUN="P11" ;;
         *)
             if ! [[ "$PLAYERS_FILTER" =~ ^[0-9]+$ ]] || [ "$PLAYERS_FILTER" -lt 1 ]; then
                 echo "無効な人数: $PLAYERS_FILTER (1以上の整数)"; exit 1
@@ -171,8 +172,7 @@ if [ -n "$PLAYERS_FILTER" ]; then
             PHASES_TO_RUN="PCUSTOM" ;;
     esac
 else
-    PHASES_TO_RUN="P1 P2 P3 P4 P5 P6 P7 P8 P9"
-    [ "$WITH_1000" -eq 1 ] && PHASES_TO_RUN="$PHASES_TO_RUN P10"
+    PHASES_TO_RUN="P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11"
 fi
 
 should_run() { [[ " $PHASES_TO_RUN " == *" $1 "* ]]; }
@@ -180,7 +180,7 @@ should_run() { [[ " $PHASES_TO_RUN " == *" $1 "* ]]; }
 # フェーズ終了コード初期化（-1=未実行, 0=成功, >0=失敗）
 SOLO_RC=-1; DUO_RC=-1; SETBLOCK_RC=-1; AILEAVE_RC=-1
 MOVETARGET_RC=-1; AVATARCHANGE_RC=-1
-MULTI3_RC=-1; MULTI10_RC=-1; MULTI100_RC=-1; MULTI1000_RC=-1; CUSTOM_RC=-1
+MULTI3_RC=-1; MULTI10_RC=-1; MULTI100_RC=-1; MULTI1000_RC=-1; MULTI2000_RC=-1; CUSTOM_RC=-1
 
 echo "========================================="
 echo "snd/rcv 整合性テスト"
@@ -213,7 +213,7 @@ restart_server() {
 start_server_log() {
     local log_file="$1"
     cd "$ROOT_DIR/nakama"
-    docker compose logs -f --tail 0 nakama 2>&1 \
+    stdbuf -oL docker compose logs -f --tail 0 nakama 2>&1 \
       | grep --line-buffered "$GREP_FILTER" \
       | sed -u 's/^[^ ]* *| *//' \
       | sed -u 's/\([0-9a-f]\{8\}\)-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/\1/g' \
@@ -229,7 +229,7 @@ run_consistency_check() {
     local out_file="$4"
     local rc
     set +e
-    python3 "$SCRIPT_DIR/check-snd-rcv.py" "$client_log" "$server_log" $extra_args 2>&1 | tee "$out_file"
+    python3 "$SCRIPT_DIR/check-snd-rcv.py" "$client_log" "$server_log" $extra_args 2>&1 | stdbuf -oL tee "$out_file"
     rc=${PIPESTATUS[0]}
     set -e
     TOTAL_ERRORS=$((TOTAL_ERRORS + rc))
@@ -266,7 +266,7 @@ run_phase() {
     echo "  Vitest 実行 (${label})..."
     cd "$ROOT_DIR"
     set +e
-    npx vitest run test/nakama-snd-rcv.test.ts -t "$vitest_filter" 2>&1 | tee "$client_log"
+    npx vitest run test/nakama-snd-rcv.test.ts -t "$vitest_filter" 2>&1 | stdbuf -oL tee "$client_log"
     local rc=${PIPESTATUS[0]}
     set -e
 
@@ -357,6 +357,13 @@ if should_run P10; then
         "1000人ログインテスト" "" "$MULTI1000_CHECK_OUT" MULTI1000_RC 5
 fi
 
+if should_run P11; then
+    run_phase P11 11 "2000人ログインテスト" \
+        "$LOG_DIR/doTest-snd-rcv-multi2000-server.log" \
+        "$LOG_DIR/doTest-snd-rcv-multi2000-client.log" \
+        "2000人ログインテスト" "" "$MULTI2000_CHECK_OUT" MULTI2000_RC 10
+fi
+
 if should_run PCUSTOM; then
     _cn="$PLAYERS_FILTER"
     _cargs=$([ "$_cn" -le 100 ] && echo "--duo" || echo "")
@@ -382,6 +389,7 @@ FINAL_RC=0
 [ "$MULTI10_RC"      -gt 0 ] && FINAL_RC=1
 [ "$MULTI100_RC"     -gt 0 ] && FINAL_RC=1
 [ "$MULTI1000_RC"    -gt 0 ] && FINAL_RC=1
+[ "$MULTI2000_RC"    -gt 0 ] && FINAL_RC=1
 [ "$CUSTOM_RC"       -gt 0 ] && FINAL_RC=1
 [ "$TOTAL_ERRORS" -gt 0 ] && FINAL_RC=1
 
@@ -399,6 +407,7 @@ echo "========================================="
 [ "$MULTI10_RC"      -gt 0 ] && echo "❌ 10人ログインテスト Vitest 失敗 (exit=$MULTI10_RC)"
 [ "$MULTI100_RC"     -gt 0 ] && echo "❌ 100人ログインテスト Vitest 失敗 (exit=$MULTI100_RC)"
 [ "$MULTI1000_RC"    -gt 0 ] && echo "❌ 1000人ログインテスト Vitest 失敗 (exit=$MULTI1000_RC)"
+[ "$MULTI2000_RC"    -gt 0 ] && echo "❌ 2000人ログインテスト Vitest 失敗 (exit=$MULTI2000_RC)"
 [ "$CUSTOM_RC"       -gt 0 ] && echo "❌ ${PLAYERS_FILTER:-?}人ログインテスト Vitest 失敗 (exit=$CUSTOM_RC)"
 [ "$TOTAL_ERRORS" -gt 0 ] && echo "❌ 整合性エラー: ${TOTAL_ERRORS}件"
 [ "$FINAL_RC" -eq 0 ]     && echo "✅ 全チェック通過"
@@ -466,6 +475,7 @@ md_phase() {
     md_phase 8  "10人ログインテスト"     "$MULTI10_RC"      "$MULTI10_CHECK_OUT"      "$LOG_DIR/doTest-snd-rcv-multi10-server.log"     "$LOG_DIR/doTest-snd-rcv-multi10-client.log"
     md_phase 9  "100人ログインテスト"    "$MULTI100_RC"     "$MULTI100_CHECK_OUT"     "$LOG_DIR/doTest-snd-rcv-multi100-server.log"    "$LOG_DIR/doTest-snd-rcv-multi100-client.log"
     md_phase 10 "1000人ログインテスト"   "$MULTI1000_RC"    "$MULTI1000_CHECK_OUT"    "$LOG_DIR/doTest-snd-rcv-multi1000-server.log"   "$LOG_DIR/doTest-snd-rcv-multi1000-client.log"
+    md_phase 11 "2000人ログインテスト"   "$MULTI2000_RC"    "$MULTI2000_CHECK_OUT"    "$LOG_DIR/doTest-snd-rcv-multi2000-server.log"   "$LOG_DIR/doTest-snd-rcv-multi2000-client.log"
     if [ "$CUSTOM_RC" -ge 0 ]; then
         _cn="${PLAYERS_FILTER:-?}"
         md_phase "N" "${_cn}人ログインテスト（カスタム）" "$CUSTOM_RC" "$CUSTOM_CHECK_OUT" \

@@ -135,13 +135,6 @@ async function loginAndJoin(name: string, x = 0, z = 0): Promise<PlayerConn> {
     const match = await socket.joinMatch(wmData.matchId);
     const selfSid = match.self?.session_id ?? '';
 
-    // ── storeLoginTime ──
-    clog(name, `snd storeLoginTime sessionId=${selfSid.slice(0, 8)}`);
-    await socket.rpc('storeLoginTime', JSON.stringify({
-        sessionId: selfSid,
-        loginTime: new Date().toISOString(),
-    })).catch(() => {});
-
     const conn: PlayerConn = { name, client, session, socket, matchId: wmData.matchId, sessionId: selfSid, receivedEvents };
 
     // ── initPos ──
@@ -291,14 +284,14 @@ describe('setBlock テスト', { timeout: 30_000 }, () => {
         expect(data.cx, 'cx=32').toBe(32);
     });
 
-    it('setBlock 後に setBlock:signal (op=4) を受信する', async () => {
+    it('setBlock 後に op=4 ブロードキャストを受信する', async () => {
         // gx=512,gz=512 → chunk(32,32) → p1 の AOI 内
         clog('block1', 'snd setBlock gx=512 gz=512 blockId=1 rgba=(255,0,0,255)');
-        await p1.socket.rpc('setBlock', JSON.stringify({
+        await p1.socket.sendMatchState(p1.matchId, OP_BLOCK_UPDATE, JSON.stringify({
             gx: 512, gz: 512, blockId: 1, r: 255, g: 0, b: 0, a: 255,
         }));
         const ev = await waitForEvent(p1, OP_BLOCK_UPDATE, 5000);
-        expect(ev, 'setBlock:signal (op=4) received').toBeTruthy();
+        expect(ev, 'setBlock broadcast (op=4) received').toBeTruthy();
     });
 });
 
@@ -426,7 +419,8 @@ async function loginNPlayers(label: string, count: number): Promise<PlayerConn[]
             if (r.status === 'fulfilled') {
                 players.push(r.value);
             } else {
-                const msg = String(r.reason);
+                const err = r.reason;
+                const msg = err instanceof Error ? err.message : JSON.stringify(err);
                 if (msg.includes('too many logins')) {
                     rateLimited++;
                     console.error(`⚠️ RATE LIMITED: ${msg}`);
@@ -493,9 +487,10 @@ makeNPlayerLoginTest(3);
 makeNPlayerLoginTest(10);
 makeNPlayerLoginTest(100);
 makeNPlayerLoginTest(1000);
+makeNPlayerLoginTest(2000);
 
 // 環境変数 MULTI_N_COUNT で任意人数テストを追加（-n N オプション用）
 const _customN = parseInt(process.env['MULTI_N_COUNT'] ?? '0', 10);
-if (_customN > 0 && ![3, 10, 100, 1000].includes(_customN)) {
+if (_customN > 0 && ![3, 10, 100, 1000, 2000].includes(_customN)) {
     makeNPlayerLoginTest(_customN);
 }

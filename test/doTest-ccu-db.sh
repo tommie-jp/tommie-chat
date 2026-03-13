@@ -46,7 +46,7 @@ echo "テストレベル: ${LEVEL} — ${LEVEL_DESC[$LEVEL]}"
 echo ""
 
 # vitest実行
-CCU_TEST_LEVEL=${LEVEL} npx vitest run test/nakama-ccu-db.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/vitest-ccu-db-result.json 2>&1 | tee /tmp/vitest-ccu-db-console.txt
+CCU_TEST_LEVEL=${LEVEL} npx vitest run test/nakama-ccu-db.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/vitest-ccu-db-result.json 2>&1 | stdbuf -oL tee /tmp/vitest-ccu-db-console.txt
 EXIT_CODE=${PIPESTATUS[0]}
 
 # JSONからMarkdownレポート生成

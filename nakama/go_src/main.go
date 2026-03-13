@@ -976,7 +976,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if p, ok := ms.Positions[sid]; ok {
 				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
 				if len(targets) > 0 {
-					logf("snd moveTarget:signal sid=%s targets=%d\n", shortSID(sid), len(targets))
+					logf("snd moveTarget sid=%s targets=%d\n", shortSID(sid), len(targets))
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
 				}
 			}
@@ -1000,7 +1000,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if p, ok := ms.Positions[sid]; ok {
 				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
 				if len(targets) > 0 {
-					logf("snd avatarChange:signal sid=%s targets=%d\n", shortSID(sid), len(targets))
+					logf("snd avatarChange sid=%s targets=%d\n", shortSID(sid), len(targets))
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
 				}
 			}
@@ -1162,6 +1162,10 @@ func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, 
 	// シャットダウン時: 未フラッシュの1sデータを1mに追加してからDB保存
 	flushCcu1mSample()
 	saveCcuHistory1m(ctx, nk, logger)
+	// キャッシュをクリア（次の getWorldMatch で新マッチが作成される）
+	worldMatchMu.Lock()
+	worldMatchID = ""
+	worldMatchMu.Unlock()
 	return state
 }
 

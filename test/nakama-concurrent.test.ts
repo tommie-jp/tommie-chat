@@ -37,14 +37,29 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    const result = await socket.rpc('getWorldMatch');
-    const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
-    if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
+    // getWorldMatch のキャッシュが古い場合にリトライ（前テストのマッチ終了後の場合）
+    let matchId = '';
+    let sessionId = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await socket.rpc('getWorldMatch');
+        const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
+        if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
+        matchId = data.matchId;
+        try {
+            const match = await socket.joinMatch(matchId);
+            sessionId = match.self?.session_id ?? '';
+            break;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : JSON.stringify(e);
+            if (msg.includes('Match not found') && attempt < 2) {
+                await new Promise(r => setTimeout(r, 1000));
+                continue;
+            }
+            throw e;
+        }
+    }
 
-    const match = await socket.joinMatch(data.matchId);
-    const sessionId = match.self?.session_id ?? '';
-
-    return { client, session, socket, matchId: data.matchId, sessionId, name };
+    return { client, session, socket, matchId, sessionId, name };
 }
 
 async function cleanup(p: PlayerConn): Promise<void> {
@@ -74,7 +89,8 @@ async function createPlayers(prefix: string, count: number, batchSize = 40): Pro
                 players.push(r.value);
             } else {
                 rejected++;
-                const msg = String(r.reason);
+                const err = r.reason;
+                const msg = err instanceof Error ? err.message : JSON.stringify(err);
                 if (msg.includes('too many logins')) {
                     console.error(`⚠️ RATE LIMITED: ${msg}`);
                 } else {
@@ -84,6 +100,10 @@ async function createPlayers(prefix: string, count: number, batchSize = 40): Pro
         }
         if (rejected > 0) {
             console.error(`⚠️ バッチ ${offset}〜${offset + batch}: ${rejected}人失敗`);
+        }
+        // 大人数テスト時は進捗を表示（doAll.shのタイムアウト防止）
+        if (count >= 100 && (offset + batchSize) < count) {
+            console.log(`  接続中: ${players.length}/${count}人`);
         }
         if (offset + batchSize < count) await sleep(1000);
     }
@@ -116,7 +136,8 @@ async function batchSend(
             if (r.status === 'fulfilled') {
                 sent++;
             } else {
-                const reason = String((r as PromiseRejectedResult).reason);
+                const _err = (r as PromiseRejectedResult).reason;
+                const reason = _err instanceof Error ? _err.message : JSON.stringify(_err);
                 if (reason.includes('not been established')) {
                     disconnected++;
                 } else {
@@ -130,17 +151,19 @@ async function batchSend(
 
 // ── テスト ──
 
-const CONCURRENCY_LEVELS = [1, 10, 100, 1000];
+const _concFilterN = parseInt(process.env['CONCURRENT_N_COUNT'] ?? '0', 10);
+const CONCURRENCY_LEVELS = _concFilterN > 0 ? [_concFilterN] : [1, 10, 100, 1000, 2000];
 
 for (const N of CONCURRENCY_LEVELS) {
-    describe(`同時接続 ${N}人`, { timeout: 120_000 }, () => {
+    describe(`同時接続 ${N}人`, { timeout: N >= 2000 ? 300_000 : 120_000 }, () => {
         let players: PlayerConn[] = [];
 
         afterAll(async () => {
+            const count = players.length;
             await cleanupAll(players);
             players = [];
-            // サーバ側の切断処理＋レート制限リセットを待つ
-            await sleep(3000);
+            // サーバ側の切断処理＋レート制限リセットを待つ（大人数ほど長く待つ）
+            await sleep(count >= 1000 ? 8000 : 3000);
         }, 30_000);
 
         it(`${N}人が全員ログイン成功する`, async () => {

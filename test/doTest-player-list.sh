@@ -19,14 +19,14 @@ while [[ $# -gt 0 ]]; do
 プロフィール（displayName, textureUrl, loginTime）がサーバから正しく取得できるかを検証します。
 
 オプション:
-  -n N, --players N   N人テストのみ実行（デフォルト: 1, 10, 100 すべて実行）
+  -n N, --players N   N人テストのみ実行（デフォルト: 1, 10, 100, 1000, 2000 すべて実行）
   -r R, --rate R      秒あたりのログイン数を指定 (デフォルト: 40)
                       例: -r 50 → 50人/秒でバッチログイン
   -t T, --timeout T   テストタイムアウトを秒単位で指定 (デフォルト: 人数に応じて自動)
                       例: -t 600 → 600秒タイムアウト
   -h                  このヘルプを表示して終了
 
-テスト内容（各人数 N=1, 10, 100 について）:
+テスト内容（各人数 N=1, 10, 100, 1000, 2000 について）:
   [プロフィール通知]
     N人がログイン後、player[0] が全員の OP_PROFILE_REQUEST を送信し、
     displayName, textureUrl, loginTime が正しく返ることを検証します。
@@ -34,6 +34,19 @@ while [[ $# -gt 0 ]]; do
   [表示名変更通知]
     N人がログイン後、player[0] が表示名を変更し、他のプレイヤーが
     OP_DISPLAY_NAME を受信すること、またプロフィール取得で反映されることを検証します。
+
+追加テスト（1人・10人固定）:
+  [不正sessionIdプロフィール要求]
+    存在しない/ログアウト済みのsessionIdを含むprofileRequestが
+    エラーにならず、有効なもののみ返ることを検証します。
+
+  [テクスチャ変更プロフィール反映]
+    avatarChange (op=3) で textureUrl を変更後、profileRequest で
+    更新後の値が返ることを検証します。
+
+  [途中参加プロフィール取得]
+    N人ログイン完了後に1人追加で参加し、途中参加者が既存全員の
+    プロフィールを取得でき、既存プレイヤーも途中参加者を取得できることを検証します。
 
   各テストの前に nakama サーバを再起動してクリーンな状態で実行します。
 
@@ -77,13 +90,13 @@ LOGFILE="$LOG_DIR/player-list-${TIMESTAMP}.md"
 
 GREP_FILTER="rcv login\|rcv logout\|rcv getWorldMatch\|rcv initPos\|rcv AOI_UPDATE\
 \|snd AOI_ENTER\|snd AOI_LEAVE\|rcv profileRequest\|snd profileResponse\
-\|rcv displayName\|snd displayName"
+\|rcv displayName\|snd displayName\|rcv avatarChange\|snd avatarChange"
 
 # 実行する人数リスト
 if [ -n "$PLAYERS_FILTER" ]; then
     COUNTS=("$PLAYERS_FILTER")
 else
-    COUNTS=(1 10 100)
+    COUNTS=(1 10 100 1000 2000)
 fi
 
 # フェーズ結果を連想配列で管理
@@ -121,7 +134,7 @@ restart_server() {
 start_server_log() {
     local log_file="$1"
     cd "$ROOT_DIR/nakama"
-    docker compose logs -f --tail 0 nakama 2>&1 \
+    stdbuf -oL docker compose logs -f --tail 0 nakama 2>&1 \
       | grep --line-buffered "$GREP_FILTER" \
       | sed -u 's/^[^ ]* *| *//' \
       | sed -u 's/\([0-9a-f]\{8\}\)-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/\1/g' \
@@ -157,7 +170,7 @@ run_phase() {
     echo "  Vitest 実行 (${label})..."
     cd "$ROOT_DIR"
     set +e
-    npx vitest run test/nakama-player-list.test.ts -t "$vitest_filter" 2>&1 | tee "$client_log"
+    npx vitest run test/nakama-player-list.test.ts -t "$vitest_filter" 2>&1 | stdbuf -oL tee "$client_log"
     local rc=${PIPESTATUS[0]}
     set -e
 
@@ -177,8 +190,8 @@ PHASE_NUM=0
 for N in "${COUNTS[@]}"; do
     # デフォルト(1,10,100)以外の人数は環境変数で vitest に通知
     case "$N" in
-        1|10|100) unset PLAYER_LIST_N_COUNT ;;
-        *)        export PLAYER_LIST_N_COUNT="$N" ;;
+        1|10|100|1000|2000) unset PLAYER_LIST_N_COUNT ;;
+        *)                 export PLAYER_LIST_N_COUNT="$N" ;;
     esac
 
     PHASE_NUM=$((PHASE_NUM + 1))
@@ -199,6 +212,34 @@ for N in "${COUNTS[@]}"; do
         "$LOG_DIR/doTest-player-list-dn${N}-server.log" \
         "$LOG_DIR/doTest-player-list-dn${N}-client.log" \
         "$local_wait"
+done
+
+# ── 追加テスト（不正sessionId / テクスチャ変更 / 途中参加） ──
+# これらは人数非依存（1人・10人固定）なので、-n フィルタに関係なく実行
+for N in 1 10; do
+    PHASE_NUM=$((PHASE_NUM + 1))
+    run_phase "P${PHASE_NUM}-invsid${N}" \
+        "${N}人 不正sessionIdプロフィール要求" \
+        "${N}人 不正sessionIdプロフィール要求" \
+        "$LOG_DIR/doTest-player-list-invsid${N}-server.log" \
+        "$LOG_DIR/doTest-player-list-invsid${N}-client.log" \
+        1
+
+    PHASE_NUM=$((PHASE_NUM + 1))
+    run_phase "P${PHASE_NUM}-txchg${N}" \
+        "${N}人 テクスチャ変更プロフィール反映" \
+        "${N}人 テクスチャ変更プロフィール反映" \
+        "$LOG_DIR/doTest-player-list-txchg${N}-server.log" \
+        "$LOG_DIR/doTest-player-list-txchg${N}-client.log" \
+        1
+
+    PHASE_NUM=$((PHASE_NUM + 1))
+    run_phase "P${PHASE_NUM}-late${N}" \
+        "${N}人 途中参加プロフィール取得" \
+        "${N}人 途中参加プロフィール取得" \
+        "$LOG_DIR/doTest-player-list-late${N}-server.log" \
+        "$LOG_DIR/doTest-player-list-late${N}-client.log" \
+        1
 done
 
 # ── 最終結果 ──
