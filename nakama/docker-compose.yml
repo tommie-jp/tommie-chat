@@ -60,7 +60,6 @@ services:
             --socket.outgoing_queue_size 2048 `# 接続毎送信バッファ[件](default64)` \
             --socket.max_request_size_bytes 131072 `# 受信メッセージ上限[bytes](default131072)` \
             --runtime.max_count 8192 `# RPC同時goroutine上限[個](default256)` \
-            --session.single true `# 同一ユーザ多重セッション禁止` \
             --match.max_empty_sec 30 `# 空マッチ自動削除[秒](default0)` \
             --runtime.env MAX_LOGIN_RATE_PER_SEC=50 `# ログイン制限[人/秒]`
     restart: "no"
