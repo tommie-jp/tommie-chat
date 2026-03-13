@@ -59,18 +59,35 @@ function sleep(ms: number): Promise<void> {
  * N人のプレイヤーを並列で作成する
  * concurrency でバッチサイズを制御（WebSocket接続の同時数を抑える）
  */
-async function createPlayers(prefix: string, count: number, concurrency = 50): Promise<PlayerConn[]> {
+async function createPlayers(prefix: string, count: number, batchSize = 40): Promise<PlayerConn[]> {
     const players: PlayerConn[] = [];
-    for (let offset = 0; offset < count; offset += concurrency) {
-        const batch = Math.min(concurrency, count - offset);
+    for (let offset = 0; offset < count; offset += batchSize) {
+        const batch = Math.min(batchSize, count - offset);
         const promises: Promise<PlayerConn>[] = [];
         for (let i = 0; i < batch; i++) {
-            const idx = offset + i;
-            promises.push(createPlayer(`${prefix}_${idx}`));
+            promises.push(createPlayer(`${prefix}_${offset + i}`));
         }
-        const results = await Promise.all(promises);
-        players.push(...results);
+        const results = await Promise.allSettled(promises);
+        let rejected = 0;
+        for (const r of results) {
+            if (r.status === 'fulfilled') {
+                players.push(r.value);
+            } else {
+                rejected++;
+                const msg = String(r.reason);
+                if (msg.includes('too many logins')) {
+                    console.error(`⚠️ RATE LIMITED: ${msg}`);
+                } else {
+                    console.error(`❌ LOGIN ERROR: ${msg}`);
+                }
+            }
+        }
+        if (rejected > 0) {
+            console.error(`⚠️ バッチ ${offset}〜${offset + batch}: ${rejected}人失敗`);
+        }
+        if (offset + batchSize < count) await sleep(1000);
     }
+    console.log(`  createPlayers: ${players.length}/${count}人成功`);
     return players;
 }
 
@@ -122,8 +139,8 @@ for (const N of CONCURRENCY_LEVELS) {
         afterAll(async () => {
             await cleanupAll(players);
             players = [];
-            // サーバ側の切断処理完了を待つ
-            await sleep(2000);
+            // サーバ側の切断処理＋レート制限リセットを待つ
+            await sleep(3000);
         }, 30_000);
 
         it(`${N}人が全員ログイン成功する`, async () => {
@@ -132,7 +149,8 @@ for (const N of CONCURRENCY_LEVELS) {
             const elapsed = performance.now() - t0;
 
             // 全員のsessionIdが存在する
-            expect(players.length).toBe(N);
+            const missing = N - players.length;
+            expect(players.length, `${N}人中${players.length}人のみログイン成功 (${missing}人失敗 — レート制限の可能性あり)`).toBe(N);
             for (const p of players) {
                 expect(p.sessionId).toBeTruthy();
                 expect(p.matchId).toBeTruthy();

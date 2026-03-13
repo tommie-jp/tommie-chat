@@ -77,7 +77,7 @@ const failed = json.numFailedTests;
 const total = json.numTotalTests;
 const durationMs = (json.testResults[0]?.endTime - json.testResults[0]?.startTime) || 0;
 const duration = durationMs >= 60000 ? (durationMs / 60000).toFixed(1) + 'min' : (durationMs / 1000).toFixed(1) + 's';
-const allPass = failed === 0;
+const allPass = failed === 0 && passed > 0;
 
 lines.push('# Nakama 接続維持テスト レポート');
 lines.push('');
@@ -107,9 +107,9 @@ lines.push('');
 
 const suites = json.testResults[0]?.assertionResults || [];
 for (const t of suites) {
-    const icon = t.status === 'passed' ? '✅' : '❌';
+    const icon = t.status === 'passed' ? '✅' : t.status === 'skipped' ? '⏭️' : '❌';
     const durMs = t.duration;
-    const dur = durMs >= 60000 ? (durMs / 60000).toFixed(1) + 'min' : durMs >= 1000 ? (durMs / 1000).toFixed(1) + 's' : Math.round(durMs) + 'ms';
+    const dur = durMs == null || isNaN(durMs) ? '-' : durMs >= 60000 ? (durMs / 60000).toFixed(1) + 'min' : durMs >= 1000 ? (durMs / 1000).toFixed(1) + 's' : Math.round(durMs) + 'ms';
     lines.push('- ' + icon + ' **' + t.ancestorTitles.join(' > ') + '** > ' + t.title + ' (' + dur + ')');
 }
 

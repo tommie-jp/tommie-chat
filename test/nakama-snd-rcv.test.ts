@@ -37,9 +37,12 @@ const AOI_RADIUS  = 48;
 
 const clientLogs: { player: string; line: string }[] = [];
 
+// 大人数テスト(100人超)ではAOI_ENTERログ・イベント蓄積を抑制しメモリ節約
+let _lightMode = false;
+
 function ts(): string {
     const d = new Date();
-    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${Math.floor(d.getMilliseconds() / 100)}`;
 }
 
 function clog(player: string, msg: string): void {
@@ -100,6 +103,17 @@ async function loginAndJoin(name: string, x = 0, z = 0): Promise<PlayerConn> {
     // joinMatch より前に登録（MatchJoin直後のサーバー通知を取りこぼさないため）
     socket.onmatchdata = (md: MatchData) => {
         const senderSid = md.presence?.session_id ?? null;
+        if (_lightMode) {
+            // 大人数モード: AOI_ENTER は蓄積・ログともにスキップ（メモリ節約）
+            if (md.op_code === OP_AOI_ENTER) return;
+            const shortSnd = senderSid ? senderSid.slice(0, 8) : '(srv)';
+            clog(name, `rcv matchdata op=${md.op_code} sid=${shortSnd}`);
+            try {
+                const payload = JSON.parse(new TextDecoder().decode(md.data));
+                receivedEvents.push({ op: md.op_code, payload, senderSid });
+            } catch { /* ignore */ }
+            return;
+        }
         const shortSnd = senderSid ? senderSid.slice(0, 8) : '(srv)';
         clog(name, `rcv matchdata op=${md.op_code} sid=${shortSnd}`);
         try {
@@ -384,7 +398,11 @@ describe('opAvatarChange テスト', { timeout: 30_000 }, () => {
 
 // ── N人ログインテスト（汎用） ──
 
+const _loginRatePerSec = parseInt(process.env['LOGIN_RATE_PER_SEC'] ?? '0', 10);
+
 async function loginNPlayers(label: string, count: number): Promise<PlayerConn[]> {
+    // 100人超: AOI_ENTERイベント蓄積を無効化（メモリ節約）
+    if (count > 100) _lightMode = true;
     if (count <= 10) {
         const players: PlayerConn[] = [];
         for (let i = 0; i < count; i++) {
@@ -393,16 +411,46 @@ async function loginNPlayers(label: string, count: number): Promise<PlayerConn[]
         }
         return players;
     }
-    // 大人数: 並列ログイン
-    const results = await Promise.allSettled(
-        Array.from({ length: count }, (_, i) => loginAndJoin(`${label}${i + 1}`, 0, 0))
-    );
-    return results.flatMap(r => r.status === 'fulfilled' ? [r.value] : []);
+    // 大人数: レート制限あり → N件/秒バッチ、なし → 全並列
+    const batchSize = _loginRatePerSec > 0 ? _loginRatePerSec : count;
+    const players: PlayerConn[] = [];
+    let rateLimited = 0;
+    let otherErrors = 0;
+    for (let i = 0; i < count; i += batchSize) {
+        const batch = Array.from(
+            { length: Math.min(batchSize, count - i) },
+            (_, j) => loginAndJoin(`${label}${i + j + 1}`, 0, 0)
+        );
+        const results = await Promise.allSettled(batch);
+        for (const r of results) {
+            if (r.status === 'fulfilled') {
+                players.push(r.value);
+            } else {
+                const msg = String(r.reason);
+                if (msg.includes('too many logins')) {
+                    rateLimited++;
+                    console.error(`⚠️ RATE LIMITED: ${msg}`);
+                } else {
+                    otherErrors++;
+                    console.error(`❌ LOGIN ERROR: ${msg}`);
+                }
+            }
+        }
+        if (i + batchSize < count) await sleep(1000);
+    }
+    if (rateLimited > 0) {
+        console.error(`\n⚠️ レート制限で ${rateLimited}人が拒否されました (サーバ MAX_LOGIN_RATE_PER_SEC=${_loginRatePerSec || '?'}, クライアント batch=${batchSize}人/秒)`);
+    }
+    if (otherErrors > 0) {
+        console.error(`\n❌ その他のログインエラー: ${otherErrors}件`);
+    }
+    return players;
 }
 
 function makeNPlayerLoginTest(count: number): void {
     const label = `multi${count}_`;
-    const timeoutMs = count <= 10 ? 30_000 : count <= 100 ? 120_000 : 360_000;
+    const _envTimeout = parseInt(process.env['TEST_TIMEOUT_MS'] ?? '0', 10);
+    const timeoutMs = _envTimeout > 0 ? _envTimeout : count <= 10 ? 90_000 : count <= 100 ? 360_000 : 1_080_000;
 
     describe(`${count}人ログインテスト`, { timeout: timeoutMs }, () => {
         let players: PlayerConn[] = [];
@@ -410,7 +458,7 @@ function makeNPlayerLoginTest(count: number): void {
         beforeAll(async () => {
             players = await loginNPlayers(label, count);
             await sleep(count <= 10 ? 500 : 5000);
-        });
+        }, timeoutMs);
 
         afterAll(async () => {
             for (const p of players) {
@@ -422,7 +470,8 @@ function makeNPlayerLoginTest(count: number): void {
         });
 
         it(`${count}人全員がログインできる`, () => {
-            expect(players.length, `${count}人ログインできる`).toBe(count);
+            const missing = count - players.length;
+            expect(players.length, `${count}人中${players.length}人のみログイン成功 (${missing}人失敗 — レート制限の可能性あり。-r を下げるか MAX_LOGIN_RATE_PER_SEC を上げてください)`).toBe(count);
             for (const p of players) {
                 expect(p.sessionId, `${p.name} sessionId が存在する`).toBeTruthy();
             }

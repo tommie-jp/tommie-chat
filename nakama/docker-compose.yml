@@ -1,4 +1,20 @@
+# tommChat サーバー docker-compose設定
+#
+# Copyright 2026 tommChat. All rights reserved.
+#
+# サービス構成:
+#   postgres   - データベース (ユーザ・マッチ等の永続化)
+#   nakama     - ゲームサーバ (マッチ・WebSocket・RPC)
+#   web        - Nginx (フロントエンド静的ファイル配信)
+#   prometheus - メトリクス収集・監視
+#
+# 起動:   docker compose up -d
+# 停止:   docker compose down
+# 再起動: docker compose restart nakama
+# ログ:   docker compose logs -f nakama
+# 状態:   docker compose ps
 services:
+  # --- PostgreSQL データベース ---
   postgres:
     image: postgres:16-alpine
     environment:
@@ -7,36 +23,58 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
     restart: "no"
     volumes:
-      - data:/var/lib/postgresql/data
+      - data:/var/lib/postgresql/data # DB永続化
     expose:
       - "5432"
     ports:
-      - "5432:5432"
+      - "5432:5432" # ホストからDB直接接続用
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nakama -d nakama"]
       interval: 3s
       timeout: 3s
       retries: 10
+
+  # --- Nakama ゲームサーバ ---
   nakama:
     image: registry.heroiclabs.com/heroiclabs/nakama:3.35.0
     entrypoint:
       - "/bin/sh"
       - "-ecx"
-      - >
-          /nakama/nakama migrate up --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama &&
-          exec /nakama/nakama --name nakama1 --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama --logger.level DEBUG --session.token_expiry_sec 7200 --socket.ping_period_ms 5000 --socket.pong_wait_ms 8000 --socket.write_wait_ms 5000 --shutdown_grace_sec 5 --metrics.prometheus_port 9100 --runtime.env NAKAMA_VERSION=3.35.0 --match.input_queue_size 4096 --match.call_stack_size 1024 --socket.outgoing_queue_size 1024 --runtime.max_count 4096
+      - |
+          /nakama/nakama migrate up \
+            --database.address \
+            nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
+          && exec /nakama/nakama \
+            --name nakama1 \
+            --database.address \
+            nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
+            --logger.level DEBUG \
+            --session.token_expiry_sec 7200 `# セッション有効期限[秒](default3600)` \
+            --socket.ping_period_ms 5000 `# WebSocket ping間隔[ms](default15000)` \
+            --socket.pong_wait_ms 8000 `# pong応答待ち[ms](default25000)` \
+            --socket.write_wait_ms 5000 `# 書込み待ち[ms](default10000)` \
+            --shutdown_grace_sec 5 `# シャットダウン猶予[秒](default0)` \
+            --metrics.prometheus_port 9100 `# Prometheusポート[番号]` \
+            --runtime.env NAKAMA_VERSION=3.35.0 \
+            --match.input_queue_size 8192 `# tick毎メッセージキュー[件](default128)` \
+            --socket.outgoing_queue_size 2048 `# 接続毎送信バッファ[件](default64)` \
+            --socket.max_request_size_bytes 131072 `# 受信メッセージ上限[bytes](default131072)` \
+            --runtime.max_count 8192 `# RPC同時goroutine上限[個](default256)` \
+            --session.single true `# 同一ユーザ多重セッション禁止` \
+            --match.max_empty_sec 30 `# 空マッチ自動削除[秒](default0)` \
+            --runtime.env MAX_LOGIN_RATE_PER_SEC=50 `# ログイン制限[人/秒]`
     restart: "no"
-    stop_grace_period: 10s
+    stop_grace_period: 10s # SIGTERM後の猶予時間
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./:/nakama/data
+      - ./:/nakama/data # Go plugin(.so)とLuaモジュール
     expose:
-      - "7349"
-      - "7350"
-      - "7351"
-      - "9100"
+      - "7349" # gRPC API
+      - "7350" # HTTP API / WebSocket
+      - "7351" # Console(管理画面)
+      - "9100" # Prometheus metrics
     ports:
       - "7349:7349"
       - "7350:7350"
@@ -46,14 +84,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # --- Web フロントエンド配信 ---
   web:
     image: nginx:alpine
     restart: "no"
     volumes:
-      - ../dist:/usr/share/nginx/html:ro
+      - ../dist:/usr/share/nginx/html:ro # ビルド済み静的ファイル
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "80:80"
+
+  # --- Prometheus メトリクス収集 ---
   prometheus:
     image: prom/prometheus
     entrypoint: /bin/sh -c
@@ -78,5 +120,6 @@ services:
       EOF'
     ports:
       - '9090:9090'
+
 volumes:
-  data:
+  data: # PostgreSQL データ永続化ボリューム

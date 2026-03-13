@@ -17,7 +17,46 @@ import (
 	"github.com/heroiclabs/nakama-common/runtime"
 )
 
-var serverUpTime = time.Now().UTC().Format(time.RFC3339)
+
+
+// loginRateLimiter はログイン試行を秒あたりの最大数で制限する
+var loginRateLimiter = newLoginRateLimiter()
+
+type loginRateLimiterT struct {
+	mu       sync.Mutex
+	maxPerSec int
+	window   []time.Time
+}
+
+func newLoginRateLimiter() *loginRateLimiterT {
+	maxPerSec := 50
+	if v := os.Getenv("MAX_LOGIN_RATE_PER_SEC"); v != "" {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+			maxPerSec = n
+		}
+	}
+	logf("loginRateLimiter: MAX_LOGIN_RATE_PER_SEC=%d\n", maxPerSec)
+	return &loginRateLimiterT{maxPerSec: maxPerSec}
+}
+
+func (r *loginRateLimiterT) Allow() bool {
+	now := time.Now()
+	cutoff := now.Add(-time.Second)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// 1秒より古いエントリを削除
+	i := 0
+	for i < len(r.window) && r.window[i].Before(cutoff) {
+		i++
+	}
+	r.window = r.window[i:]
+	if len(r.window) >= r.maxPerSec {
+		return false
+	}
+	r.window = append(r.window, now)
+	return true
+}
 
 // displayNameCache は uid → 表示名 のキャッシュ
 var displayNameCache sync.Map
@@ -44,7 +83,8 @@ func cacheDN(ctx context.Context, nk runtime.NakamaModule, uid string) {
 
 // logf は時刻プレフィックス付きでログを出力する
 func logf(format string, a ...interface{}) {
-	ts := time.Now().Format("15:04:05")
+	now := time.Now()
+	ts := now.Format("15:04:05") + fmt.Sprintf(".%d", now.Nanosecond()/100_000_000)
 	fmt.Printf(ts+" "+format, a...)
 }
 
@@ -491,7 +531,7 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	info := map[string]interface{}{
 		"name":         node,
 		"version":      version,
-		"serverUpTime": serverUpTime,
+		// serverUpTime は運用情報のためクライアントには非公開
 		"playerCount":  playerCount,
 		"worldSize":    worldSize,
 		"chunkSize":    chunkSize,
@@ -630,6 +670,9 @@ func shortSID(sid string) string {
 
 func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presence runtime.Presence, metadata map[string]string) (interface{}, bool, string) {
 	defer prof("MatchJoinAttempt")()
+	if !loginRateLimiter.Allow() {
+		return state, false, "too many logins, try again later"
+	}
 	return state, true, ""
 }
 

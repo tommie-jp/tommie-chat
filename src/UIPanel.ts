@@ -1030,6 +1030,7 @@ export function setupHtmlUI(game: GameScene): void {
             const hint = reason.includes("Failed to parse URL") ? "URLの形式が違います。"
                        : reason === "Failed to fetch"           ? "サーバが稼働していないか、URL、ポート番号が間違っている可能性があります。"
                        : reason.includes("Username is already in use") ? "Device auth error: username conflict. この名前は既に別の認証方式で使用されています。別の名前を試してください。"
+                       : reason.includes("too many logins") ? "サーバが混雑しています。しばらく待ってから再接続してください。"
                        : "";
             addServerLog(host, port, "ログイン失敗", reason, hint);
             if (loginStatus) {

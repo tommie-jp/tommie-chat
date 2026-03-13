@@ -1,12 +1,55 @@
 #!/bin/bash
 # 最大同時接続人数探索スクリプト
-# 150人から10人ずつ増やして、失敗するまで実行する
-# 各人数は3回試行し、2/3以上PASSで合格（WSL2の環境ノイズ対策）
+# 指定した開始人数から増加幅ずつ増やして、失敗するまで実行する
 #
-# 使い方: ./test/doTest-max-players.sh
+# 使い方: ./test/doTest-max-players.sh [-s S] [--step D] [-r R] [--trials N] [-h]
 # 前提: cd nakama && docker compose up -d
 
+# ── 引数パース（set -euo pipefail 前） ──
+LOGIN_RATE=40       # 秒あたりのログイン数（0=無制限, サーバ側MAX_LOGIN_RATE_PER_SEC未満にすること）
+TRIALS=1            # 試行回数（1=多数決なし）
+START=100           # 開始人数
+STEP=10             # 増加幅
+VERBOSE=0           # 1=全ログ出力（間引きなし）
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -r|--rate)
+            LOGIN_RATE="${2:-40}"
+            shift 2 ;;
+        --trials)
+            TRIALS="${2:-1}"
+            shift 2 ;;
+        -s|--start)
+            START="${2:-100}"
+            shift 2 ;;
+        --step)
+            STEP="${2:-10}"
+            shift 2 ;;
+        -v|--verbose)
+            VERBOSE=1
+            shift ;;
+        -h|--help)
+            echo "使い方: ./test/doTest-max-players.sh [-r R] [--trials N] [-s S] [--step D] [-v] [-h]"
+            echo ""
+            echo "オプション:"
+            echo "  -r R, --rate R     秒あたりのログイン数 (デフォルト: 40)"
+            echo "  --trials N         試行回数、過半数PASSで合格 (デフォルト: 1=多数決なし)"
+            echo "                     例: --trials 3 → 3回中2回以上PASSで合格"
+            echo "  -s S, --start S    開始人数 (デフォルト: 100)"
+            echo "  --step D           増加幅 (デフォルト: 10)"
+            echo "  -v, --verbose      全ログ出力（間引きなし）"
+            echo "  -h                 このヘルプを表示"
+            exit 0 ;;
+        *)
+            echo "不明なオプション: $1  (-h でヘルプ表示)"; exit 1 ;;
+    esac
+done
+
 set -uo pipefail
+
+# PASS_NEEDED = ceil(TRIALS / 2)
+PASS_NEEDED=$(( (TRIALS + 1) / 2 ))
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/log"
@@ -16,18 +59,85 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="$LOG_DIR/max-players-${TIMESTAMP}.md"
 SYMLINK="$LOG_DIR/05-max-players.md"
 
-START=100
-STEP=10
-TRIALS=3
-PASS_NEEDED=2
-
 # ── ANSI除去 ──
 strip_ansi() { sed 's/\x1b\[[0-9;]*[mGKHF]//g'; }
 
+# ── 出力制御 ──
+GREEN=$'\e[32m'
+RESET=$'\e[0m'
+CHILD_PID=0
+_TMP_OUT="/tmp/doTest-max-out-$$"
+_TMP_CHUNK="/tmp/doTest-max-chunk-$$"
+
+cleanup_and_exit() {
+    echo ""
+    echo "⚠️ Ctrl+C: テスト中断"
+    if [ $CHILD_PID -ne 0 ]; then
+        kill -TERM -- -$CHILD_PID 2>/dev/null
+        sleep 0.5
+        kill -KILL -- -$CHILD_PID 2>/dev/null
+    fi
+    rm -f "$_TMP_OUT" "$_TMP_CHUNK"
+    exit 130
+}
+trap cleanup_and_exit INT
+
+# 子プロセスを実行し、出力を間引いて表示（毎秒緑ステータス付き）
+# 引数: label est_sec command...
+run_with_throttle() {
+    local label="$1"
+    local est_sec="$2"
+    shift 2
+    > "$_TMP_OUT"
+
+    setsid "$@" >> "$_TMP_OUT" 2>&1 &
+    CHILD_PID=$!
+
+    local last_bytes=0 elapsed=0
+    while kill -0 "$CHILD_PID" 2>/dev/null; do
+        sleep 1
+        elapsed=$((elapsed + 1))
+
+        local cur_bytes
+        cur_bytes=$(wc -c < "$_TMP_OUT")
+
+        if [ "$cur_bytes" -gt "$last_bytes" ]; then
+            tail -c +"$((last_bytes + 1))" "$_TMP_OUT" > "$_TMP_CHUNK"
+            # 重要行のみ表示
+            grep -E '✅|❌|⚠|PASS|FAIL|[Ee]rror|Tests |成功|失敗|レート|timeout|タイムアウト|passed|failed|Phase|━━' "$_TMP_CHUNK" | head -n 10 || true
+            last_bytes=$cur_bytes
+        fi
+
+        # 毎秒緑でステータス表示（予測残り時間付き）
+        local remaining=$((est_sec - elapsed))
+        if [ $remaining -gt 0 ]; then
+            echo "${GREEN}${label} ${elapsed}s (終了まであと${remaining}秒見込み)${RESET}"
+        else
+            local over=$((elapsed - est_sec))
+            echo "${GREEN}${label} ${elapsed}s (予測超過+${over}秒)${RESET}"
+        fi
+    done
+
+    # 残りの出力から重要行を表示
+    local final_bytes
+    final_bytes=$(wc -c < "$_TMP_OUT")
+    if [ "$final_bytes" -gt "$last_bytes" ]; then
+        tail -c +"$((last_bytes + 1))" "$_TMP_OUT" > "$_TMP_CHUNK"
+        grep -E '✅|❌|⚠|PASS|FAIL|[Ee]rror|Tests |成功|失敗|レート|timeout|タイムアウト|passed|failed|Phase|━━' "$_TMP_CHUNK" | head -n 10 || true
+    fi
+
+    wait $CHILD_PID 2>/dev/null
+    local rc=$?
+    CHILD_PID=0
+    return $rc
+}
+
+SCRIPT_VERSION=$(date -r "$0" +%Y-%m-%d_%H:%M:%S)
 echo "========================================="
-echo "最大同時接続人数探索"
+echo "最大同時接続人数探索  (script: ${SCRIPT_VERSION})"
 echo "  開始: ${START}人  増加幅: ${STEP}人"
 echo "  試行回数: ${TRIALS}回中${PASS_NEEDED}回以上PASSで合格"
+echo "  ログインレート: $([ "${LOGIN_RATE}" -gt 0 ] && echo "${LOGIN_RATE}人/秒" || echo "無制限")"
 echo "  レポート: $LOGFILE"
 echo "========================================="
 echo ""
@@ -53,7 +163,14 @@ while true; do
         prev_report=$(ls -t "$LOG_DIR"/snd-rcv-*.md 2>/dev/null | head -1 || true)
 
         set +e
-        "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n"
+        if [ "$VERBOSE" -eq 1 ]; then
+            "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE"
+        else
+            # 予測時間: ログイン(n/rate) + 固定オーバーヘッド(40秒) + 人数比例オーバーヘッド(n/50秒)
+            # AOI処理・logout・整合性チェック等が人数に比例して増加
+            est_sec=$(( n / (LOGIN_RATE > 0 ? LOGIN_RATE : 40) + 40 + n / 50 ))
+            run_with_throttle "${n}人 試行${trial}/${TRIALS}" "$est_sec" "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE"
+        fi
         rc=$?
         set -e
 
@@ -132,6 +249,7 @@ fi
     echo "| 開始人数 | ${START}人 |"
     echo "| 増加幅 | ${STEP}人 |"
     echo "| 試行方式 | ${TRIALS}回中${PASS_NEEDED}回以上PASSで合格 |"
+    echo "| ログインレート | $([ "${LOGIN_RATE}" -gt 0 ] && echo "${LOGIN_RATE}人/秒" || echo "無制限") |"
     echo "| **最大成功人数** | **${FINAL_LABEL}** |"
     echo ""
 
@@ -184,6 +302,7 @@ fi
 } > "$LOGFILE"
 
 ln -sf "$(basename "$LOGFILE")" "$SYMLINK"
+rm -f "$_TMP_OUT" "$_TMP_CHUNK"
 
 echo "========================================="
 echo "最終結果: ${FINAL_LABEL}"

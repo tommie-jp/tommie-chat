@@ -8,18 +8,24 @@
 # ── 引数パース（set -euo pipefail 前） ──
 PLAYERS_FILTER=""   # 指定人数のみ実行（空=全フェーズ）
 WITH_1000=0
+LOGIN_RATE=40       # 秒あたりのログイン数（0=無制限, サーバ側MAX_LOGIN_RATE_PER_SEC未満にすること）
+TIMEOUT_SEC=0       # テストタイムアウト秒（0=デフォルト値を使用）
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
             cat <<'EOF'
-使い方: ./test/doTest-snd-rcv.sh [-n N] [--1000] [-h]
+使い方: ./test/doTest-snd-rcv.sh [-n N] [-r R] [--1000] [-h]
 
 snd/rcv 整合性テストを実行します。
 サーバログとクライアントログを並行取得し、各 snd/rcv ペアの整合性を確認します。
 
 オプション:
   -n N, --players N   N人ログインテストのみ実行 (N: 1|2|3|10|100|1000)
+  -r R, --rate R      秒あたりのログイン数を指定 (デフォルト: 100)
+                      例: -r 50 → 50人/秒でバッチログイン
+  -t T, --timeout T   テストタイムアウトを秒単位で指定 (デフォルト: 人数に応じて自動)
+                      例: -t 600 → 600秒タイムアウト
   --1000              1000人テストをデフォルト実行に追加
   -h                  このヘルプを表示して終了
 
@@ -97,6 +103,12 @@ EOF
         -n|--players)
             PLAYERS_FILTER="${2:-}"
             shift 2 ;;
+        -r|--rate)
+            LOGIN_RATE="${2:-0}"
+            shift 2 ;;
+        -t|--timeout)
+            TIMEOUT_SEC="${2:-0}"
+            shift 2 ;;
         --1000)
             WITH_1000=1
             shift ;;
@@ -106,6 +118,10 @@ EOF
 done
 
 set -euo pipefail
+export LOGIN_RATE_PER_SEC="$LOGIN_RATE"
+export TEST_TIMEOUT_MS=$(( TIMEOUT_SEC > 0 ? TIMEOUT_SEC * 1000 : 0 ))
+# V8ヒープ上限を拡張（vitest親プロセス + worker両方に適用）
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=8192"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 LOG_DIR="$SCRIPT_DIR/log"
@@ -180,7 +196,7 @@ echo "--- Go プラグインビルド ---"
 restart_server() {
     echo "  nakama サーバ再起動..."
     cd "$ROOT_DIR/nakama"
-    docker compose restart nakama
+    docker compose restart -t 3 nakama
     # ヘルスチェック（最大30秒）
     local i
     for i in $(seq 1 30); do
@@ -190,7 +206,7 @@ restart_server() {
         fi
         sleep 1
     done
-    sleep 2
+    sleep 1
 }
 
 # ── サーバログ取得開始 ──
@@ -435,6 +451,8 @@ md_phase() {
     echo "| 日時 | ${DATE_FMT} |"
     echo "| サーバ | 127.0.0.1:7350 |"
     echo "| 実行フェーズ | ${PHASES_TO_RUN} |"
+    echo "| ログインレート | $([ "${LOGIN_RATE_PER_SEC}" -gt 0 ] && echo "${LOGIN_RATE_PER_SEC}人/秒" || echo "無制限") |"
+    echo "| タイムアウト | $([ "${TEST_TIMEOUT_MS}" -gt 0 ] && echo "$((TEST_TIMEOUT_MS / 1000))秒" || echo "自動") |"
     echo "| 結果 | ${RESULT_LABEL} |"
     echo ""
 

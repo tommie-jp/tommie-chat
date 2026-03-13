@@ -139,16 +139,35 @@ function sleep(ms: number): Promise<void> {
     return new Promise(r => setTimeout(r, ms));
 }
 
-async function createPlayers(prefix: string, count: number, concurrency = 50): Promise<PlayerConn[]> {
+async function createPlayers(prefix: string, count: number, batchSize = 40): Promise<PlayerConn[]> {
     const players: PlayerConn[] = [];
-    for (let offset = 0; offset < count; offset += concurrency) {
-        const batch = Math.min(concurrency, count - offset);
+    for (let offset = 0; offset < count; offset += batchSize) {
+        const batch = Math.min(batchSize, count - offset);
         const promises: Promise<PlayerConn>[] = [];
         for (let i = 0; i < batch; i++) {
             promises.push(createPlayer(`${prefix}_${offset + i}`));
         }
-        players.push(...await Promise.all(promises));
+        const results = await Promise.allSettled(promises);
+        let rejected = 0;
+        for (const r of results) {
+            if (r.status === 'fulfilled') {
+                players.push(r.value);
+            } else {
+                rejected++;
+                const msg = String(r.reason);
+                if (msg.includes('too many logins')) {
+                    console.error(`⚠️ RATE LIMITED: ${msg}`);
+                } else {
+                    console.error(`❌ LOGIN ERROR: ${msg}`);
+                }
+            }
+        }
+        if (rejected > 0) {
+            console.error(`⚠️ バッチ ${offset}〜${offset + batch}: ${rejected}人失敗`);
+        }
+        if (offset + batchSize < count) await sleep(1000);
     }
+    console.log(`  createPlayers: ${players.length}/${count}人成功`);
     return players;
 }
 
