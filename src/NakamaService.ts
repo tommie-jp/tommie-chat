@@ -3,14 +3,21 @@ import { prof } from "./Profiler";
 
 const CHAT_ROOM = "world";
 const CHAT_TYPE = 1; // 1=Room, 2=DM, 3=Group
-const OP_INIT_POS      = 1; // ログイン時の初期位置
-const OP_MOVE_TARGET   = 2; // クリック移動の目標位置
-const OP_AVATAR_CHANGE = 3; // アバターテクスチャ変更
-const OP_BLOCK_UPDATE  = 4; // ブロック設置/削除通知
-const OP_AOI_UPDATE    = 5; // AOI（チャンク範囲）更新
-const OP_AOI_ENTER     = 6; // AOI内に入ったプレイヤー情報
-const OP_AOI_LEAVE     = 7; // AOI外に出たプレイヤー通知
-const OP_DISPLAY_NAME  = 8; // 表示名変更通知
+// matchデータ opコード（WebSocket sendMatchState 経由の双方向メッセージ）
+// MatchLoop のメッセージキューで処理。同一接続内で送信順が保証される。
+// RPC と異なり非同期応答（別opコード）で結果を返す。
+const OP_INIT_POS          = 1;  // C→S     ログイン時の初期位置・表示名・テクスチャ・loginTime
+const OP_MOVE_TARGET       = 2;  // C→S→C   クリック移動の目標位置（AOI内ブロードキャスト）
+const OP_AVATAR_CHANGE     = 3;  // C→S→C   アバターテクスチャ変更（AOI内ブロードキャスト）
+const OP_BLOCK_UPDATE      = 4;  // C→S→C   ブロック設置/削除（AOI内ブロードキャスト＋Storage保存）
+const OP_AOI_UPDATE        = 5;  // C→S     AOI範囲更新（チャンク座標）
+const OP_AOI_ENTER         = 6;  // S→C     プレイヤーがAOI内に入った（位置のみ）
+const OP_AOI_LEAVE         = 7;  // S→C     プレイヤーがAOI外に出た
+const OP_DISPLAY_NAME      = 8;  // C→S→C   表示名変更（全員ブロードキャスト）
+const OP_PROFILE_REQUEST   = 9;  // C→S     プロフィール要求（sessionId[]）
+const OP_PROFILE_RESPONSE  = 10; // S→C     プロフィール応答（要求者のみ）
+const OP_PLAYERS_AOI_REQ   = 11; // C→S     全プレイヤーAOI情報要求
+const OP_PLAYERS_AOI_RESP  = 12; // S→C     全プレイヤーAOI情報応答（要求者のみ）
 
 export class NakamaService {
     private client: Client;
@@ -34,8 +41,10 @@ export class NakamaService {
     onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
     onAvatarChange?:     (sessionId: string, textureUrl: string) => void;
     onBlockUpdate?:      (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => void;
-    onAOIEnter?:         (sessionId: string, x: number, z: number, ry: number, textureUrl: string, displayName: string) => void;
+    onAOIEnter?:         (sessionId: string, x: number, z: number, ry: number) => void;
     onAOILeave?:         (sessionId: string) => void;
+    onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; loginTime: string }[]) => void;
+    onPlayersAOIResponse?: (players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void;
     onDisplayName?:      (sessionId: string, displayName: string) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
@@ -92,7 +101,7 @@ export class NakamaService {
         // ch.self.session_id は他ユーザのプレゼンスに見える session_id と一致する
         const selfSessionId = ch.self?.session_id ?? "";
         this.selfSessionId = selfSessionId;
-        try { await this.storeLoginTime(selfSessionId); } catch { /* ignore */ }
+        this.loginTimeISO = new Date().toISOString();
 
         // 自分自身を先に追加（ch.presences には自分が含まれない）
         if (ch.self) {
@@ -192,14 +201,22 @@ export class NakamaService {
                     this.onBlockUpdate?.(blk.gx, blk.gz, blk.blockId, blk.r ?? 255, blk.g ?? 255, blk.b ?? 255, blk.a ?? 255);
                 } else if (md.op_code === OP_AOI_ENTER) {
                     // バルク対応: サーバは配列で送信、後方互換のため単一オブジェクトも受け付ける
-                    type AoiEntry = { sessionId: string; x: number; z: number; ry?: number; textureUrl?: string; displayName?: string };
+                    type AoiEntry = { sessionId: string; x: number; z: number; ry?: number };
                     const entries: AoiEntry[] = Array.isArray(payload) ? payload : [payload];
                     for (const e of entries) {
-                        this.onAOIEnter?.(e.sessionId, e.x, e.z, e.ry ?? 0, e.textureUrl ?? "", e.displayName ?? "");
+                        this.onAOIEnter?.(e.sessionId, e.x, e.z, e.ry ?? 0);
                     }
                 } else if (md.op_code === OP_AOI_LEAVE) {
                     const e = payload as { sessionId: string };
                     this.onAOILeave?.(e.sessionId);
+                } else if (md.op_code === OP_PROFILE_RESPONSE) {
+                    const resp = payload as { profiles: { sessionId: string; displayName: string; textureUrl: string; loginTime: string }[] };
+                    this.onProfileResponse?.(resp.profiles ?? []);
+                } else if (md.op_code === OP_PLAYERS_AOI_RESP) {
+                    const resp = payload as { players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[] };
+                    const players = resp.players ?? [];
+                    if (this._aoiResolve) { this._aoiResolve(players); this._aoiResolve = null; }
+                    this.onPlayersAOIResponse?.(players);
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
                     const dn = payload as { displayName: string };
                     this.onDisplayName?.(sid, dn.displayName);
@@ -297,6 +314,17 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    async sendProfileRequest(sessionIds: string[]): Promise<void> {
+        const _end = prof("NakamaService.sendProfileRequest");
+        try {
+        console.log(`snd profileRequest sids=${sessionIds.map(s => s.slice(0, 8)).join(",")}`);
+        if (!this.socket || !this.matchId || sessionIds.length === 0) return;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_PROFILE_REQUEST, new TextEncoder().encode(JSON.stringify({ sessionIds })));
+        } catch { /* ignore */ }
+        } finally { _end(); }
+    }
+
     async sendChatMessage(text: string): Promise<void> {
         const _end = prof("NakamaService.sendChatMessage");
         try {
@@ -349,6 +377,7 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+
     async getServerInfo(): Promise<string> {
         const _end = prof("NakamaService.getServerInfo");
         try {
@@ -386,23 +415,12 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    private async storeLoginTime(sessionId: string): Promise<void> {
-        const _end = prof("NakamaService.storeLoginTime");
-        try {
-        console.log(`snd storeLoginTime sessionId=${sessionId.slice(0, 8)}`);
-        if (!this.socket) return;
-        this.loginTimeISO = new Date().toISOString();
-        await this.socket.rpc("storeLoginTime", JSON.stringify({ sessionId, loginTime: this.loginTimeISO }));
-        } finally { _end(); }
-    }
-
-
     async setBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): Promise<void> {
         const _end = prof("NakamaService.setBlock");
         try {
         console.log(`snd setBlock gx=${gx} gz=${gz} blockId=${blockId} rgba=(${r},${g},${b},${a})`);
-        if (!this.socket) return;
-        await this.socket.rpc("setBlock", JSON.stringify({ gx, gz, blockId, r, g, b, a }));
+        if (!this.socket || !this.matchId) return;
+        await this.socket.sendMatchState(this.matchId, OP_BLOCK_UPDATE, JSON.stringify({ gx, gz, blockId, r, g, b, a }));
         } finally { _end(); }
     }
 
@@ -477,20 +495,19 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    // 全プレイヤーのAOI情報を取得
+    // 全プレイヤーのAOI情報を取得（matchデータ方式: 要求→応答）
+    private _aoiResolve: ((players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void) | null = null;
     async getPlayersAOI(): Promise<{ sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]> {
         const _end = prof("NakamaService.getPlayersAOI");
         try {
         console.log("snd getPlayersAOI");
-        if (!this.socket) return [];
-        try {
-            const result = await this.socket.rpc("getPlayersAOI");
-            if (!result?.payload) return [];
-            const data = JSON.parse(result.payload) as { players?: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[] };
-            return data.players ?? [];
-        } catch {
-            return [];
-        }
+        if (!this.socket || !this.matchId) return [];
+        const promise = new Promise<{ sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]>((resolve) => {
+            this._aoiResolve = resolve;
+            setTimeout(() => { if (this._aoiResolve === resolve) { this._aoiResolve = null; resolve([]); } }, 3000);
+        });
+        await this.socket.sendMatchState(this.matchId, OP_PLAYERS_AOI_REQ, "{}");
+        return promise;
         } finally { _end(); }
     }
 

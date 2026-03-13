@@ -175,14 +175,21 @@ const (
 	chunkSize               = 16 // 1チャンク = 16x16セル
 	chunkCount              = 64 // 64x64チャンク
 	worldSize               = chunkSize * chunkCount // 1024x1024セル
-	opInitPos      int64 = 1
-	opMoveTarget   int64 = 2
-	opAvatarChange int64 = 3
-	opBlockUpdate  int64 = 4
-	opAOIUpdate    int64 = 5
-	opAOIEnter     int64 = 6 // AOI内に入ったプレイヤー情報
-	opAOILeave     int64 = 7 // AOI外に出たプレイヤー通知
-	opDisplayName  int64 = 8 // 表示名変更通知
+	// matchデータ opコード（WebSocket sendMatchState 経由の双方向メッセージ）
+	// MatchLoop のメッセージキューで処理。同一接続内で送信順が保証される。
+	// RPC と異なり非同期応答（別opコード）で結果を返す。
+	opInitPos          int64 = 1  // C→S     ログイン時の初期位置・表示名・テクスチャ・loginTime
+	opMoveTarget       int64 = 2  // C→S→C   クリック移動の目標位置（AOI内ブロードキャスト）
+	opAvatarChange     int64 = 3  // C→S→C   アバターテクスチャ変更（AOI内ブロードキャスト）
+	opBlockUpdate      int64 = 4  // C→S→C   ブロック設置/削除（AOI内ブロードキャスト＋Storage保存）
+	opAOIUpdate        int64 = 5  // C→S     AOI範囲更新（チャンク座標）
+	opAOIEnter         int64 = 6  // S→C     プレイヤーがAOI内に入った（位置のみ）
+	opAOILeave         int64 = 7  // S→C     プレイヤーがAOI外に出た
+	opDisplayName      int64 = 8  // C→S→C   表示名変更（全員ブロードキャスト）
+	opProfileRequest   int64 = 9  // C→S     プロフィール要求（sessionId[]）
+	opProfileResponse  int64 = 10 // S→C     プロフィール応答（要求者のみ）
+	opPlayersAOIReq    int64 = 11 // C→S     全プレイヤーAOI情報要求
+	opPlayersAOIResp   int64 = 12 // S→C     全プレイヤーAOI情報応答（要求者のみ）
 )
 
 // 地面セル: blockID (uint16) + RGBA 各1バイト
@@ -637,6 +644,7 @@ type playerPos struct {
 	RY          float64 // 回転
 	TextureUrl  string  // アバターテクスチャ
 	DisplayName string  // 表示名
+	LoginTime   string  // ログイン時刻(ISO8601)
 }
 
 // matchState はマッチの状態（プレイヤーごとのAOI管理）
@@ -802,12 +810,10 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					// このプレイヤーが新しく見えるようになった → バルクリストに追加
 					logf("snd AOI_ENTER uid=%s%s sid=%s about=%s\n", toUID, dn(toUID), shortSID(sid), shortSID(otherSID))
 					enterBulk = append(enterBulk, map[string]interface{}{
-						"sessionId":   otherSID,
-						"x":           otherPos.X,
-						"z":           otherPos.Z,
-						"ry":          otherPos.RY,
-						"textureUrl":  otherPos.TextureUrl,
-						"displayName": otherPos.DisplayName,
+						"sessionId": otherSID,
+						"x":         otherPos.X,
+						"z":         otherPos.Z,
+						"ry":        otherPos.RY,
 					})
 				} else if wasVisible && !nowVisible {
 					// このプレイヤーがAOI外に出た → OP_AOI_LEAVE を送信
@@ -833,6 +839,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				RY          float64 `json:"ry"`
 				TextureUrl  string  `json:"tx"`
 				DisplayName string  `json:"dn"`
+				LoginTime   string  `json:"lt"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &pos); err == nil {
 				initUID := ""
@@ -851,8 +858,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					p.CX = cx; p.CZ = cz; p.X = pos.X; p.Z = pos.Z; p.RY = pos.RY
 					if pos.TextureUrl != "" { p.TextureUrl = pos.TextureUrl }
 					if pos.DisplayName != "" { p.DisplayName = pos.DisplayName }
+					if pos.LoginTime != "" { p.LoginTime = pos.LoginTime }
 				} else {
-					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, DisplayName: pos.DisplayName}
+					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime}
 				}
 				logf("rcv DBG INIT_POS sid=%s oldCX=%d newCX=%d oldCZ=%d newCZ=%d\n", shortSID(sid), oldCX, cx, oldCZ, cz)
 				// チャンクが変わった場合、他プレイヤーのAOIへの入退場を通知（opMoveTargetと同様）
@@ -876,12 +884,10 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					if len(enterTargets) > 0 {
 						myPos := ms.Positions[sid]
 						entry := map[string]interface{}{
-							"sessionId":   sid,
-							"x":           myPos.X,
-							"z":           myPos.Z,
-							"ry":          myPos.RY,
-							"textureUrl":  myPos.TextureUrl,
-							"displayName": myPos.DisplayName,
+							"sessionId": sid,
+							"x":         myPos.X,
+							"z":         myPos.Z,
+							"ry":        myPos.RY,
 						}
 						// AOI_ENTER をバッファに積む（aoiEnterFlushTicks 後にバルクフラッシュ）
 						for _, otherP := range enterTargets {
@@ -947,12 +953,10 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 							if otherP, ok := ms.Presences[otherSID]; ok {
 								myPos := ms.Positions[sid]
 								enterData, _ := json.Marshal(map[string]interface{}{
-									"sessionId":   sid,
-									"x":           myPos.X,
-									"z":           myPos.Z,
-									"ry":          myPos.RY,
-									"textureUrl":  myPos.TextureUrl,
-									"displayName": myPos.DisplayName,
+									"sessionId": sid,
+									"x":         myPos.X,
+									"z":         myPos.Z,
+									"ry":        myPos.RY,
 								})
 								dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{otherP}, nil, true)
 							}
@@ -998,6 +1002,109 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				if len(targets) > 0 {
 					logf("snd avatarChange:signal sid=%s targets=%d\n", shortSID(sid), len(targets))
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
+				}
+			}
+			continue
+		}
+
+		if op == opBlockUpdate {
+			// ブロック設置/削除: {"gx":...,"gz":...,"blockId":...,"r":...,"g":...,"b":...,"a":...}
+			var req blockReq
+			if err := json.Unmarshal(msg.GetData(), &req); err != nil {
+				continue
+			}
+			logf("rcv setBlock(match) sid=%s gx=%d gz=%d blockId=%d\n", shortSID(sid), req.GX, req.GZ, req.BlockID)
+			if req.GX < 0 || req.GX >= worldSize || req.GZ < 0 || req.GZ >= worldSize {
+				continue
+			}
+			a := req.A
+			if a == 0 { a = 255 }
+			cx := req.GX / chunkSize
+			cz := req.GZ / chunkSize
+			lx := req.GX % chunkSize
+			lz := req.GZ % chunkSize
+			ch := &chunks[cx][cz]
+			ch.mu.Lock()
+			ch.cells[lx][lz] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
+			ch.calcHash()
+			ch.mu.Unlock()
+			go saveChunkToStorage(ctx, nk, logger, cx, cz)
+			// AOI内のプレイヤーにブロードキャスト
+			var targets []runtime.Presence
+			for aoiSid, aoi := range ms.AOIs {
+				if aoi.containsChunk(cx, cz) {
+					if p, ok := ms.Presences[aoiSid]; ok {
+						targets = append(targets, p)
+					}
+				}
+			}
+			if len(targets) > 0 {
+				logf("snd blockUpdate sid=%s chunk=(%d,%d) targets=%d\n", shortSID(sid), cx, cz, len(targets))
+				dispatcher.BroadcastMessage(opBlockUpdate, msg.GetData(), targets, nil, false)
+			}
+			continue
+		}
+
+		if op == opPlayersAOIReq {
+			// 全プレイヤーAOI情報要求 → 応答を送信者に返す
+			type aoiEntry struct {
+				SessionID string  `json:"sessionId"`
+				Username  string  `json:"username"`
+				MinCX     int     `json:"minCX"`
+				MinCZ     int     `json:"minCZ"`
+				MaxCX     int     `json:"maxCX"`
+				MaxCZ     int     `json:"maxCZ"`
+				X         float64 `json:"x"`
+				Z         float64 `json:"z"`
+			}
+			var entries []aoiEntry
+			for aoiSid, aoi := range ms.AOIs {
+				p, ok := ms.Presences[aoiSid]
+				if !ok { continue }
+				var x, z float64
+				if pos, ok := ms.Positions[aoiSid]; ok { x = pos.X; z = pos.Z }
+				entries = append(entries, aoiEntry{
+					SessionID: shortSID(aoiSid), Username: p.GetUsername(),
+					MinCX: aoi.MinCX, MinCZ: aoi.MinCZ, MaxCX: aoi.MaxCX, MaxCZ: aoi.MaxCZ,
+					X: x, Z: z,
+				})
+			}
+			respData, _ := json.Marshal(map[string]interface{}{"players": entries})
+			if senderP, ok := ms.Presences[sid]; ok {
+				dispatcher.BroadcastMessage(opPlayersAOIResp, respData, []runtime.Presence{senderP}, nil, true)
+			}
+			continue
+		}
+
+		if op == opProfileRequest {
+			// プロフィール要求: {"sessionIds":["sid1","sid2",...]}
+			var req struct {
+				SessionIds []string `json:"sessionIds"`
+			}
+			if err := json.Unmarshal(msg.GetData(), &req); err == nil {
+				type profileEntry struct {
+					SessionId   string `json:"sessionId"`
+					DisplayName string `json:"displayName"`
+					TextureUrl  string `json:"textureUrl"`
+					LoginTime   string `json:"loginTime"`
+				}
+				profiles := make([]profileEntry, 0, len(req.SessionIds))
+				for _, reqSid := range req.SessionIds {
+					pos, ok := ms.Positions[reqSid]
+					if !ok {
+						continue
+					}
+					profiles = append(profiles, profileEntry{
+						SessionId:   reqSid,
+						DisplayName: pos.DisplayName,
+						TextureUrl:  pos.TextureUrl,
+						LoginTime:   pos.LoginTime,
+					})
+				}
+				respData, _ := json.Marshal(map[string]interface{}{"profiles": profiles})
+				logf("snd profileResponse sid=%s count=%d\n", shortSID(sid), len(profiles))
+				if senderP, ok := ms.Presences[sid]; ok {
+					dispatcher.BroadcastMessage(opProfileResponse, respData, []runtime.Presence{senderP}, nil, true)
 				}
 			}
 			continue
@@ -1058,86 +1165,8 @@ func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, 
 	return state
 }
 
-func (m *worldMatch) MatchSignal(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, data string) (interface{}, string) {
-	defer prof("MatchSignal")()
-	ms := state.(*matchState)
-
-	// シグナルタイプをルーティング
-	var sig struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal([]byte(data), &sig); err == nil && sig.Type != "" {
-		switch sig.Type {
-		case "getPlayersAOI":
-			return m.handleGetPlayersAOI(ms, data)
-}
-	}
-
-	// デフォルト: ブロック更新シグナル
-	var blk struct {
-		GX int `json:"gx"`
-		GZ int `json:"gz"`
-	}
-	if err := json.Unmarshal([]byte(data), &blk); err != nil {
-		dispatcher.BroadcastMessage(opBlockUpdate, []byte(data), nil, nil, false)
-		return ms, data
-	}
-	cx := blk.GX / chunkSize
-	cz := blk.GZ / chunkSize
-	var targets []runtime.Presence
-	for sid, aoi := range ms.AOIs {
-		if aoi.containsChunk(cx, cz) {
-			if p, ok := ms.Presences[sid]; ok {
-				targets = append(targets, p)
-			}
-		}
-	}
-	logf("snd setBlock:signal chunk=(%d,%d) targets=%d/%d\n", cx, cz, len(targets), len(ms.AOIs))
-	if len(targets) > 0 {
-		if err := dispatcher.BroadcastMessage(opBlockUpdate, []byte(data), targets, nil, false); err != nil {
-			logger.Warn("MatchSignal BroadcastMessage error: %v", err)
-		}
-	}
-	return ms, data
-}
-
-// handleGetPlayersAOI は全プレイヤーのAOI情報を返す
-func (m *worldMatch) handleGetPlayersAOI(ms *matchState, data string) (interface{}, string) {
-	defer prof("handleGetPlayersAOI")()
-	type aoiEntry struct {
-		SessionID  string  `json:"sessionId"`
-		Username   string  `json:"username"`
-		MinCX      int     `json:"minCX"`
-		MinCZ      int     `json:"minCZ"`
-		MaxCX      int     `json:"maxCX"`
-		MaxCZ      int     `json:"maxCZ"`
-		X          float64 `json:"x"`
-		Z          float64 `json:"z"`
-	}
-	var entries []aoiEntry
-	for sid, aoi := range ms.AOIs {
-		p, ok := ms.Presences[sid]
-		if !ok {
-			continue
-		}
-		var x, z float64
-		if pos, ok := ms.Positions[sid]; ok {
-			x = pos.X
-			z = pos.Z
-		}
-		entries = append(entries, aoiEntry{
-			SessionID: shortSID(sid),
-			Username:  p.GetUsername(),
-			MinCX:     aoi.MinCX,
-			MinCZ:     aoi.MinCZ,
-			MaxCX:     aoi.MaxCX,
-			MaxCZ:     aoi.MaxCZ,
-			X:         x,
-			Z:         z,
-		})
-	}
-	result, _ := json.Marshal(map[string]interface{}{"players": entries})
-	return ms, string(result)
+func (m *worldMatch) MatchSignal(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ runtime.MatchDispatcher, _ int64, state interface{}, data string) (interface{}, string) {
+	return state, data
 }
 
 // rpcPing はクライアントのラウンドトリップ時間計測用 RPC
@@ -1172,21 +1201,6 @@ func rpcGetPlayerCount(ctx context.Context, logger runtime.Logger, db *sql.DB, n
 	return string(b), nil
 }
 
-// rpcGetPlayersAOI は全プレイヤーのAOI情報を返す（MatchSignal経由）
-func rpcGetPlayersAOI(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
-	defer prof("rpcGetPlayersAOI")()
-	matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
-	if err != nil || len(matches) == 0 {
-		return `{"players":[]}`, nil
-	}
-	sigData, _ := json.Marshal(map[string]string{"type": "getPlayersAOI"})
-	result, err := nk.MatchSignal(ctx, matches[0].GetMatchId(), string(sigData))
-	if err != nil {
-		logger.Warn("getPlayersAOI MatchSignal error: %v", err)
-		return `{"players":[]}`, nil
-	}
-	return result, nil
-}
 
 type blockReq struct {
 	GX      int    `json:"gx"`
@@ -1232,54 +1246,6 @@ func dumpGroundTableCSV(logger runtime.Logger) {
 	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
 		logger.Warn("dumpGroundTableCSV WriteFile: %v", err)
 	}
-}
-
-// rpcSetBlock はブロックを地面テーブルに書き込み、全プレイヤーへ通知する
-func rpcSetBlock(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
-	defer prof("rpcSetBlock")()
-	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
-	sid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
-	var req blockReq
-	if err := json.Unmarshal([]byte(payload), &req); err != nil {
-		return "", err
-	}
-	logf("rcv setBlock uid=%s%s sid=%s gx=%d gz=%d blockId=%d r=%d g=%d b=%d a=%d\n", uid, dn(uid), shortSID(sid), req.GX, req.GZ, req.BlockID, req.R, req.G, req.B, req.A)
-	if req.GX < 0 || req.GX >= worldSize || req.GZ < 0 || req.GZ >= worldSize {
-		return "", fmt.Errorf("setBlock: out of bounds gx=%d gz=%d", req.GX, req.GZ)
-	}
-	a := req.A
-	if a == 0 {
-		a = 255
-	}
-	// 該当チャンクのみロック
-	cx := req.GX / chunkSize
-	cz := req.GZ / chunkSize
-	lx := req.GX % chunkSize
-	lz := req.GZ % chunkSize
-	ch := &chunks[cx][cz]
-	ch.mu.Lock()
-	ch.cells[lx][lz] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
-	ch.calcHash()
-	ch.mu.Unlock()
-	saveChunkToStorage(ctx, nk, logger, cx, cz)
-	// dumpGroundTableCSV(logger)
-
-	// ワールドマッチへシグナル送信（MatchListはミリ秒以内に作成されたマッチを返さない場合があるためキャッシュ優先）
-	worldMatchMu.Lock()
-	matchID := worldMatchID
-	worldMatchMu.Unlock()
-	if matchID == "" {
-		matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
-		if err != nil || len(matches) == 0 {
-			return "{}", nil
-		}
-		matchID = matches[0].GetMatchId()
-	}
-	sigData, _ := json.Marshal(req)
-	if _, err := nk.MatchSignal(ctx, matchID, string(sigData)); err != nil {
-		logger.Warn("setBlock MatchSignal error: %v", err)
-	}
-	return "{}", nil
 }
 
 // rpcGetGroundChunk は指定チャンクの地面テーブルを返す
@@ -1440,34 +1406,6 @@ func rpcGetDisplayNames(ctx context.Context, logger runtime.Logger, db *sql.DB, 
 	return string(b), nil
 }
 
-func rpcStoreLoginTime(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
-	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
-	if !ok || uid == "" {
-		return "", runtime.NewError("not authenticated", 16)
-	}
-	var req struct {
-		SessionId string `json:"sessionId"`
-		LoginTime string `json:"loginTime"`
-	}
-	if err := json.Unmarshal([]byte(payload), &req); err != nil {
-		return "", runtime.NewError("invalid payload", 3)
-	}
-	ctxSid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
-	logf("rcv storeLoginTime uid=%s%s sid=%s\n", uid, dn(uid), shortSID(ctxSid))
-	value, _ := json.Marshal(map[string]string{"loginTime": req.LoginTime})
-	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
-		Collection:      "user_status",
-		Key:             "login_time_" + req.SessionId,
-		UserID:          uid,
-		Value:           string(value),
-		PermissionRead:  2,
-		PermissionWrite: 1,
-	}}); err != nil {
-		return "", err
-	}
-	return `{"ok":true}`, nil
-}
-
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// ストレージから地面テーブルを復元（チャンク単位）
@@ -1584,9 +1522,6 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	if err := initializer.RegisterRpc("ping", rpcPing); err != nil {
 		return err
 	}
-	if err := initializer.RegisterRpc("setBlock", rpcSetBlock); err != nil {
-		return err
-	}
 	if err := initializer.RegisterRpc("getGroundTable", rpcGetGroundTable); err != nil {
 		return err
 	}
@@ -1594,9 +1529,6 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 	if err := initializer.RegisterRpc("syncChunks", rpcSyncChunks); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("getPlayersAOI", rpcGetPlayersAOI); err != nil {
 		return err
 	}
 	if err := initializer.RegisterRpc("getPlayerCount", rpcGetPlayerCount); err != nil {
@@ -1615,9 +1547,6 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 	if err := initializer.RegisterRpc("getDisplayNames", rpcGetDisplayNames); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("storeLoginTime", rpcStoreLoginTime); err != nil {
 		return err
 	}
 

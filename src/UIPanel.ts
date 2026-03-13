@@ -648,28 +648,77 @@ export function setupHtmlUI(game: GameScene): void {
         const av = game.remoteAvatars.get(sessionId);
         if (av) game.avatarSystem.changeAvatarTexture(av, textureUrl);
     };
-    game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number, textureUrl: string, displayName: string) => {
-        console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tex=${textureUrl} dname=${displayName}`);
-        // プレイヤーリストの表示名は自分自身も含めて更新
-        if (displayName) {
-            const existing = userMap.get(sessionId);
+    // --- プロフィールキャッシュ & debounced matchデータ要求 ---
+    const profileCache = new Map<string, { displayName: string; textureUrl: string; loginTime: string }>();
+    const pendingProfileSids = new Set<string>();
+    let profileFetchTimer: ReturnType<typeof setTimeout> | null = null;
+    const PROFILE_DEBOUNCE_MS = 50;
+    function scheduleProfileFetch() {
+        if (profileFetchTimer) return;
+        profileFetchTimer = setTimeout(() => {
+            profileFetchTimer = null;
+            if (pendingProfileSids.size === 0) return;
+            const sids = [...pendingProfileSids];
+            pendingProfileSids.clear();
+            game.nakama.sendProfileRequest(sids).catch(() => {});
+        }, PROFILE_DEBOUNCE_MS);
+    }
+    // サーバからのプロフィール応答を処理
+    game.nakama.onProfileResponse = (profiles) => {
+        console.log(`rcv profileResponse count=${profiles.length}`);
+        for (const prof of profiles) {
+            const sid = prof.sessionId;
+            console.log(`  profile sid=${sid.slice(0, 8)} dn=${prof.displayName} tx=${prof.textureUrl?.slice(0, 20)} lt=${prof.loginTime}`);
+            profileCache.set(sid, prof);
+            // プレイヤーリスト更新
+            const existing = userMap.get(sid);
             if (existing) {
-                userMap.set(sessionId, { ...existing, displayName });
-                scheduleRenderUserList();
+                const updates: Record<string, unknown> = {};
+                if (prof.displayName) updates.displayName = prof.displayName;
+                if (prof.loginTime) {
+                    const d = new Date(prof.loginTime);
+                    updates.loginTime = formatTimestamp(d);
+                    updates.loginTimestamp = d.getTime();
+                }
+                if (Object.keys(updates).length > 0) {
+                    userMap.set(sid, { ...existing, ...updates } as typeof existing);
+                }
+            }
+            // アバター更新（自分以外）
+            if (sid !== game.nakama.selfSessionId) {
+                const av = game.remoteAvatars.get(sid);
+                if (av) {
+                    if (prof.textureUrl) game.avatarSystem.changeAvatarTexture(av, prof.textureUrl);
+                    if (prof.displayName) {
+                        const updater = game.remoteNameUpdaters.get(sid);
+                        if (updater) updater(prof.displayName);
+                    }
+                }
             }
         }
+        scheduleRenderUserList();
+    };
+
+    game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number) => {
+        console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)}`);
         if (sessionId === game.nakama.selfSessionId) return;
+        const cached = profileCache.get(sessionId);
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
-        const av = ensureRemoteAvatar(sessionId, displayName || username);
+        const av = ensureRemoteAvatar(sessionId, cached?.displayName || username);
         if (av) {
             av.position.x = x; av.position.z = z; av.rotation.y = ry;
             av.setEnabled(true);
             game.remoteTargets.delete(sessionId);
-            if (textureUrl) game.avatarSystem.changeAvatarTexture(av, textureUrl);
-            if (displayName) {
+            if (cached?.textureUrl) game.avatarSystem.changeAvatarTexture(av, cached.textureUrl);
+            if (cached?.displayName) {
                 const updater = game.remoteNameUpdaters.get(sessionId);
-                if (updater) updater(displayName);
+                if (updater) updater(cached.displayName);
             }
+        }
+        // キャッシュ未取得ならRPCで取得予約
+        if (!profileCache.has(sessionId)) {
+            pendingProfileSids.add(sessionId);
+            scheduleProfileFetch();
         }
     };
     game.nakama.onDisplayName = (sessionId: string, displayName: string) => {
@@ -782,7 +831,7 @@ export function setupHtmlUI(game: GameScene): void {
         removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
-        userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
+        userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
         ensureRemoteAvatar(sessionId, username);
     };
@@ -791,7 +840,7 @@ export function setupHtmlUI(game: GameScene): void {
         removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
-        userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? Date.now(), loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
+        userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
         addChatHistory("[system]", `${username}がログインしました。`);
         { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
@@ -818,7 +867,7 @@ export function setupHtmlUI(game: GameScene): void {
         if (existing) {
             addChannelFlag(sessionId, "match");
         } else {
-            userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: Date.now(), loginTime: "…", channel: "match" });
+            userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: 0, loginTime: "…", channel: "match" });
         }
         scheduleRenderUserList();
         // 相手がマッチ参加した時点で自分のInitPosを送る（チャットチャンネル参加時はまだマッチ未参加で届かないため）
@@ -951,7 +1000,15 @@ export function setupHtmlUI(game: GameScene): void {
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             await game.nakama.joinWorldMatch();
             // matchId確定後にinitPosを送信（joinWorldMatch前のpresenceイベントではmatchId未設定のため送信されない）
-            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
+            { const p = game.playerBox; await game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl); }
+            // 自分のプロフィールをサーバから取得（loginTime等）
+            {
+                const sid = game.nakama.selfSessionId;
+                if (sid) {
+                    pendingProfileSids.add(sid);
+                    scheduleProfileFetch();
+                }
+            }
             // matchId確定後にAOIを強制送信（selfMatchIdガードで未送信になったAOI_UPDATEを再実行）
             game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
             game.aoiManager.updateAOI();
