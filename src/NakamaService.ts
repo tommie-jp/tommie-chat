@@ -191,8 +191,12 @@ export class NakamaService {
                     const blk = payload as { gx: number; gz: number; blockId: number; r: number; g: number; b: number; a: number };
                     this.onBlockUpdate?.(blk.gx, blk.gz, blk.blockId, blk.r ?? 255, blk.g ?? 255, blk.b ?? 255, blk.a ?? 255);
                 } else if (md.op_code === OP_AOI_ENTER) {
-                    const e = payload as { sessionId: string; x: number; z: number; ry?: number; textureUrl?: string; displayName?: string };
-                    this.onAOIEnter?.(e.sessionId, e.x, e.z, e.ry ?? 0, e.textureUrl ?? "", e.displayName ?? "");
+                    // バルク対応: サーバは配列で送信、後方互換のため単一オブジェクトも受け付ける
+                    type AoiEntry = { sessionId: string; x: number; z: number; ry?: number; textureUrl?: string; displayName?: string };
+                    const entries: AoiEntry[] = Array.isArray(payload) ? payload : [payload];
+                    for (const e of entries) {
+                        this.onAOIEnter?.(e.sessionId, e.x, e.z, e.ry ?? 0, e.textureUrl ?? "", e.displayName ?? "");
+                    }
                 } else if (md.op_code === OP_AOI_LEAVE) {
                     const e = payload as { sessionId: string };
                     this.onAOILeave?.(e.sessionId);
