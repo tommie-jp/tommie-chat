@@ -26,6 +26,12 @@ cd "$(dirname "$0")/.."
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
     set -a; source nakama/.env; set +a
 fi
+# docker compose コマンド（prod override 自動検出）
+COMPOSE="docker compose"
+if [ -f nakama/docker-compose.prod.yml ]; then
+    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+fi
+
 mkdir -p test/log
 echo "========================================="
 echo "Nakama 接続維持テスト"
@@ -38,9 +44,9 @@ echo "--- Go プラグインビルド ---"
 echo ""
 echo "--- nakama サーバ再起動 ---"
 cd nakama
-docker compose restart -t 3 nakama
+$COMPOSE restart -t 3 nakama
 for _i in $(seq 1 30); do
-    if docker compose logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
+    if $COMPOSE logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
         echo "  起動確認 (${_i}s)"
         break
     fi
