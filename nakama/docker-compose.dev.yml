@@ -1,0 +1,24 @@
+# 開発環境オーバーライド
+#
+# 使い方:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+services:
+  postgres:
+    ports:
+      - "5432:5432" # ホストからDB直接接続用
+
+  nakama:
+    ports:
+      - "6060:6060"
+      - "7349:7349"
+      - "7350:7350"
+      - "7351:7351"
+
+  web:
+    ports:
+      - "80:80"
+
+  prometheus:
+    ports:
+      - "9090:9090"

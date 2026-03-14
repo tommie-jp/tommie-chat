@@ -26,8 +26,6 @@ services:
       - data:/var/lib/postgresql/data # DB永続化
     expose:
       - "5432"
-    ports:
-      - "5432:5432" # ホストからDB直接接続用
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nakama -d nakama"]
       interval: 3s
@@ -75,11 +73,6 @@ services:
       - "7350" # HTTP API / WebSocket
       - "7351" # Console(管理画面)
       - "9100" # Prometheus metrics
-    ports:
-      - "6060:6060"
-      - "7349:7349"
-      - "7350:7350"
-      - "7351:7351"
     healthcheck:
       test: ["CMD", "/nakama/nakama", "healthcheck"]
       interval: 10s
@@ -93,8 +86,6 @@ services:
     volumes:
       - ../dist:/usr/share/nginx/html:ro # ビルド済み静的ファイル
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
-      - "80:80"
 
   # --- Prometheus メトリクス収集 ---
   prometheus:
@@ -119,8 +110,6 @@ services:
       EON
       prometheus --config.file=./prometheus.yml
       EOF'
-    ports:
-      - '9090:9090'
 
 volumes:
   data: # PostgreSQL データ永続化ボリューム

@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-docker compose down
-docker compose up -d --scale prometheus=0
+COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
+$COMPOSE down
+$COMPOSE up -d --scale prometheus=0
 
 # 起動確認（最大30秒待機）
 echo "nakamaコンテナ起動確認中..."

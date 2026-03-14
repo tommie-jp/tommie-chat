@@ -13,6 +13,10 @@ set -e
 
 cd "$(dirname "$0")"
 
-docker compose down
+# 開発環境・本番環境どちらのコンテナも停止
+if [ -f docker-compose.prod.yml ]; then
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
+fi
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
 
 echo "✅ 全コンテナ停止完了"
