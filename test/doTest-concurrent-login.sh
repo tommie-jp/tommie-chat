@@ -1,21 +1,28 @@
 #!/bin/bash
 # Nakama 同時接続テスト
-# Usage: ./test/doTest-concurrent-login.sh [-n N] [-h]
+# Usage: ./test/doTest-concurrent-login.sh [-n N] [--host HOST] [--port PORT] [-h]
 PLAYERS_FILTER=""
+OPT_HOST=""
+OPT_PORT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -n|--players)
             PLAYERS_FILTER="${2:-}"
             shift 2 ;;
+        --host)
+            OPT_HOST="${2:-}"; shift 2 ;;
+        --port)
+            OPT_PORT="${2:-}"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 [-n N] [-h]"
+            echo "Usage: $0 [-n N] [--host HOST] [--port PORT] [-h]"
             echo "  Nakama 同時接続テスト (デフォルト: 1/10/100/1000/2000人)"
             echo "  -n N, --players N  N人テストのみ実行"
+            echo "  --host HOST        接続先ホスト (デフォルト: NAKAMA_HOST or 127.0.0.1)"
+            echo "  --port PORT        Nakama API ポート (デフォルト: NAKAMA_PORT or 7350)"
             echo "  ログイン・移動のパフォーマンスを計測"
-            echo "  前提: nakama サーバが 127.0.0.1:7350 で起動していること"
             exit 0 ;;
-        *)  echo "Usage: $0 [-n N] (-h for help)"; exit 1 ;;
+        *)  echo "Usage: $0 [-n N] [--host HOST] [--port PORT] (-h for help)"; exit 1 ;;
     esac
 done
 
@@ -28,6 +35,13 @@ cd "$(dirname "$0")/.."
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
     set -a; source nakama/.env; set +a
 fi
+# --host/--port 優先 > 環境変数 > デフォルト
+export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
+export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
+IS_LOCAL=false
+if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
+    IS_LOCAL=true
+fi
 # docker compose コマンド（prod override 自動検出）
 COMPOSE="docker compose"
 if [ -f nakama/docker-compose.prod.yml ]; then
@@ -39,23 +53,29 @@ echo "========================================="
 echo "Nakama 同時接続テスト"
 echo "========================================="
 echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo ""
-echo "--- Go プラグインビルド ---"
-./nakama/doBuild.sh
 
-echo ""
-echo "--- nakama サーバ再起動 ---"
-cd nakama
-$COMPOSE restart -t 3 nakama
-for _i in $(seq 1 30); do
-    if $COMPOSE logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
-        echo "  起動確認 (${_i}s)"
-        break
-    fi
+if [ "$IS_LOCAL" = true ]; then
+    echo "--- Go プラグインビルド ---"
+    ./nakama/doBuild.sh
+
+    echo ""
+    echo "--- nakama サーバ再起動 ---"
+    cd nakama
+    $COMPOSE restart -t 3 nakama
+    for _i in $(seq 1 30); do
+        if $COMPOSE logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
+            echo "  起動確認 (${_i}s)"
+            break
+        fi
+        sleep 1
+    done
     sleep 1
-done
-sleep 1
-cd ..
+    cd ..
+else
+    echo "--- リモートホスト: ビルド・再起動スキップ ---"
+fi
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOGFILE="test/log/concurrent-${TIMESTAMP}.md"
@@ -114,7 +134,7 @@ lines.push('');
 lines.push('| 項目 | 値 |');
 lines.push('|------|-----|');
 lines.push('| 日時 | ' + '${TIMESTAMP}'.replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/, '\$1/\$2/\$3 \$4:\$5:\$6') + ' |');
-lines.push('| サーバ | 127.0.0.1:7350 |');
+lines.push('| サーバ | ' + (process.env.NAKAMA_HOST || '127.0.0.1') + ':' + (process.env.NAKAMA_PORT || '7350') + ' |');
 lines.push('| 結果 | ' + (allPass ? '✅ ALL PASS' : '❌ ' + failed + ' FAILED') + ' (' + passed + '/' + total + ') |');
 lines.push('| 実行時間 | ' + duration + ' |');
 lines.push('');

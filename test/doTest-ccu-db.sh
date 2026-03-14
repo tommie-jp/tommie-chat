@@ -1,23 +1,49 @@
 #!/bin/bash
 # 同接履歴 DB永続化テスト
-# Usage: ./test/doTest-ccu-db.sh [--1m|--5m|--30m|--1h]
+# Usage: ./test/doTest-ccu-db.sh [--1m|--5m|--30m|--1h] [--host HOST] [--port PORT]
 #   --1m  1分以内: 1sサンプリング + RPC疎通（デフォルト）
 #   --5m  5分以内: 1mフラッシュ + 再起動 + 履歴復元
 #   --30m 30分以内: 複数回再起動で履歴累積
 #   --1h  1時間以内: 長時間安定稼働 + レンジ整合性
+OPT_HOST=""
+OPT_PORT=""
+# --host/--port を先に抽出（後で positional args を処理するため）
+_ARGS=()
+_prev=""
+for _a in "$@"; do
+    if [ "$_prev" = "--host" ]; then OPT_HOST="$_a"; _prev=""; continue; fi
+    if [ "$_prev" = "--port" ]; then OPT_PORT="$_a"; _prev=""; continue; fi
+    if [ "$_a" = "--host" ]; then _prev="--host"; continue; fi
+    if [ "$_a" = "--port" ]; then _prev="--port"; continue; fi
+    _ARGS+=("$_a")
+done
+set -- "${_ARGS[@]}"
+
 cd "$(dirname "$0")/.."
 # .env から NAKAMA_SERVER_KEY 等を自動読み込み
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
     set -a; source nakama/.env; set +a
+fi
+# --host/--port 優先 > 環境変数 > デフォルト
+export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
+export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
+IS_LOCAL=false
+if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
+    IS_LOCAL=true
 fi
 mkdir -p test/log
 echo "========================================="
 echo "同接履歴 DB永続化テスト"
 echo "========================================="
 echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo ""
-echo "--- Go プラグインビルド ---"
-./nakama/doBuild.sh
+if [ "$IS_LOCAL" = true ]; then
+    echo "--- Go プラグインビルド ---"
+    ./nakama/doBuild.sh
+else
+    echo "--- リモートホスト: ビルドスキップ ---"
+fi
 
 # フラグ解析
 LEVEL="1m"

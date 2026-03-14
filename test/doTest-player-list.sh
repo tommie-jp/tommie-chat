@@ -8,6 +8,8 @@
 PLAYERS_FILTER=""
 LOGIN_RATE=40       # 秒あたりのログイン数（0=無制限, サーバ側MAX_LOGIN_RATE_PER_SEC未満にすること）
 TIMEOUT_SEC=0       # テストタイムアウト秒（0=デフォルト値を使用）
+OPT_HOST=""
+OPT_PORT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -69,6 +71,10 @@ EOF
         -t|--timeout)
             TIMEOUT_SEC="${2:-0}"
             shift 2 ;;
+        --host)
+            OPT_HOST="${2:-}"; shift 2 ;;
+        --port)
+            OPT_PORT="${2:-}"; shift 2 ;;
         *)
             echo "不明なオプション: $1  (-h でヘルプ表示)"; exit 1 ;;
     esac
@@ -85,6 +91,13 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 # .env から NAKAMA_SERVER_KEY 等を自動読み込み
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ROOT_DIR/nakama/.env" ]; then
     set -a; source "$ROOT_DIR/nakama/.env"; set +a
+fi
+# --host/--port 優先 > 環境変数 > デフォルト
+export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
+export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
+IS_LOCAL=false
+if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
+    IS_LOCAL=true
 fi
 # docker compose コマンド（prod override 自動検出）
 COMPOSE="docker compose"
@@ -117,16 +130,26 @@ echo "========================================="
 echo "プレイヤーリスト通知テスト"
 echo "========================================="
 echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo "テスト人数: ${COUNTS[*]}"
 echo "ログインレート: ${LOGIN_RATE_PER_SEC}人/秒 (0=無制限)"
 
 # ── Go プラグインビルド ──
-echo ""
-echo "--- Go プラグインビルド ---"
-"$ROOT_DIR/nakama/doBuild.sh"
+if [ "$IS_LOCAL" = true ]; then
+    echo ""
+    echo "--- Go プラグインビルド ---"
+    "$ROOT_DIR/nakama/doBuild.sh"
+else
+    echo ""
+    echo "--- リモートホスト: ビルドスキップ ---"
+fi
 
 # ── サーバ再起動 ──
 restart_server() {
+    if [ "$IS_LOCAL" != true ]; then
+        echo "  リモートホスト: 再起動スキップ"
+        return
+    fi
     echo "  nakama サーバ再起動..."
     cd "$ROOT_DIR/nakama"
     $COMPOSE restart -t 3 nakama
@@ -144,6 +167,10 @@ restart_server() {
 # ── サーバログ取得開始 ──
 start_server_log() {
     local log_file="$1"
+    if [ "$IS_LOCAL" != true ]; then
+        echo 0
+        return
+    fi
     cd "$ROOT_DIR/nakama"
     stdbuf -oL $COMPOSE logs -f --tail 0 nakama 2>&1 \
       | grep --line-buffered "$GREP_FILTER" \
@@ -186,11 +213,19 @@ run_phase() {
     set -e
 
     sleep "$wait_sec"
-    kill "$log_pid" 2>/dev/null || true
+    if [ "$log_pid" -ne 0 ]; then
+        kill "$log_pid" 2>/dev/null || true
+    fi
 
-    echo ""
-    echo "  サーバログ: $server_log"
-    cat "$server_log"
+    if [ "$IS_LOCAL" = true ]; then
+        echo ""
+        echo "  サーバログ: $server_log"
+        cat "$server_log"
+    else
+        echo ""
+        echo "  (リモートホスト: サーバログなし)"
+        > "$server_log"
+    fi
 
     PHASE_RC["$phase_key"]=$rc
     if [ "$rc" -gt 0 ]; then FINAL_RC=1; fi
@@ -279,7 +314,7 @@ DATE_FMT=$(echo "$TIMESTAMP" | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)
     echo "| 項目 | 値 |"
     echo "|------|-----|"
     echo "| 日時 | ${DATE_FMT} |"
-    echo "| サーバ | 127.0.0.1:7350 |"
+    echo "| サーバ | ${NAKAMA_HOST}:${NAKAMA_PORT:-7350} |"
     echo "| テスト人数 | ${COUNTS[*]} |"
     echo "| ログインレート | $([ "${LOGIN_RATE_PER_SEC}" -gt 0 ] && echo "${LOGIN_RATE_PER_SEC}人/秒" || echo "無制限") |"
     echo "| タイムアウト | $([ "${TEST_TIMEOUT_MS}" -gt 0 ] && echo "$((TEST_TIMEOUT_MS / 1000))秒" || echo "自動") |"

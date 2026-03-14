@@ -14,8 +14,8 @@ import * as ws from 'ws';
 (globalThis as unknown as Record<string, unknown>).WebSocket = ws.WebSocket;
 import { Client, Session, Socket, MatchData } from '@heroiclabs/nakama-js';
 
-const HOST        = '127.0.0.1';
-const PORT        = '7350';
+const HOST        = process.env.NAKAMA_HOST ?? '127.0.0.1';
+const PORT        = process.env.NAKAMA_PORT ?? '7350';
 const SERVER_KEY  = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
 const TEXTURE_URL = '/textures/pic1.ktx2';
 const CHAT_ROOM   = 'world';

@@ -8,6 +8,8 @@
 # ── 引数パース（set -euo pipefail 前） ──
 PLAYERS_FILTER=""   # 指定人数のみ実行（空=全フェーズ）
 WITH_1000=0
+OPT_HOST=""
+OPT_PORT=""
 LOGIN_RATE=40       # 秒あたりのログイン数（0=無制限, サーバ側MAX_LOGIN_RATE_PER_SEC未満にすること）
 TIMEOUT_SEC=0       # テストタイムアウト秒（0=デフォルト値を使用）
 
@@ -108,6 +110,10 @@ EOF
         -t|--timeout)
             TIMEOUT_SEC="${2:-0}"
             shift 2 ;;
+        --host)
+            OPT_HOST="${2:-}"; shift 2 ;;
+        --port)
+            OPT_PORT="${2:-}"; shift 2 ;;
         --1000)
             WITH_1000=1
             shift ;;
@@ -126,6 +132,13 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 # .env から NAKAMA_SERVER_KEY 等を自動読み込み
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ROOT_DIR/nakama/.env" ]; then
     set -a; source "$ROOT_DIR/nakama/.env"; set +a
+fi
+# --host/--port 優先 > 環境変数 > デフォルト
+export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
+export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
+IS_LOCAL=false
+if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
+    IS_LOCAL=true
 fi
 # docker compose コマンド（prod override 自動検出）
 COMPOSE="docker compose"
@@ -191,15 +204,25 @@ echo "========================================="
 echo "snd/rcv 整合性テスト"
 echo "========================================="
 echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo "実行フェーズ: $PHASES_TO_RUN"
 
 # ── Go プラグインビルド ──
-echo ""
-echo "--- Go プラグインビルド ---"
-"$ROOT_DIR/nakama/doBuild.sh"
+if [ "$IS_LOCAL" = true ]; then
+    echo ""
+    echo "--- Go プラグインビルド ---"
+    "$ROOT_DIR/nakama/doBuild.sh"
+else
+    echo ""
+    echo "--- リモートホスト: ビルドスキップ ---"
+fi
 
 # ── サーバ再起動 ──
 restart_server() {
+    if [ "$IS_LOCAL" != true ]; then
+        echo "  リモートホスト: 再起動スキップ"
+        return
+    fi
     echo "  nakama サーバ再起動..."
     cd "$ROOT_DIR/nakama"
     $COMPOSE restart -t 3 nakama
@@ -225,6 +248,10 @@ trap 'rm -f "$SOLO_CHECK_OUT" "$DUO_CHECK_OUT" "$SETBLOCK_CHECK_OUT" "$AILEAVE_C
 
 start_server_log() {
     local _unused="$1"  # filtered log path（後で filter_server_log で生成）
+    if [ "$IS_LOCAL" != true ]; then
+        echo 0
+        return
+    fi
     cd "$ROOT_DIR/nakama"
     > "$RAW_SERVER_LOG"
     stdbuf -oL $COMPOSE logs -f --tail 0 nakama >> "$RAW_SERVER_LOG" 2>&1 &
@@ -291,16 +318,23 @@ run_phase() {
     set -e
 
     sleep "$wait_extra"
-    kill "$log_pid" 2>/dev/null || true
-    wait "$log_pid" 2>/dev/null || true
+    if [ "$log_pid" -ne 0 ]; then
+        kill "$log_pid" 2>/dev/null || true
+        wait "$log_pid" 2>/dev/null || true
+    fi
 
     # 生ログからフィルタリング（パイプ欠損なし）
-    filter_server_log "$server_log"
-
-    echo ""
-    echo "  サーバログ: $server_log"
-    echo "  -----------------------------------------"
-    cat "$server_log"
+    if [ "$IS_LOCAL" = true ]; then
+        filter_server_log "$server_log"
+        echo ""
+        echo "  サーバログ: $server_log"
+        echo "  -----------------------------------------"
+        cat "$server_log"
+    else
+        echo ""
+        echo "  (リモートホスト: サーバログなし)"
+        > "$server_log"
+    fi
 
     echo ""
     echo "  整合性チェック (${label}):"
@@ -482,7 +516,7 @@ md_phase() {
     echo "| 項目 | 値 |"
     echo "|------|-----|"
     echo "| 日時 | ${DATE_FMT} |"
-    echo "| サーバ | 127.0.0.1:7350 |"
+    echo "| サーバ | ${NAKAMA_HOST}:${NAKAMA_PORT:-7350} |"
     echo "| 実行フェーズ | ${PHASES_TO_RUN} |"
     echo "| ログインレート | $([ "${LOGIN_RATE_PER_SEC}" -gt 0 ] && echo "${LOGIN_RATE_PER_SEC}人/秒" || echo "無制限") |"
     echo "| タイムアウト | $([ "${TEST_TIMEOUT_MS}" -gt 0 ] && echo "$((TEST_TIMEOUT_MS / 1000))秒" || echo "自動") |"

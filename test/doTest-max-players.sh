@@ -11,6 +11,8 @@ TRIALS=1            # 試行回数（1=多数決なし）
 START=100           # 開始人数
 STEP=10             # 増加幅
 VERBOSE=0           # 1=全ログ出力（間引きなし）
+OPT_HOST=""
+OPT_PORT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -26,6 +28,10 @@ while [[ $# -gt 0 ]]; do
         --step)
             STEP="${2:-10}"
             shift 2 ;;
+        --host)
+            OPT_HOST="${2:-}"; shift 2 ;;
+        --port)
+            OPT_PORT="${2:-}"; shift 2 ;;
         -v|--verbose)
             VERBOSE=1
             shift ;;
@@ -60,6 +66,16 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 # .env から NAKAMA_SERVER_KEY 等を自動読み込み
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ROOT_DIR/nakama/.env" ]; then
     set -a; source "$ROOT_DIR/nakama/.env"; set +a
+fi
+# --host/--port 優先 > 環境変数 > デフォルト
+export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
+export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
+HOST_PORT_OPT=""
+if [ "$NAKAMA_HOST" != "127.0.0.1" ] && [ "$NAKAMA_HOST" != "localhost" ]; then
+    HOST_PORT_OPT="--host $NAKAMA_HOST"
+fi
+if [ "$NAKAMA_PORT" != "7350" ]; then
+    HOST_PORT_OPT="$HOST_PORT_OPT --port $NAKAMA_PORT"
 fi
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"
@@ -144,6 +160,7 @@ run_with_throttle() {
 SCRIPT_VERSION=$(date -r "$0" +%Y-%m-%d_%H:%M:%S)
 echo "========================================="
 echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo "最大同時接続人数探索  (script: ${SCRIPT_VERSION})"
 echo "  開始: ${START}人  増加幅: ${STEP}人"
 echo "  試行回数: ${TRIALS}回中${PASS_NEEDED}回以上PASSで合格"
@@ -176,12 +193,12 @@ while true; do
 
         set +e
         if [ "$VERBOSE" -eq 1 ]; then
-            "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE"
+            "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE" $HOST_PORT_OPT
         else
             # 予測時間: ログイン(n/rate) + 固定オーバーヘッド(40秒) + 人数比例オーバーヘッド(n/50秒)
             # AOI処理・logout・整合性チェック等が人数に比例して増加
             est_sec=$(( n / (LOGIN_RATE > 0 ? LOGIN_RATE : 40) + 40 + n / 50 ))
-            run_with_throttle "${n}人 snd-rcv 試行${trial}/${TRIALS}" "$est_sec" "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE"
+            run_with_throttle "${n}人 snd-rcv 試行${trial}/${TRIALS}" "$est_sec" "$SCRIPT_DIR/doTest-snd-rcv.sh" -n "$n" -r "$LOGIN_RATE" $HOST_PORT_OPT
         fi
         snd_rcv_rc=$?
         set -e
@@ -201,10 +218,10 @@ while true; do
 
         set +e
         if [ "$VERBOSE" -eq 1 ]; then
-            "$SCRIPT_DIR/doTest-player-list.sh" -n "$n" -r "$LOGIN_RATE"
+            "$SCRIPT_DIR/doTest-player-list.sh" -n "$n" -r "$LOGIN_RATE" $HOST_PORT_OPT
         else
             est_pl_sec=$(( n / (LOGIN_RATE > 0 ? LOGIN_RATE : 40) + 30 + n / 50 ))
-            run_with_throttle "${n}人 player-list 試行${trial}/${TRIALS}" "$est_pl_sec" "$SCRIPT_DIR/doTest-player-list.sh" -n "$n" -r "$LOGIN_RATE"
+            run_with_throttle "${n}人 player-list 試行${trial}/${TRIALS}" "$est_pl_sec" "$SCRIPT_DIR/doTest-player-list.sh" -n "$n" -r "$LOGIN_RATE" $HOST_PORT_OPT
         fi
         pl_rc=$?
         set -e
@@ -279,7 +296,7 @@ fi
     echo "| 項目 | 値 |"
     echo "|------|-----|"
     echo "| 日時 | ${DATE_FMT} |"
-    echo "| サーバ | 127.0.0.1:7350 |"
+    echo "| サーバ | ${NAKAMA_HOST}:${NAKAMA_PORT:-7350} |"
     echo "| 開始人数 | ${START}人 |"
     echo "| 増加幅 | ${STEP}人 |"
     echo "| 試行方式 | ${TRIALS}回中${PASS_NEEDED}回以上PASSで合格 |"

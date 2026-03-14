@@ -6,6 +6,8 @@ PLAYERS_OPT="-n 100"  # デフォルト100人（-n N で変更可能）
 START_N=""         # -s S: 段階モード開始人数
 STEP_N=""          # --step D: 増加幅
 COUNTS_STR=""      # --counts: カンマ区切り人数リスト
+OPT_HOST=""
+OPT_PORT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -24,6 +26,10 @@ while [[ $# -gt 0 ]]; do
         --counts)
             COUNTS_STR="${2:-}"
             shift 2 ;;
+        --host)
+            OPT_HOST="${2:-}"; shift 2 ;;
+        --port)
+            OPT_PORT="${2:-}"; shift 2 ;;
         -h|--help)
             cat <<'EOF'
 Usage: ./test/doAll.sh [-n N] [-s S] [--step D] [--counts C] [-v] [-h]
@@ -69,8 +75,18 @@ ENV_FILE="$ROOT_DIR/nakama/.env"
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
+# --host/--port 優先 > 環境変数 > デフォルト
+export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
+export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
+HOST_PORT_OPT=""
+if [ "$NAKAMA_HOST" != "127.0.0.1" ] && [ "$NAKAMA_HOST" != "localhost" ]; then
+    HOST_PORT_OPT="--host $NAKAMA_HOST"
+fi
+if [ "$NAKAMA_PORT" != "7350" ]; then
+    HOST_PORT_OPT="$HOST_PORT_OPT --port $NAKAMA_PORT"
+fi
 # ── 疎通テスト（server_key 認証確認） ──
-bash "$SCRIPT_DIR/doTest-ping.sh" || exit 1
+bash "$SCRIPT_DIR/doTest-ping.sh" $HOST_PORT_OPT || exit 1
 
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"
@@ -298,7 +314,7 @@ run_one_round() {
 
     # 1. 同時接続テスト
     set +e
-    run_test "doTest-concurrent-login.sh" $players_opt
+    run_test "doTest-concurrent-login.sh" $players_opt $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
     set -e
 
@@ -307,7 +323,7 @@ run_one_round() {
 
     # 2. 持続接続テスト
     set +e
-    run_test "doTest-sustain.sh" $players_opt
+    run_test "doTest-sustain.sh" $players_opt $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
     set -e
 
@@ -316,7 +332,7 @@ run_one_round() {
 
     # 3. 送受信整合性テスト
     set +e
-    run_test "doTest-snd-rcv.sh" $players_opt
+    run_test "doTest-snd-rcv.sh" $players_opt $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
     set -e
 
@@ -325,7 +341,7 @@ run_one_round() {
 
     # 4. プレイヤーリスト通知テスト
     set +e
-    run_test "doTest-player-list.sh" $players_opt
+    run_test "doTest-player-list.sh" $players_opt $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
     set -e
 
@@ -334,7 +350,7 @@ run_one_round() {
 
     # 5. 同接履歴 DB永続化テスト
     set +e
-    run_test "doTest-ccu-db.sh"
+    run_test "doTest-ccu-db.sh" $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
     set -e
 
@@ -351,6 +367,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
     echo "========================================="
     echo "全テスト一括実行（段階モード）"
     echo "  server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+    echo "  endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
     echo "  人数: ${PLAYER_COUNTS[*]}"
     echo "  テスト: concurrent / sustain / snd-rcv / player-list / ccu-db"
     echo "========================================="
@@ -397,6 +414,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
 else
     # ── 単一モード（従来互換） ──
     echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+    echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
     CURRENT_ROUND_LABEL=""
     [ -n "$PLAYERS_OPT" ] && CURRENT_ROUND_LABEL="[$(echo "$PLAYERS_OPT" | grep -oP '\d+')人]"
 
@@ -434,7 +452,7 @@ fi
     echo "| 項目 | 値 |"
     echo "|------|-----|"
     echo "| 日時 | ${DATE_FMT} |"
-    echo "| サーバ | 127.0.0.1:7350 |"
+    echo "| サーバ | ${NAKAMA_HOST}:${NAKAMA_PORT:-7350} |"
     echo "| テスト人数 | ${MODE_LABEL} |"
     echo "| 結果 | ${RESULT_LABEL} (${TOTAL_PASSED}/${TOTAL_RUN}) |"
     echo "| 実行時間 | $(format_duration $TOTAL_ELAPSED) |"
