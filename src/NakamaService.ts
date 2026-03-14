@@ -60,7 +60,7 @@ export class NakamaService {
     private _mdProfileAccum = { calls: 0, totalMs: 0, maxMs: 0, lastReset: performance.now() };
 
     constructor(host = "127.0.0.1", port = "7350", useSSL = false) {
-        this.client = new Client("defaultkey", host, port, useSSL);
+        this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", host, port, useSSL);
     }
 
     private getOrCreateDeviceId(loginName: string): string {
@@ -79,7 +79,7 @@ export class NakamaService {
         this.host = host;
         this.port = port;
         this.loginName = loginName;
-        this.client = new Client("defaultkey", host, port, false);
+        this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", host, port, false);
         const deviceId = this.getOrCreateDeviceId(loginName);
         this.session = await this.client.authenticateDevice(deviceId, true);
         // デバイス認証後にusernameを設定し、セッションを再取得（JWTにusernameを反映）

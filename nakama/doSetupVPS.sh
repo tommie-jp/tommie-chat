@@ -17,9 +17,9 @@ case "${1:-}" in
         echo "  2. スワップ設定（2GB 以下の場合）"
         echo "  3. Docker インストール"
         echo "  4. Node.js インストール"
-        echo "  5. フロントエンドビルド"
-        echo "  6. 環境変数の自動生成"
-        echo "  7. docker-compose.yml の本番化"
+        echo "  5. 環境変数の自動生成"
+        echo "  6. Nakama セキュリティ設定"
+        echo "  7. フロントエンドビルド（server_key 自動設定）"
         echo "  8. Docker ログローテーション設定"
         echo "  9. サーバー起動"
         exit 0 ;;
@@ -114,15 +114,8 @@ else
     echo "✅ Node.js インストール完了: $(node --version)"
 fi
 
-# ── 5. フロントエンドビルド ──
-step "5. フロントエンドビルド"
-cd "$ROOT_DIR"
-npm install
-npm run build
-echo "✅ ビルド完了"
-
-# ── 6. 環境変数の自動生成 ──
-step "6. 環境変数の設定"
+# ── 5. 環境変数の自動生成 ──
+step "5. 環境変数の設定"
 ENV_FILE="$SCRIPT_DIR/.env"
 if [ -f "$ENV_FILE" ] && ! grep -q 'localdev' "$ENV_FILE"; then
     echo ".env 既に本番設定済み（スキップ）"
@@ -132,8 +125,8 @@ else
     echo "✅ .env 生成完了（パスワード自動生成済み）"
 fi
 
-# ── 7. Nakama セキュリティ設定 ──
-step "7. Nakama セキュリティ設定"
+# ── 6. Nakama セキュリティ設定 ──
+step "6. Nakama セキュリティ設定"
 
 # .env に本番用キーを追加（未設定の場合のみ）
 if grep -q 'NAKAMA_SERVER_KEY' "$ENV_FILE"; then
@@ -155,8 +148,16 @@ echo ""
 echo "  server_key:       $SERVER_KEY"
 echo "  console.username: admin"
 echo "  console.password: $CONSOLE_PASS"
-echo ""
-warn "server_key を index.html の APP_SERVER_KEY に設定してください"
+
+# ── 7. フロントエンドビルド ──
+step "7. フロントエンドビルド"
+cd "$ROOT_DIR"
+npm install
+
+# server_key をフロントエンドに埋め込んでビルド
+echo "VITE_SERVER_KEY=$SERVER_KEY" > "$ROOT_DIR/.env"
+npm run build
+echo "✅ ビルド完了（server_key 自動設定済み）"
 
 # ── 8. Docker ログローテーション ──
 step "8. Docker ログローテーション設定"
@@ -192,8 +193,6 @@ echo "  Web:       http://$(hostname -I | awk '{print $1}')"
 echo "  Console:   http://127.0.0.1:7351 (admin / $CONSOLE_PASS)"
 echo ""
 echo "次のステップ:"
-echo "  1. index.html の APP_SERVER_KEY を '$SERVER_KEY' に変更"
-echo "  2. npm run build で再ビルド"
-echo "  3. HTTPS を設定: ./nakama/doSetupHTTPS.sh <ドメイン名>"
+echo "  HTTPS を設定: ./nakama/doSetupHTTPS.sh <ドメイン名>"
 echo ""
 echo "詳細: doc/40-デプロイ手順.md"
