@@ -1,6 +1,6 @@
 # tommChat サーバー docker-compose設定
 #
-# Copyright 2026 tommie.jp. All rights reserved.
+# Copyright 2026 tommChat. All rights reserved.
 #
 # サービス構成:
 #   postgres   - データベース (ユーザ・マッチ等の永続化)
