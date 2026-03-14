@@ -1,0 +1,58 @@
+# 本番環境オーバーライド
+#
+# 使い方:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# 開発用の docker-compose.yml を変更せずに、本番向けの設定を上書きします。
+# - ポートを 127.0.0.1 バインド（nginx 以外は外部非公開）
+# - restart: unless-stopped（自動再起動）
+# - Nakama セキュリティ設定（.env から読み込み）
+services:
+  postgres:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  nakama:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6060:6060"
+      - "127.0.0.1:7349:7349"
+      - "127.0.0.1:7350:7350"
+      - "127.0.0.1:7351:7351"
+    entrypoint:
+      - "/bin/sh"
+      - "-ecx"
+      - |
+          /nakama/nakama migrate up \
+            --database.address \
+            nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
+          && exec /nakama/nakama \
+            --name nakama1 \
+            --database.address \
+            nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
+            --logger.level DEBUG \
+            --session.token_expiry_sec 7200 \
+            --socket.ping_period_ms 10000 \
+            --socket.pong_wait_ms 15000 \
+            --socket.write_wait_ms 5000 \
+            --shutdown_grace_sec 5 \
+            --metrics.prometheus_port 9100 \
+            --runtime.env NAKAMA_VERSION=3.35.0 \
+            --match.input_queue_size 8192 \
+            --socket.outgoing_queue_size 2048 \
+            --socket.max_request_size_bytes 131072 \
+            --runtime.max_count 8192 \
+            --match.max_empty_sec 30 \
+            --runtime.env MAX_LOGIN_RATE_PER_SEC=50 \
+            --socket.server_key ${NAKAMA_SERVER_KEY:-defaultkey} \
+            --console.username ${NAKAMA_CONSOLE_USER:-admin} \
+            --console.password ${NAKAMA_CONSOLE_PASS:-password}
+
+  web:
+    restart: unless-stopped
+
+  prometheus:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
