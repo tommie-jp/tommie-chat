@@ -1,5 +1,7 @@
 # tommChat
 
+> **プロジェクトの状態:** 現在、鋭意開発中です。まだサーバ公開していません。近日公開予定。
+
 ブラウザで動く3D MMOチャットゲームです。
 Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー環境で、ブロックを置いたりチャットしたりできます。
 
@@ -88,11 +90,14 @@ bash test/doLint.sh
 
 | ポート | 用途 |
 |---|---|
+| 80 | Web フロントエンド (nginx) |
 | 5173 | Vite 開発サーバー |
+| 5432 | PostgreSQL |
+| 6060 | Go pprof プロファイラ |
+| 7349 | Nakama gRPC API |
 | 7350 | Nakama クライアント API |
 | 7351 | Nakama 管理ダッシュボード |
-| 5432 | PostgreSQL |
-| 9090 | Prometheus |
+| 9090 | Prometheus メトリクス |
 
 ## 操作方法
 
@@ -104,21 +109,41 @@ bash test/doLint.sh
 
 ```text
 tommChat/
-├── src/                # クライアント側ソースコード (TypeScript)
-│   ├── main.ts         # エントリーポイント
-│   ├── GameScene.ts    # Babylon.js ゲームシーン
-│   ├── NakamaService.ts# Nakama サーバー通信
-│   ├── UIPanel.ts      # UI パネル
-│   └── DebugOverlay.ts # デバッグツール
-├── public/             # 静的アセット
-│   └── textures/       # テクスチャ (.ktx2)
-├── nakama/             # サーバー側
+├── src/                  # クライアント側ソースコード (TypeScript)
+│   ├── main.ts           # エントリーポイント
+│   ├── GameScene.ts      # Babylon.js ゲームシーン
+│   ├── NakamaService.ts  # Nakama サーバー通信
+│   ├── UIPanel.ts        # UI パネル
+│   ├── AOIManager.ts     # AOI (Area of Interest) 管理
+│   ├── AvatarSystem.ts   # アバター管理
+│   ├── ChunkDB.ts        # チャンクデータベース
+│   ├── CloudSystem.ts    # 雲エフェクト
+│   ├── NPCSystem.ts      # NPC 管理
+│   ├── Profiler.ts       # パフォーマンス計測
+│   ├── WorldConstants.ts # ワールド定数
+│   └── DebugOverlay.ts   # デバッグオーバーレイ
+├── public/               # 静的アセット
+│   └── textures/         # テクスチャ (.ktx2)
+├── nakama/               # サーバー側
 │   ├── docker-compose.yml
-│   ├── go_src/         # Go サーバープラグイン
-│   └── nginx.conf
-├── index.html          # メイン HTML
+│   ├── go_src/           # Go サーバープラグイン (main.go)
+│   ├── nginx.conf        # リバースプロキシ設定
+│   ├── doBuild.sh        # プラグインビルドスクリプト
+│   └── doRestart.sh      # サーバー再起動スクリプト
+├── test/                 # テストスクリプト・テストコード
+│   ├── doAll.sh          # 全テスト一括実行
+│   ├── doLint.sh         # 文法チェック
+│   ├── doNight.sh        # 夜間長時間テスト
+│   ├── doTest-*.sh       # 各種テストスクリプト
+│   ├── nakama-*.test.ts  # Vitest テストファイル
+│   └── log/              # テストレポート出力先
+├── doc/                  # ドキュメント
+├── pic/                  # 画像素材・変換スクリプト
+├── .github/              # GitHub Actions / Dependabot
+├── index.html            # メイン HTML
 ├── package.json
 ├── vite.config.ts
+├── vitest.config.ts
 └── tsconfig.json
 ```
 
