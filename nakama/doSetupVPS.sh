@@ -142,6 +142,8 @@ NAKAMA_SERVER_KEY=$SERVER_KEY
 NAKAMA_CONSOLE_USER=admin
 NAKAMA_CONSOLE_PASS=$CONSOLE_PASS
 EOV
+# シェル環境にも export（docker compose が確実に参照できるようにする）
+set -a; source "$ENV_FILE"; set +a
 echo "✅ .env 生成完了（パスワード・キー自動生成済み）"
 
 echo ""
@@ -181,6 +183,8 @@ fi
 # ── 8. サーバー起動 ──
 step "8. サーバー起動"
 cd "$SCRIPT_DIR"
+echo "  NAKAMA_SERVER_KEY=${NAKAMA_SERVER_KEY}"
+echo "  .env server_key: $(grep NAKAMA_SERVER_KEY "$ENV_FILE" | cut -d= -f2)"
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 bash doBuild.sh --fresh
 
