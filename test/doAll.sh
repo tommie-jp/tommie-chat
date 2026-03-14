@@ -63,6 +63,12 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# .env から NAKAMA_SERVER_KEY 等を自動読み込み（未設定の場合のみ）
+ENV_FILE="$ROOT_DIR/nakama/.env"
+if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ENV_FILE" ]; then
+    set -a; source "$ENV_FILE"; set +a
+fi
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"
 CHILD_PID=0

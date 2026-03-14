@@ -24,6 +24,10 @@ if [ -n "$PLAYERS_FILTER" ]; then
     export CONCURRENT_N_COUNT="$PLAYERS_FILTER"
 fi
 cd "$(dirname "$0")/.."
+# .env から NAKAMA_SERVER_KEY 等を自動読み込み
+if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
+    set -a; source nakama/.env; set +a
+fi
 mkdir -p test/log
 echo "========================================="
 echo "Nakama 同時接続テスト"

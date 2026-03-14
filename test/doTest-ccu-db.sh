@@ -6,6 +6,10 @@
 #   --30m 30分以内: 複数回再起動で履歴累積
 #   --1h  1時間以内: 長時間安定稼働 + レンジ整合性
 cd "$(dirname "$0")/.."
+# .env から NAKAMA_SERVER_KEY 等を自動読み込み
+if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
+    set -a; source nakama/.env; set +a
+fi
 mkdir -p test/log
 echo "========================================="
 echo "同接履歴 DB永続化テスト"

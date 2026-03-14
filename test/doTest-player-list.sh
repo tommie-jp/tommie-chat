@@ -82,6 +82,10 @@ export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=8192"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+# .env から NAKAMA_SERVER_KEY 等を自動読み込み
+if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ROOT_DIR/nakama/.env" ]; then
+    set -a; source "$ROOT_DIR/nakama/.env"; set +a
+fi
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"
 

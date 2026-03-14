@@ -22,6 +22,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 cd "$(dirname "$0")/.."
+# .env から NAKAMA_SERVER_KEY 等を自動読み込み
+if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
+    set -a; source nakama/.env; set +a
+fi
 mkdir -p test/log
 echo "========================================="
 echo "Nakama 接続維持テスト"
