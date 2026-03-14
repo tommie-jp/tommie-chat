@@ -1,5 +1,13 @@
 # tommChat
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Babylon.js](https://img.shields.io/badge/Babylon.js-8.x-red.svg)](https://www.babylonjs.com/)
+[![Nakama](https://img.shields.io/badge/Nakama-3.35-blueviolet.svg)](https://heroiclabs.com/nakama/)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1.svg)](https://www.postgresql.org/)
+
 2026/03/14 更新
 
 > **プロジェクトの状態:** 現在、鋭意開発中です。まだサーバ公開していません。近日公開予定。
@@ -7,11 +15,27 @@
 ブラウザで動く3D MMOチャットゲームです。
 Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー環境で、ブロックを置いたりチャットしたりできます。
 
-## スクリーンショット
+## 目次
+
+1. [スクリーンショット](#1-スクリーンショット)
+2. [特徴](#2-特徴)
+3. [技術スタック](#3-技術スタック)
+4. [必要な環境](#4-必要な環境)
+5. [セットアップ](#5-セットアップ)
+6. [ポート番号](#6-ポート番号)
+7. [操作方法](#7-操作方法)
+8. [ディレクトリ構成](#8-ディレクトリ構成)
+9. [ドキュメント](#9-ドキュメント)
+10. [開発ツール](#10-開発ツール)
+11. [貢献](#11-貢献)
+12. [ライセンス](#12-ライセンス)
+13. [作者](#13-作者)
+
+## 1. スクリーンショット
 
 （準備中）
 
-## 特徴
+## 2. 特徴
 
 - ブラウザだけで動作（インストール不要）
 - 3Dワールドでリアルタイムチャット
@@ -19,7 +43,7 @@ Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー
 - 複数ユーザーの同時接続に対応
 - デバイス認証によるかんたんログイン
 
-## 技術スタック
+## 3. 技術スタック
 
 | 項目 | 技術 |
 |---|---|
@@ -31,29 +55,39 @@ Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー
 | データベース | PostgreSQL 16 |
 | コンテナ | Docker Compose |
 
-## 必要な環境
+## 4. 必要な環境
 
-- Node.js v24 LTS
-- Docker / Docker Compose
-- Go（サーバープラグインのビルドに必要）
+### 開発環境
 
-## セットアップ
+- Node.js v24+（フロントエンドのビルドに必要）
+- Docker / Docker Compose（サーバ起動に必要）
 
-### 1. リポジトリのクローン
+### 本番環境
+
+- Docker / Docker Compose のみ（ビルド済み `dist/` を配置）
+
+### ブラウザ
+
+- スマートフォン対応（iOS Safari, Android Chrome）
+- WebGL 2.0 対応ブラウザ（Chrome, Edge, Firefox, Safari）
+
+## 5. セットアップ
+
+### 5.1 リポジトリのクローン
 
 ```bash
 git clone https://github.com/open-tommie/tommie-chat.git
 cd tommie-chat
 ```
 
-### 2. クライアント（フロントエンド）
+### 5.2 クライアント（フロントエンド）
 
 ```bash
 npm install
 npm run build
 ```
 
-### 3. サーバー（Nakama）
+### 5.3 サーバー（Nakama）
 
 ```bash
 # 環境変数の設定
@@ -66,13 +100,15 @@ cd nakama && docker compose up -d && cd ..
 bash nakama/doBuild.sh --fresh
 ```
 
-### 4. ブラウザで確認
+### 5.4 ブラウザで確認
 
 <http://localhost> を開きます（nginx 経由で `dist/` を配信）。
 
 開発中は `npm run dev` で Vite 開発サーバー (<http://localhost:5173>) も使えます。
 
-### 5. テスト
+Nakama 管理ダッシュボード: <http://localhost:7351>（初期ユーザー: `admin` / `password`）
+
+### 5.5 テスト
 
 ```bash
 # 型チェック
@@ -88,7 +124,7 @@ bash test/doAll.sh
 bash test/doLint.sh
 ```
 
-## ポート番号
+## 6. ポート番号
 
 | ポート | 用途 |
 |---|---|
@@ -101,13 +137,15 @@ bash test/doLint.sh
 | 7351 | Nakama 管理ダッシュボード |
 | 9090 | Prometheus メトリクス |
 
-## 操作方法
+## 7. 操作方法
 
 - **ログイン**: ユーザIDを入力してログインボタン
-- **ブロック配置**: Bキー + クリック
+- **移動**: クリックまたはタップで移動先を指定
+- **ブロック配置**: Bキー + クリック（スマホ: 未対応）
 - **チャット**: 下部のテキスト入力欄からメッセージ送信
+- **カメラ**: ドラッグまたはスワイプで回転
 
-## ディレクトリ構成
+## 8. ディレクトリ構成
 
 ```text
 tommChat/
@@ -149,15 +187,36 @@ tommChat/
 └── tsconfig.json
 ```
 
-## 貢献
+## 9. ドキュメント
+
+`doc/` ディレクトリに詳細ドキュメントがあります。
+
+| ドキュメント | 内容 |
+|-------------|------|
+| [03-nakama-サーバ構築](doc/03-nakama-サーバ構築.md) | Nakama サーバの構築手順 |
+| [04-DB-同接データ](doc/04-DB-同接データ.md) | 同接データの DB 設計 |
+| [05-ユーザID削除](doc/05-ユーザID削除.md) | ユーザ ID 削除手順 |
+| [06-nakama-チューニング](doc/06-nakama-チューニング.md) | サーバチューニングパラメータ |
+| [10-ブラウザ側ファイル構成](doc/10-ブラウザ側ファイル構成.md) | フロントエンドのファイル構成 |
+| [11-RPC関数一覧](doc/11-RPC関数一覧.md) | サーバ RPC 関数の一覧 |
+| [20-ブラウザプロファイル](doc/20-ブラウザプロファイル.md) | ブラウザ側パフォーマンス計測 |
+| [21-nakamaサーバプロファイル](doc/21-nakamaサーバプロファイル.md) | サーバ側プロファイリング |
+| [30-テストスクリプト一覧](doc/30-テストスクリプト一覧.md) | テストスクリプトとオプション |
+| [40-デプロイ手順](doc/40-デプロイ手順.md) | さくらVPS デプロイ手順 |
+
+## 10. 開発ツール
+
+本プロジェクトの設計・実装・テスト・ドキュメント作成において、[Claude Code](https://docs.anthropic.com/en/docs/claude-code)（Anthropic）を全面的に活用しています。
+
+## 11. 貢献
 
 [CONTRIBUTING.md](CONTRIBUTING.md) をご覧ください。
 
-## ライセンス
+## 12. ライセンス
 
 [MIT License](LICENSE)
 
-## 作者
+## 13. 作者
 
 - tommie.jp
 - X: [@tommie_nico](https://x.com/tommie_nico)
