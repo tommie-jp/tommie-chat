@@ -50,12 +50,26 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    const result = await socket.rpc('getWorldMatch');
-    const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
-    if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
-
-    await socket.joinMatch(data.matchId);
-    return { client, session, socket, matchId: data.matchId, name };
+    // joinMatch リトライ（レートリミット対応）
+    let matchId = '';
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const result = await socket.rpc('getWorldMatch');
+        const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
+        if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
+        matchId = data.matchId;
+        try {
+            await socket.joinMatch(matchId);
+            break;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : JSON.stringify(e);
+            if (msg.includes('too many logins') && attempt < 9) {
+                await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+                continue;
+            }
+            throw e;
+        }
+    }
+    return { client, session, socket, matchId, name };
 }
 
 async function cleanup(p: PlayerConn): Promise<void> {

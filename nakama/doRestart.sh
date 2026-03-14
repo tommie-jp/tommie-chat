@@ -5,19 +5,36 @@ COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
 $COMPOSE down
 $COMPOSE up -d --scale prometheus=0
 
-# 起動確認（最大30秒待機）
-echo "nakamaコンテナ起動確認中..."
-for i in $(seq 1 30); do
-    if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -q 'nakama.*running'; then
-        echo "✅ nakama 起動成功"
-        exit 0
+# 起動確認（最大60秒待機）
+# prometheus はスケール0で除外
+EXPECTED_SERVICES="postgres nakama web"
+echo "コンテナ起動確認中..."
+FAILED=0
+for svc in $EXPECTED_SERVICES; do
+    echo -n "  $svc ... "
+    FOUND=false
+    for i in $(seq 1 60); do
+        if $COMPOSE ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -q "$svc.*running"; then
+            echo "OK (${i}s)"
+            FOUND=true
+            break
+        fi
+        sleep 1
+    done
+    if [ "$FOUND" = false ]; then
+        echo "FAIL"
+        FAILED=1
     fi
-    sleep 1
 done
 
-echo "❌ nakama 起動失敗（30秒以内に起動しませんでした）"
-echo "--- docker compose ps ---"
-docker compose ps
-echo "--- nakama ログ (最後の30行) ---"
-docker compose logs --tail=30 nakama
-exit 1
+if [ "$FAILED" -eq 0 ]; then
+    echo "✅ 全コンテナ起動成功"
+    exit 0
+else
+    echo "❌ 起動失敗（上記を確認してください）"
+    echo "--- docker compose ps ---"
+    $COMPOSE ps
+    echo "--- ログ (最後の30行) ---"
+    $COMPOSE logs --tail=30
+    exit 1
+fi

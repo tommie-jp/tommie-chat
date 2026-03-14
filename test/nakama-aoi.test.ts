@@ -38,14 +38,29 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    // getWorldMatch RPC (WebSocket)
-    const result = await socket.rpc('getWorldMatch');
-    const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
-    expect(data.matchId).toBeTruthy();
-    const match = await socket.joinMatch(data.matchId!);
-    const sessionId = match.self?.session_id ?? "";
+    // getWorldMatch RPC (WebSocket) + joinMatch リトライ（レートリミット対応）
+    let matchId = '';
+    let sessionId = '';
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const result = await socket.rpc('getWorldMatch');
+        const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
+        expect(data.matchId).toBeTruthy();
+        matchId = data.matchId!;
+        try {
+            const match = await socket.joinMatch(matchId);
+            sessionId = match.self?.session_id ?? '';
+            break;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : JSON.stringify(e);
+            if (msg.includes('too many logins') && attempt < 9) {
+                await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+                continue;
+            }
+            throw e;
+        }
+    }
 
-    return { client, session, socket, matchId: data.matchId!, sessionId };
+    return { client, session, socket, matchId, sessionId };
 }
 
 async function sendAOI(p: PlayerConn, minCX: number, minCZ: number, maxCX: number, maxCZ: number): Promise<void> {

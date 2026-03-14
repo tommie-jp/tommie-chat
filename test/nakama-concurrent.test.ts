@@ -37,10 +37,10 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     await socket.connect(session, true);
     await socket.joinChat('world', 1, true, false);
 
-    // getWorldMatch のキャッシュが古い場合にリトライ（前テストのマッチ終了後の場合）
+    // joinMatch リトライ（レートリミット or マッチ未発見時）
     let matchId = '';
     let sessionId = '';
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
         const result = await socket.rpc('getWorldMatch');
         const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
         if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
@@ -51,7 +51,11 @@ async function createPlayer(name: string): Promise<PlayerConn> {
             break;
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : JSON.stringify(e);
-            if (msg.includes('Match not found') && attempt < 2) {
+            if (msg.includes('too many logins') && attempt < 9) {
+                await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+                continue;
+            }
+            if (msg.includes('Match not found') && attempt < 9) {
                 await new Promise(r => setTimeout(r, 1000));
                 continue;
             }

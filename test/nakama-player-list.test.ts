@@ -132,8 +132,22 @@ async function loginAndJoin(name: string, x = 0, z = 0): Promise<PlayerConn> {
         } catch { /* ignore */ }
     };
 
-    const match = await socket.joinMatch(wmData.matchId);
-    const selfSid = match.self?.session_id ?? '';
+    // joinMatch リトライ（レートリミット対応）
+    let match;
+    for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+            match = await socket.joinMatch(wmData.matchId);
+            break;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : JSON.stringify(e);
+            if (msg.includes('too many logins') && attempt < 9) {
+                await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+                continue;
+            }
+            throw e;
+        }
+    }
+    const selfSid = match!.self?.session_id ?? '';
 
     const conn: PlayerConn = { name, client, session, socket, matchId: wmData.matchId, sessionId: selfSid, receivedEvents, receivedProfiles };
 
@@ -190,6 +204,10 @@ async function loginNPlayers(prefix: string, count: number): Promise<PlayerConn[
                     console.error(`LOGIN ERROR: ${msg}`);
                 }
             }
+        }
+        // 大人数テスト時は進捗を表示（doAll.shのタイムアウト防止）
+        if (count >= 100 && (i + batchSize) < count) {
+            console.log(`  接続中: ${players.length}/${count}人`);
         }
         if (i + batchSize < count) await sleep(1000);
     }

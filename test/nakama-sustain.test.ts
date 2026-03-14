@@ -56,9 +56,23 @@ async function connectSocket(p: PlayerConn): Promise<void> {
     await socket.connect(p.session, true);
     await socket.joinChat('world', 1, true, false);
 
-    const match = await socket.joinMatch(p.matchId);
+    // joinMatch リトライ（レートリミット対応）
+    let match;
+    for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+            match = await socket.joinMatch(p.matchId);
+            break;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : JSON.stringify(e);
+            if (msg.includes('too many logins') && attempt < 9) {
+                await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+                continue;
+            }
+            throw e;
+        }
+    }
     p.socket = socket;
-    p.sessionId = match.self?.session_id ?? '';
+    p.sessionId = match!.self?.session_id ?? '';
     p.connected = true;
 
     // 切断検知ハンドラを設定
@@ -79,8 +93,22 @@ async function createPlayer(name: string): Promise<PlayerConn> {
     const data = JSON.parse(result.payload ?? '{}') as { matchId?: string };
     if (!data.matchId) throw new Error(`getWorldMatch failed for ${name}`);
 
-    const match = await socket.joinMatch(data.matchId);
-    const sessionId = match.self?.session_id ?? '';
+    // joinMatch リトライ（レートリミット対応）
+    let match;
+    for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+            match = await socket.joinMatch(data.matchId);
+            break;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : JSON.stringify(e);
+            if (msg.includes('too many logins') && attempt < 9) {
+                await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+                continue;
+            }
+            throw e;
+        }
+    }
+    const sessionId = match!.self?.session_id ?? '';
 
     const p: PlayerConn = {
         client, session, socket, matchId: data.matchId, sessionId, name,
@@ -165,6 +193,10 @@ async function createPlayers(prefix: string, count: number, batchSize = 40): Pro
         }
         if (rejected > 0) {
             console.error(`⚠️ バッチ ${offset}〜${offset + batch}: ${rejected}人失敗`);
+        }
+        // 大人数テスト時は進捗を表示（doAll.shのタイムアウト防止）
+        if (count >= 100 && (offset + batchSize) < count) {
+            console.log(`  接続中: ${players.length}/${count}人`);
         }
         if (offset + batchSize < count) await sleep(1000);
     }

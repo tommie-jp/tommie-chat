@@ -42,10 +42,12 @@ IS_LOCAL=false
 if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
     IS_LOCAL=true
 fi
-# docker compose コマンド（prod override 自動検出）
+# docker compose コマンド（実行中のコンテナから dev/prod を自動検出）
 COMPOSE="docker compose"
-if [ -f nakama/docker-compose.prod.yml ]; then
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'tommchat-prod'; then
     COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+elif [ -f nakama/docker-compose.dev.yml ]; then
+    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
 fi
 
 mkdir -p test/log
