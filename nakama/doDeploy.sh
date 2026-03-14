@@ -1,6 +1,6 @@
 #!/bin/bash
-# VPS デプロイスクリプト（Docker インストール〜アプリ起動）
-# Usage: ./nakama/doSetupVPS.sh [-h]
+# デプロイスクリプト（Docker インストール〜アプリ起動）
+# Usage: ./nakama/doDeploy.sh [-h]
 #
 # 前提:
 #   - Ubuntu 22.04 / 24.04
