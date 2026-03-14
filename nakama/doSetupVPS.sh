@@ -17,11 +17,10 @@ case "${1:-}" in
         echo "  2. スワップ設定（2GB 以下の場合）"
         echo "  3. Docker インストール"
         echo "  4. Node.js インストール"
-        echo "  5. 環境変数の自動生成"
-        echo "  6. Nakama セキュリティ設定"
-        echo "  7. フロントエンドビルド（server_key 自動設定）"
-        echo "  8. Docker ログローテーション設定"
-        echo "  9. サーバー起動"
+        echo "  5. 環境変数・セキュリティ設定（パスワード・キー自動生成）"
+        echo "  6. フロントエンドビルド（server_key 自動設定）"
+        echo "  7. Docker ログローテーション設定"
+        echo "  8. サーバー起動"
         exit 0 ;;
 esac
 
@@ -46,13 +45,19 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # ── 既存コンテナの停止（ポート競合防止） ──
+# docker compose down -v で確実にコンテナ・ネットワーク・ボリュームを削除
+cd "$SCRIPT_DIR"
+if [ -f docker-compose.prod.yml ]; then
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v 2>/dev/null || true
+fi
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v 2>/dev/null || true
+docker compose down -v 2>/dev/null || true
+# 名前ベースでも残留コンテナを削除
 EXISTING=$(docker ps -aq --filter "name=nakama" 2>/dev/null; docker ps -aq --filter "name=tommchat-prod" 2>/dev/null)
-EXISTING=$(echo "$EXISTING" | sort -u)
+EXISTING=$(echo "$EXISTING" | sort -u | grep -v '^$' || true)
 if [ -n "$EXISTING" ]; then
-    warn "既存のコンテナを停止・削除します"
+    warn "残留コンテナを削除します"
     echo "$EXISTING" | xargs -r docker rm -f
-    docker network rm nakama_default tommchat-prod_default 2>/dev/null || true
-    docker volume rm nakama_data tommchat-prod_data 2>/dev/null || true
 fi
 
 # ── 1. ファイアウォール ──
@@ -127,40 +132,25 @@ fi
 # ── 5. 環境変数の自動生成 ──
 step "5. 環境変数の設定"
 ENV_FILE="$SCRIPT_DIR/.env"
-if [ -f "$ENV_FILE" ] && ! grep -q 'localdev' "$ENV_FILE"; then
-    echo ".env 既に本番設定済み（スキップ）"
-else
-    PG_PASS=$(openssl rand -hex 16)
-    echo "POSTGRES_PASSWORD=$PG_PASS" > "$ENV_FILE"
-    echo "✅ .env 生成完了（パスワード自動生成済み）"
-fi
-
-# ── 6. Nakama セキュリティ設定 ──
-step "6. Nakama セキュリティ設定"
-
-# .env に本番用キーを追加（未設定の場合のみ）
-if grep -q 'NAKAMA_SERVER_KEY' "$ENV_FILE"; then
-    echo "セキュリティ設定 既に設定済み（スキップ）"
-    SERVER_KEY=$(grep NAKAMA_SERVER_KEY "$ENV_FILE" | cut -d= -f2)
-    CONSOLE_PASS=$(grep NAKAMA_CONSOLE_PASS "$ENV_FILE" | cut -d= -f2)
-else
-    SERVER_KEY=$(openssl rand -hex 16)
-    CONSOLE_PASS=$(openssl rand -hex 12)
-    cat >> "$ENV_FILE" <<EOV
+# ボリュームを毎回削除するため、パスワードも毎回再生成する
+PG_PASS=$(openssl rand -hex 16)
+SERVER_KEY=$(openssl rand -hex 16)
+CONSOLE_PASS=$(openssl rand -hex 12)
+cat > "$ENV_FILE" <<EOV
+POSTGRES_PASSWORD=$PG_PASS
 NAKAMA_SERVER_KEY=$SERVER_KEY
 NAKAMA_CONSOLE_USER=admin
 NAKAMA_CONSOLE_PASS=$CONSOLE_PASS
 EOV
-    echo "✅ セキュリティ設定を .env に追加"
-fi
+echo "✅ .env 生成完了（パスワード・キー自動生成済み）"
 
 echo ""
 echo "  server_key:       $SERVER_KEY"
 echo "  console.username: admin"
 echo "  console.password: $CONSOLE_PASS"
 
-# ── 7. フロントエンドビルド ──
-step "7. フロントエンドビルド"
+# ── 6. フロントエンドビルド ──
+step "6. フロントエンドビルド"
 cd "$ROOT_DIR"
 npm install
 
@@ -169,8 +159,8 @@ echo "VITE_SERVER_KEY=$SERVER_KEY" > "$ROOT_DIR/.env"
 npm run build
 echo "✅ ビルド完了（server_key 自動設定済み）"
 
-# ── 8. Docker ログローテーション ──
-step "8. Docker ログローテーション設定"
+# ── 7. Docker ログローテーション ──
+step "7. Docker ログローテーション設定"
 DAEMON_JSON="/etc/docker/daemon.json"
 if [ ! -f "$DAEMON_JSON" ]; then
     sudo tee "$DAEMON_JSON" > /dev/null <<'EOF'
@@ -188,8 +178,8 @@ else
     echo "daemon.json 既存（スキップ）"
 fi
 
-# ── 9. サーバー起動 ──
-step "9. サーバー起動"
+# ── 8. サーバー起動 ──
+step "8. サーバー起動"
 cd "$SCRIPT_DIR"
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 bash doBuild.sh --fresh
