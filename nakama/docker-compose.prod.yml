@@ -52,6 +52,8 @@ services:
 
   web:
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
 
   prometheus:
     restart: unless-stopped
