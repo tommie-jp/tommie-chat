@@ -16,7 +16,7 @@ import { Client, Session, Socket, MatchData } from '@heroiclabs/nakama-js';
 
 const HOST        = '127.0.0.1';
 const PORT        = '7350';
-const SERVER_KEY  = 'defaultkey';
+const SERVER_KEY  = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
 const TEXTURE_URL = '/textures/pic1.ktx2';
 const CHAT_ROOM   = 'world';
 
