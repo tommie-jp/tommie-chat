@@ -31,7 +31,7 @@ fi
 
 git clone https://github.com/open-tommie/tommie-chat.git
 cd tommie-chat/nakama
-bash doSetupVPS.sh
+bash doDeploy.sh
 
 # デプロイ後テスト
 echo ""

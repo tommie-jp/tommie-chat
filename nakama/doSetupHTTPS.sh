@@ -3,7 +3,7 @@
 # Usage: ./nakama/doSetupHTTPS.sh <ドメイン名> [-h]
 #
 # 前提:
-#   - doSetupVPS.sh 実行済み（サーバー起動済み）
+#   - doDeploy.sh 実行済み（サーバー起動済み）
 #   - DNS の A レコードがこのサーバーの IP を指している
 
 case "${1:-}" in
@@ -14,7 +14,7 @@ case "${1:-}" in
         echo "例: $0 chat.example.com"
         echo ""
         echo "前提:"
-        echo "  - doSetupVPS.sh 実行済み"
+        echo "  - doDeploy.sh 実行済み"
         echo "  - DNS A レコードがこのサーバーの IP に設定済み"
         exit 0 ;;
 esac
