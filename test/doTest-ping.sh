@@ -2,7 +2,8 @@
 # サーバ疎通テスト（server_key 認証確認）
 # Usage: ./test/doTest-ping.sh [-h]
 #
-# curl で Nakama HTTP API に接続し、server_key で認証できるかを確認する。
+# Nakama コンテナが healthy になるまで待機し、
+# curl で HTTP API に接続して server_key で認証できるかを確認する。
 # 失敗した場合は exit 1 を返す。
 
 case "${1:-}" in
@@ -27,7 +28,32 @@ echo "--- 疎通テスト ---"
 echo "server_key: ${SERVER_KEY}"
 echo "endpoint:   http://${HOST}:${PORT}"
 
-# ヘルスチェック（認証不要、最大30秒リトライ）
+# ── Nakama コンテナの起動待ち（最大60秒） ──
+echo -n "  waiting for nakama ... "
+NAKAMA_CONTAINER=$(docker ps --format '{{.Names}}' --filter "name=nakama" 2>/dev/null | grep nakama | head -1)
+if [ -n "$NAKAMA_CONTAINER" ]; then
+    for i in $(seq 1 60); do
+        STATUS=$(docker inspect --format '{{.State.Health.Status}}' "$NAKAMA_CONTAINER" 2>/dev/null)
+        if [ "$STATUS" = "healthy" ]; then
+            echo "healthy (${i}s)"
+            break
+        fi
+        if [ "$STATUS" = "" ] || [ "$STATUS" = "none" ]; then
+            # healthcheck 未設定の場合は HTTP で待つ
+            break
+        fi
+        sleep 1
+    done
+    if [ "$STATUS" != "healthy" ] && [ "$STATUS" != "" ] && [ "$STATUS" != "none" ]; then
+        echo "FAIL (status: ${STATUS})"
+        echo "❌ Nakama コンテナが healthy になりません。docker logs $NAKAMA_CONTAINER を確認してください。"
+        exit 1
+    fi
+else
+    echo "skip (container not found)"
+fi
+
+# ── ヘルスチェック（HTTP、最大30秒リトライ） ──
 echo -n "  healthcheck ... "
 HTTP_CODE=""
 for i in $(seq 1 30); do
@@ -45,7 +71,7 @@ else
     exit 1
 fi
 
-# server_key 認証テスト（デバイス認証）
+# ── server_key 認証テスト（デバイス認証） ──
 echo -n "  authenticate ... "
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "http://${HOST}:${PORT}/v2/account/authenticate/device" \
