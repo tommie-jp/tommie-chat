@@ -46,7 +46,8 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # ── 既存コンテナの停止（ポート競合防止） ──
-EXISTING=$(docker ps -aq --filter "name=nakama" --filter "name=tommchat-prod" 2>/dev/null)
+EXISTING=$(docker ps -aq --filter "name=nakama" 2>/dev/null; docker ps -aq --filter "name=tommchat-prod" 2>/dev/null)
+EXISTING=$(echo "$EXISTING" | sort -u)
 if [ -n "$EXISTING" ]; then
     warn "既存のコンテナを停止・削除します"
     echo "$EXISTING" | xargs -r docker rm -f
