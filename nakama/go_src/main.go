@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"sync"
@@ -1412,6 +1414,14 @@ func rpcGetDisplayNames(ctx context.Context, logger runtime.Logger, db *sql.DB, 
 
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
+	// pprof サーバ (ポート6060)
+	go func() {
+		logger.Info("pprof server starting on :6060")
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			logger.Error("pprof server error: %v", err)
+		}
+	}()
+
 	// ストレージから地面テーブルを復元（チャンク単位）
 	loadedChunks := 0
 	for cx := 0; cx < chunkCount; cx++ {

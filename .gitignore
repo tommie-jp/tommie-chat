@@ -57,3 +57,4 @@ nakama/go_src/.protobuf-version-cache
 nakama/go_src/build.sh
 nakama/go_src/world.so
 nakama/go_src/nakama-tommie-chat.so
+test/__pycache__/

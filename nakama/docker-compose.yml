@@ -50,8 +50,8 @@ services:
             nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
             --logger.level DEBUG \
             --session.token_expiry_sec 7200 `# セッション有効期限[秒](default3600)` \
-            --socket.ping_period_ms 5000 `# WebSocket ping間隔[ms](default15000)` \
-            --socket.pong_wait_ms 8000 `# pong応答待ち[ms](default25000)` \
+            --socket.ping_period_ms 10000 `# WebSocket ping間隔[ms](default15000)` \
+            --socket.pong_wait_ms 15000 `# pong応答待ち[ms](default25000)` \
             --socket.write_wait_ms 5000 `# 書込み待ち[ms](default10000)` \
             --shutdown_grace_sec 5 `# シャットダウン猶予[秒](default0)` \
             --metrics.prometheus_port 9100 `# Prometheusポート[番号]` \
@@ -70,11 +70,13 @@ services:
     volumes:
       - ./:/nakama/data # Go plugin(.so)とLuaモジュール
     expose:
+      - "6060" # pprof
       - "7349" # gRPC API
       - "7350" # HTTP API / WebSocket
       - "7351" # Console(管理画面)
       - "9100" # Prometheus metrics
     ports:
+      - "6060:6060"
       - "7349:7349"
       - "7350:7350"
       - "7351:7351"

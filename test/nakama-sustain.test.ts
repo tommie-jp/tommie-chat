@@ -191,9 +191,14 @@ async function batchSend(
                 return p.socket.sendMatchState(p.matchId, opCode, data);
             })
         );
-        for (const r of results) {
-            if (r.status === 'fulfilled') sent++;
-            else errors++;
+        for (let ri = 0; ri < results.length; ri++) {
+            if (results[ri].status === 'fulfilled') {
+                sent++;
+            } else {
+                errors++;
+                // 送信失敗したプレイヤーをdisconnected扱いにする（reconnect対象にする）
+                batch[ri].connected = false;
+            }
         }
     }
     return { sent, errors };
@@ -229,10 +234,12 @@ async function sustainTest(
 
         const connectedCount = players.filter(p => p.connected).length;
 
-        // 全員がランダム方向に移動
+        // 全員がランダム方向に移動（AOI重複を減らすため広く配置）
+        const spacing = players.length >= 500 ? 20 : 2;
+        const cols = Math.ceil(Math.sqrt(players.length));
         const result = await batchSend(players, (_p, i) => {
-            const baseX = (i % 100) * 2 - 100;
-            const baseZ = Math.floor(i / 100) * 2 - 10;
+            const baseX = (i % cols) * spacing - (cols * spacing) / 2;
+            const baseZ = Math.floor(i / cols) * spacing - (cols * spacing) / 2;
             const dx = (Math.random() - 0.5) * 10;
             const dz = (Math.random() - 0.5) * 10;
             return {
@@ -245,6 +252,15 @@ async function sustainTest(
         totalErrors += result.errors;
         const elapsed = performance.now() - t0;
         roundResults.push({ elapsed, sent: result.sent, errors: result.errors, reconnected, connected: connectedCount });
+
+        // 進捗ログ（doAll.shのOUTPUT_TIMEOUT=60s対策）
+        // リコネクト中は1ラウンドが長くなるため毎ラウンド出力、それ以外は15秒ごと
+        const shouldLog = durationSec >= 30 && round < rounds - 1 &&
+            (reconnected > 0 || result.errors > 0 || (round + 1) % 5 === 0);
+        if (shouldLog) {
+            const elapsedSec = ((round + 1) * INTERVAL_MS / 1000).toFixed(0);
+            console.log(`  維持中 ${elapsedSec}/${durationSec}秒 ラウンド=${round + 1}/${rounds} 送信=${totalSent} エラー=${totalErrors}${reconnected > 0 ? ` リコネクト=${reconnected}` : ''}`);
+        }
 
         // 次のラウンドまで待つ（送信時間分を差し引く）
         const waitMs = INTERVAL_MS - elapsed;
@@ -265,6 +281,8 @@ const DURATIONS_SEC = ALL_DURATIONS_SEC.filter(d => d <= MAX_DURATION);
 describe(`接続維持テスト (${PLAYER_COUNT}人, ${MAX_DURATION}秒)`, { timeout: (MAX_DURATION + 120) * 1000 }, () => {
     let players: PlayerConn[] = [];
 
+    // プレイヤー作成: バッチ40人×1s間隔 → 2000人で約60s必要
+    const SETUP_TIMEOUT = Math.max(30_000, Math.ceil(PLAYER_COUNT / 40) * 1500 + 30_000);
     beforeAll(async () => {
         totalReconnects = 0;
         players = await createPlayers('__test_sustain', PLAYER_COUNT);
@@ -272,14 +290,17 @@ describe(`接続維持テスト (${PLAYER_COUNT}人, ${MAX_DURATION}秒)`, { tim
         await sleep(200);
 
         // 全員の初期位置とAOIを設定
+        // 大人数時はAOI重複を減らすため広く配置（間隔20 → AOI112内に最大~25人）
+        const spacing = PLAYER_COUNT >= 500 ? 20 : 2;
+        const cols = Math.ceil(Math.sqrt(PLAYER_COUNT));
         await batchSend(players, (_p, i) => {
-            const x = (i % 100) * 2 - 100;
-            const z = Math.floor(i / 100) * 2 - 10;
+            const x = (i % cols) * spacing - (cols * spacing) / 2;
+            const z = Math.floor(i / cols) * spacing - (cols * spacing) / 2;
             return { opCode: OP_INIT_POS, data: JSON.stringify({ x, z, ry: 0 }) };
         });
         await batchSend(players, (_p, i) => {
-            const x = (i % 100) * 2 - 100;
-            const z = Math.floor(i / 100) * 2 - 10;
+            const x = (i % cols) * spacing - (cols * spacing) / 2;
+            const z = Math.floor(i / cols) * spacing - (cols * spacing) / 2;
             const half = 512;
             const cx = Math.floor((x + half) / 16);
             const cz = Math.floor((z + half) / 16);
@@ -294,7 +315,7 @@ describe(`接続維持テスト (${PLAYER_COUNT}人, ${MAX_DURATION}秒)`, { tim
         await sleep(300);
 
         console.log(`  セットアップ完了: ${players.length}人接続`);
-    });
+    }, SETUP_TIMEOUT);
 
     afterAll(async () => {
         await cleanupAll(players);

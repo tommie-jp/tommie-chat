@@ -140,11 +140,6 @@ MULTI100_CHECK_OUT="/tmp/snd-rcv-multi100-check-$$.txt"
 MULTI1000_CHECK_OUT="/tmp/snd-rcv-multi1000-check-$$.txt"
 MULTI2000_CHECK_OUT="/tmp/snd-rcv-multi2000-check-$$.txt"
 CUSTOM_CHECK_OUT="/tmp/snd-rcv-custom-check-$$.txt"
-trap 'rm -f "$SOLO_CHECK_OUT" "$DUO_CHECK_OUT" "$SETBLOCK_CHECK_OUT" "$AILEAVE_CHECK_OUT" \
-          "$MOVETARGET_CHECK_OUT" "$AVATARCHANGE_CHECK_OUT" \
-          "$MULTI3_CHECK_OUT" "$MULTI10_CHECK_OUT" "$MULTI100_CHECK_OUT" "$MULTI1000_CHECK_OUT" \
-          "$MULTI2000_CHECK_OUT" "$CUSTOM_CHECK_OUT"' EXIT
-
 GREP_FILTER="rcv login\|rcv logout\|rcv setBlock\|rcv getWorldMatch\|rcv getServerInfo\
 \|rcv getGroundChunk\|rcv syncChunks\|rcv initPos\|rcv AOI_UPDATE\
 \|snd AOI_ENTER\|snd AOI_LEAVE\
@@ -210,15 +205,29 @@ restart_server() {
 }
 
 # ── サーバログ取得開始 ──
+# 全ログを生ファイルに保存し、テスト後にフィルタリング（パイプ欠損防止）
+RAW_SERVER_LOG="/tmp/snd-rcv-raw-server-$$.log"
+trap 'rm -f "$SOLO_CHECK_OUT" "$DUO_CHECK_OUT" "$SETBLOCK_CHECK_OUT" "$AILEAVE_CHECK_OUT" \
+          "$MOVETARGET_CHECK_OUT" "$AVATARCHANGE_CHECK_OUT" \
+          "$MULTI3_CHECK_OUT" "$MULTI10_CHECK_OUT" "$MULTI100_CHECK_OUT" "$MULTI1000_CHECK_OUT" \
+          "$MULTI2000_CHECK_OUT" "$CUSTOM_CHECK_OUT" "$RAW_SERVER_LOG"' EXIT
+
 start_server_log() {
-    local log_file="$1"
+    local _unused="$1"  # filtered log path（後で filter_server_log で生成）
     cd "$ROOT_DIR/nakama"
-    stdbuf -oL docker compose logs -f --tail 0 nakama 2>&1 \
-      | grep --line-buffered "$GREP_FILTER" \
-      | sed -u 's/^[^ ]* *| *//' \
-      | sed -u 's/\([0-9a-f]\{8\}\)-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/\1/g' \
-      > "$log_file" &
+    > "$RAW_SERVER_LOG"
+    stdbuf -oL docker compose logs -f --tail 0 nakama >> "$RAW_SERVER_LOG" 2>&1 &
     echo $!
+}
+
+# 生ログからフィルタリングして最終サーバログを生成
+filter_server_log() {
+    local raw="$RAW_SERVER_LOG"
+    local out="$1"
+    grep "$GREP_FILTER" "$raw" \
+      | sed 's/^[^ ]* *| *//' \
+      | sed 's/\([0-9a-f]\{8\}\)-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/\1/g' \
+      > "$out" || true
 }
 
 # ── 整合性チェック（Python スクリプトに委譲） ──
@@ -272,6 +281,10 @@ run_phase() {
 
     sleep "$wait_extra"
     kill "$log_pid" 2>/dev/null || true
+    wait "$log_pid" 2>/dev/null || true
+
+    # 生ログからフィルタリング（パイプ欠損なし）
+    filter_server_log "$server_log"
 
     echo ""
     echo "  サーバログ: $server_log"
