@@ -2,7 +2,7 @@
 # 全テスト一括実行（人数段階的増加対応）
 # Usage: ./test/doAll.sh [-n N] [-s S] [--step D] [--counts C] [-v] [-h]
 VERBOSE=0
-PLAYERS_OPT=""     # -n N が指定された場合（単一人数モード）
+PLAYERS_OPT="-n 100"  # デフォルト100人（-n N で変更可能）
 START_N=""         # -s S: 段階モード開始人数
 STEP_N=""          # --step D: 増加幅
 COUNTS_STR=""      # --counts: カンマ区切り人数リスト
@@ -32,7 +32,7 @@ Usage: ./test/doAll.sh [-n N] [-s S] [--step D] [--counts C] [-v] [-h]
 人数を段階的に増やして繰り返し実行できます。
 
 モード:
-  (引数なし)           デフォルト人数で1回実行
+  (引数なし)           100人で1回実行
   -n N, --players N    N人で1回実行
   --counts 100,500,2000  指定した人数リストで順に実行（失敗で停止）
   -s S [--step D]      S人から開始しD人ずつ増加（失敗で停止）
@@ -425,7 +425,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
     MODE_LABEL="段階モード: $(IFS=,; echo "${PLAYER_COUNTS[*]}")"
 else
     RESULT_LABEL=$([ "$TOTAL_FAILED" -eq 0 ] && echo "✅ ALL PASS" || echo "❌ ${TOTAL_FAILED} FAILED")
-    MODE_LABEL="${PLAYERS_OPT:-デフォルト (1,10,100,1000,2000)}"
+    MODE_LABEL="${PLAYERS_OPT}"
 fi
 
 {
