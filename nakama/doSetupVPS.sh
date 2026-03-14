@@ -52,6 +52,7 @@ if [ -n "$EXISTING" ]; then
     warn "既存のコンテナを停止・削除します"
     echo "$EXISTING" | xargs -r docker rm -f
     docker network rm nakama_default tommchat-prod_default 2>/dev/null || true
+    docker volume rm nakama_data tommchat-prod_data 2>/dev/null || true
 fi
 
 # ── 1. ファイアウォール ──
