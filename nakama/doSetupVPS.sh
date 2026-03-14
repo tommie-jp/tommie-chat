@@ -45,6 +45,13 @@ if [ "$(id -u)" -eq 0 ]; then
     fail "root で実行しないでください。sudo 権限を持つ一般ユーザーで実行してください"
 fi
 
+# ── 既存コンテナの停止（ポート競合防止） ──
+if docker ps -q --filter "name=nakama" 2>/dev/null | grep -q .; then
+    warn "既存の nakama コンテナを停止します"
+    docker ps -q --filter "name=nakama" | xargs -r docker stop
+    docker ps -aq --filter "name=nakama" | xargs -r docker rm
+fi
+
 # ── 1. ファイアウォール ──
 step "1. ファイアウォール設定"
 if ! command -v ufw &>/dev/null; then
