@@ -32,6 +32,7 @@ mkdir -p test/log
 echo "========================================="
 echo "Nakama 同時接続テスト"
 echo "========================================="
+echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
 echo ""
 echo "--- Go プラグインビルド ---"
 ./nakama/doBuild.sh

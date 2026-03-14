@@ -14,6 +14,7 @@ mkdir -p test/log
 echo "========================================="
 echo "同接履歴 DB永続化テスト"
 echo "========================================="
+echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
 echo ""
 echo "--- Go プラグインビルド ---"
 ./nakama/doBuild.sh

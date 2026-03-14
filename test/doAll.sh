@@ -347,6 +347,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
     # ── 段階モード ──
     echo "========================================="
     echo "全テスト一括実行（段階モード）"
+    echo "  server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
     echo "  人数: ${PLAYER_COUNTS[*]}"
     echo "  テスト: concurrent / sustain / snd-rcv / player-list / ccu-db"
     echo "========================================="
@@ -392,6 +393,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
     echo "========================================="
 else
     # ── 単一モード（従来互換） ──
+    echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
     CURRENT_ROUND_LABEL=""
     [ -n "$PLAYERS_OPT" ] && CURRENT_ROUND_LABEL="[$(echo "$PLAYERS_OPT" | grep -oP '\d+')人]"
 

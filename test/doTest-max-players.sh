@@ -143,6 +143,7 @@ run_with_throttle() {
 
 SCRIPT_VERSION=$(date -r "$0" +%Y-%m-%d_%H:%M:%S)
 echo "========================================="
+echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
 echo "最大同時接続人数探索  (script: ${SCRIPT_VERSION})"
 echo "  開始: ${START}人  増加幅: ${STEP}人"
 echo "  試行回数: ${TRIALS}回中${PASS_NEEDED}回以上PASSで合格"
