@@ -129,7 +129,7 @@ ENV_FILE="$SCRIPT_DIR/.env"
 if [ -f "$ENV_FILE" ] && ! grep -q 'localdev' "$ENV_FILE"; then
     echo ".env 既に本番設定済み（スキップ）"
 else
-    PG_PASS=$(openssl rand -base64 24)
+    PG_PASS=$(openssl rand -hex 16)
     echo "POSTGRES_PASSWORD=$PG_PASS" > "$ENV_FILE"
     echo "✅ .env 生成完了（パスワード自動生成済み）"
 fi
@@ -144,7 +144,7 @@ if grep -q 'NAKAMA_SERVER_KEY' "$ENV_FILE"; then
     CONSOLE_PASS=$(grep NAKAMA_CONSOLE_PASS "$ENV_FILE" | cut -d= -f2)
 else
     SERVER_KEY=$(openssl rand -hex 16)
-    CONSOLE_PASS=$(openssl rand -base64 16)
+    CONSOLE_PASS=$(openssl rand -hex 12)
     cat >> "$ENV_FILE" <<EOV
 NAKAMA_SERVER_KEY=$SERVER_KEY
 NAKAMA_CONSOLE_USER=admin
