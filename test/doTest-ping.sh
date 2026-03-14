@@ -27,11 +27,18 @@ echo "--- 疎通テスト ---"
 echo "server_key: ${SERVER_KEY}"
 echo "endpoint:   http://${HOST}:${PORT}"
 
-# ヘルスチェック（認証不要）
+# ヘルスチェック（認証不要、最大30秒リトライ）
 echo -n "  healthcheck ... "
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${HOST}:${PORT}/healthcheck" --connect-timeout 5 --max-time 10 2>/dev/null)
+HTTP_CODE=""
+for i in $(seq 1 30); do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${HOST}:${PORT}/healthcheck" --connect-timeout 2 --max-time 5 2>/dev/null)
+    if [ "$HTTP_CODE" = "200" ]; then
+        break
+    fi
+    sleep 1
+done
 if [ "$HTTP_CODE" = "200" ]; then
-    echo "OK"
+    echo "OK (${i}s)"
 else
     echo "FAIL (HTTP ${HTTP_CODE:-timeout})"
     echo "❌ サーバに接続できません。nakama が起動しているか確認してください。"
