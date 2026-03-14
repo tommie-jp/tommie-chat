@@ -3,6 +3,7 @@
 # 使い方:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
+name: tommchat-prod
 # 開発用の docker-compose.yml を変更せずに、本番向けの設定を上書きします。
 # - ポートを 127.0.0.1 バインド（nginx 以外は外部非公開）
 # - restart: unless-stopped（自動再起動）
