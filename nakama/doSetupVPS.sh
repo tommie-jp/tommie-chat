@@ -46,10 +46,11 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # ── 既存コンテナの停止（ポート競合防止） ──
-if docker ps -q --filter "name=nakama" 2>/dev/null | grep -q .; then
-    warn "既存の nakama コンテナを停止します"
-    docker ps -q --filter "name=nakama" | xargs -r docker stop
-    docker ps -aq --filter "name=nakama" | xargs -r docker rm
+EXISTING=$(docker ps -aq --filter "name=nakama" --filter "name=tommchat-prod" 2>/dev/null)
+if [ -n "$EXISTING" ]; then
+    warn "既存のコンテナを停止・削除します"
+    echo "$EXISTING" | xargs -r docker rm -f
+    docker network rm nakama_default tommchat-prod_default 2>/dev/null || true
 fi
 
 # ── 1. ファイアウォール ──
