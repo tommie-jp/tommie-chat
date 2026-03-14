@@ -69,6 +69,9 @@ ENV_FILE="$ROOT_DIR/nakama/.env"
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
+# ── 疎通テスト（server_key 認証確認） ──
+bash "$SCRIPT_DIR/doTest-ping.sh" || exit 1
+
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"
 CHILD_PID=0
