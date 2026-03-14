@@ -44,5 +44,10 @@ if [ "$FORCE" -eq 0 ] && [ -f "$TARGET" ]; then
     fi
 fi
 
-cd "$GO_SRC" && bash build.sh && cd "$SCRIPT_DIR" && docker compose restart nakama
+# prod override があればそちらを使う
+COMPOSE="docker compose"
+if [ -f "$SCRIPT_DIR/docker-compose.prod.yml" ]; then
+    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+fi
+cd "$GO_SRC" && bash build.sh && cd "$SCRIPT_DIR" && $COMPOSE restart nakama
 echo "world.so updated — $(date -r "$TARGET" '+%Y/%m/%d %H:%M:%S')"
