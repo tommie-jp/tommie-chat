@@ -14,7 +14,7 @@ import { Client, Session, Socket, MatchData } from '@heroiclabs/nakama-js';
 
 const HOST = '127.0.0.1';
 const PORT = '7350';
-const SERVER_KEY = 'defaultkey';
+const SERVER_KEY = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
 const CHUNK_SIZE = 16;
 const OP_INIT_POS = 1;
 const OP_MOVE_TARGET = 2;
