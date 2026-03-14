@@ -86,6 +86,12 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ROOT_DIR/nakama/.env" ]; then
     set -a; source "$ROOT_DIR/nakama/.env"; set +a
 fi
+# docker compose コマンド（prod override 自動検出）
+COMPOSE="docker compose"
+if [ -f "$ROOT_DIR/nakama/docker-compose.prod.yml" ]; then
+    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+fi
+
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"
 
@@ -123,10 +129,10 @@ echo "--- Go プラグインビルド ---"
 restart_server() {
     echo "  nakama サーバ再起動..."
     cd "$ROOT_DIR/nakama"
-    docker compose restart -t 3 nakama
+    $COMPOSE restart -t 3 nakama
     local i
     for i in $(seq 1 30); do
-        if docker compose logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
+        if $COMPOSE logs --tail 5 nakama 2>/dev/null | grep -q "Startup"; then
             echo "  起動確認 (${i}s)"
             break
         fi
@@ -139,7 +145,7 @@ restart_server() {
 start_server_log() {
     local log_file="$1"
     cd "$ROOT_DIR/nakama"
-    stdbuf -oL docker compose logs -f --tail 0 nakama 2>&1 \
+    stdbuf -oL $COMPOSE logs -f --tail 0 nakama 2>&1 \
       | grep --line-buffered "$GREP_FILTER" \
       | sed -u 's/^[^ ]* *| *//' \
       | sed -u 's/\([0-9a-f]\{8\}\)-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/\1/g' \
