@@ -59,3 +59,4 @@ nakama/go_src/world.so
 nakama/go_src/nakama-tommie-chat.so
 test/__pycache__/
 .env.*
+01-README.md
