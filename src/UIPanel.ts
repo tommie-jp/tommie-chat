@@ -299,6 +299,12 @@ export function setupHtmlUI(game: GameScene): void {
         if (srvUrlInput)  srvUrlInput.value  = defaultHost;
         if (srvPortInput) srvPortInput.value = defaultPort;
 
+        // 本番ビルドではローカルデバッグ情報を非表示
+        const srvDesc = srvPanel?.querySelector(".srv-desc") as HTMLElement | null;
+        if (srvDesc && defaultHost !== "127.0.0.1") {
+            srvDesc.textContent = "接続するtommChatサーバの設定";
+        }
+
         if (srvPanel && srvHeader) {
             const sCk = (k: string, v: string) =>
                 document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
@@ -1948,9 +1954,9 @@ export function setupHtmlUI(game: GameScene): void {
         if (dateEl) dateEl.textContent = "更新日 " + date;
         if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
             + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
-            + 'URL: 準備中<br>'
+            + 'URL: <a href="https://mmo.tommie.jp" target="_blank">https://mmo.tommie.jp</a><br>'
             + 'X: <a href="https://x.com/tommie_nico" target="_blank" rel="noopener" style="color:#1d9bf0;">@tommie_nico</a><br>'
-            + 'GitHub: 準備中<br>'
+            + 'GitHub: <a href="https://github.com/open-tommie/tommie-chat" target="_blank">https://github.com/open-tommie/tommie-chat</a><br>'
             + 'メール: 準備中'
             + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
             + '本ソフトウェアは現状のまま（AS IS）提供され、一切の保証はありません。<br>'
