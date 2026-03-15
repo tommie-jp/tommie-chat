@@ -20,7 +20,7 @@ case "${1:-}" in
         echo "  5. 環境変数・セキュリティ設定（パスワード・キー自動生成）"
         echo "  6. フロントエンドビルド（server_key 自動設定）"
         echo "  7. Docker ログローテーション設定"
-        echo "  8. サーバー起動"
+        echo "  8. サーバー起動（Go プラグインはビルド済み前提）"
         exit 0 ;;
 esac
 
@@ -186,8 +186,13 @@ step "8. サーバー起動"
 cd "$SCRIPT_DIR"
 echo "  NAKAMA_SERVER_KEY=${NAKAMA_SERVER_KEY}"
 echo "  .env server_key: $(grep NAKAMA_SERVER_KEY "$ENV_FILE" | cut -d= -f2)"
+# Go プラグイン（world.so）は開発環境でビルド済み（git に含まれる）
+if [ ! -f "$SCRIPT_DIR/modules/world.so" ]; then
+    echo "⚠️  nakama/modules/world.so が見つかりません。"
+    echo "   開発環境で doBuild.sh を実行してから git push してください。"
+    exit 1
+fi
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-bash doBuild.sh --fresh
 
 echo ""
 echo "${GREEN}=========================================${RESET}"
