@@ -220,12 +220,16 @@ if [ "$IS_LOCAL" = true ]; then
         WEB_PORTS=(80 8080)
     fi
     WEB_PORT=""
-    for p in "${WEB_PORTS[@]}"; do
-        WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${HOST}:${p}/" --connect-timeout 2 --max-time 5 2>/dev/null)
-        if [ "$WEB_CODE" = "200" ]; then
-            WEB_PORT=$p
-            break
-        fi
+    for attempt in $(seq 1 15); do
+        for p in "${WEB_PORTS[@]}"; do
+            WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${HOST}:${p}/" --connect-timeout 2 --max-time 5 2>/dev/null)
+            if [ "$WEB_CODE" = "200" ]; then
+                WEB_PORT=$p
+                break 2
+            fi
+        done
+        echo -n "リトライ(${attempt}/15)... "
+        sleep 1
     done
     if [ -n "$WEB_PORT" ]; then
         echo "OK (port ${WEB_PORT})"

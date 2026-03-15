@@ -59,7 +59,8 @@ services:
             --socket.max_request_size_bytes 131072 `# 受信メッセージ上限[bytes](default131072)` \
             --runtime.max_count 8192 `# RPC同時goroutine上限[個](default256)` \
             --match.max_empty_sec 30 `# 空マッチ自動削除[秒](default0)` \
-            --runtime.env MAX_LOGIN_RATE_PER_SEC=50 `# ログイン制限[人/秒]`
+            --runtime.env MAX_LOGIN_RATE_PER_SEC=50 `# ログイン制限[人/秒]` \
+            --runtime.env ENABLE_TEST_RPC=true `# テスト用RPC有効（本番では設定しない）`
     restart: "no"
     stop_grace_period: 10s # SIGTERM後の猶予時間
     depends_on:

@@ -11,6 +11,7 @@ import * as ws from 'ws';
 // Node.js にはブラウザの WebSocket がないので ws パッケージで補う
 (globalThis as unknown as Record<string, unknown>).WebSocket = ws.WebSocket;
 import { Client, Session, Socket, MatchData } from '@heroiclabs/nakama-js';
+import { trackUserId, deleteCreatedUsers } from './test-helpers';
 
 const HOST = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT = process.env.NAKAMA_PORT ?? '7350';
@@ -60,6 +61,7 @@ async function createPlayer(name: string): Promise<PlayerConn> {
         }
     }
 
+    trackUserId(session.user_id!);
     return { client, session, socket, matchId, sessionId };
 }
 
@@ -854,3 +856,8 @@ describe('Nakama AOI 境界値テスト', () => {
         await p1.socket.rpc('setBlock', JSON.stringify({ gx, gz, blockId: 0, r: 0, g: 0, b: 0, a: 0 }));
     });
 });
+
+// ファイルレベルのクリーンアップ: 全 describe 完了後にユーザー削除
+afterAll(async () => {
+    await deleteCreatedUsers();
+}, 60_000);

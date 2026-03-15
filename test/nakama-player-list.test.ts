@@ -14,6 +14,7 @@ import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import * as ws from 'ws';
 (globalThis as unknown as Record<string, unknown>).WebSocket = ws.WebSocket;
 import { Client, Session, Socket, MatchData } from '@heroiclabs/nakama-js';
+import { trackUserId, deleteCreatedUsers } from './test-helpers';
 
 const HOST        = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT        = process.env.NAKAMA_PORT ?? '7350';
@@ -150,6 +151,7 @@ async function loginAndJoin(name: string, x = 0, z = 0): Promise<PlayerConn> {
     const selfSid = match!.self?.session_id ?? '';
 
     const conn: PlayerConn = { name, client, session, socket, matchId: wmData.matchId, sessionId: selfSid, receivedEvents, receivedProfiles };
+    trackUserId(session.user_id!);
 
     const ry = 0;
     clog(name, `snd initPos x=${x.toFixed(1)} z=${z.toFixed(1)} dn=${name} tx=${TEXTURE_URL}`);
@@ -589,3 +591,8 @@ if (_customN > 0 && ![1, 10, 100, 1000, 2000].includes(_customN)) {
     makeProfileTest(_customN);
     makeDisplayNameTest(_customN);
 }
+
+// ファイルレベルのクリーンアップ: 全 describe 完了後にユーザー削除
+afterAll(async () => {
+    await deleteCreatedUsers();
+}, 60_000);
