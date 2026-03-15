@@ -10,6 +10,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import * as ws from 'ws';
 (globalThis as unknown as Record<string, unknown>).WebSocket = ws.WebSocket;
 import { Client, Session, Socket } from '@heroiclabs/nakama-js';
+import { trackUserId, deleteCreatedUsers } from './test-helpers';
 
 const HOST = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT = process.env.NAKAMA_PORT ?? '7350';
@@ -63,12 +64,14 @@ async function createPlayer(name: string): Promise<PlayerConn> {
         }
     }
 
+    trackUserId(session.user_id!);
     return { client, session, socket, matchId, sessionId, name };
 }
 
 async function cleanup(p: PlayerConn): Promise<void> {
     try { p.socket.disconnect(true); } catch { /* ignore */ }
 }
+
 
 function sleep(ms: number): Promise<void> {
     return new Promise(r => setTimeout(r, ms));
@@ -252,3 +255,8 @@ for (const N of CONCURRENCY_LEVELS) {
         });
     });
 }
+
+// ファイルレベルのクリーンアップ: 全 describe 完了後にユーザー削除
+afterAll(async () => {
+    await deleteCreatedUsers();
+}, 60_000);

@@ -84,7 +84,11 @@ export class NakamaService {
         this.session = await this.client.authenticateDevice(deviceId, true);
         // デバイス認証後にusernameを設定し、セッションを再取得（JWTにusernameを反映）
         if (this.session.username !== loginName) {
-            await this.client.updateAccount(this.session, { username: loginName });
+            try {
+                await this.client.updateAccount(this.session, { username: loginName });
+            } catch {
+                throw new Error(`ユーザーID "${loginName}" は既に使用されています。別のIDでログインしてください。ブラウザのキャッシュをクリアした場合、ユーザIDは使えなくなります。`);
+            }
             this.session = await this.client.authenticateDevice(deviceId, false);
         }
         console.log("snd Login username:", this.session.username);

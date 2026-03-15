@@ -1412,6 +1412,26 @@ func rpcGetDisplayNames(ctx context.Context, logger runtime.Logger, db *sql.DB, 
 	return string(b), nil
 }
 
+// rpcDeleteUsers はテスト用: 指定ユーザーIDを一括削除する（ENABLE_TEST_RPC=true 時のみ登録）
+func rpcDeleteUsers(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	var req struct {
+		UserIds []string `json:"userIds"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return "", runtime.NewError("invalid payload", 3)
+	}
+	deleted := 0
+	for _, uid := range req.UserIds {
+		if err := nk.AccountDeleteId(ctx, uid, false); err != nil {
+			logger.Warn("deleteUser %s: %v", uid, err)
+			continue
+		}
+		deleted++
+	}
+	b, _ := json.Marshal(map[string]int{"deleted": deleted})
+	return string(b), nil
+}
+
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// pprof サーバ (ポート6060)
@@ -1562,6 +1582,15 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	}
 	if err := initializer.RegisterRpc("getDisplayNames", rpcGetDisplayNames); err != nil {
 		return err
+	}
+
+	// テスト用 RPC（ENABLE_TEST_RPC=true 時のみ）
+	env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
+	if env["ENABLE_TEST_RPC"] == "true" {
+		logger.Info("Test RPCs enabled (ENABLE_TEST_RPC=true)")
+		if err := initializer.RegisterRpc("deleteUsers", rpcDeleteUsers); err != nil {
+			return err
+		}
 	}
 
 	// 表示名バリデーション（updateAccount のフック）

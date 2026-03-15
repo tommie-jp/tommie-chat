@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as ws from 'ws';
 (globalThis as unknown as Record<string, unknown>).WebSocket = ws.WebSocket;
 import { Client, Session, Socket } from '@heroiclabs/nakama-js';
+import { trackUserId, deleteCreatedUsers } from './test-helpers';
 
 const HOST = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT = process.env.NAKAMA_PORT ?? '7350';
@@ -120,6 +121,7 @@ async function createPlayer(name: string): Promise<PlayerConn> {
         p.connected = false;
     };
 
+    trackUserId(session.user_id!);
     return p;
 }
 
@@ -376,3 +378,8 @@ describe(`接続維持テスト (${PLAYER_COUNT}人, ${MAX_DURATION}秒)`, { tim
         });
     }
 });
+
+// ファイルレベルのクリーンアップ: 全 describe 完了後にユーザー削除
+afterAll(async () => {
+    await deleteCreatedUsers();
+}, 60_000);

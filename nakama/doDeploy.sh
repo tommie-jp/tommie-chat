@@ -134,7 +134,7 @@ step "5. 環境変数の設定"
 ENV_FILE="$SCRIPT_DIR/.env"
 # ボリュームを毎回削除するため、パスワードも毎回再生成する
 PG_PASS=$(openssl rand -hex 16)
-SERVER_KEY=$(openssl rand -hex 16)
+SERVER_KEY=tommie-chat
 CONSOLE_PASS=$(openssl rand -hex 12)
 cat > "$ENV_FILE" <<EOV
 POSTGRES_PASSWORD=$PG_PASS
