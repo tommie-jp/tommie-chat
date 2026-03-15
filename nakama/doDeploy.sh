@@ -157,7 +157,11 @@ cd "$ROOT_DIR"
 npm install
 
 # server_key をフロントエンドに埋め込んでビルド
-echo "VITE_SERVER_KEY=$SERVER_KEY" > "$ROOT_DIR/.env"
+cat > "$ROOT_DIR/.env" <<EOV2
+VITE_SERVER_KEY=$SERVER_KEY
+VITE_DEFAULT_HOST=mmo.tommie.jp
+VITE_DEFAULT_PORT=443
+EOV2
 NODE_OPTIONS="--max-old-space-size=3072" npm run build
 rm -f "$ROOT_DIR/.env"  # ビルド後は不要（server_key は dist/ に埋め込み済み）
 echo "✅ ビルド完了（server_key 自動設定済み）"
