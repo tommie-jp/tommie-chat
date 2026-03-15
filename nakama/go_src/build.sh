@@ -57,6 +57,7 @@ BUILDER_IMG="registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:${NAKAMA_VE
 
 docker run --rm \
   --entrypoint sh \
+  --dns 8.8.8.8 \
   -v "$SCRIPT_DIR":/go_src \
   -v "$OUT_DIR":/output \
   -v nakama-go-cache:/go/pkg/mod \
