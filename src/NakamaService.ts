@@ -79,7 +79,9 @@ export class NakamaService {
         this.host = host;
         this.port = port;
         this.loginName = loginName;
-        this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", host, port, false);
+        const useSSL = port === "443";
+        console.log(`snd Connect ${useSSL ? "https" : "http"}://${host}:${port} (SSL=${useSSL})`);
+        this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", host, port, useSSL);
         const deviceId = this.getOrCreateDeviceId(loginName);
         this.session = await this.client.authenticateDevice(deviceId, true);
         // デバイス認証後にusernameを設定し、セッションを再取得（JWTにusernameを反映）
@@ -93,7 +95,7 @@ export class NakamaService {
         }
         console.log("snd Login username:", this.session.username);
 
-        this.socket = this.client.createSocket(false, false);
+        this.socket = this.client.createSocket(useSSL, false);
         this.socket.setHeartbeatTimeoutMs(60000);
         await this.socket.connect(this.session, true);
 
@@ -153,7 +155,7 @@ export class NakamaService {
             if (!this.session) { this.reconnecting = false; return; } // logged out
             try {
                 console.log(`NakamaService reconnect attempt ${attempt + 1}/${delays.length}`);
-                this.socket = this.client.createSocket(false, false);
+                this.socket = this.client.createSocket(this.port === "443", false);
                 this.socket.setHeartbeatTimeoutMs(60000);
                 await this.socket.connect(this.session, true);
                 this.setupSocketHandlers();

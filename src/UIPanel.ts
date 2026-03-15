@@ -293,6 +293,12 @@ export function setupHtmlUI(game: GameScene): void {
         const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
         const srvPortInput = document.getElementById("serverPort") as HTMLInputElement;
 
+        // 環境変数からデフォルト値を設定（本番ビルドでは mmo.tommie.jp:443）
+        const defaultHost = import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1";
+        const defaultPort = import.meta.env.VITE_DEFAULT_PORT ?? "7350";
+        if (srvUrlInput)  srvUrlInput.value  = defaultHost;
+        if (srvPortInput) srvPortInput.value = defaultPort;
+
         if (srvPanel && srvHeader) {
             const sCk = (k: string, v: string) =>
                 document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
@@ -911,8 +917,8 @@ export function setupHtmlUI(game: GameScene): void {
     const srvPortInput = document.getElementById("serverPort") as HTMLInputElement;
 
     const updateLoginTooltip = () => {
-        const url  = srvUrlInput?.value.trim()  || "127.0.0.1";
-        const port = srvPortInput?.value.trim() || "7350";
+        const url  = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
+        const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
         if (loginBtn) loginBtn.title =
             "tommChatサーバへログインします。\nサーバURL: " + url + "\nポート番号: " + port;
     };
@@ -965,8 +971,8 @@ export function setupHtmlUI(game: GameScene): void {
             }
             _end(); return;
         }
-        const host = srvUrlInput?.value.trim()  || "127.0.0.1";
-        const port = srvPortInput?.value.trim() || "7350";
+        const host = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
+        const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
         game.updatePlayerNameTag(name);
         setCookie("loginName", name);
         if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : "接続中…"; }
@@ -1192,11 +1198,11 @@ export function setupHtmlUI(game: GameScene): void {
                 confirmedDisplayName = name;
                 if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.display = "none"; displayNameBtn.style.background = ""; }
                 showDnStatus("✓ 表示名変更しました！", "#00dd55");
-                addServerLog(loggedInHost || "127.0.0.1", loggedInPort || "7350", "表示名変更", `表示名を「${name}」に設定しました`);
+                addServerLog(loggedInHost || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1"), loggedInPort || (import.meta.env.VITE_DEFAULT_PORT ?? "7350"), "表示名変更", `表示名を「${name}」に設定しました`);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ " + msg; }
-                addServerLog(loggedInHost || "127.0.0.1", loggedInPort || "7350", "表示名変更失敗", msg);
+                addServerLog(loggedInHost || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1"), loggedInPort || (import.meta.env.VITE_DEFAULT_PORT ?? "7350"), "表示名変更失敗", msg);
             }
             } finally { _end(); }
         };
@@ -1885,8 +1891,8 @@ export function setupHtmlUI(game: GameScene): void {
     }
 
     const doLogout = () => {
-        const host = srvUrlInput?.value.trim()  || "127.0.0.1";
-        const port = srvPortInput?.value.trim() || "7350";
+        const host = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
+        const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
         stopPing();
         stopCcu();
         game.saveChunksToDB();

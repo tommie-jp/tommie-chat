@@ -78,32 +78,45 @@ FAILED=0
 echo "--- 疎通テスト ---"
 echo "server_key: ${SERVER_KEY}"
 
+# ── プロトコル判定（ポート443はHTTPS） ──
+PROTO="http"
+if [ "$PORT" = "443" ]; then
+    PROTO="https"
+fi
+
 # ── リモート時: Web ポートを先に検出（API は nginx プロキシ経由） ──
 API_BASE=""
 if [ "$IS_LOCAL" = true ]; then
-    API_BASE="http://${HOST}:${PORT}"
+    API_BASE="${PROTO}://${HOST}:${PORT}"
     echo "endpoint:   ${API_BASE} (direct)"
 else
     # Web ポート検出
     if [ -n "$OPT_WEB_PORT" ]; then
         WEB_PORTS=("$OPT_WEB_PORT")
     else
-        WEB_PORTS=(80 8080)
+        if [ "$PORT" = "443" ]; then
+            WEB_PORTS=(443)
+        else
+            WEB_PORTS=(80 8080)
+        fi
     fi
     DETECTED_WEB_PORT=""
     for p in "${WEB_PORTS[@]}"; do
-        WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${HOST}:${p}/" --connect-timeout 2 --max-time 5 2>/dev/null)
+        TEST_PROTO="http"
+        [ "$p" = "443" ] && TEST_PROTO="https"
+        WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${TEST_PROTO}://${HOST}:${p}/" --connect-timeout 2 --max-time 5 2>/dev/null)
         if [ "$WEB_CODE" = "200" ]; then
             DETECTED_WEB_PORT=$p
+            PROTO=$TEST_PROTO
             break
         fi
     done
     if [ -n "$DETECTED_WEB_PORT" ]; then
-        API_BASE="http://${HOST}:${DETECTED_WEB_PORT}"
+        API_BASE="${PROTO}://${HOST}:${DETECTED_WEB_PORT}"
         echo "endpoint:   ${API_BASE} (nginx proxy)"
     else
-        echo "endpoint:   http://${HOST}:${PORT} (direct, fallback)"
-        API_BASE="http://${HOST}:${PORT}"
+        API_BASE="${PROTO}://${HOST}:${PORT}"
+        echo "endpoint:   ${API_BASE} (direct, fallback)"
     fi
 fi
 
