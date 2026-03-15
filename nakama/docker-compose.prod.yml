@@ -8,14 +8,27 @@ name: tommchat-prod
 # - ポートを 127.0.0.1 バインド（nginx 以外は外部非公開）
 # - restart: unless-stopped（自動再起動）
 # - Nakama セキュリティ設定（.env から読み込み）
+# - PostgreSQL ボリュームを dev と分離（パスワード競合防止）
 services:
   postgres:
     restart: unless-stopped
     ports:
       - "127.0.0.1:5432:5432"
+    volumes:
+      - data-prod:/var/lib/postgresql/data # dev の data とは別ボリューム
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   nakama:
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     ports:
       - "127.0.0.1:6060:6060"
       - "127.0.0.1:7349:7349"
@@ -32,7 +45,7 @@ services:
             --name nakama1 \
             --database.address \
             nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
-            --logger.level DEBUG \
+            --logger.level INFO \
             --session.token_expiry_sec 7200 \
             --socket.ping_period_ms 10000 \
             --socket.pong_wait_ms 15000 \
@@ -54,8 +67,21 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   prometheus:
     restart: unless-stopped
     ports:
       - "127.0.0.1:9090:9090"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  data-prod: # 本番用 PostgreSQL データ（dev の data とは別）

@@ -159,6 +159,7 @@ npm install
 # server_key をフロントエンドに埋め込んでビルド
 echo "VITE_SERVER_KEY=$SERVER_KEY" > "$ROOT_DIR/.env"
 npm run build
+rm -f "$ROOT_DIR/.env"  # ビルド後は不要（server_key は dist/ に埋め込み済み）
 echo "✅ ビルド完了（server_key 自動設定済み）"
 
 # ── 7. Docker ログローテーション ──
