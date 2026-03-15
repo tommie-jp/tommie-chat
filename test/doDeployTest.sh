@@ -40,4 +40,4 @@ cd ../test
 set -a
 source ../nakama/.env
 set +a
-./doAll.sh
+./doTest-ping.sh
