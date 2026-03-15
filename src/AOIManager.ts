@@ -6,7 +6,7 @@ import { prof } from "./Profiler";
 export class AOIManager {
     aoiRadius = 48;
     lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
-    aoiVisEnabled = true;
+    aoiVisEnabled = false;
     remoteAoiEnabled = false;
 
     private syncThrottleTimer: ReturnType<typeof setTimeout> | null = null;
