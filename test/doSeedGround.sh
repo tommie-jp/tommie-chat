@@ -2,27 +2,43 @@
 # 初期地面データ投入スクリプト
 #
 # OP_BLOCK_UPDATE を使い、テスト用の地面データをサーバに書き込む。
-# 中央付近に 32x32 の地面パターンを生成する。
 #
 # 前提: Nakama サーバが起動していること
 #
 # 使い方:
-#   ./test/doSeedGround.sh
+#   ./test/doSeedGround.sh                    # デフォルト: 広場パターン
+#   ./test/doSeedGround.sh --pattern plaza    # 広場パターン
+#   ./test/doSeedGround.sh --pattern 4color   # 4色テスト用
 #   ./test/doSeedGround.sh --host 127.0.0.1 --port 7350
 
 set -e
 cd "$(dirname "$0")/.."
 
-# 引数をそのまま vitest に渡す環境変数に変換
+# 引数パース
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -h|--help)
+            echo "使い方: $0 [オプション]"
+            echo ""
+            echo "オプション:"
+            echo "  -p, --pattern <名前>  地面パターン（デフォルト: plaza）"
+            echo "    plaza   広場: 中央白広場 + 芝生 + 十字小道 + 池"
+            echo "    4color  4色テスト: 象限ごとに緑/茶/青/灰"
+            echo "    clear   地面クリア: plaza 範囲のブロックを全削除"
+            echo "  --host <ホスト>    Nakama サーバホスト（デフォルト: 127.0.0.1）"
+            echo "  --port <ポート>    Nakama サーバポート（デフォルト: 7350）"
+            echo "  -h, --help         このヘルプを表示"
+            exit 0
+            ;;
         --host) export NAKAMA_HOST="$2"; shift 2 ;;
         --port) export NAKAMA_PORT="$2"; shift 2 ;;
-        *) shift ;;
+        -p|--pattern) export SEED_PATTERN="$2"; shift 2 ;;
+        *) echo "不明なオプション: $1（-h でヘルプ表示）"; exit 1 ;;
     esac
 done
 
-echo "=== 地面データ投入 ==="
+PATTERN="${SEED_PATTERN:-plaza}"
+echo "=== 地面データ投入（パターン: ${PATTERN}） ==="
 npx vitest run test/seed-ground.test.ts 2>&1
 echo ""
 echo "⚠️  サーバのメモリ上には反映済みです（再起動不要）"

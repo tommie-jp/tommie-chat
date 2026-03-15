@@ -8,6 +8,18 @@
 #   ./test/doClearGround.sh
 
 set -e
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "使い方: $0"
+    echo ""
+    echo "PostgreSQL の world_data チャンクを全削除する。"
+    echo "削除前に確認あり。削除後はサーバ再起動が必要。"
+    echo ""
+    echo "オプション:"
+    echo "  -h, --help  このヘルプを表示"
+    exit 0
+fi
+
 cd "$(dirname "$0")/../nakama"
 
 # dev/prod 自動検出

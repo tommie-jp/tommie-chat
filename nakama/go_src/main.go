@@ -207,6 +207,12 @@ type chunk struct {
 	hash  uint64 // FNV-1a 64bit ハッシュ（setBlock更新時に再計算）
 }
 
+// dirtyChunks は更新されたチャンク座標のキュー（重複排除付き）
+var (
+	dirtyChunksMu  sync.Mutex
+	dirtyChunksSet = make(map[[2]int]struct{}) // 重複排除用
+)
+
 // calcHash: チャンクのFNV-1a 64bitハッシュを計算してhashメンバに格納。呼び出し元がLock保持
 func (ch *chunk) calcHash() {
 	h := fnv.New64a()
@@ -491,28 +497,59 @@ func flatToInts(flat []uint8) []int {
 	return ints
 }
 
-func saveChunkToStorage(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger, cx, cz int) {
-	defer prof("saveChunkToStorage")()
-	ch := &chunks[cx][cz]
-	ch.mu.RLock()
-	flat := ch.toFlat()
-	ch.mu.RUnlock()
-	data, err := json.Marshal(struct {
-		Table []int `json:"table"`
-	}{Table: flatToInts(flat)})
-	if err != nil {
-		logger.Warn("saveChunk marshal: %v", err)
+// markChunkDirty は更新されたチャンク座標をキューに追加する（重複排除）
+func markChunkDirty(cx, cz int) {
+	key := [2]int{cx, cz}
+	dirtyChunksMu.Lock()
+	dirtyChunksSet[key] = struct{}{}
+	dirtyChunksMu.Unlock()
+}
+
+// flushDirtyChunks はキューからダーティチャンクを取り出し、1回の StorageWrite でバッチ保存する
+func flushDirtyChunks(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger) {
+	dirtyChunksMu.Lock()
+	if len(dirtyChunksSet) == 0 {
+		dirtyChunksMu.Unlock()
 		return
 	}
-	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
-		Collection:      groundCollection,
-		Key:             chunkStorageKey(cx, cz),
-		UserID:          systemUserID,
-		Value:           string(data),
-		PermissionRead:  2,
-		PermissionWrite: 1,
-	}}); err != nil {
-		logger.Warn("saveChunk StorageWrite: %v", err)
+	// キューをコピーしてクリア
+	keys := make([][2]int, 0, len(dirtyChunksSet))
+	for k := range dirtyChunksSet {
+		keys = append(keys, k)
+	}
+	dirtyChunksSet = make(map[[2]int]struct{})
+	dirtyChunksMu.Unlock()
+
+	// 全ダーティチャンクを1回の StorageWrite でバッチ保存
+	writes := make([]*runtime.StorageWrite, 0, len(keys))
+	for _, k := range keys {
+		cx, cz := k[0], k[1]
+		ch := &chunks[cx][cz]
+		ch.mu.RLock()
+		flat := ch.toFlat()
+		ch.mu.RUnlock()
+		data, err := json.Marshal(struct {
+			Table []int `json:"table"`
+		}{Table: flatToInts(flat)})
+		if err != nil {
+			logger.Warn("saveChunk marshal chunk(%d,%d): %v", cx, cz, err)
+			continue
+		}
+		writes = append(writes, &runtime.StorageWrite{
+			Collection:      groundCollection,
+			Key:             chunkStorageKey(cx, cz),
+			UserID:          systemUserID,
+			Value:           string(data),
+			PermissionRead:  2,
+			PermissionWrite: 1,
+		})
+	}
+	if len(writes) > 0 {
+		if _, err := nk.StorageWrite(ctx, writes); err != nil {
+			logger.Warn("flushDirtyChunks StorageWrite %d chunks: %v", len(writes), err)
+		} else {
+			logf("flushDirtyChunks: saved %d chunks\n", len(writes))
+		}
 	}
 }
 
@@ -733,6 +770,10 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		worldPlayersMu.Lock()
 		delete(worldPlayersCache, sid)
 		worldPlayersMu.Unlock()
+	}
+	// 最後のプレイヤーが退出したらダーティチャンクを即座に保存
+	if len(ms.Presences) == 0 {
+		flushDirtyChunks(ctx, nk, logger)
 	}
 	return ms
 }
@@ -1030,7 +1071,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			ch.cells[lx][lz] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
 			ch.calcHash()
 			ch.mu.Unlock()
-			go saveChunkToStorage(ctx, nk, logger, cx, cz)
+			markChunkDirty(cx, cz)
 			// AOI内のプレイヤーにブロードキャスト
 			var targets []runtime.Presence
 			for aoiSid, aoi := range ms.AOIs {
@@ -1155,13 +1196,20 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		flushCcu1mSample()
 	}
 
+	// ダーティチャンクをDBにバッチ保存（60秒ごと）
+	if tick%600 == 0 {
+		flushDirtyChunks(ctx, nk, logger)
+	}
+
 	return ms
 }
 
 func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, graceSeconds int) interface{} {
 	defer prof("MatchTerminate")()
 	logger.Info("MatchTerminate called: graceSeconds=%d tick=%d", graceSeconds, tick)
-	// シャットダウン時: 未フラッシュの1sデータを1mに追加してからDB保存
+	// シャットダウン時: ダーティチャンクを保存
+	flushDirtyChunks(ctx, nk, logger)
+	// 未フラッシュの1sデータを1mに追加してからDB保存
 	flushCcu1mSample()
 	saveCcuHistory1m(ctx, nk, logger)
 	// キャッシュをクリア（次の getWorldMatch で新マッチが作成される）
@@ -1505,9 +1553,10 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 				for cx := 0; cx < chunkCount; cx++ {
 					for cz := 0; cz < chunkCount; cz++ {
 						chunks[cx][cz].calcHash()
-						saveChunkToStorage(ctx, nk, logger, cx, cz)
+						markChunkDirty(cx, cz)
 					}
 				}
+				flushDirtyChunks(ctx, nk, logger)
 			} else {
 				// 旧旧フォーマット (blockIDのみ uint16 x 10000)
 				var oldData struct {
@@ -1527,9 +1576,10 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 					for cx := 0; cx < chunkCount; cx++ {
 						for cz := 0; cz < chunkCount; cz++ {
 							chunks[cx][cz].calcHash()
-							saveChunkToStorage(ctx, nk, logger, cx, cz)
+							markChunkDirty(cx, cz)
 						}
 					}
+					flushDirtyChunks(ctx, nk, logger)
 				}
 			}
 		}
