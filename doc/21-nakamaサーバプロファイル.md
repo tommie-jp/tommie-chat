@@ -31,7 +31,7 @@ ports:
 
 ### ブラウザで一覧表示
 
-[http://localhost:6060/debug/pprof/](http://localhost:6060/debug/pprof/)
+`http://localhost:6060/debug/pprof/`
 
 ### CPU プロファイル
 
@@ -45,7 +45,7 @@ go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile?seconds=30
 
 対話シェルでの主なコマンド:
 
-```
+```text
 (pprof) top 20       # CPU消費トップ20関数
 (pprof) web           # SVGグラフをブラウザで表示
 (pprof) list funcName # 関数のソース行ごとの消費
@@ -57,7 +57,7 @@ go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile?seconds=30
 go tool pprof http://localhost:6060/debug/pprof/heap
 ```
 
-```
+```text
 (pprof) top 20              # メモリ割り当てトップ20
 (pprof) top 20 -cum         # 累積割り当て順
 ```
