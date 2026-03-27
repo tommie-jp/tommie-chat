@@ -1584,6 +1584,12 @@
                     <option value="/textures/pic1.ktx2">pic1</option>
                     <option value="/textures/pic2.ktx2">pic2</option>
                 </select>
+                <div style="margin-top:4px;">
+                    <input type="text" id="spriteUrlInput" class="debug-input" placeholder="/s3/avatars/sprite.png" style="width:160px;">
+                    <input type="number" id="spriteCharCol" class="debug-input" min="0" max="7" value="0" style="width:30px;" title="charCol">
+                    <input type="number" id="spriteCharRow" class="debug-input" min="0" max="7" value="0" style="width:30px;" title="charRow">
+                    <button id="spriteApplyBtn" class="debug-btn">Apply</button>
+                </div>
             </td></tr>
             <tr><td class="label" title="37.NPC&#10;NPC（npc001〜003）の表示をON/OFFします&#10;初期値: Off">37.NPC:</td><td class="value">
                 <button id="npcVisBtn" class="debug-btn off">Off</button>

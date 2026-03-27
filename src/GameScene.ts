@@ -21,6 +21,7 @@ import { loadAllChunks, saveChunks, ChunkRecord } from "./ChunkDB";
 import { CHUNK_SIZE, CHUNK_COUNT, WORLD_SIZE } from "./WorldConstants";
 import { CloudSystem } from "./CloudSystem";
 import { AvatarSystem } from "./AvatarSystem";
+import { SpriteAvatarSystem } from "./SpriteAvatarSystem";
 import { NPCSystem } from "./NPCSystem";
 import { AOIManager } from "./AOIManager";
 import { setupHtmlUI } from "./UIPanel";
@@ -65,7 +66,9 @@ export class GameScene {
     private blockMatCache = new Map<string, StandardMaterial>();
     buildMode = false;
     latestPingAvg: number | null = null;
-    playerTextureUrl = "/textures/pic1.ktx2";
+    playerTextureUrl = "/s3/avatars/pipo-nekonin008.png";
+    playerCharCol = 0;
+    playerCharRow = 0;
     avatarDepth = 0.05;
 
     // フレームプロファイル（ms単位、10フレーム移動平均）
@@ -81,6 +84,7 @@ export class GameScene {
 
     // サブシステム
     avatarSystem!: AvatarSystem;
+    spriteAvatarSystem!: SpriteAvatarSystem;
     cloudSystem!: CloudSystem;
     npcSystem!: NPCSystem;
     aoiManager!: AOIManager;
@@ -94,6 +98,7 @@ export class GameScene {
 
         // サブシステム初期化
         this.avatarSystem = new AvatarSystem(this.scene);
+        this.spriteAvatarSystem = new SpriteAvatarSystem(this.scene);
         this.cloudSystem = new CloudSystem(this.scene, this.engine);
 
         this.setupScene();
@@ -389,12 +394,15 @@ export class GameScene {
         this.clickMarker.isVisible = false;
         this.clickMarker.isPickable = false;
 
-        // プレイヤーアバター
+        // プレイヤーアバター（位置制御用の不可視ボックス）
         this.playerBox = this.avatarSystem.createAvatar("tommie.jp", "/textures/pic1.ktx2", 0, 0, this.avatarDepth);
-        const playerStandBase = this.playerBox.getChildMeshes().find(m => m.name === "tommie.jp_standBase");
-        if (playerStandBase && playerStandBase.material) {
-            (playerStandBase.material as StandardMaterial).diffuseColor = new Color3(1.0, 0.0, 0.0);
-        }
+        // 旧式メッシュアバターを非表示
+        this.playerBox.getChildMeshes().forEach(m => m.isVisible = false);
+        // スプライトアバターを作成
+        this.spriteAvatarSystem.createAvatar(
+            "__self__", this.playerTextureUrl, this.playerCharCol, this.playerCharRow, 0, 0, "",
+            new Color3(1.0, 0.0, 0.0)
+        ).catch(e => console.error("Failed to create player sprite avatar:", e));
 
         // NPCシステム
         this.npcSystem = new NPCSystem(this.avatarSystem);
@@ -639,11 +647,12 @@ export class GameScene {
             for (const [sid, av] of this.remoteAvatars) {
                 const tgt = this.remoteTargets.get(sid);
                 if (!tgt) continue;
+                const isSprite = this.spriteAvatarSystem.has(sid);
                 const dx = tgt.x - av.position.x, dz = tgt.z - av.position.z;
                 const dist = dx * dx + dz * dz;
                 if (dist <= 0.0025) continue; // 0.05^2
                 // 視錐台外のアバターは位置をテレポート（補間スキップ）
-                if (frustumPlanes && !av.isInFrustum(frustumPlanes)) {
+                if (!isSprite && frustumPlanes && (av as Mesh).isInFrustum && !(av as Mesh).isInFrustum(frustumPlanes)) {
                     av.position.x = tgt.x;
                     av.position.z = tgt.z;
                     continue;
@@ -652,11 +661,31 @@ export class GameScene {
                 const step = Math.min(this.moveSpeed * deltaTime, d);
                 av.position.x += (dx / d) * step;
                 av.position.z += (dz / d) * step;
-                const targetAngle = Math.atan2(dx, dz) + Math.PI;
-                let diff = targetAngle - av.rotation.y;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff >  Math.PI) diff -= Math.PI * 2;
-                av.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
+                if (isSprite) {
+                    // スプライトの場合: スプライト位置を同期（回転は不要、updateAnimationで方向処理）
+                    this.spriteAvatarSystem.syncPosition(sid, av.position.x, av.position.z);
+                } else {
+                    // メッシュの場合: 回転を補間
+                    const targetAngle = Math.atan2(dx, dz) + Math.PI;
+                    let diff = targetAngle - av.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff >  Math.PI) diff -= Math.PI * 2;
+                    av.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
+                }
+            }
+
+            // スプライトアバターのアニメーション更新
+            const camAlpha = this.camera.alpha;
+            // 自分のスプライトアバター
+            if (this.spriteAvatarSystem.has("__self__")) {
+                this.spriteAvatarSystem.syncPosition("__self__", this.playerBox.position.x, this.playerBox.position.z);
+                this.spriteAvatarSystem.updateAnimation("__self__", camAlpha);
+            }
+            // リモートのスプライトアバター
+            for (const [sid] of this.remoteAvatars) {
+                if (this.spriteAvatarSystem.has(sid)) {
+                    this.spriteAvatarSystem.updateAnimation(sid, camAlpha);
+                }
             }
 
             const _t2 = performance.now();

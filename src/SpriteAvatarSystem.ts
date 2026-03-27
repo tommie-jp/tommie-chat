@@ -1,0 +1,411 @@
+import {
+    Scene, Mesh, MeshBuilder, Vector3, StandardMaterial, Color3,
+    TransformNode, Texture, DynamicTexture, VertexData
+} from "@babylonjs/core";
+import { SpriteManager, Sprite } from "@babylonjs/core";
+import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
+import {
+    cellIndex, animRange, worldDirToSpriteDir,
+    buildTransparentPNG, sampleBgColor, type SheetInfo
+} from "../lib/babylon-rpgmaker-sprites/src/RpgMakerSpriteSheet";
+import { prof } from "./Profiler";
+
+interface SpriteAvatarData {
+    sprite: Sprite;
+    root: TransformNode;
+    standBase: Mesh;
+    namePlane: Mesh;
+    nameUpdate: (name: string) => void;
+    speechUpdate: (text: string) => void;
+    sheetInfo: SheetInfo;
+    charCol: number;
+    charRow: number;
+    currentDir: number;
+    isMoving: boolean;
+    prevX: number;
+    prevZ: number;
+}
+
+interface ManagerEntry {
+    mgr: SpriteManager;
+    sheetInfo: SheetInfo;
+    refCount: number;
+}
+
+export class SpriteAvatarSystem {
+    private managers = new Map<string, ManagerEntry>();
+    private avatars = new Map<string, SpriteAvatarData>();
+    private processing = new Map<string, Promise<ManagerEntry>>();
+    private creating = new Set<string>();
+
+    constructor(private scene: Scene) {}
+
+    private async getOrCreateManager(sheetUrl: string): Promise<ManagerEntry> {
+        const existing = this.managers.get(sheetUrl);
+        if (existing) {
+            existing.refCount++;
+            return existing;
+        }
+        const pending = this.processing.get(sheetUrl);
+        if (pending) {
+            const entry = await pending;
+            entry.refCount++;
+            return entry;
+        }
+        const promise = this.loadManager(sheetUrl);
+        this.processing.set(sheetUrl, promise);
+        try {
+            const entry = await promise;
+            this.managers.set(sheetUrl, entry);
+            return entry;
+        } finally {
+            this.processing.delete(sheetUrl);
+        }
+    }
+
+    private async loadManager(sheetUrl: string): Promise<ManagerEntry> {
+        const bg = await sampleBgColor(sheetUrl);
+        const result = await buildTransparentPNG(sheetUrl, bg.r, bg.g, bg.b, 30);
+        const info = result.info;
+        const scale = result.finalScale;
+        const frameW = info.frameW * scale;
+        const frameH = info.frameH * scale;
+
+        const mgr = new SpriteManager(
+            "sprMgr_" + sheetUrl.replace(/[^a-zA-Z0-9]/g, "_"),
+            result.dataURL, 50,
+            { width: frameW, height: frameH },
+            this.scene
+        );
+        mgr.texture.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE);
+
+        // テクスチャのロード完了を待つ
+        await new Promise<void>((resolve) => {
+            if (mgr.texture.isReady()) {
+                resolve();
+            } else {
+                mgr.texture.onLoadObservable.addOnce(() => resolve());
+            }
+        });
+
+        return { mgr, sheetInfo: info, refCount: 1 };
+    }
+
+    async createAvatar(
+        id: string, sheetUrl: string, charCol: number, charRow: number,
+        x: number, z: number, name: string, baseColor?: Color3
+    ): Promise<TransformNode> {
+        const _end = prof("SpriteAvatarSystem.createAvatar");
+        // 作成中なら無視
+        if (this.creating.has(id)) { _end(); return new TransformNode("dummy_" + id, this.scene); }
+        this.creating.add(id);
+        // 既存のスプライトがあれば先に破棄
+        if (this.avatars.has(id)) {
+            this.dispose(id);
+        }
+        const entry = await this.getOrCreateManager(sheetUrl);
+        // async待ちの間に別の呼び出しで作成された場合は中止
+        if (this.avatars.has(id)) { this.creating.delete(id); _end(); return this.avatars.get(id)!.root; }
+        const info = entry.sheetInfo;
+
+        console.log(`SpriteAvatarSystem.createAvatar id=${id} sheet=${sheetUrl} frameW=${info.frameW} frameH=${info.frameH} fCols=${info.fCols}`);
+        const s = new Sprite("sprAvatar_" + id, entry.mgr);
+        const baseSprW = info.frameW >= 80 ? 3.0 : 1.8;
+        const sprAspect = info.frameH / info.frameW;
+        s.width = baseSprW;
+        s.height = baseSprW * sprAspect;
+
+        const root = new TransformNode("sprRoot_" + id, this.scene);
+        root.position.set(x, 0, z);
+
+        s.position = new Vector3(x, s.height / 2, z);
+
+        // idle frame (dir=0 down, frame=1 middle)
+        const idle = cellIndex(info, charCol, charRow, 0, 1);
+        s.cellIndex = idle;
+
+        // stand base
+        const standBase = this.createStandBase(id, root, baseColor);
+
+        // name tag
+        const { plane: namePlane, update: nameUpdate } = this.createNameTag(root, name, s.height);
+
+        // speech bubble
+        const speechUpdate = this.createSpeechBubble(namePlane);
+
+        const data: SpriteAvatarData = {
+            sprite: s, root, standBase, namePlane, nameUpdate, speechUpdate,
+            sheetInfo: info, charCol, charRow,
+            currentDir: 0, isMoving: false,
+            prevX: x, prevZ: z,
+        };
+        this.avatars.set(id, data);
+        this.creating.delete(id);
+
+        _end();
+        return root;
+    }
+
+    updateAnimation(id: string, camAlpha: number): void {
+        const data = this.avatars.get(id);
+        if (!data) return;
+
+        const { sprite, root, sheetInfo, charCol, charRow } = data;
+        const dx = root.position.x - data.prevX;
+        const dz = root.position.z - data.prevZ;
+        data.prevX = root.position.x;
+        data.prevZ = root.position.z;
+
+        sprite.position.x = root.position.x;
+        sprite.position.z = root.position.z;
+
+        const moving = dx * dx + dz * dz > 0.0001;
+
+        if (moving) {
+            // スタンドベースを移動方向に向ける
+            const targetAngle = Math.atan2(dx, dz) + Math.PI;
+            root.rotation.y = targetAngle;
+
+            const dir = worldDirToSpriteDir(dx, dz, camAlpha);
+            if (!data.isMoving || dir !== data.currentDir) {
+                const range = animRange(sheetInfo, charCol, charRow, dir);
+                sprite.playAnimation(range.from, range.to, true, 150);
+                data.currentDir = dir;
+            }
+            data.isMoving = true;
+        } else if (data.isMoving) {
+            sprite.stopAnimation();
+            sprite.cellIndex = cellIndex(sheetInfo, charCol, charRow, data.currentDir, 1);
+            data.isMoving = false;
+        }
+    }
+
+    setEnabled(id: string, enabled: boolean): void {
+        const data = this.avatars.get(id);
+        if (!data) return;
+        data.sprite.isVisible = enabled;
+        data.root.setEnabled(enabled);
+    }
+
+    setPosition(id: string, x: number, z: number): void {
+        const data = this.avatars.get(id);
+        if (!data) return;
+        data.root.position.x = x;
+        data.root.position.z = z;
+        data.prevX = x;
+        data.prevZ = z;
+        data.sprite.position.x = x;
+        data.sprite.position.z = z;
+    }
+
+    syncPosition(id: string, x: number, z: number): void {
+        const data = this.avatars.get(id);
+        if (!data) return;
+        data.root.position.x = x;
+        data.root.position.z = z;
+        data.sprite.position.x = x;
+        data.sprite.position.z = z;
+    }
+
+    getNameUpdate(id: string): ((name: string) => void) | undefined {
+        return this.avatars.get(id)?.nameUpdate;
+    }
+
+    getSpeechUpdate(id: string): ((text: string) => void) | undefined {
+        return this.avatars.get(id)?.speechUpdate;
+    }
+
+    dispose(id: string): void {
+        const data = this.avatars.get(id);
+        if (!data) return;
+        data.sprite.dispose();
+        data.root.dispose();
+        this.avatars.delete(id);
+    }
+
+    has(id: string): boolean {
+        return this.avatars.has(id);
+    }
+
+    isCreating(id: string): boolean {
+        return this.creating.has(id);
+    }
+
+    private createStandBase(id: string, parent: TransformNode, color?: Color3): Mesh {
+        const baseThickness = 0.05;
+        const y = baseThickness / 2;
+        const baseColor = color ?? new Color3(0.4, 0.75, 0.95);
+
+        const p0 = new Vector3(0, y, -0.5);
+        const p1 = new Vector3(0.5, y, -0.1);
+        const p2 = new Vector3(0.5, y, 0.5);
+        const p3 = new Vector3(-0.5, y, 0.5);
+        const p4 = new Vector3(-0.5, y, -0.1);
+        const b0 = new Vector3(0, -y, -0.5);
+        const b1 = new Vector3(0.5, -y, -0.1);
+        const b2 = new Vector3(0.5, -y, 0.5);
+        const b3 = new Vector3(-0.5, -y, 0.5);
+        const b4 = new Vector3(-0.5, -y, -0.1);
+
+        // 先頭三角形（p0-p1-p4 と底面 b0-b1-b4 + 側面）
+        const frontMesh = new Mesh("sprStandFront_" + id, this.scene);
+        const fPos: number[] = [], fInd: number[] = [];
+        let fi = 0;
+        const fAdd = (v0: Vector3, v1: Vector3, v2: Vector3) => {
+            fPos.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+            fInd.push(fi, fi + 1, fi + 2); fi += 3;
+        };
+        const fQuad = (v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3) => { fAdd(v0, v1, v2); fAdd(v0, v2, v3); };
+        fAdd(p0, p4, p1); // top
+        fAdd(b0, b1, b4); // bottom
+        fQuad(p0, p1, b1, b0); // side front-right
+        fQuad(p4, p0, b0, b4); // side front-left
+        const fNorm: number[] = [];
+        VertexData.ComputeNormals(fPos, fInd, fNorm);
+        const fVd = new VertexData();
+        fVd.positions = fPos; fVd.indices = fInd; fVd.normals = fNorm;
+        fVd.applyToMesh(frontMesh);
+
+        const frontMat = new StandardMaterial("sprBaseMatFront_" + id, this.scene);
+        frontMat.diffuseColor = baseColor;
+        frontMat.alpha = 0.8;
+        frontMat.specularColor = new Color3(0, 0, 0);
+        frontMat.backFaceCulling = false;
+        frontMat.needDepthPrePass = true;
+        frontMesh.material = frontMat;
+
+        // 後方四角形（p1-p2-p3-p4 と底面 b1-b2-b3-b4 + 側面）
+        const backMesh = new Mesh("sprStandBack_" + id, this.scene);
+        const bPos: number[] = [], bInd: number[] = [];
+        let bi = 0;
+        const bAdd = (v0: Vector3, v1: Vector3, v2: Vector3) => {
+            bPos.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+            bInd.push(bi, bi + 1, bi + 2); bi += 3;
+        };
+        const bQuad = (v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3) => { bAdd(v0, v1, v2); bAdd(v0, v2, v3); };
+        bQuad(p1, p2, p3, p4); // top
+        bQuad(b4, b3, b2, b1); // bottom
+        bQuad(p1, p2, b2, b1); // side right
+        bQuad(p2, p3, b3, b2); // side back
+        bQuad(p3, p4, b4, b3); // side left
+        const bNorm: number[] = [];
+        VertexData.ComputeNormals(bPos, bInd, bNorm);
+        const bVd = new VertexData();
+        bVd.positions = bPos; bVd.indices = bInd; bVd.normals = bNorm;
+        bVd.applyToMesh(backMesh);
+
+        const backMat = new StandardMaterial("sprBaseMatBack_" + id, this.scene);
+        backMat.diffuseColor = baseColor;
+        backMat.alpha = 0.4;
+        backMat.specularColor = new Color3(0, 0, 0);
+        backMat.backFaceCulling = false;
+        backMat.needDepthPrePass = true;
+        backMesh.material = backMat;
+
+        // 親にまとめる
+        const standRoot = new TransformNode("sprStand_" + id, this.scene);
+        standRoot.parent = parent;
+        standRoot.position.set(0, y + 0.01, 0);
+        frontMesh.parent = standRoot;
+        backMesh.parent = standRoot;
+
+        return standRoot as unknown as Mesh;
+    }
+
+    private createNameTag(parent: TransformNode, nameText: string, spriteHeight: number): { plane: Mesh; update: (name: string) => void } {
+        const namePlane = MeshBuilder.CreatePlane("sprNameTag_" + parent.name, { width: 1.5, height: 0.40 }, this.scene);
+        namePlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+        namePlane.isPickable = false;
+        namePlane.parent = parent;
+        namePlane.position = new Vector3(0, spriteHeight + 0.1, 0);
+
+        const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 1024, 128);
+        const tb = new TextBlock();
+        tb.text = nameText;
+        tb.color = "white";
+        tb.fontSize = "56px";
+        tb.fontWeight = "bold";
+        tb.outlineWidth = 6;
+        tb.outlineColor = "black";
+        adt.addControl(tb);
+
+        return { plane: namePlane, update: (n: string) => { tb.text = n; } };
+    }
+
+    private createSpeechBubble(namePlane: Mesh): (text: string) => void {
+        const texSize = 512;
+        const planeSize = 1.5;
+        const bubblePlane = MeshBuilder.CreatePlane("sprBubble_" + namePlane.name, { width: planeSize, height: planeSize }, this.scene);
+        bubblePlane.isPickable = false;
+        bubblePlane.parent = namePlane;
+        bubblePlane.position = new Vector3(1.5 / 2 + planeSize / 2 - 0.3, 0.3, 0);
+
+        const dynTex = new DynamicTexture("sprBubbleTex_" + namePlane.name, { width: texSize, height: texSize }, this.scene, true);
+        dynTex.hasAlpha = true;
+        const mat = new StandardMaterial("sprBubbleMat_" + namePlane.name, this.scene);
+        mat.diffuseTexture = dynTex;
+        mat.useAlphaFromDiffuseTexture = true;
+        mat.emissiveColor = new Color3(1, 1, 1);
+        mat.disableLighting = true;
+        mat.backFaceCulling = false;
+        bubblePlane.material = mat;
+        bubblePlane.isVisible = false;
+
+        const draw = (text: string) => {
+            const ctx = dynTex.getContext() as unknown as CanvasRenderingContext2D;
+            ctx.clearRect(0, 0, texSize, texSize);
+            if (!text || text.trim() === "") return;
+
+            const lines = text.split("\n").slice(0, 5);
+            const n = Math.max(1, lines.length);
+            const fontSize = 64;
+            const lineH = 76;
+            const pad = 40;
+            const bH = Math.max(120, pad * 2 + n * lineH);
+            const tH = 40;
+            const totalH = bH + tH;
+            const rad = 16;
+
+            ctx.font = `bold ${fontSize}px monospace`;
+            const maxW = Math.max(...lines.map(l => ctx.measureText(l).width));
+            const usedW = Math.min(texSize, Math.ceil(pad + maxW + pad));
+
+            const scaleY = totalH / texSize;
+            const scaleX = usedW / texSize;
+            bubblePlane.scaling.y = scaleY;
+            bubblePlane.scaling.x = scaleX;
+
+            ctx.beginPath();
+            ctx.moveTo(rad, 0);
+            ctx.lineTo(usedW - rad, 0);
+            ctx.quadraticCurveTo(usedW, 0, usedW, rad);
+            ctx.lineTo(usedW, bH - rad);
+            ctx.quadraticCurveTo(usedW, bH, usedW - rad, bH);
+            ctx.lineTo(90, bH); ctx.lineTo(60, totalH); ctx.lineTo(30, bH);
+            ctx.lineTo(rad, bH);
+            ctx.quadraticCurveTo(0, bH, 0, bH - rad);
+            ctx.lineTo(0, rad);
+            ctx.quadraticCurveTo(0, 0, rad, 0);
+            ctx.closePath();
+            ctx.fillStyle = "rgba(255,255,255,0.92)";
+            ctx.fill();
+            ctx.strokeStyle = "#444";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.fillStyle = "#111";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            const startY = (bH - n * lineH) / 2 + lineH / 2;
+            for (let i = 0; i < n; i++) {
+                ctx.fillText(lines[i].slice(0, 30), pad, startY + i * lineH);
+            }
+            dynTex.update();
+        };
+
+        return (text: string) => {
+            bubblePlane.isVisible = !!(text && text.trim() !== "");
+            draw(text);
+        };
+    }
+}

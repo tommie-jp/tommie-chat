@@ -16,5 +16,5 @@
     "noImplicitReturns": true,
     "jsx": "preserve"
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "lib/babylon-rpgmaker-sprites/src"]
 }
