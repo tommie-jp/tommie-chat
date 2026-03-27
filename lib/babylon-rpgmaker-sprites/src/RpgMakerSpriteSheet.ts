@@ -294,6 +294,9 @@ export function rgbToHex(r: number, g: number, b: number): string {
 export function loadImageFromSrc(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
     const img = new Image();
+    if (!src.startsWith('data:') && !src.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => res(img);
     img.onerror = rej;
     img.src = src;
