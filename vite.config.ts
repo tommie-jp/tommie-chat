@@ -6,6 +6,13 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true, // 起動時にブラウザを開く
+    proxy: {
+      '/s3': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/s3/, ''),
+      },
+    },
   },
   // ビルド時の最適化
   build: {

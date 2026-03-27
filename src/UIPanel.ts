@@ -1,5 +1,5 @@
 import type { GameScene } from "./GameScene";
-import { Color3, StandardMaterial } from "@babylonjs/core";
+import { Color3, Mesh, StandardMaterial } from "@babylonjs/core";
 import { fnv1a64, CHUNK_SIZE } from "./WorldConstants";
 import { prof } from "./Profiler";
 
@@ -618,15 +618,23 @@ export function setupHtmlUI(game: GameScene): void {
     // OP_INIT_POS受信後、サーバーAOI追跡が追いつくまでAOI_LEAVEを無視するガード
     const initPosGuard = new Map<string, number>(); // sessionId → timestamp
 
-    game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string) => {
+    game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, _ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number) => {
         console.log(`rcv onAvatarInitPos sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} hasAvatar=${game.remoteAvatars.has(sessionId)}`);
         initPosGuard.set(sessionId, performance.now());
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
-        const av = ensureRemoteAvatar(sessionId, displayName || username);
-        if (av) {
-            av.position.x = x; av.position.z = z; av.rotation.y = ry;
-            av.setEnabled(true);
-            if (textureUrl) game.avatarSystem.changeAvatarTexture(av, textureUrl);
+        const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
+        if (game.spriteAvatarSystem.has(sessionId) || game.spriteAvatarSystem.isCreating(sessionId)) {
+            if (game.spriteAvatarSystem.has(sessionId)) {
+                game.spriteAvatarSystem.setPosition(sessionId, x, z);
+                game.spriteAvatarSystem.setEnabled(sessionId, true);
+            }
+        } else {
+            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, x, z, displayName || username).then(root => {
+                game.remoteAvatars.set(sessionId, root as unknown as Mesh);
+                game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
+                const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
+                if (su) game.remoteSpeeches.set(sessionId, su);
+            });
         }
         game.remoteTargets.delete(sessionId);
         // OP_INIT_POS に含まれるログイン時刻・表示名を userMap に反映
@@ -655,10 +663,14 @@ export function setupHtmlUI(game: GameScene): void {
     game.nakama.onAvatarMoveTarget = (sessionId: string, x: number, z: number) => {
         if (game.remoteAvatars.has(sessionId)) game.remoteTargets.set(sessionId, { x, z });
     };
-    game.nakama.onAvatarChange = (sessionId: string, textureUrl: string) => {
-        console.log(`rcv avatarChange sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl}`);
-        const av = game.remoteAvatars.get(sessionId);
-        if (av) game.avatarSystem.changeAvatarTexture(av, textureUrl);
+    game.nakama.onAvatarChange = (sessionId: string, textureUrl: string, charCol: number, charRow: number) => {
+        console.log(`rcv avatarChange sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl} cc=${charCol} cr=${charRow}`);
+        const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
+        const username = userMap.get(sessionId)?.displayName ?? sessionId.slice(0, 8);
+        game.spriteAvatarSystem.dispose(sessionId);
+        game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, 0, 0, username).then(root => {
+            game.remoteAvatars.set(sessionId, root as unknown as Mesh);
+        });
     };
     // --- プロフィールキャッシュ & debounced matchデータ要求 ---
     const profileCache = new Map<string, { displayName: string; textureUrl: string; loginTime: string }>();
@@ -698,35 +710,34 @@ export function setupHtmlUI(game: GameScene): void {
             }
             // アバター更新（自分以外）
             if (sid !== game.nakama.selfSessionId) {
-                const av = game.remoteAvatars.get(sid);
-                if (av) {
-                    if (prof.textureUrl) game.avatarSystem.changeAvatarTexture(av, prof.textureUrl);
-                    if (prof.displayName) {
-                        const updater = game.remoteNameUpdaters.get(sid);
-                        if (updater) updater(prof.displayName);
-                    }
+                if (prof.displayName) {
+                    const updater = game.remoteNameUpdaters.get(sid);
+                    if (updater) updater(prof.displayName);
                 }
             }
         }
         scheduleRenderUserList();
     };
 
-    game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number) => {
-        console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)}`);
+    game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, _ry: number) => {
+        console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)}`);
         if (sessionId === game.nakama.selfSessionId) return;
         const cached = profileCache.get(sessionId);
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
-        const av = ensureRemoteAvatar(sessionId, cached?.displayName || username);
-        if (av) {
-            av.position.x = x; av.position.z = z; av.rotation.y = ry;
-            av.setEnabled(true);
-            game.remoteTargets.delete(sessionId);
-            if (cached?.textureUrl) game.avatarSystem.changeAvatarTexture(av, cached.textureUrl);
-            if (cached?.displayName) {
-                const updater = game.remoteNameUpdaters.get(sessionId);
-                if (updater) updater(cached.displayName);
-            }
+        const displayName = cached?.displayName || username;
+        const sheetUrl = (cached?.textureUrl && cached.textureUrl.includes("/s3/")) ? cached.textureUrl : "/s3/avatars/pipo-nekonin008.png";
+        if (game.spriteAvatarSystem.has(sessionId)) {
+            game.spriteAvatarSystem.setPosition(sessionId, x, z);
+            game.spriteAvatarSystem.setEnabled(sessionId, true);
+        } else if (!game.spriteAvatarSystem.isCreating(sessionId)) {
+            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, 0, 0, x, z, displayName).then(root => {
+                game.remoteAvatars.set(sessionId, root as unknown as Mesh);
+                game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
+                const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
+                if (su) game.remoteSpeeches.set(sessionId, su);
+            });
         }
+        game.remoteTargets.delete(sessionId);
         // キャッシュ未取得ならRPCで取得予約
         if (!profileCache.has(sessionId)) {
             pendingProfileSids.add(sessionId);
@@ -855,7 +866,7 @@ export function setupHtmlUI(game: GameScene): void {
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
         addChatHistory("[system]", `${username}がログインしました。`);
-        { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
+        { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
     };
     game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
         cc("onPresenceLeave");
@@ -885,7 +896,7 @@ export function setupHtmlUI(game: GameScene): void {
         // 相手がマッチ参加した時点で自分のInitPosを送る（チャットチャンネル参加時はまだマッチ未参加で届かないため）
         if (sessionId !== game.nakama.selfSessionId) {
             const p = game.playerBox;
-            game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {});
+            game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {});
         }
     };
     game.nakama.onMatchPresenceLeave = (sessionId, _userId, _uname) => {
@@ -1012,7 +1023,7 @@ export function setupHtmlUI(game: GameScene): void {
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             await game.nakama.joinWorldMatch();
             // matchId確定後にinitPosを送信（joinWorldMatch前のpresenceイベントではmatchId未設定のため送信されない）
-            { const p = game.playerBox; await game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl); }
+            { const p = game.playerBox; await game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow); }
             // 自分のプロフィールをサーバから取得（loginTime等）
             {
                 const sid = game.nakama.selfSessionId;
@@ -1061,7 +1072,7 @@ export function setupHtmlUI(game: GameScene): void {
                 game.syncAOIChunks().catch(() => {});
             }
 
-            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {}); }
+            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
             game.aoiManager.updateAOI();
             const srvInfo = await game.nakama.getServerInfo();
             addServerLog(host, port, "ログイン成功", srvInfo);
@@ -1092,7 +1103,7 @@ export function setupHtmlUI(game: GameScene): void {
                 addServerLog(loggedInHost, loggedInPort, "マッチ再接続", "WebSocket復帰");
                 // 再接続後にInitPos・AOI・アバターを再送信
                 const p = game.playerBox;
-                game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl).catch(() => {});
+                game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {});
                 game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
                 game.aoiManager.updateAOI();
                 // CCUグラフを再初期化（切断中の無効データをクリア）

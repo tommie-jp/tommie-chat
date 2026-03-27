@@ -201,7 +201,7 @@ export class AvatarSystem {
         namePlane.isPickable = false;
 
         namePlane.parent = targetMesh;
-        namePlane.position = new Vector3(0, 1.75, 0);
+        namePlane.position = new Vector3(0, 1.9, 0);
 
         const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 1024, 128);
 

@@ -682,6 +682,8 @@ type playerPos struct {
 	X, Z        float64 // ワールド座標
 	RY          float64 // 回転
 	TextureUrl  string  // アバターテクスチャ
+	CharCol     int     // スプライトシート キャラ列
+	CharRow     int     // スプライトシート キャラ行
 	DisplayName string  // 表示名
 	LoginTime   string  // ログイン時刻(ISO8601)
 }
@@ -875,7 +877,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 
 		if op == opInitPos {
-			// 初期位置: {"x":..., "z":..., "ry":..., "lt":..., "dn":..., "tx":...}
+			// 初期位置: {"x":..., "z":..., "ry":..., "lt":..., "dn":..., "tx":..., "cc":..., "cr":...}
 			var pos struct {
 				X           float64 `json:"x"`
 				Z           float64 `json:"z"`
@@ -883,6 +885,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				TextureUrl  string  `json:"tx"`
 				DisplayName string  `json:"dn"`
 				LoginTime   string  `json:"lt"`
+				CharCol     int     `json:"cc"`
+				CharRow     int     `json:"cr"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &pos); err == nil {
 				initUID := ""
@@ -900,10 +904,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					oldCX, oldCZ = p.CX, p.CZ
 					p.CX = cx; p.CZ = cz; p.X = pos.X; p.Z = pos.Z; p.RY = pos.RY
 					if pos.TextureUrl != "" { p.TextureUrl = pos.TextureUrl }
+					p.CharCol = pos.CharCol; p.CharRow = pos.CharRow
 					if pos.DisplayName != "" { p.DisplayName = pos.DisplayName }
 					if pos.LoginTime != "" { p.LoginTime = pos.LoginTime }
 				} else {
-					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime}
+					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, CharCol: pos.CharCol, CharRow: pos.CharRow, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime}
 				}
 				logf("rcv DBG INIT_POS sid=%s oldCX=%d newCX=%d oldCZ=%d newCZ=%d\n", shortSID(sid), oldCX, cx, oldCZ, cz)
 				// チャンクが変わった場合、他プレイヤーのAOIへの入退場を通知（opMoveTargetと同様）
@@ -1027,9 +1032,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 
 		if op == opAvatarChange {
-			// アバター変更: {"textureUrl":...}
+			// アバター変更: {"textureUrl":..., "cc":..., "cr":...}
 			var av struct {
 				TextureUrl string `json:"textureUrl"`
+				CharCol    int    `json:"cc"`
+				CharRow    int    `json:"cr"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &av); err == nil {
 				avatarUID := ""
@@ -1037,6 +1044,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				logf("rcv avatarChange uid=%s%s sid=%s\n", avatarUID, dn(avatarUID), shortSID(sid))
 				if p, ok := ms.Positions[sid]; ok {
 					p.TextureUrl = av.TextureUrl
+					p.CharCol = av.CharCol
+					p.CharRow = av.CharRow
 				}
 			}
 			// 保存済みの位置でAOIフィルタ
@@ -1129,6 +1138,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					SessionId   string `json:"sessionId"`
 					DisplayName string `json:"displayName"`
 					TextureUrl  string `json:"textureUrl"`
+					CharCol     int    `json:"cc"`
+					CharRow     int    `json:"cr"`
 					LoginTime   string `json:"loginTime"`
 				}
 				profiles := make([]profileEntry, 0, len(req.SessionIds))
@@ -1141,6 +1152,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 						SessionId:   reqSid,
 						DisplayName: pos.DisplayName,
 						TextureUrl:  pos.TextureUrl,
+						CharCol:     pos.CharCol,
+						CharRow:     pos.CharRow,
 						LoginTime:   pos.LoginTime,
 					})
 				}

@@ -562,7 +562,7 @@ export function detectDirOrder(
   }
 
   // Classify each row
-  const results: (DirDetectResult & { i?: number })[] = scores.map((s, i) => {
+  const results: (DirDetectResult & { i?: number })[] = scores.map((s, _i) => {
     const topRatio =
       s.totalSkin > 0 ? s.skinTop / s.totalSkin : 0;
     const sideRatio =

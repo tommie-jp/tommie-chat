@@ -37,9 +37,9 @@ export class NakamaService {
     onPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
-    onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string) => void;
+    onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number) => void;
     onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
-    onAvatarChange?:     (sessionId: string, textureUrl: string) => void;
+    onAvatarChange?:     (sessionId: string, textureUrl: string, charCol: number, charRow: number) => void;
     onBlockUpdate?:      (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => void;
     onAOIEnter?:         (sessionId: string, x: number, z: number, ry: number) => void;
     onAOILeave?:         (sessionId: string) => void;
@@ -229,14 +229,14 @@ export class NakamaService {
                 } else if (!sid) {
                     return;
                 } else if (md.op_code === OP_INIT_POS) {
-                    const pos = payload as { x: number; z: number; ry?: number; lt?: string; dn?: string; tx?: string };
-                    this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0, pos.lt ?? "", pos.dn ?? "", pos.tx ?? "");
+                    const pos = payload as { x: number; z: number; ry?: number; lt?: string; dn?: string; tx?: string; cc?: number; cr?: number };
+                    this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0, pos.lt ?? "", pos.dn ?? "", pos.tx ?? "", pos.cc ?? 0, pos.cr ?? 0);
                 } else if (md.op_code === OP_MOVE_TARGET) {
                     const pos = payload as { x: number; z: number };
                     this.onAvatarMoveTarget?.(sid, pos.x, pos.z);
                 } else if (md.op_code === OP_AVATAR_CHANGE) {
-                    const av = payload as { textureUrl: string };
-                    this.onAvatarChange?.(sid, av.textureUrl);
+                    const av = payload as { textureUrl: string; cc?: number; cr?: number };
+                    this.onAvatarChange?.(sid, av.textureUrl, av.cc ?? 0, av.cr ?? 0);
                 }
             } catch { /* ignore */ }
             // プロファイル集計（1秒ごとにリセット）
@@ -267,24 +267,24 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    async sendInitPos(x: number, z: number, ry = 0, textureUrl = ""): Promise<void> {
+    async sendInitPos(x: number, z: number, ry = 0, textureUrl = "", charCol = 0, charRow = 0): Promise<void> {
         const _end = prof("NakamaService.sendInitPos");
         try {
-        console.log(`snd initPos x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tx=${textureUrl}`);
+        console.log(`snd initPos x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tx=${textureUrl} cc=${charCol} cr=${charRow}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl })));
+            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl, cc: charCol, cr: charRow })));
         } catch { /* ignore */ }
         } finally { _end(); }
     }
 
-    async sendAvatarChange(textureUrl: string): Promise<void> {
+    async sendAvatarChange(textureUrl: string, charCol = 0, charRow = 0): Promise<void> {
         const _end = prof("NakamaService.sendAvatarChange");
         try {
-        console.log(`snd sendAvatarChange textureUrl=${textureUrl}`);
+        console.log(`snd sendAvatarChange textureUrl=${textureUrl} cc=${charCol} cr=${charRow}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, new TextEncoder().encode(JSON.stringify({ textureUrl })));
+            await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, new TextEncoder().encode(JSON.stringify({ textureUrl, cc: charCol, cr: charRow })));
         } catch { /* ignore */ }
         } finally { _end(); }
     }

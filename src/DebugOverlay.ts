@@ -818,6 +818,50 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
+    // スプライトアバター: localStorage から復元
+    const savedSpriteUrl = localStorage.getItem("spriteAvatarUrl");
+    const savedSpriteCol = localStorage.getItem("spriteAvatarCol");
+    const savedSpriteRow = localStorage.getItem("spriteAvatarRow");
+    if (savedSpriteUrl) {
+        game.playerTextureUrl = savedSpriteUrl;
+        game.playerCharCol = parseInt(savedSpriteCol ?? "0", 10) || 0;
+        game.playerCharRow = parseInt(savedSpriteRow ?? "0", 10) || 0;
+        const urlInput = document.getElementById("spriteUrlInput") as HTMLInputElement | null;
+        const colInput = document.getElementById("spriteCharCol") as HTMLInputElement | null;
+        const rowInput = document.getElementById("spriteCharRow") as HTMLInputElement | null;
+        if (urlInput) urlInput.value = savedSpriteUrl;
+        if (colInput) colInput.value = String(game.playerCharCol);
+        if (rowInput) rowInput.value = String(game.playerCharRow);
+    }
+
+    const spriteApplyBtn = document.getElementById("spriteApplyBtn") as HTMLButtonElement | null;
+    if (spriteApplyBtn) {
+        spriteApplyBtn.addEventListener("click", () => {
+            const urlInput = document.getElementById("spriteUrlInput") as HTMLInputElement | null;
+            const colInput = document.getElementById("spriteCharCol") as HTMLInputElement | null;
+            const rowInput = document.getElementById("spriteCharRow") as HTMLInputElement | null;
+            const url = urlInput?.value?.trim();
+            if (!url) return;
+            const cc = parseInt(colInput?.value ?? "0", 10) || 0;
+            const cr = parseInt(rowInput?.value ?? "0", 10) || 0;
+            game.playerTextureUrl = url;
+            game.playerCharCol = cc;
+            game.playerCharRow = cr;
+            localStorage.setItem("spriteAvatarUrl", url);
+            localStorage.setItem("spriteAvatarCol", String(cc));
+            localStorage.setItem("spriteAvatarRow", String(cr));
+            // 自分のアバターをスプライトに切り替え
+            const selfId = "__self__";
+            game.spriteAvatarSystem.dispose(selfId);
+            const p = game.playerBox.position;
+            game.spriteAvatarSystem.createAvatar(selfId, url, cc, cr, p.x, p.z, "", new Color3(1.0, 0.0, 0.0)).then(() => {
+                // 既存メッシュアバターを非表示
+                game.playerBox.getChildMeshes().forEach(m => m.isVisible = false);
+            });
+            game.nakama.sendAvatarChange(url, cc, cr).catch(() => {});
+        });
+    }
+
     const sceneInstrumentation = new SceneInstrumentation(game.scene);
     sceneInstrumentation.captureFrameTime = true;
 
