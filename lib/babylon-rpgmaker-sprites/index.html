@@ -9,68 +9,10 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
 #renderCanvas { width:100%; height:100%; touch-action:none; display:block; }
-#ui {
-  position:fixed; top:50px; left:10px;
-  pointer-events:none; user-select:none;
-}
-@media (hover:none) {
-  #ui {
-    position:fixed !important;
-    top:56px !important; left:0 !important; right:0 !important;
-    width:100% !important; margin:0 !important; padding:0 !important;
-    box-sizing:border-box !important;
-  }
-  #infoTable {
-    width:100% !important;
-    margin:0 !important; padding:0 !important;
-  }
-  #infoTable td:first-child { padding-left:10px !important; }
-}
-#infoTable {
-  border-collapse:collapse;
-  background:rgba(255,255,255,0.92);
-  border:1px solid #cccccc;
-  border-radius:4px;
-  font-family:'Courier New',monospace;
-  font-size:10px;
-  box-shadow:0 2px 8px rgba(0,0,0,0.3);
-}
-#infoTable td { padding:3px 8px; line-height:1.6; }
-#infoTable .k { color:#555555; white-space:nowrap; border-right:1px solid #eeeeee; }
-#infoTable .v { color:#111111; }
-#infoTable tr:nth-child(even) { background:rgba(0,0,0,0.03); }
-/* responsive: 全幅・大文字 */
-@media (hover:none) {
-  #infoTable {
-    width:100%; font-size:30px; font-weight:bold;
-    border-radius:0; border:none;
-    border-bottom:2px solid #cccccc; box-shadow:none;
-    background:#ffffff; table-layout:fixed;
-  }
-  #infoTable td { padding:2px 10px; line-height:1.1; }
-  #infoTable .k { color:#333333; width:38%; }
-  #infoTable .v { color:#000000; }
-}
-#panel {
-  position:fixed; bottom:40px; left:50%; transform:translateX(-50%);
-  background:rgba(8,8,20,0.92); border:1px solid #2a2a50;
-  padding:10px 20px; display:flex; align-items:center; gap:16px;
-  font-family:'Courier New',monospace; font-size:10px; color:#707090;
-  border-radius:3px; backdrop-filter:blur(4px); pointer-events:all;
-  white-space:nowrap;
-}
-.sep { width:1px; height:22px; background:#2a2a50; }
-.panel-label { color:#a0a0c8; letter-spacing:.5px; }
+/* legacy desktop elements — hidden */
+#ui, #panel { display:none !important; }
 .swatch { width:22px; height:22px; border:1px solid #404060; cursor:pointer;
   flex-shrink:0; border-radius:2px; }
-.slider { width:80px; cursor:pointer; accent-color:#6dffd4; }
-.val { color:#6dffd4; min-width:26px; display:inline-block; }
-.applybtn {
-  background:rgba(109,255,212,0.1); border:1px solid #6dffd4;
-  color:#6dffd4; font-family:'Courier New',monospace; font-size:10px;
-  padding:4px 10px; cursor:pointer; border-radius:2px; letter-spacing:.5px;
-}
-.applybtn:hover { background:rgba(109,255,212,0.2); }
 /* ── hamburger menu ── */
 #topbar {
   position:fixed; top:0; left:0; right:0; height:52px; z-index:500;
@@ -108,8 +50,6 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
 }
 .split-panel.split-active { display:flex; }
 body.split-open #renderCanvas { width:calc(100% - var(--split-size)); }
-body.split-open #panel { left:calc((100% - var(--split-size)) / 2); }
-body.split-open #hint { left:calc((100% - var(--split-size)) / 2); }
 body.split-open #fpsCounter { right:calc(var(--split-size) + 10px); }
 
 #splitHandle {
@@ -123,13 +63,7 @@ body.split-open #splitHandle {
   right:calc(var(--split-size) - 3px);
 }
 
-#menuPanel {
-  background:#ffffff; border-left:1px solid #cccccc;
-  font-family:'Courier New',monospace; padding:20px 0;
-  color:#111111;
-}
-#menuPanel::-webkit-scrollbar { width:3px; }
-#menuPanel::-webkit-scrollbar-thumb { background:#2a2a50; }
+#menuPanel { display:none !important; }
 
 
 .menu-section:last-child { border-bottom:none; }
@@ -209,6 +143,33 @@ body.split-open #splitHandle {
 }
 .badge-ok  { background:rgba(109,255,212,0.1); color:#6dffd4; border:1px solid #6dffd4; }
 .badge-low { background:rgba(255,200,0,0.1);   color:#ffc800; border:1px solid #ffc800; }
+/* dropdown menu (shared PC/mobile) */
+#mobileDropMenu {
+  display:none; position:fixed; top:52px; left:0; right:0;
+  z-index:500; background:#fff; border-bottom:2px solid #ddd;
+  font-family:'Courier New',monospace;
+}
+#mobileDropMenu.open { display:flex; flex-direction:column; }
+#mobileDropMenu .mdm-item {
+  padding:14px 20px; font-size:16px; font-weight:bold; color:#222;
+  border-bottom:1px solid #eee; cursor:pointer;
+  display:flex; align-items:center; gap:10px;
+}
+#mobileDropMenu .mdm-item:hover { background:#f0f8ff; }
+#mobileDropMenu .mdm-icon { font-size:18px; width:28px; text-align:center; }
+
+/* shared panel styles */
+.mobile-fullpanel {
+  background:#fff;
+  font-family:'Courier New',monospace; color:#111;
+  padding:16px;
+}
+.mobile-fullpanel h4 {
+  font-size:16px; font-weight:bold; color:#000;
+  margin:0 0 10px 0; padding-bottom:6px;
+  border-bottom:1px solid #ddd;
+}
+
 #dropzone {
   position:fixed; inset:0; z-index:200;
   background:rgba(8,8,24,0.88);
@@ -230,7 +191,7 @@ body.split-open #splitHandle {
 
 /* playback controls */
 #playback {
-  position:fixed; bottom:50px; left:10px; z-index:40;
+  position:fixed; bottom:10px; left:10px; z-index:40;
   display:flex; gap:6px; align-items:center;
 }
 #speedSlider { width:80px; accent-color:#6dffd4; cursor:pointer; }
@@ -246,6 +207,7 @@ body.split-open #splitHandle {
   cursor:pointer; padding:0;
   font-family:'Courier New',monospace;
 }
+#btnHelp { color:#6dffd4; border-color:#6dffd4; font-weight:bold; }
 #btnStop.active { color:#cc3333; border-color:#cc3333; background:rgba(204,51,51,0.15); }
 #btnPlay.active { color:#33cc33; border-color:#33cc33; background:rgba(51,204,51,0.15); }
 #hint {
@@ -265,55 +227,15 @@ body.split-open #splitHandle {
 #panel { -webkit-overflow-scrolling:touch; }
 
 @media (hover:none) {
-  /* 背景: キャンバス背後は黒のまま、テーブル部分のみ白 */
   body { background:#000000; }
   html { background:#000000; }
-
-  /* 属性表はメニュー内に移動 */
-  #ui { display:none !important; }
-
-  /* パネルをモバイルでは非表示（メニューに移動） */
-  #panel { display:none !important; }
-
-  /* キャンバスを全画面に */
   #renderCanvas { height:100vh; }
 
-  /* canvas 上部に余白（topbar分） */
-  #renderCanvas { display:block; }
-
-  /* トップバー: 黒文字 */
+  /* トップバー: 白背景 */
   #topbar { background:#ffffff; border-bottom:1px solid #dddddd; height:56px; }
   #topbarTitle { color:#000000; font-size:18px; font-weight:bold; letter-spacing:0; line-height:56px; white-space:nowrap; }
   #hamburger { width:40px; height:40px; }
   #hamburger span { background:#000000; width:24px; height:2px; margin:3px 0; }
-
-  /* 情報テーブル */
-  #ui { top:56px; left:0; width:100%; }
-
-  /* コントロールパネル */
-  #panel {
-    left:0; right:0; bottom:0;
-    transform:none; width:100%;
-    flex-wrap:wrap; gap:10px 14px;
-    padding:12px 14px;
-    border-radius:0;
-    border-left:none; border-right:none; border-bottom:none;
-    background:rgba(255,255,255,0.97);
-    border-top:1px solid #cccccc;
-    max-height:50vh; overflow-y:auto;
-    justify-content:flex-start;
-  }
-  .sep { display:none; }
-  .panel-label { font-size:13px; color:#333333; }
-  .applybtn {
-    font-size:13px; padding:8px 14px;
-    border-radius:4px;
-  }
-  select#upscaleSelect { font-size:13px; padding:6px 8px; }
-  .swatch { width:28px; height:28px; border-radius:3px; }
-  .val { font-size:13px; }
-  .slider { width:80px; }
-  input[type="range"] { height:24px; }
 
   /* ヒント非表示 */
   #hint { display:none; }
@@ -366,33 +288,8 @@ body.split-open #splitHandle {
   .menu-section { padding:0 14px 10px; margin-bottom:4px; }
   #creditNote { font-size:14px; font-weight:bold; }
 
-  /* モバイルメニュー: ドロップダウン形式 */
-  #menuPanel { display:none !important; }
-  #mobileDropMenu {
-    display:none; position:fixed; top:56px; left:0; right:0;
-    z-index:500; background:#fff; border-bottom:2px solid #ddd;
-    font-family:'Courier New',monospace;
-  }
-  #mobileDropMenu.open { display:flex; flex-direction:column; }
-  #mobileDropMenu .mdm-item {
-    padding:14px 20px; font-size:16px; font-weight:bold; color:#222;
-    border-bottom:1px solid #eee; cursor:pointer;
-    display:flex; align-items:center; gap:10px;
-  }
-  #mobileDropMenu .mdm-item:active { background:#f0f8ff; }
-  #mobileDropMenu .mdm-icon { font-size:18px; width:28px; text-align:center; }
-
-  /* モバイル用パネル共通スタイル */
-  .mobile-fullpanel {
-    background:#fff;
-    font-family:'Courier New',monospace; color:#111;
-    padding:16px;
-  }
-  .mobile-fullpanel h4 {
-    font-size:16px; font-weight:bold; color:#000;
-    margin:0 0 10px 0; padding-bottom:6px;
-    border-bottom:1px solid #ddd;
-  }
+  /* モバイル: ドロップダウンを56pxに調整 */
+  #mobileDropMenu { top:56px; }
   .split-close { width:36px; height:36px; font-size:24px; line-height:36px; }
 
   /* 向き変換パネル モバイル対応 */
@@ -425,7 +322,31 @@ body.split-open #splitHandle {
 @media (hover:none) and (max-width:390px) {
   .panel-label { font-size:12px; }
   .applybtn { font-size:12px; padding:7px 10px; }
-  #menuPanel { width:92vw; }
+}
+
+/* モバイル・ランドスケープ: パネルを右側に表示 */
+@media (hover:none) and (orientation:landscape) {
+  :root { --split-size: 45vw; }
+  .split-panel {
+    top:56px; left:auto; right:0; bottom:0;
+    width:var(--split-size) !important; height:auto;
+    border-top:none; border-left:1px solid #ccc;
+  }
+  body.split-open #renderCanvas {
+    width:calc(100% - var(--split-size)) !important;
+    height:100vh;
+  }
+  body.split-open #playback { bottom:10px; }
+  body.split-open #fpsCounter { right:calc(var(--split-size) + 10px); }
+  #splitHandle {
+    top:56px; left:auto; right:auto; bottom:0;
+    width:8px; height:auto;
+    cursor:col-resize;
+  }
+  body.split-open #splitHandle {
+    right:calc(var(--split-size) - 3px);
+    bottom:auto;
+  }
 }
 </style>
 </head>
@@ -531,6 +452,7 @@ body.split-open #splitHandle {
 </div>
 <div id="fpsCounter">-- FPS</div>
 <div id="playback">
+  <button id="btnHelp" class="pb-btn" onclick="toggleHelp()">?</button>
   <button id="btnStop" class="pb-btn active" onclick="stopWalk()">■</button>
   <button id="btnPlay" class="pb-btn" onclick="playWalk()">▶</button>
   <input type="range" id="speedSlider" min="0" max="500" value="100">
@@ -606,10 +528,12 @@ body.split-open #splitHandle {
   </div>
 </div>
 
-<!-- mobile: help panel -->
+<!-- help panel -->
 <div id="mfpHelp" class="mobile-fullpanel split-panel">
   <button class="split-close" onclick="closeSplit()">✕</button>
-  <h4>対応形式</h4>
+  <h4>操作方法</h4>
+  <table class="format-table" id="controlTable2"></table>
+  <h4 style="margin-top:16px;">対応形式</h4>
   <table class="format-table">
     <tr><th>ツクール</th><th>フレーム</th><th>枚数</th><th>対応</th></tr>
     <tr><td>MV / MZ</td><td>48×48 ×3</td><td>最大8</td><td class="badge-ok2">✓</td></tr>
@@ -625,8 +549,6 @@ body.split-open #splitHandle {
     ・ファイル名の $ プレフィックスで1キャラ判定<br>
     ・未知サイズは自動検出（精度は保証外）
   </div>
-  <h4>操作方法</h4>
-  <table class="format-table" id="controlTable2"></table>
   <div class="menu-note" id="creditNote2" style="color:#2a2a48;text-align:center;font-size:14px;font-weight:bold;margin-top:20px;">
     (C)2026 tommie.jp<br>
     tommieChat Sprite Viewer<br>
@@ -1301,23 +1223,9 @@ function closeSplit() {
 
 // ── Hamburger menu ────────────────────────────────────
 function toggleMenu() {
-  const isTouchOnly = !window.matchMedia('(hover:hover)').matches;
-  if (isTouchOnly) {
-    // Mobile: toggle dropdown menu
-    const drop = document.getElementById('mobileDropMenu');
-    const isOpen = drop.classList.toggle('open');
-    document.getElementById('menuOverlay').classList.toggle('open', isOpen);
-    return;
-  }
-  // Desktop: toggle menu as split panel
-  const mp = document.getElementById('menuPanel');
-  if (_activeSplit === mp) {
-    closeSplit();
-  } else {
-    const ds = document.getElementById('desktopPanelSection');
-    if (ds) ds.style.display = 'block';
-    openSplit(mp);
-  }
+  const drop = document.getElementById('mobileDropMenu');
+  const isOpen = drop.classList.toggle('open');
+  document.getElementById('menuOverlay').classList.toggle('open', isOpen);
 }
 
 // ── Mobile panel helpers ──────────────────────────────
@@ -1334,6 +1242,15 @@ function mobileShowPanel(id) {
 
 function mobileClosePanel(id) {
   closeSplit();
+}
+
+function toggleHelp() {
+  const el = document.getElementById('mfpHelp');
+  if (_activeSplit === el) {
+    closeSplit();
+  } else {
+    mobileShowPanel('mfpHelp');
+  }
 }
 
 function mobileOpenConverter() {
@@ -1558,6 +1475,7 @@ window.applyBg = applyBg;
 window.updateFloor = updateFloor;
 window._applyBg = applyBg;
 window.mobileShowPanel = mobileShowPanel;
+window.toggleHelp = toggleHelp;
 window.mobileClosePanel = mobileClosePanel;
 window.mobileOpenConverter = mobileOpenConverter;
 window.closeSplit = closeSplit;
