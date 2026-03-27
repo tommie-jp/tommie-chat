@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpriteViewer 0.1.1</title>
 <style>
+:root { --split-size: 360px; }
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
 #renderCanvas { width:100%; height:100%; touch-action:none; display:block; }
@@ -84,17 +86,12 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
 #hamburger {
   width:32px; height:32px; cursor:pointer;
   display:flex; flex-direction:column; justify-content:center;
-  align-items:center; gap:5px; flex-shrink:0;
+  align-items:center; gap:0; flex-shrink:0;
 }
 #hamburger span {
-  display:block; width:22px; height:2px;
+  display:block; width:20px; height:2px; margin:3px 0;
   background:#6060a0; border-radius:1px;
-  transition:all .2s;
 }
-#hamburger:hover span { background:#c0c0e0; }
-#hamburger.open span:nth-child(1) { transform:translateY(7px) rotate(45deg); }
-#hamburger.open span:nth-child(2) { opacity:0; }
-#hamburger.open span:nth-child(3) { transform:translateY(-7px) rotate(-45deg); }
 
 #menuOverlay {
   position:fixed; inset:0; z-index:400;
@@ -102,17 +99,34 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
 }
 #menuOverlay.open { display:block; pointer-events:all; }
 
-#menuPanel {
-  position:fixed; top:0; left:-360px; width:340px; height:100vh;
-  background:#ffffff; border-right:1px solid #cccccc;
-  z-index:450; overflow-y:auto; transition:left .25s ease;
-  font-family:'Courier New',monospace; padding:52px 0 20px 0;
-  color:#111111;
+/* ── Split panel (shared positioning for all side panels) ── */
+.split-panel {
+  position:fixed; top:52px; right:0; bottom:0;
+  width:var(--split-size);
+  display:none; flex-direction:column;
+  overflow-y:auto; z-index:50;
 }
-#menuPanel.open { left:0; }
-@media (hover:none) {
-  #menuPanel { left:-100vw; }
-  #menuPanel.open { left:0; }
+.split-panel.split-active { display:flex; }
+body.split-open #renderCanvas { width:calc(100% - var(--split-size)); }
+body.split-open #panel { left:calc((100% - var(--split-size)) / 2); }
+body.split-open #hint { left:calc((100% - var(--split-size)) / 2); }
+body.split-open #fpsCounter { right:calc(var(--split-size) + 10px); }
+
+#splitHandle {
+  position:fixed; top:52px; bottom:0;
+  width:8px; cursor:col-resize; z-index:55;
+  background:#2a2a50; display:none;
+}
+#splitHandle:hover, #splitHandle.dragging { background:#6dffd4; }
+body.split-open #splitHandle {
+  display:block;
+  right:calc(var(--split-size) - 3px);
+}
+
+#menuPanel {
+  background:#ffffff; border-left:1px solid #cccccc;
+  font-family:'Courier New',monospace; padding:20px 0;
+  color:#111111;
 }
 #menuPanel::-webkit-scrollbar { width:3px; }
 #menuPanel::-webkit-scrollbar-thumb { background:#2a2a50; }
@@ -153,17 +167,20 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
 }
 .mapplybtn:active { background:rgba(109,255,212,0.3); }
 
-/* file drop zone */
 /* direction converter */
 #converter {
-  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-  background:rgba(8,8,24,0.97); border:1px solid #3a3a60;
-  padding:20px 24px; border-radius:4px; z-index:300;
-  font-family:'Courier New',monospace; min-width:360px;
-  display:none; flex-direction:column; gap:12px;
-  backdrop-filter:blur(8px);
+  background:rgba(8,8,24,0.97); border-left:1px solid #3a3a60;
+  padding:20px 24px;
+  font-family:'Courier New',monospace; gap:12px;
 }
-#converter.show { display:flex; }
+/* split-panel close button (shared) */
+.split-close {
+  position:absolute; top:8px; right:8px; z-index:2;
+  width:28px; height:28px; border:none; background:none;
+  color:#cc3333; font-size:20px; line-height:28px; text-align:center;
+  cursor:pointer; border-radius:4px;
+}
+.split-close:hover { background:rgba(204,51,51,0.15); }
 #converter h3 { color:#6dffd4; font-size:11px; letter-spacing:2px; margin:0; }
 #converter .sub { color:#505070; font-size:9px; letter-spacing:.5px; line-height:1.6; }
 #converter .dir-row {
@@ -203,6 +220,34 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
 }
 #dropzone.active { display:flex; }
 #dropzone .sub { font-size:10px; color:#406060; letter-spacing:1px; }
+/* FPS counter */
+#fpsCounter {
+  position:fixed; top:60px; right:10px; z-index:45;
+  font-family:'Courier New',monospace; font-size:16px; font-weight:bold;
+  color:#6dffd4; pointer-events:none;
+  background:rgba(0,0,0,0.5); padding:2px 8px; border-radius:3px;
+}
+
+/* playback controls */
+#playback {
+  position:fixed; bottom:50px; left:10px; z-index:40;
+  display:flex; gap:6px; align-items:center;
+}
+#speedSlider { width:80px; accent-color:#6dffd4; cursor:pointer; }
+#speedVal {
+  color:#6dffd4; font-family:'Courier New',monospace;
+  font-size:16px; font-weight:bold; min-width:40px;
+  text-shadow:0 0 4px rgba(0,0,0,0.6);
+}
+.pb-btn {
+  width:28px; height:28px; border:1px solid rgba(255,255,255,0.3); border-radius:3px;
+  background:transparent; color:#505070;
+  font-size:14px; line-height:28px; text-align:center;
+  cursor:pointer; padding:0;
+  font-family:'Courier New',monospace;
+}
+#btnStop.active { color:#cc3333; border-color:#cc3333; background:rgba(204,51,51,0.15); }
+#btnPlay.active { color:#33cc33; border-color:#33cc33; background:rgba(51,204,51,0.15); }
 #hint {
   position:fixed; bottom:12px; left:50%; transform:translateX(-50%);
   color:#303050; font-size:10px; letter-spacing:1px;
@@ -231,15 +276,16 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
   #panel { display:none !important; }
 
   /* キャンバスを全画面に */
-  #renderCanvas { height:calc(100vh - 56px); }
+  #renderCanvas { height:100vh; }
 
   /* canvas 上部に余白（topbar分） */
   #renderCanvas { display:block; }
 
   /* トップバー: 黒文字 */
   #topbar { background:#ffffff; border-bottom:1px solid #dddddd; height:56px; }
-  #topbarTitle { color:#000000; font-size:32px; font-weight:bold; letter-spacing:0; line-height:52px; }
-  #hamburger span { background:#000000; width:28px; height:3px; }
+  #topbarTitle { color:#000000; font-size:18px; font-weight:bold; letter-spacing:0; line-height:56px; white-space:nowrap; }
+  #hamburger { width:40px; height:40px; }
+  #hamburger span { background:#000000; width:24px; height:2px; margin:3px 0; }
 
   /* 情報テーブル */
   #ui { top:56px; left:0; width:100%; }
@@ -272,11 +318,45 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
   /* ヒント非表示 */
   #hint { display:none; }
 
+  /* playback controls mobile */
+  #playback { bottom:10px; left:10px; }
+  .pb-btn {
+    width:40px; height:40px; font-size:20px; line-height:40px;
+    border-radius:4px; background:transparent;
+    border:1px solid rgba(255,255,255,0.4); color:#aaa;
+  }
+  #btnStop.active { color:#cc3333; border-color:#cc3333; background:rgba(204,51,51,0.1); }
+  #btnPlay.active { color:#33cc33; border-color:#33cc33; background:rgba(51,204,51,0.1); }
+  #speedSlider { width:100px; height:28px; accent-color:#007744; }
+  #speedVal { font-size:18px; font-weight:bold; color:#007744; text-shadow:none; }
+
   /* ドロップヒント */
   #dropHint { font-size:13px; top:45%; }
 
-  /* ハンバーガーメニュー幅 */
-  #menuPanel { width:88vw; max-width:380px; font-size:15px; }
+  :root { --split-size: 45vh; }
+
+  /* モバイル: スプリットパネル共通 — bottom panel */
+  .split-panel {
+    top:auto; left:0; right:0; bottom:0;
+    width:100% !important; height:var(--split-size);
+    border-left:none; border-top:1px solid #ccc;
+  }
+  body.split-open #renderCanvas {
+    width:100% !important;
+    height:calc(100vh - var(--split-size));
+  }
+  body.split-open #playback { bottom:calc(var(--split-size) + 10px); }
+  body.split-open #fpsCounter { right:10px; }
+  #splitHandle {
+    top:auto; right:auto;
+    left:0; width:100%; height:8px;
+    cursor:row-resize;
+  }
+  body.split-open #splitHandle {
+    bottom:var(--split-size);
+    right:auto;
+  }
+
   .format-table { font-size:15px; }
   .format-table th { padding:6px 12px; color:#000; }
   .format-table td { padding:6px 12px; color:#000; line-height:1.4; }
@@ -284,6 +364,61 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
   .menu-section h4 { font-size:16px; font-weight:bold; color:#000; }
   .menu-note { font-size:14px; color:#111; line-height:1.5; }
   .menu-section { padding:0 14px 10px; margin-bottom:4px; }
+  #creditNote { font-size:14px; font-weight:bold; }
+
+  /* モバイルメニュー: ドロップダウン形式 */
+  #menuPanel { display:none !important; }
+  #mobileDropMenu {
+    display:none; position:fixed; top:56px; left:0; right:0;
+    z-index:500; background:#fff; border-bottom:2px solid #ddd;
+    font-family:'Courier New',monospace;
+  }
+  #mobileDropMenu.open { display:flex; flex-direction:column; }
+  #mobileDropMenu .mdm-item {
+    padding:14px 20px; font-size:16px; font-weight:bold; color:#222;
+    border-bottom:1px solid #eee; cursor:pointer;
+    display:flex; align-items:center; gap:10px;
+  }
+  #mobileDropMenu .mdm-item:active { background:#f0f8ff; }
+  #mobileDropMenu .mdm-icon { font-size:18px; width:28px; text-align:center; }
+
+  /* モバイル用パネル共通スタイル */
+  .mobile-fullpanel {
+    background:#fff;
+    font-family:'Courier New',monospace; color:#111;
+    padding:16px;
+  }
+  .mobile-fullpanel h4 {
+    font-size:16px; font-weight:bold; color:#000;
+    margin:0 0 10px 0; padding-bottom:6px;
+    border-bottom:1px solid #ddd;
+  }
+  .split-close { width:36px; height:36px; font-size:24px; line-height:36px; }
+
+  /* 向き変換パネル モバイル対応 */
+  #converter {
+    border-top:1px solid #ccc;
+    padding:10px 12px; gap:8px;
+    background:rgba(255,255,255,0.95);
+  }
+  #converter h3 { color:#006644; font-size:14px; font-weight:bold; margin:0; }
+  #converter .sub { color:#444; font-size:11px; line-height:1.4; }
+  #converter .dir-row {
+    grid-template-columns:70px 1fr 100px;
+    gap:6px; font-size:12px; color:#333; margin-bottom:4px;
+  }
+  #converter .dir-row .preview { width:64px; height:38px; }
+  #converter select.dirsel {
+    background:#fff; border:1px solid #ccc; color:#111;
+    font-size:13px; padding:4px 6px; border-radius:4px;
+  }
+  #converter .conv-btns { gap:8px; margin-top:8px; }
+  #converter .cbtn {
+    font-size:12px; padding:8px 14px; border-radius:4px;
+    border:1px solid #6dffd4; background:rgba(109,255,212,0.15); color:#006644;
+  }
+  #converter .cbtn.cancel { border-color:#ccc; color:#666; background:transparent; }
+  #converter .detected-badge { font-size:10px; padding:1px 4px; }
 }
 
 /* 極小画面 (iPhone SE等) */
@@ -381,15 +516,25 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
   <button class="applybtn" id="floorBtn">▶ 適用</button>
 </div>
 
-<div id="converter">
+<div id="splitHandle"></div>
+
+<div id="converter" class="split-panel">
+  <button class="split-close" onclick="closeSplit()">✕</button>
   <h3>⚙ 向き順 変換ツール</h3>
   <div class="sub">各行の向きを確認・修正してMV標準順（下左右上）に変換します。<br>
   自動検出：■確信あり　□信頼度低め</div>
   <div id="dirRows"></div>
   <div class="conv-btns">
-    <button class="cbtn cancel" onclick="document.getElementById('converter').classList.remove('show')">キャンセル</button>
+    <button class="cbtn cancel" onclick="closeSplit()">キャンセル</button>
     <button class="cbtn" onclick="convertAndDownload()">変換してダウンロード ↓</button>
   </div>
+</div>
+<div id="fpsCounter">-- FPS</div>
+<div id="playback">
+  <button id="btnStop" class="pb-btn active" onclick="stopWalk()">■</button>
+  <button id="btnPlay" class="pb-btn" onclick="playWalk()">▶</button>
+  <input type="range" id="speedSlider" min="0" max="500" value="100">
+  <span id="speedVal">×1.0</span>
 </div>
 <div id="hint">左ドラッグ: 回転 ／ ホイール: ズーム ／ 右ドラッグ: パン</div>
 <div class="scan"></div>
@@ -399,14 +544,100 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
   <div id="hamburger" onclick="toggleMenu()">
     <span></span><span></span><span></span>
   </div>
-  <div id="topbarTitle">SpriteViewer 1.0 for tommieChat</div>
+  <div id="topbarTitle">SpriteViewer 0.1.1 for tommieChat</div>
 </div>
 
 <!-- overlay (click to close) -->
 <div id="menuOverlay" onclick="closeMenu()"></div>
 
-<!-- slide-in panel -->
-<div id="menuPanel">
+<!-- mobile dropdown menu -->
+<div id="mobileDropMenu">
+  <div class="mdm-item" onclick="mobileShowPanel('mfpInfo')"><span class="mdm-icon">📋</span>ファイル情報</div>
+  <div class="mdm-item" onclick="mobileShowPanel('mfpSettings')"><span class="mdm-icon">⚙</span>設定</div>
+  <div class="mdm-item" onclick="mobileOpenConverter()"><span class="mdm-icon">🔄</span>向き変換</div>
+  <div class="mdm-item" onclick="mobileShowPanel('mfpHelp')"><span class="mdm-icon">❓</span>HELP</div>
+</div>
+
+<!-- mobile: file info panel -->
+<div id="mfpInfo" class="mobile-fullpanel split-panel">
+  <button class="split-close" onclick="closeSplit()">✕</button>
+  <h4>ファイル情報</h4>
+  <table class="format-table" id="mfpInfoTable">
+    <tr><td>Draw calls</td><td>1 (全スプライト)</td></tr>
+    <tr id="mfpFile"><td>ファイル</td><td>—</td></tr>
+    <tr id="mfpFormat"><td>形式</td><td>—</td></tr>
+    <tr id="mfpGrid"><td>グリッド</td><td>—</td></tr>
+    <tr id="mfpFrame"><td>フレーム</td><td>—</td></tr>
+  </table>
+</div>
+
+<!-- mobile: settings panel -->
+<div id="mfpSettings" class="mobile-fullpanel split-panel">
+  <button class="split-close" onclick="closeSplit()">✕</button>
+  <h4>設定</h4>
+  <div class="msetting-row">
+    <span class="msetting-label">背景色</span>
+    <div class="swatch" id="bgSwatchM2" onclick="document.getElementById('bgColorInput').click()" style="cursor:pointer;border:1px solid #ccc;width:28px;height:28px;border-radius:3px;"></div>
+    <span class="msetting-label">許容</span>
+    <input type="range" id="bgThreshM2" min="5" max="80" value="30" style="flex:1;height:28px;">
+    <span id="threshValM2" style="min-width:28px;text-align:right;color:#111;">30</span>
+  </div>
+  <button class="mapplybtn" onclick="syncFromMenu2();applyBg()">▶ 透過を適用</button>
+  <div class="msetting-row" style="margin-top:14px">
+    <span class="msetting-label">素材ファイル</span>
+    <button class="mapplybtn" onclick="document.getElementById('fileInput').click()">📂 選択</button>
+  </div>
+  <div class="msetting-row" style="margin-top:14px">
+    <span class="msetting-label">解像度</span>
+    <select id="upscaleSelectM2" style="flex:1;font-size:15px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">
+      <option value="auto">自動</option>
+      <option value="1">×1 (等倍)</option>
+      <option value="2">×2</option>
+      <option value="4">×4 (高解像度)</option>
+    </select>
+    <span id="curScaleM2" style="font-size:13px;color:#666;">現在: ×2</span>
+  </div>
+  <div class="msetting-row" style="margin-top:14px">
+    <span class="msetting-label">床の色A</span>
+    <div id="floorSwatchM2"  onclick="document.getElementById('floorColorA').click()" style="width:28px;height:28px;background:#888;border:1px solid #ccc;border-radius:3px;cursor:pointer;"></div>
+    <span class="msetting-label">色B</span>
+    <div id="floorSwatch2M2" onclick="document.getElementById('floorColorB').click()" style="width:28px;height:28px;background:#999;border:1px solid #ccc;border-radius:3px;cursor:pointer;"></div>
+    <button class="mapplybtn" onclick="updateFloor()">▶ 適用</button>
+  </div>
+</div>
+
+<!-- mobile: help panel -->
+<div id="mfpHelp" class="mobile-fullpanel split-panel">
+  <button class="split-close" onclick="closeSplit()">✕</button>
+  <h4>対応形式</h4>
+  <table class="format-table">
+    <tr><th>ツクール</th><th>フレーム</th><th>枚数</th><th>対応</th></tr>
+    <tr><td>MV / MZ</td><td>48×48 ×3</td><td>最大8</td><td class="badge-ok2">✓</td></tr>
+    <tr><td>VX / VXAce</td><td>32×32 ×3</td><td>最大8</td><td class="badge-ok2">✓</td></tr>
+    <tr><td>XP</td><td>48×64 ×4</td><td>1</td><td class="badge-ok2">✓</td></tr>
+    <tr><td>2000</td><td>24×32 ×3</td><td>最大8</td><td class="badge-ok2">✓</td></tr>
+    <tr><td>2003</td><td>32×48 ×4</td><td>1</td><td class="badge-ok2">✓</td></tr>
+    <tr><td>$ 単体 (MV)</td><td>48×48 ×3</td><td>1</td><td class="badge-ok2">✓</td></tr>
+    <tr><td>大型 (MV)</td><td>96×96 ×3</td><td>最大8</td><td class="badge-ok2">✓</td></tr>
+  </table>
+  <div class="menu-note" style="margin:10px 0;">
+    ・非標準の向き順は「⚙ 向き変換」で修正可<br>
+    ・ファイル名の $ プレフィックスで1キャラ判定<br>
+    ・未知サイズは自動検出（精度は保証外）
+  </div>
+  <h4>操作方法</h4>
+  <table class="format-table" id="controlTable2"></table>
+  <div class="menu-note" id="creditNote2" style="color:#2a2a48;text-align:center;font-size:14px;font-weight:bold;margin-top:20px;">
+    (C)2026 tommie.jp<br>
+    tommieChat Sprite Viewer<br>
+    Last updated on 2026-03-27
+  </div>
+  <div class="menu-note bjsVersion" style="color:#2a2a48;text-align:center;font-size:14px;font-weight:bold;margin-top:8px;"></div>
+</div>
+
+<!-- info/help panel (split view) -->
+<div id="menuPanel" class="split-panel">
+  <button class="split-close" onclick="closeSplit()">✕</button>
   <div class="menu-section" id="mobileInfoSection" style="display:none">
     <h4>▶ ファイル情報</h4>
     <table class="format-table" id="mobileInfoTable">
@@ -495,9 +726,12 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
       ['右ドラッグ',    'パン'],
       ['ファイルドロップ', '素材切替'],
     ];
-    const t = document.getElementById('controlTable');
-    t.innerHTML = rows.map(([a,b]) =>
+    const html = rows.map(([a,b]) =>
       `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+    const t = document.getElementById('controlTable');
+    if (t) t.innerHTML = html;
+    const t2 = document.getElementById('controlTable2');
+    if (t2) t2.innerHTML = html;
   })();
   </script>
 
@@ -526,6 +760,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
         <option value="2">×2</option>
         <option value="4">×4 (高解像度)</option>
       </select>
+      <span id="curScaleM" style="font-size:14px;color:#666;">現在: ×2</span>
     </div>
 
     <div class="msetting-row" style="margin-top:14px">
@@ -553,10 +788,12 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080812; }
   </div>
 
   <div class="menu-section">
-    <div class="menu-note" style="color:#2a2a48;text-align:center;font-size:8px;">
+    <div class="menu-note" id="creditNote" style="color:#2a2a48;text-align:center;font-size:8px;">
       (C)2026 tommie.jp<br>
-      tommieChat Sprite Viewer
+      tommieChat Sprite Viewer<br>
+      Last updated on 2026-03-27
     </div>
+    <div class="menu-note bjsVersion" style="color:#2a2a48;text-align:center;font-size:8px;font-weight:bold;margin-top:4px;"></div>
   </div>
 </div>
 
@@ -584,10 +821,13 @@ const SHEET_B64 = "/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAA
 /** @type {import('./src/RpgMakerSpriteSheet.ts').SheetInfo | null} */
 let sheetInfo = null;
 let finalScale = 2;
+let walkPaused = false;
+let walkSpeed = 1.0;
 let currentImgSrc = 'data:image/jpeg;base64,' + SHEET_B64;
 let bgR = 0, bgG = 0, bgB = 0, bgThresh = 30;
 let engine, scene, mgr, dtex;
 let sprData = [];
+let dirRemap = [0,1,2,3]; // direction row remap: dirRemap[mvDir] = sheetRow
 let floorColorA = '#888888';
 let floorColorB = '#999999';
 
@@ -648,17 +888,26 @@ function updateInfoDisplay() {
   if (q('infoFormat')) q('infoFormat').querySelector('.v').textContent = fmtLabel;
   if (q('infoGrid')) q('infoGrid').querySelector('.v').textContent = sheetInfo.charCols + '×' + sheetInfo.charRows + ' (' + nC + 'キャラ)';
   if (q('infoFrame')) q('infoFrame').querySelector('.v').textContent = sheetInfo.frameW + '×' + sheetInfo.frameH + 'px ×' + finalScale;
+  const scaleText = '現在: ×' + finalScale;
+  if (q('curScaleM2')) q('curScaleM2').textContent = scaleText;
+  if (q('curScaleM'))  q('curScaleM').textContent  = scaleText;
 }
 
 // ── Babylon.js scene ──────────────────────────────────
 async function initScene(pngURL) {
   const canvas = document.getElementById('renderCanvas');
   if (engine) { scene.dispose(); engine.dispose(); sprData=[]; }
+  dirRemap = [0,1,2,3];
 
   engine = new BABYLON.Engine(canvas, true,
     {preserveDrawingBuffer:true, stencil:true});
   scene = new BABYLON.Scene(engine);
   scene.clearColor = new BABYLON.Color4(0.05, 0.05, 0.05, 1);
+
+  // Show BabylonJS version in help panels
+  const ver = 'Babylon.js v' + BABYLON.Engine.Version
+    + ' - ' + (engine.webGLVersion > 1 ? 'WebGL2' : 'WebGL1');
+  document.querySelectorAll('.bjsVersion').forEach(el => { el.textContent = ver; });
 
   // Camera
   const camera = new BABYLON.ArcRotateCamera(
@@ -677,11 +926,11 @@ async function initScene(pngURL) {
 
   // Ground
   const ground = BABYLON.MeshBuilder.CreateGround('g',
-    {width:26,height:26,subdivisions:1},scene);
+    {width:120,height:120,subdivisions:1},scene);
   const gmat = new BABYLON.StandardMaterial('gm',scene);
   dtex = new BABYLON.DynamicTexture('dt',{width:512,height:512},scene,false);
   updateFloor();
-  dtex.uScale=5; dtex.vScale=5;
+  dtex.uScale=23; dtex.vScale=23;
   gmat.diffuseTexture=dtex;
   gmat.specularColor=new BABYLON.Color3(0,0,0);
   ground.material=gmat;
@@ -713,7 +962,7 @@ async function initScene(pngURL) {
   mgr = new BABYLON.SpriteManager('mgr', pngURL, 50,
     {width: frameDisplayW, height: frameDisplayH}, scene);
   const nChars = Math.min(8, CHAR_COLS_CUR * CHAR_ROWS_CUR);
-  mgr.texture.updateSamplingMode(BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
+  mgr.texture.updateSamplingMode(BABYLON.Texture.NEAREST_SAMPLINGMODE);
 
   // Shadow helper
   const shadowMat = new BABYLON.StandardMaterial('shm',scene);
@@ -760,7 +1009,7 @@ async function initScene(pngURL) {
 
   scene.onBeforeRenderObservable.add(() => {
     const dt = scene.getEngine().getDeltaTime() * 0.001;
-    elapsed += dt;
+    if (!walkPaused) elapsed += dt * walkSpeed;
 
     sprData.forEach(sp => {
       const {x, z, mvx, mvz} = posOnSquare(elapsed * SPEED + sp.tOffset);
@@ -768,16 +1017,17 @@ async function initScene(pngURL) {
       sp.disc.position = new BABYLON.Vector3(x, 0.01, z);
 
       const dir = worldDirToSpriteDir(mvx, mvz, camera.alpha);
+      const rd  = dirRemap[dir]; // remapped direction row
       if (dir !== sp.curDir) {
         sp.curDir = dir;
         if (SHEET_FORMAT === '2003' || SHEET_FORMAT === 'XP') {
           sp.s.stopAnimation();
-          sp.s.cellIndex = cellIndex(sheetInfo, 0, 0, dir, 1);
-          sp.anim2003 = { dir, fi: 0,
+          sp.s.cellIndex = cellIndex(sheetInfo, 0, 0, rd, 1);
+          sp.anim2003 = { dir: rd, fi: 0,
             seq: SHEET_FORMAT === 'XP' ? [0,1,2,3,2,1] : [0,1,2,1] };
         } else {
-          const from = cellIndex(sheetInfo, sp.charCol, sp.charRow, dir, 0);
-          const to   = cellIndex(sheetInfo, sp.charCol, sp.charRow, dir, 2);
+          const from = cellIndex(sheetInfo, sp.charCol, sp.charRow, rd, 0);
+          const to   = cellIndex(sheetInfo, sp.charCol, sp.charRow, rd, 2);
           sp.s.playAnimation(from, to, true, 165);
         }
       }
@@ -794,7 +1044,16 @@ async function initScene(pngURL) {
     });
   });
 
-  engine.runRenderLoop(() => scene.render());
+  const fpsEl = document.getElementById('fpsCounter');
+  let fpsTimer = 0;
+  engine.runRenderLoop(() => {
+    scene.render();
+    fpsTimer += engine.getDeltaTime();
+    if (fpsTimer >= 500) {
+      fpsEl.textContent = engine.getFps().toFixed(0) + ' FPS';
+      fpsTimer = 0;
+    }
+  });
   window.addEventListener('resize', () => engine.resize());
 }
 
@@ -848,7 +1107,48 @@ if (tm) tm.addEventListener('input', e=>{
   document.getElementById('bgThresh').value = bgThresh;
   document.getElementById('threshVal').textContent = bgThresh;
 });
+const tm2 = document.getElementById('bgThreshM2');
+if (tm2) tm2.addEventListener('input', e=>{
+  bgThresh = parseInt(e.target.value);
+  document.getElementById('threshValM2').textContent = bgThresh;
+  document.getElementById('bgThresh').value = bgThresh;
+  document.getElementById('threshVal').textContent = bgThresh;
+});
 document.getElementById('reloadBtn').addEventListener('click', applyBg);
+
+// Resolution select sync
+['upscaleSelect','upscaleSelectM','upscaleSelectM2'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => {
+    const v = el.value;
+    ['upscaleSelect','upscaleSelectM','upscaleSelectM2'].forEach(sid => {
+      const s = document.getElementById(sid);
+      if (s) s.value = v;
+    });
+    const label = v === 'auto' ? '自動 (×' + finalScale + ')' : '×' + v;
+    const cur = document.getElementById('curScaleM2');
+    const cur2 = document.getElementById('curScaleM');
+    if (cur) cur.textContent = '選択: ' + label;
+    if (cur2) cur2.textContent = '選択: ' + label;
+  });
+});
+
+// Playback controls
+function stopWalk() {
+  walkPaused = true;
+  document.getElementById('btnStop').classList.remove('active');
+  document.getElementById('btnPlay').classList.add('active');
+}
+function playWalk() {
+  walkPaused = false;
+  document.getElementById('btnPlay').classList.remove('active');
+  document.getElementById('btnStop').classList.add('active');
+}
+document.getElementById('speedSlider').addEventListener('input', e => {
+  const v = parseInt(e.target.value);
+  walkSpeed = v / 100;
+  document.getElementById('speedVal').textContent = '×' + walkSpeed.toFixed(1);
+});
 
 // Floor color pickers
 document.getElementById('floorSwatch').addEventListener('click',()=>
@@ -866,6 +1166,21 @@ document.getElementById('floorColorB').addEventListener('input',e=>{
 document.getElementById('floorBtn').addEventListener('click', updateFloor);
 
 // ── Direction converter ───────────────────────────────
+function updateDirRemap() {
+  const mvDirs = ['down','left','right','up'];
+  const dirToRow = {};
+  for (let i = 0; i < 4; i++) {
+    const sel = document.getElementById(`dirsel_${i}`);
+    if (!sel) return;
+    dirToRow[sel.value] = i;
+  }
+  for (let i = 0; i < 4; i++) {
+    dirRemap[i] = dirToRow[mvDirs[i]] ?? i;
+  }
+  // force all sprites to re-evaluate direction
+  sprData.forEach(sp => { sp.curDir = -1; });
+}
+
 function openConverter() {
   if (!currentImgSrc || !sheetInfo) return;
   const img = new Image();
@@ -900,17 +1215,19 @@ function openConverter() {
       const sel = document.createElement('select');
       sel.className = 'dirsel';
       sel.id = `dirsel_${rowIdx}`;
+      const defaultDir = DIR_VALS[rowIdx]; // MV standard: down,left,right,up
       DIR_VALS.forEach((v, vi) => {
         const opt = document.createElement('option');
         opt.value = v; opt.textContent = DIR_LABELS[vi];
-        if (v === det.dir) opt.selected = true;
+        if (v === defaultDir) opt.selected = true;
         sel.appendChild(opt);
       });
+      sel.addEventListener('change', updateDirRemap);
       row.appendChild(sel);
       container.appendChild(row);
     });
 
-    document.getElementById('converter').classList.add('show');
+    openSplit(document.getElementById('converter'));
   };
   img.src = currentImgSrc;
 }
@@ -954,28 +1271,166 @@ function convertAndDownload() {
       a.href = url; a.download = 'converted_mv.png';
       a.click();
       URL.revokeObjectURL(url);
-      document.getElementById('converter').classList.remove('show');
+      closeSplit();
     }, 'image/png');
   };
   img.src = currentImgSrc;
 }
 
+// ── Unified split panel system ────────────────────────
+let _activeSplit = null;
+
+function openSplit(el) {
+  if (_activeSplit && _activeSplit !== el) {
+    _activeSplit.classList.remove('split-active');
+  }
+  el.classList.add('split-active');
+  document.body.classList.add('split-open');
+  _activeSplit = el;
+  if (engine) engine.resize();
+}
+
+function closeSplit() {
+  if (_activeSplit) {
+    _activeSplit.classList.remove('split-active');
+    _activeSplit = null;
+  }
+  document.body.classList.remove('split-open');
+  if (engine) engine.resize();
+}
+
 // ── Hamburger menu ────────────────────────────────────
 function toggleMenu() {
   const isTouchOnly = !window.matchMedia('(hover:hover)').matches;
-  const open = document.getElementById('menuPanel').classList.toggle('open');
-  document.getElementById('hamburger').classList.toggle('open', open);
-  document.getElementById('menuOverlay').classList.toggle('open', open);
-  const ms  = document.getElementById('mobilePanelSection');
-  const ds  = document.getElementById('desktopPanelSection');
-  const mis = document.getElementById('mobileInfoSection');
-  if (ms)  ms.style.display  = isTouchOnly ? 'block' : 'none';
-  if (ds)  ds.style.display  = isTouchOnly ? 'none'  : 'block';
-  if (mis) mis.style.display = isTouchOnly ? 'block' : 'none';
-  if (open && isTouchOnly) {
-    syncToMenu();
-    syncMobileInfo();
+  if (isTouchOnly) {
+    // Mobile: toggle dropdown menu
+    const drop = document.getElementById('mobileDropMenu');
+    const isOpen = drop.classList.toggle('open');
+    document.getElementById('menuOverlay').classList.toggle('open', isOpen);
+    return;
   }
+  // Desktop: toggle menu as split panel
+  const mp = document.getElementById('menuPanel');
+  if (_activeSplit === mp) {
+    closeSplit();
+  } else {
+    const ds = document.getElementById('desktopPanelSection');
+    if (ds) ds.style.display = 'block';
+    openSplit(mp);
+  }
+}
+
+// ── Mobile panel helpers ──────────────────────────────
+function mobileShowPanel(id) {
+  // close dropdown + overlay
+  document.getElementById('mobileDropMenu').classList.remove('open');
+  document.getElementById('menuOverlay').classList.remove('open');
+  // sync data before showing
+  if (id === 'mfpInfo') syncMobilePanelInfo();
+  if (id === 'mfpSettings') syncToMenu2();
+  // open panel
+  openSplit(document.getElementById(id));
+}
+
+function mobileClosePanel(id) {
+  closeSplit();
+}
+
+function mobileOpenConverter() {
+  document.getElementById('mobileDropMenu').classList.remove('open');
+  document.getElementById('menuOverlay').classList.remove('open');
+  openConverter();
+}
+
+// ── Split handle drag resize ─────────────────────────
+(function() {
+  const handle = document.getElementById('splitHandle');
+  let dragging = false;
+
+  handle.addEventListener('mousedown', startDrag);
+  handle.addEventListener('touchstart', startDrag, { passive: false });
+
+  function startDrag(e) {
+    if (e.cancelable) e.preventDefault();
+    dragging = true;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', stopDrag);
+    document.addEventListener('touchmove', onDrag, { passive: false });
+    document.addEventListener('touchend', stopDrag);
+  }
+
+  function onDrag(e) {
+    if (!dragging) return;
+    if (e.cancelable) e.preventDefault();
+    const isMobile = !window.matchMedia('(hover:hover)').matches;
+    const root = document.documentElement;
+    if (isMobile) {
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const size = window.innerHeight - clientY;
+      const clamped = Math.max(120, Math.min(size, window.innerHeight - 100));
+      root.style.setProperty('--split-size', clamped + 'px');
+    } else {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const size = window.innerWidth - clientX;
+      const clamped = Math.max(200, Math.min(size, window.innerWidth - 200));
+      root.style.setProperty('--split-size', clamped + 'px');
+    }
+    if (engine) engine.resize();
+  }
+
+  function stopDrag() {
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
+    document.removeEventListener('touchmove', onDrag);
+    document.removeEventListener('touchend', stopDrag);
+  }
+})();
+
+function syncMobilePanelInfo() {
+  const pairs = [
+    ['mfpFile',   'infoFile'],
+    ['mfpFormat', 'infoFormat'],
+    ['mfpGrid',   'infoGrid'],
+    ['mfpFrame',  'infoFrame'],
+  ];
+  pairs.forEach(([dstId, srcId]) => {
+    const src = document.getElementById(srcId);
+    const dst = document.getElementById(dstId);
+    if (!src || !dst) return;
+    const srcVal = src.querySelector('.v');
+    const dstVal = dst.querySelector('td:last-child');
+    if (srcVal && dstVal) dstVal.textContent = srcVal.textContent;
+  });
+}
+
+function syncToMenu2() {
+  const tm = document.getElementById('bgThreshM2');
+  const tv = document.getElementById('threshValM2');
+  const sw = document.getElementById('bgSwatchM2');
+  if (tm) { tm.value = bgThresh; if(tv) tv.textContent = bgThresh; }
+  if (sw) sw.style.background = 'rgb('+bgR+','+bgG+','+bgB+')';
+  const usM = document.getElementById('upscaleSelectM2');
+  const us  = document.getElementById('upscaleSelect');
+  if (usM && us) usM.value = us.value;
+  const fsM  = document.getElementById('floorSwatchM2');
+  const fs2M = document.getElementById('floorSwatch2M2');
+  if (fsM)  fsM.style.background  = floorColorA;
+  if (fs2M) fs2M.style.background = floorColorB;
+}
+
+function syncFromMenu2() {
+  const tm = document.getElementById('bgThreshM2');
+  if (tm) {
+    bgThresh = parseInt(tm.value);
+    document.getElementById('bgThresh').value = bgThresh;
+    document.getElementById('threshVal').textContent = bgThresh;
+  }
+  const usM = document.getElementById('upscaleSelectM2');
+  const us  = document.getElementById('upscaleSelect');
+  if (usM && us) us.value = usM.value;
 }
 
 function syncMobileInfo() {
@@ -1022,9 +1477,10 @@ function syncFromMenu() {
 }
 
 function closeMenu() {
-  document.getElementById('menuPanel').classList.remove('open');
-  document.getElementById('hamburger').classList.remove('open');
+  closeSplit();
   document.getElementById('menuOverlay').classList.remove('open');
+  const drop = document.getElementById('mobileDropMenu');
+  if (drop) drop.classList.remove('open');
 }
 
 window.addEventListener('keydown', e => { if (e.key==='Escape') closeMenu(); });
@@ -1092,6 +1548,8 @@ window.addEventListener('drop', e => {
 // The HTML uses onclick="openConverter()", onclick="convertAndDownload()", etc.
 // Since we're in a module, we need to expose them on window.
 window.openConverter = openConverter;
+window.stopWalk = stopWalk;
+window.playWalk = playWalk;
 window.convertAndDownload = convertAndDownload;
 window.toggleMenu = toggleMenu;
 window.closeMenu = closeMenu;
@@ -1099,6 +1557,11 @@ window.syncFromMenu = syncFromMenu;
 window.applyBg = applyBg;
 window.updateFloor = updateFloor;
 window._applyBg = applyBg;
+window.mobileShowPanel = mobileShowPanel;
+window.mobileClosePanel = mobileClosePanel;
+window.mobileOpenConverter = mobileOpenConverter;
+window.closeSplit = closeSplit;
+window.syncFromMenu2 = syncFromMenu2;
 
 // ── Boot ──────────────────────────────────────────────
 window.addEventListener('load', async () => {
