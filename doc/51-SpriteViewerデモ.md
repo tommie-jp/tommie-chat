@@ -33,6 +33,35 @@ npx vite
 - Vite が `.ts` の import を自動的に処理するため、ビルド不要
 - Babylon.js は CDN から読み込まれるため、オンライン環境が必要
 
+## URL からの読み込み
+
+### クエリパラメータ
+
+`?url=` パラメータでスプライトシートのURLを直接指定して開ける。
+
+```text
+http://localhost:5173/lib/babylon-rpgmaker-sprites/index.html?url=http://localhost:9000/test01/sprite.png
+```
+
+MinIO (S3互換) にアップロードしたキャラチップの表示テストに使用する。
+
+### 設定パネルから読み込み
+
+1. ハンバーガーメニュー →「設定」
+2. 「URL読込」欄にURLを入力
+3. 「▶ 読込」ボタンをクリック
+
+### 読み込み可能なURL
+
+| URL | 可否 | 備考 |
+| --- | --- | --- |
+| `/s3/avatars/sprite.png` | 可 | nginx 経由 (同一オリジン) |
+| `http://localhost:9000/bucket/file.png` | 可 | MinIO 直接 (開発時) |
+| `https://外部サイト/image.png` | 不可 | CORS 制限 |
+
+外部サイトの画像は CORS 制限により読み込めない。
+素材は MinIO にアップロードしてから使用すること。
+
 ## 操作方法
 
 ### PC

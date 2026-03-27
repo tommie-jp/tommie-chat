@@ -7,6 +7,7 @@
 #   nakama     - ゲームサーバ (マッチ・WebSocket・RPC)
 #   web        - Nginx (フロントエンド静的ファイル配信)
 #   prometheus - メトリクス収集・監視
+#   minio      - アセットストレージ (S3互換)
 #
 # 起動:   docker compose up -d
 # 停止:   docker compose down
@@ -60,7 +61,11 @@ services:
             --runtime.max_count 8192 `# RPC同時goroutine上限[個](default256)` \
             --match.max_empty_sec 30 `# 空マッチ自動削除[秒](default0)` \
             --runtime.env MAX_LOGIN_RATE_PER_SEC=50 `# ログイン制限[人/秒]` \
-            --runtime.env ENABLE_TEST_RPC=true `# テスト用RPC有効（本番では設定しない）`
+            --runtime.env ENABLE_TEST_RPC=true `# テスト用RPC有効（本番では設定しない）` \
+            --runtime.env MINIO_ENDPOINT=minio:9000 `# MinIO S3 API` \
+            --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \
+            --runtime.env MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin} \
+            --runtime.env MINIO_USE_SSL=false
     restart: "no"
     stop_grace_period: 10s # SIGTERM後の猶予時間
     depends_on:
@@ -86,6 +91,8 @@ services:
     restart: "no"
     depends_on:
       nakama:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     volumes:
       - ../dist:/usr/share/nginx/html:ro # ビルド済み静的ファイル
@@ -115,5 +122,25 @@ services:
       prometheus --config.file=./prometheus.yml
       EOF'
 
+  # --- MinIO アセットストレージ (S3互換) ---
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    restart: "no"
+    volumes:
+      - minio_data:/data
+    expose:
+      - "9000"  # S3 API
+      - "9001"  # Web管理コンソール
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   data: # PostgreSQL データ永続化ボリューム
+  minio_data: # MinIO データ永続化ボリューム

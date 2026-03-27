@@ -510,6 +510,11 @@ body.split-open #splitHandle {
     <button class="mapplybtn" onclick="document.getElementById('fileInput').click()">📂 選択</button>
   </div>
   <div class="msetting-row" style="margin-top:14px">
+    <span class="msetting-label">URL読込</span>
+    <input type="text" id="urlInput" placeholder="/s3/avatars/sprite.png" style="flex:1;font-size:14px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-family:'Courier New',monospace;">
+    <button class="mapplybtn" onclick="loadFromURL()">▶ 読込</button>
+  </div>
+  <div class="msetting-row" style="margin-top:14px">
     <span class="msetting-label">解像度</span>
     <select id="upscaleSelectM2" style="flex:1;font-size:15px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">
       <option value="auto">自動</option>
@@ -1442,6 +1447,37 @@ document.getElementById('fileInput').addEventListener('change', e => {
   e.target.value = '';
 });
 
+function loadFromURL(url) {
+  if (!url) {
+    const input = document.getElementById('urlInput');
+    url = input ? input.value.trim() : '';
+  }
+  if (!url) return;
+  const fn = url.split('/').pop() || 'url-loaded';
+  document.getElementById('fileName').textContent = fn;
+  currentImgSrc = url;
+  const tmpImg = new Image();
+  tmpImg.crossOrigin = 'anonymous';
+  tmpImg.onerror = () => {
+    alert('URL読込失敗: ' + url + '\n\n外部サイトの画像はCORS制限により読込できません。\nMinIO (/s3/...) または同一サーバーのURLを指定してください。');
+  };
+  tmpImg.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = 1; c.height = 1;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(tmpImg, 0, 0);
+    const p = ctx.getImageData(0, 0, 1, 1).data;
+    bgR = p[0]; bgG = p[1]; bgB = p[2];
+    const hex = rgbToHex(bgR, bgG, bgB);
+    document.getElementById('bgSwatch').style.background = hex;
+    document.getElementById('bgColorInput').value = hex;
+    applyBg();
+  };
+  tmpImg.src = url;
+  const dh = document.getElementById('dropHint');
+  if (dh) dh.style.display = 'none';
+}
+
 // Drag & Drop on whole window
 const dz = document.getElementById('dropzone');
 window.addEventListener('dragenter', e => {
@@ -1479,6 +1515,7 @@ window.toggleHelp = toggleHelp;
 window.mobileClosePanel = mobileClosePanel;
 window.mobileOpenConverter = mobileOpenConverter;
 window.closeSplit = closeSplit;
+window.loadFromURL = loadFromURL;
 window.syncFromMenu2 = syncFromMenu2;
 
 // ── Boot ──────────────────────────────────────────────
@@ -1487,6 +1524,14 @@ window.addEventListener('load', async () => {
   if (typeof BABYLON === 'undefined') {
     loadingEl.textContent = 'ERROR: BabylonJS CDN に接続できません。オンライン環境で開いてください。';
     return;
+  }
+  // クエリパラメータ ?url= でURL読込
+  const urlParam = new URLSearchParams(location.search).get('url');
+  if (urlParam) {
+    currentImgSrc = urlParam;
+    const input = document.getElementById('urlInput');
+    if (input) input.value = urlParam;
+    document.getElementById('fileName').textContent = urlParam.split('/').pop() || 'url-loaded';
   }
   try {
     const bg = await sampleBgColor(currentImgSrc);
