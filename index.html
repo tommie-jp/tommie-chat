@@ -1576,26 +1576,55 @@
             <tr><td class="label" title="34.自動デバッグチャット&#10;数秒毎にランダムなセリフを自動投稿します&#10;初期値: Off&#10;ログイン中のみ有効">34.AutoChat:</td><td class="value">
                 <button id="autoChatBtn" class="debug-btn off">Off</button>
             </td></tr>
+            <tr><td colspan="2" style="padding:4px 0 0 0;">
+                <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
+                <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">AutoWalk</div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <tr><td class="label" title="34b.AutoWalk&#10;指定した四角形を自動で巡回移動します&#10;初期値: Off">34b.AutoWalk:</td><td class="value">
+                        <button id="autoWalkBtn" class="debug-btn off">Off</button>
+                    </td></tr>
+                    <tr><td class="label">始点:</td><td class="value">
+                        <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
+                            <span style="font-size:10px;color:#555;">X</span><input type="number" id="autoWalkX" class="debug-input" value="0" style="width:40px;" title="始点X">
+                            <span style="font-size:10px;color:#555;">Z</span><input type="number" id="autoWalkZ" class="debug-input" value="0" style="width:40px;" title="始点Z">
+                        </div>
+                    </td></tr>
+                    <tr><td class="label">サイズ:</td><td class="value">
+                        <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
+                            <span style="font-size:10px;color:#555;">dX</span><input type="number" id="autoWalkDX" class="debug-input" value="5" style="width:40px;" title="dX">
+                            <span style="font-size:10px;color:#555;">dZ</span><input type="number" id="autoWalkDZ" class="debug-input" value="5" style="width:40px;" title="dZ">
+                        </div>
+                    </td></tr>
+                </table>
+                </div>
+            </td></tr>
             <tr><td class="label" title="35.NPC Chat&#10;npc001〜003が数秒毎にチャット履歴へ自動投稿します&#10;初期値: Off">35.NPC Chat:</td><td class="value">
                 <button id="npcAutoChatBtn" class="debug-btn off">Off</button>
             </td></tr>
-            <tr><td class="label" title="36.Avatar&#10;自分のアバターを選択します。変更すると他ユーザの画面にも反映されます。">36.Avatar:</td><td class="value">
-                <select id="avatarSelect" class="debug-select">
-                    <option value="/textures/pic1.ktx2">pic1</option>
-                    <option value="/textures/pic2.ktx2">pic2</option>
-                </select>
-                <div style="margin-top:4px;">
-                    <input type="text" id="spriteUrlInput" class="debug-input" placeholder="/s3/avatars/sprite.png" style="width:160px;">
-                    <input type="number" id="spriteCharCol" class="debug-input" min="0" max="7" value="0" style="width:30px;" title="charCol">
-                    <input type="number" id="spriteCharRow" class="debug-input" min="0" max="7" value="0" style="width:30px;" title="charRow">
-                    <button id="spriteApplyBtn" class="debug-btn">Apply</button>
+            <tr><td colspan="2" style="padding:4px 0 0 0;">
+                <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
+                <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Avatar</div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <tr><td class="label" title="36.Avatar&#10;自分のアバターを選択します。変更すると他ユーザの画面にも反映されます。">36.Avatar:</td><td class="value">
+                        <select id="avatarSelect" class="debug-select">
+                            <option value="/textures/pic1.ktx2">pic1</option>
+                            <option value="/textures/pic2.ktx2">pic2</option>
+                        </select>
+                        <div style="margin-top:4px;">
+                            <select id="spriteUrlSelect" class="debug-select" style="width:170px;"></select>
+                            <input type="number" id="spriteCharCol" class="debug-input" min="0" max="7" value="0" style="width:30px;" title="charCol">
+                            <input type="number" id="spriteCharRow" class="debug-input" min="0" max="7" value="0" style="width:30px;" title="charRow">
+                            <button id="spriteApplyBtn" class="debug-btn">Apply</button>
+                        </div>
+                    </td></tr>
+                    <tr><td class="label" title="37.NPC&#10;NPC（npc001〜003）の表示をON/OFFします&#10;初期値: Off">37.NPC:</td><td class="value">
+                        <button id="npcVisBtn" class="debug-btn off">Off</button>
+                    </td></tr>
+                    <tr><td class="label" title="38.Avatar Thick&#10;アバターの厚みを調節します&#10;初期値: 5 (depth=0.05)&#10;最小: 1 (depth=0.01) 最大: 50 (depth=0.50)">38.Avatar Thick:</td><td class="value">
+                        <input type="number" id="avatarThickInput" class="debug-input" min="1" max="50" step="1" value="5" style="width:60px;">
+                    </td></tr>
+                </table>
                 </div>
-            </td></tr>
-            <tr><td class="label" title="37.NPC&#10;NPC（npc001〜003）の表示をON/OFFします&#10;初期値: Off">37.NPC:</td><td class="value">
-                <button id="npcVisBtn" class="debug-btn off">Off</button>
-            </td></tr>
-            <tr><td class="label" title="38.Avatar Thick&#10;アバターの厚みを調節します&#10;初期値: 5 (depth=0.05)&#10;最小: 1 (depth=0.01) 最大: 50 (depth=0.50)">38.Avatar Thick:</td><td class="value">
-                <input type="number" id="avatarThickInput" class="debug-input" min="1" max="50" step="1" value="5" style="width:60px;">
             </td></tr>
             <tr><td colspan="2" style="padding:4px 0 0 0;">
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
@@ -1653,9 +1682,9 @@
                             <option value="12">12pt</option>
                             <option value="14">14pt</option>
                             <option value="24">24pt</option>
-                            <option value="36" selected>36pt</option>
+                            <option value="36">36pt</option>
                             <option value="48">48pt</option>
-                            <option value="60">60pt</option>
+                            <option value="60" selected>60pt</option>
                             <option value="72">72pt</option>
                             <option value="84">84pt</option>
                             <option value="96">96pt</option>

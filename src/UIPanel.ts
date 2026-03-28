@@ -666,10 +666,18 @@ export function setupHtmlUI(game: GameScene): void {
     game.nakama.onAvatarChange = (sessionId: string, textureUrl: string, charCol: number, charRow: number) => {
         console.log(`rcv avatarChange sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl} cc=${charCol} cr=${charRow}`);
         const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
-        const username = userMap.get(sessionId)?.displayName ?? sessionId.slice(0, 8);
-        game.spriteAvatarSystem.dispose(sessionId);
-        game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, 0, 0, username).then(root => {
+        const cached = profileCache.get(sessionId);
+        const username = cached?.displayName || userMap.get(sessionId)?.displayName || userMap.get(sessionId)?.username || sessionId.slice(0, 8);
+        // 既存アバターの現在位置・回転を保持
+        const oldRoot = game.remoteAvatars.get(sessionId);
+        const px = oldRoot?.position.x ?? 0;
+        const pz = oldRoot?.position.z ?? 0;
+        const ry = oldRoot?.rotation.y ?? 0;
+        game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, px, pz, username, undefined, ry).then(root => {
             game.remoteAvatars.set(sessionId, root as unknown as Mesh);
+            game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
+            const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
+            if (su) game.remoteSpeeches.set(sessionId, su);
         });
     };
     // --- プロフィールキャッシュ & debounced matchデータ要求 ---
@@ -719,8 +727,8 @@ export function setupHtmlUI(game: GameScene): void {
         scheduleRenderUserList();
     };
 
-    game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, _ry: number) => {
-        console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)}`);
+    game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number) => {
+        console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(2)}`);
         if (sessionId === game.nakama.selfSessionId) return;
         const cached = profileCache.get(sessionId);
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
@@ -728,9 +736,10 @@ export function setupHtmlUI(game: GameScene): void {
         const sheetUrl = (cached?.textureUrl && cached.textureUrl.includes("/s3/")) ? cached.textureUrl : "/s3/avatars/pipo-nekonin008.png";
         if (game.spriteAvatarSystem.has(sessionId)) {
             game.spriteAvatarSystem.setPosition(sessionId, x, z);
+            game.spriteAvatarSystem.setRotation(sessionId, ry);
             game.spriteAvatarSystem.setEnabled(sessionId, true);
         } else if (!game.spriteAvatarSystem.isCreating(sessionId)) {
-            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, 0, 0, x, z, displayName).then(root => {
+            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, 0, 0, x, z, displayName, undefined, ry).then(root => {
                 game.remoteAvatars.set(sessionId, root as unknown as Mesh);
                 game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
                 const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
@@ -2055,6 +2064,19 @@ export function setupHtmlUI(game: GameScene): void {
         }
         updateClearBtnIcon();
     };
+
+    // Speech Size 変更時に既存の吹き出しを即時再描画
+    {
+        const ssSel = document.getElementById("speechSizeSelect") as HTMLSelectElement | null;
+        if (ssSel) {
+            ssSel.addEventListener("change", () => {
+                game.spriteAvatarSystem.refreshAllSpeeches();
+                if (game.updatePlayerSpeech && lastSpeechText) {
+                    game.updatePlayerSpeech(bubbleHidden ? "" : lastSpeechText);
+                }
+            });
+        }
+    }
 
     sendBtn.onclick = () => { sendMessage(); };
     textarea.onkeydown = (e) => {

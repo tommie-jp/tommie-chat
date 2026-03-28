@@ -258,7 +258,7 @@ export class AvatarSystem {
             const clippedLines = rawLines.map(l => l.length > MAX_CHARS ? l.slice(0, MAX_CHARS) + '...' : l);
             const n = Math.max(1, clippedLines.length);
 
-            const ptSize = parseInt((document.getElementById("speechSizeSelect") as HTMLSelectElement | null)?.value ?? "14", 10);
+            const ptSize = parseInt((document.getElementById("speechSizeSelect") as HTMLSelectElement | null)?.value ?? "60", 10);
             const fontSize = Math.round(ptSize * 96 / 72);
             const aaMode = (document.getElementById("aaModeBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? false;
             let fontFamily: string;
