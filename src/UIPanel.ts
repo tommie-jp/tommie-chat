@@ -2096,7 +2096,8 @@ export function setupHtmlUI(game: GameScene): void {
 
     sendBtn.onclick = () => { sendMessage(); };
     textarea.onkeydown = (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
+        // スマホ: Enterは改行（送信ボタンで送信）、PC: Enterで送信、Shift+Enterで改行
+        if (e.key === "Enter" && !isMobileDev && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
         }
