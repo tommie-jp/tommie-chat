@@ -15,7 +15,7 @@ interface SpriteAvatarData {
     root: TransformNode;
     standBase: Mesh;
     namePlane: Mesh;
-    nameUpdate: (name: string, color?: string) => void;
+    nameUpdate: (name: string, color?: string, suffix?: string) => void;
     speechUpdate: (text: string) => void;
     speechRedraw: () => void;
     speechSetAlpha: (a: number) => void;
@@ -252,7 +252,7 @@ export class SpriteAvatarSystem {
         data.sprite.position.z = z;
     }
 
-    getNameUpdate(id: string): ((name: string, color?: string) => void) | undefined {
+    getNameUpdate(id: string): ((name: string, color?: string, suffix?: string) => void) | undefined {
         return this.avatars.get(id)?.nameUpdate;
     }
 
@@ -404,7 +404,7 @@ export class SpriteAvatarSystem {
         return standRoot as unknown as Mesh;
     }
 
-    private createNameTag(parent: TransformNode, nameText: string, spriteHeight: number): { plane: Mesh; update: (name: string) => void } {
+    private createNameTag(parent: TransformNode, nameText: string, spriteHeight: number): { plane: Mesh; update: (name: string, color?: string, suffix?: string) => void } {
         const nameTexW = 1024, nameTexH = 384;
         const nameW = 3.0;
         const nameH = nameW * (nameTexH / nameTexW);
@@ -449,7 +449,30 @@ export class SpriteAvatarSystem {
         tbName.heightInPixels = nameTexH;
         panel.addControl(tbName);
 
-        return { plane: namePlane, update: (n: string, color?: string) => {
+        // セッションIDサフィックス用（#だけ色付き、4桁は白）
+        const tbHash = new TextBlock();
+        tbHash.text = "";
+        tbHash.color = "white";
+        tbHash.fontSize = "40px";
+        tbHash.fontWeight = "bold";
+        tbHash.outlineWidth = 5;
+        tbHash.outlineColor = "black";
+        tbHash.resizeToFit = true;
+        tbHash.heightInPixels = nameTexH;
+        panel.addControl(tbHash);
+
+        const tbSuffixId = new TextBlock();
+        tbSuffixId.text = "";
+        tbSuffixId.color = "white";
+        tbSuffixId.fontSize = "40px";
+        tbSuffixId.fontWeight = "bold";
+        tbSuffixId.outlineWidth = 5;
+        tbSuffixId.outlineColor = "black";
+        tbSuffixId.resizeToFit = true;
+        tbSuffixId.heightInPixels = nameTexH;
+        panel.addControl(tbSuffixId);
+
+        return { plane: namePlane, update: (n: string, color?: string, suffix?: string) => {
             if (color && color !== "white") {
                 // @マークだけ色付き、残りは白
                 tbAt.text = "@";
@@ -464,6 +487,19 @@ export class SpriteAvatarSystem {
                 tbName.text = n;
                 tbName.color = "white";
                 tbName.outlineColor = "black";
+            }
+            // セッションIDサフィックス（#だけ色付き、4桁は白）
+            if (suffix && suffix.startsWith("#")) {
+                const hashColor = color && color !== "white" ? color : "#00bbfa";
+                tbHash.text = " #";
+                tbHash.color = hashColor;
+                tbHash.outlineColor = "rgba(0,0,0,0.7)";
+                tbSuffixId.text = suffix.slice(1);
+                tbSuffixId.color = "white";
+                tbSuffixId.outlineColor = "black";
+            } else {
+                tbHash.text = "";
+                tbSuffixId.text = "";
             }
         } };
     }
@@ -493,7 +529,8 @@ export class SpriteAvatarSystem {
         let lastText = "";
 
         const draw = (text: string) => {
-            const ctx = dynTex.getContext() as unknown as CanvasRenderingContext2D;
+            const ctx = dynTex.getContext() as unknown as CanvasRenderingContext2D | null;
+            if (!ctx) return;  // テクスチャ破棄済み
             ctx.clearRect(0, 0, texW, texH);
             if (!text || text.trim() === "") return;
 

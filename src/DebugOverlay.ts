@@ -1063,15 +1063,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 game.spriteAvatarSystem.setPosition(selfId, cur.x, cur.z);
                 // 既存メッシュアバターを非表示
                 game.playerBox.getChildMeshes().forEach(m => m.isVisible = false);
-                // 表示名タグを再設定
-                const selfDn = game.nakama.selfDisplayName ?? "";
-                const selfUsername = (document.getElementById("loginName") as HTMLInputElement | null)?.value ?? "";
-                if (selfDn) {
-                    game.updatePlayerNameTag(selfDn, "white");
-                } else {
-                    const uidColor = (document.getElementById("uidColorInput") as HTMLInputElement | null)?.value ?? "#00bbfa";
-                    game.updatePlayerNameTag("@" + selfUsername, uidColor);
-                }
+                // 表示名タグを再設定（セッションIDサフィックス含む）
+                game.refreshSelfNameTag?.();
             });
             game.nakama.sendAvatarChange(url, cc, cr).catch(() => {});
         });
