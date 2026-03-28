@@ -414,13 +414,19 @@ export class SpriteAvatarSystem {
         const tb = new TextBlock();
         tb.text = nameText;
         tb.color = "white";
-        tb.fontSize = "56px";
+        tb.fontSize = "48px";
         tb.fontWeight = "bold";
-        tb.outlineWidth = 6;
+        tb.outlineWidth = 5;
         tb.outlineColor = "black";
         adt.addControl(tb);
 
-        return { plane: namePlane, update: (n: string, color?: string) => { tb.text = n; if (color) tb.color = color; } };
+        return { plane: namePlane, update: (n: string, color?: string) => {
+            tb.text = n;
+            if (color) {
+                tb.color = color;
+                tb.outlineColor = color === "white" ? "black" : "#0a2244";
+            }
+        } };
     }
 
     private createSpeechBubble(namePlane: Mesh): { updater: (text: string) => void; redraw: () => void; setAlpha: (a: number) => void; getAlpha: () => number } {

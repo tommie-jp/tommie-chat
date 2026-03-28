@@ -471,10 +471,10 @@ export function setupHtmlUI(game: GameScene): void {
         return match ? decodeURIComponent(match[1]) : null;
     };
 
-    /** 表示名が空ならユーザID@uid（青色）、あればそのまま（白色）を返す */
+    /** 表示名が空なら @username（青色）、あればそのまま（白色）を返す */
     const resolveDisplayLabel = (displayName: string, username: string): { text: string; color: string } => {
         if (displayName) return { text: displayName, color: "white" };
-        return { text: username + "@uid", color: "#66bbff" };
+        return { text: "@" + username, color: "#1177dd" };
     };
 
     const loginNameInput = document.getElementById("loginName") as HTMLInputElement;
