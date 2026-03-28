@@ -73,9 +73,9 @@ export class GameScene {
     private blockMatCache = new Map<string, StandardMaterial>();
     buildMode = false;
     latestPingAvg: number | null = null;
-    playerTextureUrl = "/s3/avatars/pipo-nekonin008.png";
-    playerCharCol = 0;
-    playerCharRow = 0;
+    playerTextureUrl = localStorage.getItem("spriteAvatarUrl") || "/s3/avatars/pipo-nekonin008.png";
+    playerCharCol = parseInt(localStorage.getItem("spriteAvatarCol") ?? "0", 10) || 0;
+    playerCharRow = parseInt(localStorage.getItem("spriteAvatarRow") ?? "0", 10) || 0;
     avatarDepth = 0.05;
 
     // フレームプロファイル（ms単位、10フレーム移動平均）

@@ -43,7 +43,7 @@ export class NakamaService {
     onBlockUpdate?:      (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => void;
     onAOIEnter?:         (sessionId: string, x: number, z: number, ry: number) => void;
     onAOILeave?:         (sessionId: string) => void;
-    onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; loginTime: string }[]) => void;
+    onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string }[]) => void;
     onPlayersAOIResponse?: (players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void;
     onDisplayName?:      (sessionId: string, displayName: string) => void;
     onMatchDisconnect?:  () => void;
@@ -216,7 +216,7 @@ export class NakamaService {
                     const e = payload as { sessionId: string };
                     this.onAOILeave?.(e.sessionId);
                 } else if (md.op_code === OP_PROFILE_RESPONSE) {
-                    const resp = payload as { profiles: { sessionId: string; displayName: string; textureUrl: string; loginTime: string }[] };
+                    const resp = payload as { profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string }[] };
                     this.onProfileResponse?.(resp.profiles ?? []);
                 } else if (md.op_code === OP_PLAYERS_AOI_RESP) {
                     const resp = payload as { players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[] };
