@@ -442,13 +442,7 @@ export class SpriteAvatarSystem {
             ctx.clearRect(0, 0, texW, texH);
             if (!text || text.trim() === "") return;
 
-            const MAX_CHARS = 40;
-            const rawLines = text.split("\n");
-            while (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === "") rawLines.pop();
-            if (rawLines.length > 5) rawLines.splice(5);
-            const clippedLines = rawLines.map(l => l.length > MAX_CHARS ? l.slice(0, MAX_CHARS) + "..." : l);
-            const n = Math.max(1, clippedLines.length);
-
+            const MAX_LINES = 5;
             const ptSize = parseInt((document.getElementById("speechSizeSelect") as HTMLSelectElement | null)?.value ?? "24", 10);
             const fontSize = Math.round(ptSize * 96 / 72);
             const aaMode = (document.getElementById("aaModeBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? false;
@@ -462,6 +456,50 @@ export class SpriteAvatarSystem {
                 leadingMult = parseFloat((document.getElementById("speechLeadingSelect") as HTMLSelectElement | null)?.value ?? "1.3");
             }
             const lineSpacing = Math.round(fontSize * leadingMult);
+
+            // フォント設定してからwrap計算
+            ctx.font = `bold ${fontSize}px ${fontFamily}`;
+            const pad = Math.max(8, Math.round(fontSize * 0.5));
+            const maxLineW = texW - pad * 2;
+
+            // 折り返し処理
+            const wrapLine = (line: string): string[] => {
+                if (ctx.measureText(line).width <= maxLineW) return [line];
+                const wrapped: string[] = [];
+                let cur = "";
+                for (let i = 0; i < line.length; i++) {
+                    const ch = line[i];
+                    const test = cur + ch;
+                    if (ctx.measureText(test).width > maxLineW && cur.length > 0) {
+                        wrapped.push(cur);
+                        cur = ch;
+                    } else {
+                        cur = test;
+                    }
+                }
+                if (cur) wrapped.push(cur);
+                return wrapped;
+            };
+
+            const rawLines = text.split("\n");
+            while (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === "") rawLines.pop();
+            const wrappedLines: string[] = [];
+            for (const line of rawLines) {
+                for (const wl of wrapLine(line)) {
+                    wrappedLines.push(wl);
+                    if (wrappedLines.length >= MAX_LINES) break;
+                }
+                if (wrappedLines.length >= MAX_LINES) break;
+            }
+            // MAX_LINES超過時は最終行に...を付加
+            if (wrappedLines.length >= MAX_LINES) {
+                const totalRawLines = rawLines.reduce((s, l) => s + wrapLine(l).length, 0);
+                if (totalRawLines > MAX_LINES) {
+                    wrappedLines[MAX_LINES - 1] = wrappedLines[MAX_LINES - 1].slice(0, -1) + "...";
+                }
+            }
+            const clippedLines = wrappedLines;
+            const n = Math.max(1, clippedLines.length);
 
             const vertPad = Math.round(fontSize / 2);
             let bH1 = Math.max(fontSize + vertPad * 2, lineSpacing + vertPad * 2);
@@ -477,12 +515,11 @@ export class SpriteAvatarSystem {
             const drawFontSize = Math.round(fontSize * fit);
 
             const rad = Math.max(4, Math.round(14 * (bH1 / 108)));
-            const leftPad  = Math.max(8, Math.round(fontSize * fit * 0.5));
-            const rightPad = leftPad;
+            const actualLeftPad = Math.max(8, Math.round(drawFontSize * 0.5));
 
             ctx.font = `bold ${drawFontSize}px ${fontFamily}`;
             const maxTextW = Math.max(...clippedLines.map(l => ctx.measureText(l).width));
-            const usedTexW = Math.min(texW, Math.max(60, Math.ceil(leftPad + maxTextW + rightPad)));
+            const usedTexW = Math.min(texW, Math.max(60, Math.ceil(actualLeftPad * 2 + maxTextW)));
 
             const bodyH  = bH1 + (n - 1) * lH;
 
@@ -535,13 +572,14 @@ export class SpriteAvatarSystem {
             ctx.lineWidth = 3;
             ctx.stroke();
 
+            ctx.font = `bold ${drawFontSize}px ${fontFamily}`;
             ctx.fillStyle = "#111";
             ctx.textAlign = "left";
             ctx.textBaseline = "middle";
             const totalTextH = n * lH;
             const textStartY = (bodyH - totalTextH) / 2 + lH / 2;
             for (let i = 0; i < n; i++) {
-                ctx.fillText(clippedLines[i], leftPad, textStartY + i * lH);
+                ctx.fillText(clippedLines[i], actualLeftPad, textStartY + i * lH);
             }
             ctx.restore();
             dynTex.update();
