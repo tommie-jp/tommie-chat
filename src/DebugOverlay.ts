@@ -939,36 +939,59 @@ export function setupDebugOverlay(game: GameScene): void {
     }
 
     const sceneInstrumentation = new SceneInstrumentation(game.scene);
-    sceneInstrumentation.captureFrameTime = true;
+    sceneInstrumentation.captureFrameTime = false;
 
     const engineInstrumentation = new EngineInstrumentation(game.engine);
-    engineInstrumentation.captureGPUFrameTime = true;
+    engineInstrumentation.captureGPUFrameTime = false;
 
     let frameCount = 0;
     let lastTexRAM = "0.0 MB";
     let lastGeoRAM = "0.0 MB";
+    let lastOcclusionQueries = "0";
+    let instrumentationEnabled = false;
+
+    const debugOverlayEl = document.getElementById("debug-overlay");
 
     game.scene.onAfterRenderObservable.add(() => {
         frameCount++;
 
-        if (frameCount % 10 !== 0) return;
-
-        const fpsNum = Math.min(99, Math.floor(game.engine.getFps()));
-        const fps = String(fpsNum).padStart(2, "0");
-        if (fv) fv.innerText = fps;
-        const pd = document.getElementById("ping-display");
-        if (pd) {
-            if (game.latestPingAvg !== null && game.latestPingAvg < 0) {
-                pd.innerHTML = `<span style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px">● 未接続</span> 回線切断中 FPS=${fps}`;
-                pd.style.color = "#ff4444";
-            } else if (game.latestPingAvg !== null) {
-                pd.innerHTML = `<span style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px">● ログイン中</span> ping=${game.latestPingAvg}ms FPS=${fps}`;
-                pd.style.color = "";
-            } else {
-                pd.innerHTML = `<span style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px">● 未接続</span> ping=--ms FPS=${fps}`;
-                pd.style.color = "";
+        // ping-display はデバッグパネルとは独立して常時更新
+        if (frameCount % 30 === 0) {
+            const fpsNum = Math.min(99, Math.floor(game.engine.getFps()));
+            const fps = String(fpsNum).padStart(2, "0");
+            if (fv) fv.innerText = fps;
+            const pd = document.getElementById("ping-display");
+            if (pd) {
+                if (game.latestPingAvg !== null && game.latestPingAvg < 0) {
+                    pd.innerHTML = `<span style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px">● 未接続</span> 回線切断中 FPS=${fps}`;
+                    pd.style.color = "#ff4444";
+                } else if (game.latestPingAvg !== null) {
+                    pd.innerHTML = `<span style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px">● ログイン中</span> ping=${game.latestPingAvg}ms FPS=${fps}`;
+                    pd.style.color = "";
+                } else {
+                    pd.innerHTML = `<span style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px">● 未接続</span> ping=--ms FPS=${fps}`;
+                    pd.style.color = "";
+                }
             }
         }
+
+        // パネル非表示時は計測を停止して早期リターン
+        if (!debugOverlayEl || debugOverlayEl.style.display === "none") {
+            if (instrumentationEnabled) {
+                sceneInstrumentation.captureFrameTime = false;
+                engineInstrumentation.captureGPUFrameTime = false;
+                instrumentationEnabled = false;
+            }
+            return;
+        }
+        // パネル表示時のみ instrumentation を有効化
+        if (!instrumentationEnabled) {
+            sceneInstrumentation.captureFrameTime = true;
+            engineInstrumentation.captureGPUFrameTime = true;
+            instrumentationEnabled = true;
+        }
+
+        if (frameCount % 30 !== 0) return;
 
         if (sceneInstrumentation.frameTimeCounter && cv) {
             cv.innerText = sceneInstrumentation.frameTimeCounter.lastSecAverage.toFixed(2);
@@ -1023,6 +1046,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (indices) geoMemoryBytes += indices.length * 4;
             });
             lastGeoRAM = (geoMemoryBytes / (1024 * 1024)).toFixed(1) + " MB";
+
+            lastOcclusionQueries = game.scene.meshes.filter((m: any) => m.isOcclusionQueryInProgress).length.toString();
         }
         if (tv) tv.innerText = lastTexRAM;
         if (geov) geov.innerText = lastGeoRAM;
@@ -1031,8 +1056,7 @@ export function setupDebugOverlay(game: GameScene): void {
         if (iv) iv.innerText = activeIndices.toString();
         if (pv) pv.innerText = Math.floor(activeIndices / 3).toString();
 
-        const activeOcclusionQueries = game.scene.meshes.filter((m: any) => m.isOcclusionQueryInProgress).length;
-        if (ov) ov.innerText = activeOcclusionQueries.toString();
+        if (ov) ov.innerText = lastOcclusionQueries;
 
         if (profv) {
             const p = game.frameProfile;
