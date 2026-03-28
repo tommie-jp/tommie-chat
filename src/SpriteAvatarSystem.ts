@@ -18,6 +18,8 @@ interface SpriteAvatarData {
     nameUpdate: (name: string, color?: string) => void;
     speechUpdate: (text: string) => void;
     speechRedraw: () => void;
+    speechSetAlpha: (a: number) => void;
+    speechGetAlpha: () => number;
     sheetInfo: SheetInfo;
     charCol: number;
     charRow: number;
@@ -128,7 +130,7 @@ export class SpriteAvatarSystem {
         const { plane: namePlane, update: nameUpdate } = this.createNameTag(root, name, s.height);
 
         // speech bubble
-        const { updater: speechUpdate, redraw: speechRedraw } = this.createSpeechBubble(namePlane);
+        const { updater: speechUpdate, redraw: speechRedraw, setAlpha: speechSetAlpha, getAlpha: speechGetAlpha } = this.createSpeechBubble(namePlane);
 
         // 新しいアバターの準備が完了してから旧アバターを破棄（ちらつき防止）
         if (this.avatars.has(id)) {
@@ -154,7 +156,7 @@ export class SpriteAvatarSystem {
         }
 
         const data: SpriteAvatarData = {
-            sprite: s, root, standBase, namePlane, nameUpdate, speechUpdate, speechRedraw,
+            sprite: s, root, standBase, namePlane, nameUpdate, speechUpdate, speechRedraw, speechSetAlpha, speechGetAlpha,
             sheetInfo: info, charCol, charRow,
             currentDir: 0, isMoving: false,
             prevX: x, prevZ: z,
@@ -253,6 +255,14 @@ export class SpriteAvatarSystem {
 
     getSpeechUpdate(id: string): ((text: string) => void) | undefined {
         return this.avatars.get(id)?.speechUpdate;
+    }
+
+    setSpeechAlpha(id: string, alpha: number): void {
+        this.avatars.get(id)?.speechSetAlpha(alpha);
+    }
+
+    getSpeechAlpha(id: string): number {
+        return this.avatars.get(id)?.speechGetAlpha() ?? 1;
     }
 
     dispose(id: string): void {
@@ -413,7 +423,7 @@ export class SpriteAvatarSystem {
         return { plane: namePlane, update: (n: string, color?: string) => { tb.text = n; if (color) tb.color = color; } };
     }
 
-    private createSpeechBubble(namePlane: Mesh): { updater: (text: string) => void; redraw: () => void } {
+    private createSpeechBubble(namePlane: Mesh): { updater: (text: string) => void; redraw: () => void; setAlpha: (a: number) => void; getAlpha: () => number } {
         const texW = 1024, texH = 1024;
         // 1テクスチャpx = worldScale ワールド単位
         const worldScale = 1 / 256;  // 256px = 1.0 ワールド単位
@@ -587,10 +597,17 @@ export class SpriteAvatarSystem {
 
         const updater = (text: string) => {
             lastText = text;
-            bubblePlane.isVisible = !!(text && text.trim() !== "");
+            const visible = !!(text && text.trim() !== "");
+            bubblePlane.isVisible = visible;
+            if (visible) mat.alpha = 1;
             draw(text);
         };
         const redraw = () => { if (lastText) draw(lastText); };
-        return { updater, redraw };
+        const setAlpha = (a: number) => {
+            mat.alpha = a;
+            if (a <= 0) { bubblePlane.isVisible = false; lastText = ""; }
+        };
+        const getAlpha = () => mat.alpha;
+        return { updater, redraw, setAlpha, getAlpha };
     }
 }

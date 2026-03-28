@@ -302,7 +302,7 @@ export function setupHtmlUI(game: GameScene): void {
         // 本番ビルドではローカルデバッグ情報を非表示
         const srvDesc = srvPanel?.querySelector(".srv-desc") as HTMLElement | null;
         if (srvDesc && defaultHost !== "127.0.0.1") {
-            srvDesc.textContent = "接続するtommChatサーバの設定";
+            srvDesc.textContent = "接続するtommieChatサーバの設定";
         }
 
         if (srvPanel && srvHeader) {
@@ -610,14 +610,58 @@ export function setupHtmlUI(game: GameScene): void {
 
 
     // Nakama コールバック設定
+    // セリフ自動消去: 15秒後にフェードアウト開始、約1秒で透明→消去
+    const SPEECH_DISPLAY_MS = 15000;
+    const SPEECH_FADE_DURATION = 1.0;  // フェード秒数
+    const speechTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const speechFading = new Map<string, { clearFn: () => void; sid: string }>();
+
+    const scheduleSpeechClear = (sessionId: string, clearFn: () => void) => {
+        // 前のタイマー・フェードをキャンセル
+        const prev = speechTimers.get(sessionId);
+        if (prev !== undefined) clearTimeout(prev);
+        speechFading.delete(sessionId);
+        // alpha をリセット（新しいセリフ表示時）
+        game.spriteAvatarSystem.setSpeechAlpha(sessionId, 1);
+
+        speechTimers.set(sessionId, setTimeout(() => {
+            speechTimers.delete(sessionId);
+            // フェードアウト開始
+            speechFading.set(sessionId, { clearFn, sid: sessionId });
+        }, SPEECH_DISPLAY_MS));
+    };
+
+    // レンダーループでフェード処理（追加タイマー不要）
+    game.scene.onAfterRenderObservable.add(() => {
+        if (speechFading.size === 0) return;
+        const dt = game.engine.getDeltaTime() / 1000;  // 秒
+        const step = dt / SPEECH_FADE_DURATION;
+        for (const [sid, fade] of speechFading) {
+            const cur = game.spriteAvatarSystem.getSpeechAlpha(sid);
+            const next = cur - step;
+            if (next <= 0) {
+                game.spriteAvatarSystem.setSpeechAlpha(sid, 0);
+                fade.clearFn();
+                speechFading.delete(sid);
+            } else {
+                game.spriteAvatarSystem.setSpeechAlpha(sid, next);
+            }
+        }
+    });
+
     game.nakama.onChatMessage = (username, text, userId) => {
         addChatHistory(username, text);
         for (const [sessionId, user] of userMap) {
             if (user.uuid !== userId) continue;
             if (sessionId === game.nakama.selfSessionId) {
                 doUpdateSpeech(text);
+                scheduleSpeechClear("__self__", () => doUpdateSpeech(""));
             } else {
                 game.remoteSpeeches.get(sessionId)?.(text);
+                const remoteSpeech = game.remoteSpeeches.get(sessionId);
+                if (remoteSpeech) {
+                    scheduleSpeechClear(sessionId, () => remoteSpeech(""));
+                }
             }
         }
     };
@@ -967,7 +1011,7 @@ export function setupHtmlUI(game: GameScene): void {
         const url  = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
         const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
         if (loginBtn) loginBtn.title =
-            "tommChatサーバへログインします。\nサーバURL: " + url + "\nポート番号: " + port;
+            "tommieChatサーバへログインします。\nサーバURL: " + url + "\nポート番号: " + port;
     };
     srvUrlInput?.addEventListener("input",  updateLoginTooltip);
     srvPortInput?.addEventListener("input", updateLoginTooltip);
@@ -1985,7 +2029,7 @@ export function setupHtmlUI(game: GameScene): void {
         const verEl = document.getElementById("about-app-ver");
         const dateEl = document.getElementById("about-app-date");
         const creditsEl = document.getElementById("about-app-credits");
-        if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommChat';
+        if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommieChat';
         if (verEl) verEl.textContent = "Ver. " + ver;
         if (dateEl) dateEl.textContent = "更新日 " + date;
         if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
@@ -2010,7 +2054,7 @@ export function setupHtmlUI(game: GameScene): void {
                 aboutPanel.style.display = "none";
                 setDivCk("showAbout", "0");
                 const mb = document.getElementById("menu-about");
-                if (mb) mb.textContent = "　 tommChatについて";
+                if (mb) mb.textContent = "　 tommieChatについて";
             });
         }
 
