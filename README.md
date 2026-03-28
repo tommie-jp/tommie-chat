@@ -1,4 +1,4 @@
-# tommChat
+# tommieChat
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Babylon.js](https://img.shields.io/badge/Babylon.js-8.x-red.svg)](https://www.babylonjs.com/)
@@ -148,7 +148,7 @@ bash test/doLint.sh
 ## 8. ディレクトリ構成
 
 ```text
-tommChat/
+tommieChat/
 ├── src/                  # クライアント側ソースコード (TypeScript)
 │   ├── main.ts           # エントリーポイント
 │   ├── GameScene.ts      # Babylon.js ゲームシーン

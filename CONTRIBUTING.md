@@ -1,6 +1,6 @@
-# Contributing to tommChat
+# Contributing to tommieChat
 
-tommChat への貢献に興味を持っていただきありがとうございます！
+tommieChat への貢献に興味を持っていただきありがとうございます！
 
 ## 貢献の方法
 
