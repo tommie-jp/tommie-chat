@@ -777,6 +777,7 @@ export class GameScene {
                     this.isPanning = true;
                     this.panLastX = e.clientX;
                     this.panLastY = e.clientY;
+                    canvas.setPointerCapture(e.pointerId);
                     e.stopImmediatePropagation();
                 }
             }, true);
@@ -851,9 +852,14 @@ export class GameScene {
             canvas.addEventListener("pointerup", (e: PointerEvent) => {
                 if (e.button === 2) {
                     this.isPanning = false;
+                    canvas.releasePointerCapture(e.pointerId);
                     e.stopImmediatePropagation();
                 }
             }, true);
+            // ポインタがキャンバス外で失われた場合のフォールバック
+            canvas.addEventListener("lostpointercapture", () => {
+                this.isPanning = false;
+            });
             canvas.addEventListener("contextmenu", (e: Event) => { e.preventDefault(); });
 
             // 毎フレームカメラターゲットを更新（target を直接書き換えて alpha/beta を維持）
