@@ -153,12 +153,15 @@ export function setupDebugOverlay(game: GameScene): void {
         const menuPopup  = document.getElementById("menu-popup")!;
         const cookieReset = document.getElementById("menu-cookie-reset")!;
 
-        menuBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
+        menuBtn.addEventListener("click", () => {
             menuPopup.classList.toggle("open");
         });
 
-        document.addEventListener("click", () => {
+        // メニュー外クリックで閉じる
+        document.addEventListener("mousedown", (e) => {
+            if (!menuPopup.classList.contains("open")) return;
+            const t = e.target as HTMLElement;
+            if (t.closest("#menu-popup") || t.closest("#menu-btn")) return;
             menuPopup.classList.remove("open");
         });
 
@@ -301,17 +304,64 @@ export function setupDebugOverlay(game: GameScene): void {
                     }
                 }
 
+                if (visible) {
+                    // 非表示にする前にサイズ・位置をクッキーに保存
+                    const r = target.getBoundingClientRect();
+                    sCk(targetId + "_w", String(Math.round(r.width)));
+                    sCk(targetId + "_h", String(Math.round(r.height)));
+                    sCk(targetId + "_t", String(Math.round(r.top)));
+                    sCk(targetId + "_l", String(Math.round(r.left)));
+                }
                 target.style.display = visible ? "none" : "";
                 if (!visible) {
-                    if (targetId === "debug-overlay") {
-                        const pad = 15;
-                        const vw = window.innerWidth;
-                        const w = 270;
+                    // パネル表示時: クッキーから復元、小さすぎ/画面外ならデフォルト
+                    const pad = 15;
+                    const defaults: Record<string, { w: number; h: number; top: number; left: number }> = {
+                        "debug-overlay":         { w: 310, h: 0,   top: pad, left: window.innerWidth - 310 - pad },
+                        "user-list-panel":       { w: 420, h: 280, top: pad, left: window.innerWidth - 420 - 300 },
+                        "chat-history-panel":    { w: 360, h: 400, top: pad, left: pad },
+                        "server-log-panel":      { w: 380, h: 240, top: 120, left: window.innerWidth - 380 - pad },
+                        "server-settings-panel": { w: 210, h: 0,   top: pad, left: window.innerWidth - 210 - 460 },
+                        "ping-panel":            { w: 300, h: 160, top: pad, left: window.innerWidth - 300 - 300 },
+                        "ccu-panel":             { w: 300, h: 160, top: pad, left: window.innerWidth - 300 - 610 },
+                        "about-panel":           { w: 380, h: 0,   top: -1, left: -1 },  // -1 = CSS中央配置を使用
+                    };
+                    const d = defaults[targetId];
+                    if (d) {
+                        const ck = (k: string) => { const v = gCk(targetId + "_" + k); return v !== null ? parseInt(v, 10) : NaN; };
+                        let w = ck("w"), h = ck("h"), t = ck("t"), l = ck("l");
+                        const minW = d.w * 0.5;
+                        const minH = d.h * 0.5;
+                        const vw = window.innerWidth, vh = window.innerHeight;
+                        // サイズが小さすぎるか無効ならデフォルト
+                        if (isNaN(w) || w < minW) w = d.w;
+                        if (isNaN(h) || (d.h > 0 && h < minH)) h = d.h;
+                        // クッキーに有効な位置があるか
+                        const hasValidPos = !isNaN(l) && !isNaN(t)
+                            && l >= -w / 2 && l <= vw - 30
+                            && t >= 0 && t <= vh - 30;
                         target.style.width  = w + "px";
-                        target.style.height = "auto";
-                        target.style.left   = Math.max(pad, vw - w - pad) + "px";
-                        target.style.right  = "auto";
-                        target.style.top    = pad + "px";
+                        target.style.height = d.h > 0 ? h + "px" : "auto";
+                        target.style.transform = "";
+                        if (hasValidPos) {
+                            // クッキーから復元
+                            target.style.top    = t + "px";
+                            target.style.left   = l + "px";
+                            target.style.right  = "auto";
+                        } else if (d.left === -1) {
+                            // 画面中央にピクセル値で配置
+                            target.style.left = "0px";
+                            target.style.top = "0px";
+                            target.style.right = "auto";
+                            // 一旦レンダリングしてサイズを取得し中央に配置
+                            const rect = target.getBoundingClientRect();
+                            target.style.left = Math.round((window.innerWidth - rect.width) / 2) + "px";
+                            target.style.top = Math.round((window.innerHeight - rect.height) / 2) + "px";
+                        } else {
+                            target.style.top    = d.top + "px";
+                            target.style.left   = d.left + "px";
+                            target.style.right  = "auto";
+                        }
                     }
                     game.clampToViewport(target);
                 }

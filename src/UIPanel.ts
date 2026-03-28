@@ -143,29 +143,13 @@ export function setupHtmlUI(game: GameScene): void {
         const setCookie = (name: string, value: string) => {
             document.cookie = `${name}=${encodeURIComponent(value)};path=/;max-age=${60 * 60 * 24 * 365}`;
         };
-        const getCookie = (name: string): string | null => {
-            const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
-            return match ? decodeURIComponent(match[1]) : null;
-        };
         const savePanelState = () => {
             const rect = historyPanel.getBoundingClientRect();
-            setCookie("chatHistLeft",   String(Math.round(rect.left)));
-            setCookie("chatHistTop",    String(Math.round(rect.top)));
-            setCookie("chatHistWidth",  String(Math.round(rect.width)));
-            setCookie("chatHistHeight", String(Math.round(rect.height)));
+            setCookie("chat-history-panel_l", String(Math.round(rect.left)));
+            setCookie("chat-history-panel_t", String(Math.round(rect.top)));
+            setCookie("chat-history-panel_w", String(Math.round(rect.width)));
+            setCookie("chat-history-panel_h", String(Math.round(rect.height)));
         };
-
-        const savedLeft   = getCookie("chatHistLeft");
-        const savedTop    = getCookie("chatHistTop");
-        const savedWidth  = getCookie("chatHistWidth");
-        const savedHeight = getCookie("chatHistHeight");
-        if (!isMobileDev) {
-            if (savedLeft   !== null) historyPanel.style.left   = savedLeft   + "px";
-            if (savedTop    !== null) historyPanel.style.top    = savedTop    + "px";
-            if (savedWidth  !== null) historyPanel.style.width  = savedWidth  + "px";
-            if (savedHeight !== null) historyPanel.style.height = savedHeight + "px";
-            game.clampToViewport(historyPanel);
-        }
 
         let isDragging = false;
         let dragOffsetX = 0;
@@ -173,6 +157,8 @@ export function setupHtmlUI(game: GameScene): void {
 
         historyHeader.addEventListener("pointerdown", (e: PointerEvent) => {
             if (isMobileLandscape()) return;
+            // Xボタン上のクリックはドラッグしない
+            if ((e.target as HTMLElement).id === "chat-history-close") return;
             isDragging = true;
             dragOffsetX = e.clientX - historyPanel.getBoundingClientRect().left;
             dragOffsetY = e.clientY - historyPanel.getBoundingClientRect().top;
@@ -196,6 +182,7 @@ export function setupHtmlUI(game: GameScene): void {
         });
 
         const resizeObserver = new ResizeObserver(() => {
+            if (historyPanel.style.display === "none") return;
             savePanelState();
         });
         resizeObserver.observe(historyPanel);
@@ -203,6 +190,7 @@ export function setupHtmlUI(game: GameScene): void {
         const histClose = document.getElementById("chat-history-close") as HTMLElement;
         if (histClose) {
             histClose.addEventListener("click", () => {
+                savePanelState();  // 非表示前に位置・サイズを保存
                 historyPanel.style.display = "none";
                 setCookie("showChatHist", "0");
                 const mb = document.getElementById("menu-chathistory");
@@ -226,23 +214,6 @@ export function setupHtmlUI(game: GameScene): void {
 
             const sCookieFn = (k: string, v: string) =>
                 document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
-            const gCookieFn = (k: string): string | null => {
-                const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
-                return m ? decodeURIComponent(m[1]) : null;
-            };
-
-            const savedL = gCookieFn("ulLeft");
-            const savedT = gCookieFn("ulTop");
-            const savedW = gCookieFn("ulWidth");
-            const savedH = gCookieFn("ulHeight");
-            if (!isMobileDev) {
-                if (savedL !== null) { ulPanel.style.left = savedL + "px"; ulPanel.style.right = "auto"; }
-                if (savedT !== null)   ulPanel.style.top  = savedT + "px";
-                game.clampToViewport(ulPanel);
-                if (savedW !== null) ulPanel.style.width  = savedW + "px";
-                if (savedH !== null) ulPanel.style.height = savedH + "px";
-            }
-
             let isDrag = false, offX = 0, offY = 0;
             ulHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).id === "user-list-close") return;
@@ -262,20 +233,27 @@ export function setupHtmlUI(game: GameScene): void {
                 if (!isDrag) return;
                 isDrag = false;
                 const r = ulPanel.getBoundingClientRect();
-                sCookieFn("ulLeft", String(Math.round(r.left)));
-                sCookieFn("ulTop",  String(Math.round(r.top)));
+                sCookieFn("user-list-panel_l", String(Math.round(r.left)));
+                sCookieFn("user-list-panel_t",  String(Math.round(r.top)));
             });
 
             const ulResizeObserver = new ResizeObserver(() => {
                 if (ulPanel.classList.contains("minimized")) return;
+                if (ulPanel.style.display === "none") return;
                 const r = ulPanel.getBoundingClientRect();
-                sCookieFn("ulWidth",  String(Math.round(r.width)));
-                sCookieFn("ulHeight", String(Math.round(r.height)));
+                sCookieFn("user-list-panel_w",  String(Math.round(r.width)));
+                sCookieFn("user-list-panel_h", String(Math.round(r.height)));
             });
             ulResizeObserver.observe(ulPanel);
 
             if (ulClose) {
                 ulClose.addEventListener("click", () => {
+                    // 非表示前に位置・サイズを保存
+                    const r = ulPanel.getBoundingClientRect();
+                    sCookieFn("user-list-panel_l", String(Math.round(r.left)));
+                    sCookieFn("user-list-panel_t", String(Math.round(r.top)));
+                    sCookieFn("user-list-panel_w", String(Math.round(r.width)));
+                    sCookieFn("user-list-panel_h", String(Math.round(r.height)));
                     ulPanel.style.display = "none";
                     sCookieFn("showUserList", "0");
                     const mb = document.getElementById("menu-userlist");
@@ -2045,6 +2023,7 @@ export function setupHtmlUI(game: GameScene): void {
             + 'License: MIT'
             + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
             + 'このプロジェクトの開発を支援していただける方を募集しています。<br>'
+            + 'We are looking for contributors to support the development of this project.<br>'
             + '☕ 開発支援（準備中）';
 
         // 閉じるボタン
