@@ -719,7 +719,7 @@ export function setupHtmlUI(game: GameScene): void {
         });
     };
     // --- プロフィールキャッシュ & debounced matchデータ要求 ---
-    const profileCache = new Map<string, { displayName: string; textureUrl: string; loginTime: string }>();
+    const profileCache = new Map<string, { displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string }>();
     const pendingProfileSids = new Set<string>();
     let profileFetchTimer: ReturnType<typeof setTimeout> | null = null;
     const PROFILE_DEBOUNCE_MS = 50;
@@ -760,6 +760,24 @@ export function setupHtmlUI(game: GameScene): void {
                 const plbl = resolveDisplayLabel(prof.displayName ?? "", uname);
                 const updater = game.remoteNameUpdaters.get(sid);
                 if (updater) updater(plbl.text, plbl.color);
+                // テクスチャURLが変わっていたらアバターを再作成
+                const newSheetUrl = (prof.textureUrl && prof.textureUrl.includes("/s3/")) ? prof.textureUrl : "/s3/avatars/pipo-nekonin008.png";
+                const cc = prof.charCol ?? 0;
+                const cr = prof.charRow ?? 0;
+                if (game.spriteAvatarSystem.has(sid)) {
+                    // 現在のアバターのテクスチャと異なる場合のみ再作成
+                    const oldAvatar = game.remoteAvatars.get(sid);
+                    const oldPos = oldAvatar?.position ?? { x: 0, z: 0 };
+                    const oldRy = oldAvatar?.rotation?.y ?? 0;
+                    game.spriteAvatarSystem.createAvatar(sid, newSheetUrl, cc, cr, oldPos.x, oldPos.z, plbl.text, undefined, oldRy).then(root => {
+                        game.remoteAvatars.set(sid, root as unknown as Mesh);
+                        game.remoteNameUpdaters.set(sid, game.spriteAvatarSystem.getNameUpdate(sid)!);
+                        const su = game.spriteAvatarSystem.getSpeechUpdate(sid);
+                        if (su) game.remoteSpeeches.set(sid, su);
+                        const upd2 = game.spriteAvatarSystem.getNameUpdate(sid);
+                        if (upd2) upd2(plbl.text, plbl.color);
+                    });
+                }
             }
         }
         scheduleRenderUserList();
@@ -778,13 +796,29 @@ export function setupHtmlUI(game: GameScene): void {
             game.spriteAvatarSystem.setRotation(sessionId, ry);
             game.spriteAvatarSystem.setEnabled(sessionId, true);
         } else if (!game.spriteAvatarSystem.isCreating(sessionId)) {
-            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, 0, 0, x, z, aoiLbl.text, undefined, ry).then(root => {
+            const cc = cached?.charCol ?? 0;
+            const cr = cached?.charRow ?? 0;
+            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, cc, cr, x, z, aoiLbl.text, undefined, ry).then(root => {
                 game.remoteAvatars.set(sessionId, root as unknown as Mesh);
                 game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
                 const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
                 if (su) game.remoteSpeeches.set(sessionId, su);
                 const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
                 if (upd) upd(aoiLbl.text, aoiLbl.color);
+                // 作成中にprofileResponseが到着しキャッシュが更新されていたら再作成
+                const latest = profileCache.get(sessionId);
+                const latestUrl = (latest?.textureUrl && latest.textureUrl.includes("/s3/")) ? latest.textureUrl : null;
+                if (latestUrl && (latestUrl !== sheetUrl || (latest!.charCol ?? 0) !== cc || (latest!.charRow ?? 0) !== cr)) {
+                    const lbl2 = resolveDisplayLabel(latest!.displayName ?? "", userMap.get(sessionId)?.username ?? sessionId.slice(0, 8));
+                    game.spriteAvatarSystem.createAvatar(sessionId, latestUrl, latest!.charCol ?? 0, latest!.charRow ?? 0, root.position.x, root.position.z, lbl2.text, undefined, root.rotation.y).then(root2 => {
+                        game.remoteAvatars.set(sessionId, root2 as unknown as Mesh);
+                        game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
+                        const su2 = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
+                        if (su2) game.remoteSpeeches.set(sessionId, su2);
+                        const upd2 = game.spriteAvatarSystem.getNameUpdate(sessionId);
+                        if (upd2) upd2(lbl2.text, lbl2.color);
+                    });
+                }
             });
         }
         game.remoteTargets.delete(sessionId);

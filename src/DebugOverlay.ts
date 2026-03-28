@@ -1024,14 +1024,10 @@ export function setupDebugOverlay(game: GameScene): void {
         };
         fetchAvatarList();
 
-        // localStorage から復元
+        // localStorage から復元（GameScene が既に読み込み済みなのでUI同期のみ）
         const savedSpriteUrl = localStorage.getItem("spriteAvatarUrl");
-        const savedSpriteCol = localStorage.getItem("spriteAvatarCol");
-        const savedSpriteRow = localStorage.getItem("spriteAvatarRow");
         if (savedSpriteUrl) {
-            game.playerTextureUrl = savedSpriteUrl;
-            game.playerCharCol = parseInt(savedSpriteCol ?? "0", 10) || 0;
-            game.playerCharRow = parseInt(savedSpriteRow ?? "0", 10) || 0;
+            // GameScene が localStorage から既に読み込み済みなので、ドロップダウンの値を合わせるだけ
             spriteUrlSelect.value = savedSpriteUrl;
             // fetchAvatarList完了後に再設定
             fetchAvatarList().then(() => { spriteUrlSelect.value = savedSpriteUrl; });
@@ -1061,12 +1057,21 @@ export function setupDebugOverlay(game: GameScene): void {
             // 自分のアバターをスプライトに切り替え
             const selfId = "__self__";
             const p = game.playerBox.position;
-            game.spriteAvatarSystem.createAvatar(selfId, url, cc, cr, p.x, p.z, game.nakama.selfDisplayName, new Color3(1.0, 0.0, 0.0), game.playerBox.rotation.y).then(() => {
+            game.spriteAvatarSystem.createAvatar(selfId, url, cc, cr, p.x, p.z, "", new Color3(1.0, 0.0, 0.0), game.playerBox.rotation.y).then(() => {
                 // await中にプレイヤーが動いた場合に備えて最新位置を反映
                 const cur = game.playerBox.position;
                 game.spriteAvatarSystem.setPosition(selfId, cur.x, cur.z);
                 // 既存メッシュアバターを非表示
                 game.playerBox.getChildMeshes().forEach(m => m.isVisible = false);
+                // 表示名タグを再設定
+                const selfDn = game.nakama.selfDisplayName ?? "";
+                const selfUsername = (document.getElementById("loginName") as HTMLInputElement | null)?.value ?? "";
+                if (selfDn) {
+                    game.updatePlayerNameTag(selfDn, "white");
+                } else {
+                    const uidColor = (document.getElementById("uidColorInput") as HTMLInputElement | null)?.value ?? "#00bbfa";
+                    game.updatePlayerNameTag("@" + selfUsername, uidColor);
+                }
             });
             game.nakama.sendAvatarChange(url, cc, cr).catch(() => {});
         });
