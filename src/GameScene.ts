@@ -417,8 +417,21 @@ export class GameScene {
 
         // ネームタグ & 吹き出し
         const playerNameTag = this.avatarSystem.createNameTag(this.playerBox, "tommie.jp✅️");
-        this.updatePlayerNameTag = playerNameTag.update;
-        this.updatePlayerSpeech = this.avatarSystem.createSpeechBubble(playerNameTag.plane, "");
+        // スプライトアバターが有効ならメッシュ側の名前タグ・吹き出しを非表示
+        playerNameTag.plane.isVisible = false;
+        this.updatePlayerNameTag = (name: string) => {
+            playerNameTag.update(name);
+            // スプライトアバターの名前タグも更新
+            const sprNameUpdate = this.spriteAvatarSystem.getNameUpdate("__self__");
+            if (sprNameUpdate) sprNameUpdate(name);
+        };
+        const meshSpeechUpdater = this.avatarSystem.createSpeechBubble(playerNameTag.plane, "");
+        this.updatePlayerSpeech = (text: string) => {
+            meshSpeechUpdater(text);
+            // スプライトアバターの吹き出しも更新
+            const sprSpeechUpdate = this.spriteAvatarSystem.getSpeechUpdate("__self__");
+            if (sprSpeechUpdate) sprSpeechUpdate(text);
+        };
 
         // 雲
         this.cloudSystem.create();

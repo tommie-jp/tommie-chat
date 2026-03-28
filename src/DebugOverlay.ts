@@ -1,5 +1,5 @@
 import type { GameScene } from "./GameScene";
-import { Scene, Color3, Color4, SceneInstrumentation, EngineInstrumentation } from "@babylonjs/core";
+import { Scene, Color3, Color4, Vector3, SceneInstrumentation, EngineInstrumentation } from "@babylonjs/core";
 import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
 import { profSetEnabled, profReset } from "./Profiler";
 
@@ -599,6 +599,54 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
+    // --- 34b.AutoWalk ---
+    {
+        const autoWalkBtn = document.getElementById("autoWalkBtn") as HTMLButtonElement | null;
+        const awXInput  = document.getElementById("autoWalkX")  as HTMLInputElement | null;
+        const awZInput  = document.getElementById("autoWalkZ")  as HTMLInputElement | null;
+        const awDXInput = document.getElementById("autoWalkDX") as HTMLInputElement | null;
+        const awDZInput = document.getElementById("autoWalkDZ") as HTMLInputElement | null;
+        if (autoWalkBtn) {
+            let isOn = false;
+            let cornerIdx = 0;
+
+            const getCorners = () => {
+                const sx  = parseFloat(awXInput?.value  ?? "0") || 0;
+                const sz  = parseFloat(awZInput?.value  ?? "0") || 0;
+                const dx  = parseFloat(awDXInput?.value ?? "5") || 5;
+                const dz  = parseFloat(awDZInput?.value ?? "5") || 5;
+                return [
+                    { x: sx,      z: sz },
+                    { x: sx + dx, z: sz },
+                    { x: sx + dx, z: sz + dz },
+                    { x: sx,      z: sz + dz },
+                ];
+            };
+
+            // レンダーループで到着検知 → 次の頂点をセット
+            game.scene.onBeforeRenderObservable.add(() => {
+                if (!isOn || game.targetPosition) return;
+                const corners = getCorners();
+                const c = corners[cornerIdx % corners.length];
+                game.targetPosition = new Vector3(c.x, 0, c.z);
+                cornerIdx++;
+            });
+
+            autoWalkBtn.addEventListener("click", () => {
+                isOn = !isOn;
+                autoWalkBtn.textContent = isOn ? "On" : "Off";
+                if (isOn) {
+                    autoWalkBtn.classList.remove("off");
+                    cornerIdx = 0;
+                    game.targetPosition = null;
+                } else {
+                    autoWalkBtn.classList.add("off");
+                    game.targetPosition = null;
+                }
+            });
+        }
+    }
+
     if (npcAutoChatBtn) {
         npcAutoChatBtn.addEventListener("click", () => {
             game.npcSystem.isNpcChatOn = !game.npcSystem.isNpcChatOn;
@@ -818,29 +866,55 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
-    // スプライトアバター: localStorage から復元
-    const savedSpriteUrl = localStorage.getItem("spriteAvatarUrl");
-    const savedSpriteCol = localStorage.getItem("spriteAvatarCol");
-    const savedSpriteRow = localStorage.getItem("spriteAvatarRow");
-    if (savedSpriteUrl) {
-        game.playerTextureUrl = savedSpriteUrl;
-        game.playerCharCol = parseInt(savedSpriteCol ?? "0", 10) || 0;
-        game.playerCharRow = parseInt(savedSpriteRow ?? "0", 10) || 0;
-        const urlInput = document.getElementById("spriteUrlInput") as HTMLInputElement | null;
-        const colInput = document.getElementById("spriteCharCol") as HTMLInputElement | null;
-        const rowInput = document.getElementById("spriteCharRow") as HTMLInputElement | null;
-        if (urlInput) urlInput.value = savedSpriteUrl;
-        if (colInput) colInput.value = String(game.playerCharCol);
-        if (rowInput) rowInput.value = String(game.playerCharRow);
+    // スプライトアバター: /s3/avatars/ のファイル一覧を取得してドロップダウンに表示
+    const spriteUrlSelect = document.getElementById("spriteUrlSelect") as HTMLSelectElement | null;
+    if (spriteUrlSelect) {
+        const fetchAvatarList = async () => {
+            try {
+                const res = await fetch("/s3/avatars/");
+                const xml = await res.text();
+                const doc = new DOMParser().parseFromString(xml, "application/xml");
+                const keys = doc.querySelectorAll("Contents > Key");
+                spriteUrlSelect.innerHTML = "";
+                keys.forEach(k => {
+                    const name = k.textContent ?? "";
+                    if (!name) return;
+                    const opt = document.createElement("option");
+                    opt.value = "/s3/avatars/" + name;
+                    opt.textContent = name;
+                    spriteUrlSelect.appendChild(opt);
+                });
+            } catch (e) {
+                console.warn("Failed to fetch avatar list from /s3/avatars/:", e);
+            }
+        };
+        fetchAvatarList();
+
+        // localStorage から復元
+        const savedSpriteUrl = localStorage.getItem("spriteAvatarUrl");
+        const savedSpriteCol = localStorage.getItem("spriteAvatarCol");
+        const savedSpriteRow = localStorage.getItem("spriteAvatarRow");
+        if (savedSpriteUrl) {
+            game.playerTextureUrl = savedSpriteUrl;
+            game.playerCharCol = parseInt(savedSpriteCol ?? "0", 10) || 0;
+            game.playerCharRow = parseInt(savedSpriteRow ?? "0", 10) || 0;
+            spriteUrlSelect.value = savedSpriteUrl;
+            // fetchAvatarList完了後に再設定
+            fetchAvatarList().then(() => { spriteUrlSelect.value = savedSpriteUrl; });
+            const colInput = document.getElementById("spriteCharCol") as HTMLInputElement | null;
+            const rowInput = document.getElementById("spriteCharRow") as HTMLInputElement | null;
+            if (colInput) colInput.value = String(game.playerCharCol);
+            if (rowInput) rowInput.value = String(game.playerCharRow);
+        }
     }
 
     const spriteApplyBtn = document.getElementById("spriteApplyBtn") as HTMLButtonElement | null;
     if (spriteApplyBtn) {
         spriteApplyBtn.addEventListener("click", () => {
-            const urlInput = document.getElementById("spriteUrlInput") as HTMLInputElement | null;
+            const urlSelect = document.getElementById("spriteUrlSelect") as HTMLSelectElement | null;
             const colInput = document.getElementById("spriteCharCol") as HTMLInputElement | null;
             const rowInput = document.getElementById("spriteCharRow") as HTMLInputElement | null;
-            const url = urlInput?.value?.trim();
+            const url = urlSelect?.value?.trim();
             if (!url) return;
             const cc = parseInt(colInput?.value ?? "0", 10) || 0;
             const cr = parseInt(rowInput?.value ?? "0", 10) || 0;
@@ -852,9 +926,11 @@ export function setupDebugOverlay(game: GameScene): void {
             localStorage.setItem("spriteAvatarRow", String(cr));
             // 自分のアバターをスプライトに切り替え
             const selfId = "__self__";
-            game.spriteAvatarSystem.dispose(selfId);
             const p = game.playerBox.position;
-            game.spriteAvatarSystem.createAvatar(selfId, url, cc, cr, p.x, p.z, "", new Color3(1.0, 0.0, 0.0)).then(() => {
+            game.spriteAvatarSystem.createAvatar(selfId, url, cc, cr, p.x, p.z, game.nakama.selfDisplayName, new Color3(1.0, 0.0, 0.0), game.playerBox.rotation.y).then(() => {
+                // await中にプレイヤーが動いた場合に備えて最新位置を反映
+                const cur = game.playerBox.position;
+                game.spriteAvatarSystem.setPosition(selfId, cur.x, cur.z);
                 // 既存メッシュアバターを非表示
                 game.playerBox.getChildMeshes().forEach(m => m.isVisible = false);
             });

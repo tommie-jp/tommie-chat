@@ -17,6 +17,7 @@ interface SpriteAvatarData {
     namePlane: Mesh;
     nameUpdate: (name: string) => void;
     speechUpdate: (text: string) => void;
+    speechRedraw: () => void;
     sheetInfo: SheetInfo;
     charCol: number;
     charRow: number;
@@ -93,19 +94,13 @@ export class SpriteAvatarSystem {
 
     async createAvatar(
         id: string, sheetUrl: string, charCol: number, charRow: number,
-        x: number, z: number, name: string, baseColor?: Color3
+        x: number, z: number, name: string, baseColor?: Color3, ry?: number
     ): Promise<TransformNode> {
         const _end = prof("SpriteAvatarSystem.createAvatar");
         // 作成中なら無視
         if (this.creating.has(id)) { _end(); return new TransformNode("dummy_" + id, this.scene); }
         this.creating.add(id);
-        // 既存のスプライトがあれば先に破棄
-        if (this.avatars.has(id)) {
-            this.dispose(id);
-        }
         const entry = await this.getOrCreateManager(sheetUrl);
-        // async待ちの間に別の呼び出しで作成された場合は中止
-        if (this.avatars.has(id)) { this.creating.delete(id); _end(); return this.avatars.get(id)!.root; }
         const info = entry.sheetInfo;
 
         console.log(`SpriteAvatarSystem.createAvatar id=${id} sheet=${sheetUrl} frameW=${info.frameW} frameH=${info.frameH} fCols=${info.fCols}`);
@@ -117,6 +112,7 @@ export class SpriteAvatarSystem {
 
         const root = new TransformNode("sprRoot_" + id, this.scene);
         root.position.set(x, 0, z);
+        if (ry !== undefined) root.rotation.y = ry;
 
         s.position = new Vector3(x, s.height / 2, z);
 
@@ -131,10 +127,15 @@ export class SpriteAvatarSystem {
         const { plane: namePlane, update: nameUpdate } = this.createNameTag(root, name, s.height);
 
         // speech bubble
-        const speechUpdate = this.createSpeechBubble(namePlane);
+        const { updater: speechUpdate, redraw: speechRedraw } = this.createSpeechBubble(namePlane);
+
+        // 新しいアバターの準備が完了してから旧アバターを破棄（ちらつき防止）
+        if (this.avatars.has(id)) {
+            this.dispose(id);
+        }
 
         const data: SpriteAvatarData = {
-            sprite: s, root, standBase, namePlane, nameUpdate, speechUpdate,
+            sprite: s, root, standBase, namePlane, nameUpdate, speechUpdate, speechRedraw,
             sheetInfo: info, charCol, charRow,
             currentDir: 0, isMoving: false,
             prevX: x, prevZ: z,
@@ -175,8 +176,22 @@ export class SpriteAvatarSystem {
             data.isMoving = true;
         } else if (data.isMoving) {
             sprite.stopAnimation();
-            sprite.cellIndex = cellIndex(sheetInfo, charCol, charRow, data.currentDir, 1);
+            // 停止時: スタンドベース方向からスプライト方向を算出
+            const mvx = -Math.sin(root.rotation.y);
+            const mvz = -Math.cos(root.rotation.y);
+            const stopDir = worldDirToSpriteDir(mvx, mvz, camAlpha);
+            data.currentDir = stopDir;
+            sprite.cellIndex = cellIndex(sheetInfo, charCol, charRow, stopDir, 1);
             data.isMoving = false;
+        } else {
+            // 静止中でもカメラ回転でスプライト方向を更新
+            const mvx = -Math.sin(root.rotation.y);
+            const mvz = -Math.cos(root.rotation.y);
+            const idleDir = worldDirToSpriteDir(mvx, mvz, camAlpha);
+            if (idleDir !== data.currentDir) {
+                data.currentDir = idleDir;
+                sprite.cellIndex = cellIndex(sheetInfo, charCol, charRow, idleDir, 1);
+            }
         }
     }
 
@@ -196,6 +211,12 @@ export class SpriteAvatarSystem {
         data.prevZ = z;
         data.sprite.position.x = x;
         data.sprite.position.z = z;
+    }
+
+    setRotation(id: string, ry: number): void {
+        const data = this.avatars.get(id);
+        if (!data) return;
+        data.root.rotation.y = ry;
     }
 
     syncPosition(id: string, x: number, z: number): void {
@@ -221,6 +242,12 @@ export class SpriteAvatarSystem {
         data.sprite.dispose();
         data.root.dispose();
         this.avatars.delete(id);
+    }
+
+    refreshAllSpeeches(): void {
+        for (const data of this.avatars.values()) {
+            data.speechRedraw();
+        }
     }
 
     has(id: string): boolean {
@@ -313,13 +340,15 @@ export class SpriteAvatarSystem {
     }
 
     private createNameTag(parent: TransformNode, nameText: string, spriteHeight: number): { plane: Mesh; update: (name: string) => void } {
-        const namePlane = MeshBuilder.CreatePlane("sprNameTag_" + parent.name, { width: 1.5, height: 0.40 }, this.scene);
+        const nameW = 1.5;
+        const nameH = nameW * (256 / 1024);             // テクスチャ比に合わせて 0.375
+        const namePlane = MeshBuilder.CreatePlane("sprNameTag_" + parent.name, { width: nameW, height: nameH }, this.scene);
         namePlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
         namePlane.isPickable = false;
         namePlane.parent = parent;
         namePlane.position = new Vector3(0, spriteHeight + 0.1, 0);
 
-        const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 1024, 128);
+        const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 1024, 256);
         const tb = new TextBlock();
         tb.text = nameText;
         tb.color = "white";
@@ -332,15 +361,20 @@ export class SpriteAvatarSystem {
         return { plane: namePlane, update: (n: string) => { tb.text = n; } };
     }
 
-    private createSpeechBubble(namePlane: Mesh): (text: string) => void {
-        const texSize = 512;
-        const planeSize = 1.5;
-        const bubblePlane = MeshBuilder.CreatePlane("sprBubble_" + namePlane.name, { width: planeSize, height: planeSize }, this.scene);
+    private createSpeechBubble(namePlane: Mesh): { updater: (text: string) => void; redraw: () => void } {
+        const nameW = 1.5;
+        const texW = 1024, texH = 384;
+        const planeW = texW / 512 * 1.5;               // 3.0
+        const bodyH1 = 108, triH = 36;
+        const baseTotalH = bodyH1 + triH;
+        const maxPlaneH = texH * (0.42 / baseTotalH);   // ≈1.12
+        const bubblePlane = MeshBuilder.CreatePlane("sprBubble_" + namePlane.name, { width: planeW, height: maxPlaneH }, this.scene);
         bubblePlane.isPickable = false;
         bubblePlane.parent = namePlane;
-        bubblePlane.position = new Vector3(1.5 / 2 + planeSize / 2 - 0.3, 0.3, 0);
+        const fixedBottom = -(0.42 / 2);
+        bubblePlane.position = new Vector3(nameW / 2 + planeW / 2 - 0.5, 0, 0);
 
-        const dynTex = new DynamicTexture("sprBubbleTex_" + namePlane.name, { width: texSize, height: texSize }, this.scene, true);
+        const dynTex = new DynamicTexture("sprBubbleTex_" + namePlane.name, { width: texW, height: texH }, this.scene, true);
         dynTex.hasAlpha = true;
         const mat = new StandardMaterial("sprBubbleMat_" + namePlane.name, this.scene);
         mat.diffuseTexture = dynTex;
@@ -351,39 +385,81 @@ export class SpriteAvatarSystem {
         bubblePlane.material = mat;
         bubblePlane.isVisible = false;
 
+        let lastText = "";
+
         const draw = (text: string) => {
             const ctx = dynTex.getContext() as unknown as CanvasRenderingContext2D;
-            ctx.clearRect(0, 0, texSize, texSize);
+            ctx.clearRect(0, 0, texW, texH);
             if (!text || text.trim() === "") return;
 
-            const lines = text.split("\n").slice(0, 5);
-            const n = Math.max(1, lines.length);
-            const fontSize = 64;
-            const lineH = 76;
-            const pad = 40;
-            const bH = Math.max(120, pad * 2 + n * lineH);
-            const tH = 40;
-            const totalH = bH + tH;
-            const rad = 16;
+            const MAX_CHARS = 40;
+            const rawLines = text.split("\n");
+            while (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === "") rawLines.pop();
+            if (rawLines.length > 5) rawLines.splice(5);
+            const clippedLines = rawLines.map(l => l.length > MAX_CHARS ? l.slice(0, MAX_CHARS) + "..." : l);
+            const n = Math.max(1, clippedLines.length);
 
-            ctx.font = `bold ${fontSize}px monospace`;
-            const maxW = Math.max(...lines.map(l => ctx.measureText(l).width));
-            const usedW = Math.min(texSize, Math.ceil(pad + maxW + pad));
+            const ptSize = parseInt((document.getElementById("speechSizeSelect") as HTMLSelectElement | null)?.value ?? "60", 10);
+            const fontSize = Math.round(ptSize * 96 / 72);
+            const aaMode = (document.getElementById("aaModeBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? false;
+            let fontFamily: string;
+            let leadingMult: number;
+            if (aaMode) {
+                fontFamily = "'ＭＳ Ｐゴシック', 'MS PGothic', 'Mona', sans-serif";
+                leadingMult = 1.0;
+            } else {
+                fontFamily = (document.getElementById("speechFontSelect") as HTMLSelectElement | null)?.value ?? "monospace";
+                leadingMult = parseFloat((document.getElementById("speechLeadingSelect") as HTMLSelectElement | null)?.value ?? "1.3");
+            }
+            const lineSpacing = Math.round(fontSize * leadingMult);
 
-            const scaleY = totalH / texSize;
-            const scaleX = usedW / texSize;
-            bubblePlane.scaling.y = scaleY;
+            const vertPad = 35;
+            let bH1 = Math.max(108, lineSpacing + vertPad * 2);
+            let tH  = Math.max(36, Math.round(fontSize * 0.95));
+            let lH  = Math.max(lineSpacing, 48);
+            const rawTotalH = bH1 + (n - 1) * lH + tH;
+            const fit = rawTotalH > texH ? texH / rawTotalH : 1;
+            if (fit < 1) {
+                bH1 = Math.round(bH1 * fit);
+                tH  = Math.round(tH  * fit);
+                lH  = Math.round(lH  * fit);
+            }
+            const drawFontSize = Math.round(fontSize * fit);
+
+            const ttX = Math.round(60 * (bH1 / 108));
+            const tbL = Math.round(30 * (bH1 / 108));
+            const tbR = Math.round(90 * (bH1 / 108));
+            const rad = Math.max(4, Math.round(14 * (bH1 / 108)));
+            const leftPad  = Math.max(8, Math.round(fontSize * fit * 0.5));
+            const rightPad = leftPad;
+
+            ctx.font = `bold ${drawFontSize}px ${fontFamily}`;
+            const maxTextW = Math.max(...clippedLines.map(l => ctx.measureText(l).width));
+            const rawUsedTexW = Math.max(60, Math.ceil(leftPad + maxTextW + rightPad));
+            const fitX = rawUsedTexW > texW ? texW / rawUsedTexW : 1;
+            const usedTexW = rawUsedTexW > texW ? texW : rawUsedTexW;
+
+            const bodyH  = bH1 + (n - 1) * lH;
+            const totalH = bodyH + tH;
+
+            const s = totalH / texH;
+            const scaleX = s / fitX;
+            bubblePlane.scaling.y = s;
             bubblePlane.scaling.x = scaleX;
+            bubblePlane.position.y = fixedBottom + s * maxPlaneH / 2;
+            bubblePlane.position.x = (nameW / 2 - 0.5) + planeW * scaleX / 2;
 
             ctx.beginPath();
             ctx.moveTo(rad, 0);
-            ctx.lineTo(usedW - rad, 0);
-            ctx.quadraticCurveTo(usedW, 0, usedW, rad);
-            ctx.lineTo(usedW, bH - rad);
-            ctx.quadraticCurveTo(usedW, bH, usedW - rad, bH);
-            ctx.lineTo(90, bH); ctx.lineTo(60, totalH); ctx.lineTo(30, bH);
-            ctx.lineTo(rad, bH);
-            ctx.quadraticCurveTo(0, bH, 0, bH - rad);
+            ctx.lineTo(usedTexW - rad, 0);
+            ctx.quadraticCurveTo(usedTexW, 0, usedTexW, rad);
+            ctx.lineTo(usedTexW, bodyH - rad);
+            ctx.quadraticCurveTo(usedTexW, bodyH, usedTexW - rad, bodyH);
+            ctx.lineTo(tbR, bodyH);
+            ctx.lineTo(ttX, totalH);
+            ctx.lineTo(tbL, bodyH);
+            ctx.lineTo(rad, bodyH);
+            ctx.quadraticCurveTo(0, bodyH, 0, bodyH - rad);
             ctx.lineTo(0, rad);
             ctx.quadraticCurveTo(0, 0, rad, 0);
             ctx.closePath();
@@ -396,16 +472,29 @@ export class SpriteAvatarSystem {
             ctx.fillStyle = "#111";
             ctx.textAlign = "left";
             ctx.textBaseline = "middle";
-            const startY = (bH - n * lineH) / 2 + lineH / 2;
-            for (let i = 0; i < n; i++) {
-                ctx.fillText(lines[i].slice(0, 30), pad, startY + i * lineH);
+            const totalTextH = n * lH;
+            const textStartY = (bodyH - totalTextH) / 2 + lH / 2;
+            if (fitX < 1) {
+                ctx.save();
+                ctx.scale(fitX, 1);
+                for (let i = 0; i < n; i++) {
+                    ctx.fillText(clippedLines[i], leftPad / fitX, textStartY + i * lH);
+                }
+                ctx.restore();
+            } else {
+                for (let i = 0; i < n; i++) {
+                    ctx.fillText(clippedLines[i], leftPad, textStartY + i * lH);
+                }
             }
             dynTex.update();
         };
 
-        return (text: string) => {
+        const updater = (text: string) => {
+            lastText = text;
             bubblePlane.isVisible = !!(text && text.trim() !== "");
             draw(text);
         };
+        const redraw = () => { if (lastText) draw(lastText); };
+        return { updater, redraw };
     }
 }
