@@ -1430,16 +1430,20 @@ func rpcUpdateDisplayName(ctx context.Context, logger runtime.Logger, db *sql.DB
 		return "", runtime.NewError("invalid payload", 3)
 	}
 	dn := strings.TrimSpace(req.DisplayName)
-	if dn == "" {
-		return "", runtime.NewError("display name must not be empty", 3)
-	}
 	for _, r := range dn {
 		if unicode.IsControl(r) {
 			return "", runtime.NewError("display name must not contain control characters", 3)
 		}
 	}
-	if err := nk.AccountUpdateId(ctx, uid, "", nil, dn, "", "", "", ""); err != nil {
-		return "", err
+	if dn == "" {
+		// AccountUpdateId は空文字を「変更なし」と見なすため、直接DBでクリア
+		if _, err := db.ExecContext(ctx, "UPDATE users SET display_name = '' WHERE id = $1", uid); err != nil {
+			return "", runtime.NewError("failed to clear display name: "+err.Error(), 13)
+		}
+	} else {
+		if err := nk.AccountUpdateId(ctx, uid, "", nil, dn, "", "", "", ""); err != nil {
+			return "", err
+		}
 	}
 	return `{"ok":true}`, nil
 }

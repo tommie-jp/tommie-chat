@@ -471,6 +471,12 @@ export function setupHtmlUI(game: GameScene): void {
         return match ? decodeURIComponent(match[1]) : null;
     };
 
+    /** 表示名が空ならユーザID@uid（青色）、あればそのまま（白色）を返す */
+    const resolveDisplayLabel = (displayName: string, username: string): { text: string; color: string } => {
+        if (displayName) return { text: displayName, color: "white" };
+        return { text: username + "@uid", color: "#66bbff" };
+    };
+
     const loginNameInput = document.getElementById("loginName") as HTMLInputElement;
     const loginBtn = document.getElementById("loginBtn") as HTMLButtonElement;
 
@@ -629,11 +635,15 @@ export function setupHtmlUI(game: GameScene): void {
                 game.spriteAvatarSystem.setEnabled(sessionId, true);
             }
         } else {
-            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, x, z, displayName || username).then(root => {
+            const initLbl = resolveDisplayLabel(displayName, username);
+            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, x, z, initLbl.text).then(root => {
                 game.remoteAvatars.set(sessionId, root as unknown as Mesh);
                 game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
                 const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
                 if (su) game.remoteSpeeches.set(sessionId, su);
+                // 初期色を反映
+                const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
+                if (upd) upd(initLbl.text, initLbl.color);
             });
         }
         game.remoteTargets.delete(sessionId);
@@ -646,18 +656,17 @@ export function setupHtmlUI(game: GameScene): void {
                 updates.loginTime = formatTimestamp(loginDate);
                 updates.loginTimestamp = loginDate.getTime();
             }
-            if (displayName) {
-                updates.displayName = displayName;
-            }
+            updates.displayName = displayName;
             if (Object.keys(updates).length) {
                 userMap.set(sessionId, { ...existing, ...updates });
                 scheduleRenderUserList();
             }
         }
         // アバターのnameTagを表示名で更新
-        if (displayName) {
+        {
+            const lbl = resolveDisplayLabel(displayName, username);
             const updater = game.remoteNameUpdaters.get(sessionId);
-            if (updater) updater(displayName);
+            if (updater) updater(lbl.text, lbl.color);
         }
     };
     game.nakama.onAvatarMoveTarget = (sessionId: string, x: number, z: number) => {
@@ -667,17 +676,21 @@ export function setupHtmlUI(game: GameScene): void {
         console.log(`rcv avatarChange sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl} cc=${charCol} cr=${charRow}`);
         const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
         const cached = profileCache.get(sessionId);
-        const username = cached?.displayName || userMap.get(sessionId)?.displayName || userMap.get(sessionId)?.username || sessionId.slice(0, 8);
+        const dn = cached?.displayName ?? userMap.get(sessionId)?.displayName ?? "";
+        const uname = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
+        const chgLbl = resolveDisplayLabel(dn, uname);
         // 既存アバターの現在位置・回転を保持
         const oldRoot = game.remoteAvatars.get(sessionId);
         const px = oldRoot?.position.x ?? 0;
         const pz = oldRoot?.position.z ?? 0;
         const ry = oldRoot?.rotation.y ?? 0;
-        game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, px, pz, username, undefined, ry).then(root => {
+        game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, px, pz, chgLbl.text, undefined, ry).then(root => {
             game.remoteAvatars.set(sessionId, root as unknown as Mesh);
             game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
             const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
             if (su) game.remoteSpeeches.set(sessionId, su);
+            const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
+            if (upd) upd(chgLbl.text, chgLbl.color);
         });
     };
     // --- プロフィールキャッシュ & debounced matchデータ要求 ---
@@ -706,7 +719,7 @@ export function setupHtmlUI(game: GameScene): void {
             const existing = userMap.get(sid);
             if (existing) {
                 const updates: Record<string, unknown> = {};
-                if (prof.displayName) updates.displayName = prof.displayName;
+                updates.displayName = prof.displayName ?? "";
                 if (prof.loginTime) {
                     const d = new Date(prof.loginTime);
                     updates.loginTime = formatTimestamp(d);
@@ -718,10 +731,10 @@ export function setupHtmlUI(game: GameScene): void {
             }
             // アバター更新（自分以外）
             if (sid !== game.nakama.selfSessionId) {
-                if (prof.displayName) {
-                    const updater = game.remoteNameUpdaters.get(sid);
-                    if (updater) updater(prof.displayName);
-                }
+                const uname = userMap.get(sid)?.username ?? sid.slice(0, 8);
+                const plbl = resolveDisplayLabel(prof.displayName ?? "", uname);
+                const updater = game.remoteNameUpdaters.get(sid);
+                if (updater) updater(plbl.text, plbl.color);
             }
         }
         scheduleRenderUserList();
@@ -732,18 +745,21 @@ export function setupHtmlUI(game: GameScene): void {
         if (sessionId === game.nakama.selfSessionId) return;
         const cached = profileCache.get(sessionId);
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
-        const displayName = cached?.displayName || username;
+        const displayName = cached?.displayName ?? "";
+        const aoiLbl = resolveDisplayLabel(displayName, username);
         const sheetUrl = (cached?.textureUrl && cached.textureUrl.includes("/s3/")) ? cached.textureUrl : "/s3/avatars/pipo-nekonin008.png";
         if (game.spriteAvatarSystem.has(sessionId)) {
             game.spriteAvatarSystem.setPosition(sessionId, x, z);
             game.spriteAvatarSystem.setRotation(sessionId, ry);
             game.spriteAvatarSystem.setEnabled(sessionId, true);
         } else if (!game.spriteAvatarSystem.isCreating(sessionId)) {
-            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, 0, 0, x, z, displayName, undefined, ry).then(root => {
+            game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, 0, 0, x, z, aoiLbl.text, undefined, ry).then(root => {
                 game.remoteAvatars.set(sessionId, root as unknown as Mesh);
                 game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
                 const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
                 if (su) game.remoteSpeeches.set(sessionId, su);
+                const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
+                if (upd) upd(aoiLbl.text, aoiLbl.color);
             });
         }
         game.remoteTargets.delete(sessionId);
@@ -756,8 +772,10 @@ export function setupHtmlUI(game: GameScene): void {
     game.nakama.onDisplayName = (sessionId: string, displayName: string) => {
         console.log(`rcv onDisplayName sid=${sessionId.slice(0, 8)} displayName=${displayName}`);
         // アバターのnameTag更新
+        const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
+        const lbl = resolveDisplayLabel(displayName, username);
         const updater = game.remoteNameUpdaters.get(sessionId);
-        if (updater) updater(displayName);
+        if (updater) updater(lbl.text, lbl.color);
         // ユーザリストの表示名更新
         for (const [sid, entry] of userMap) {
             if (entry.sessionId === sessionId) {
@@ -1015,8 +1033,9 @@ export function setupHtmlUI(game: GameScene): void {
                 try {
                     const names = await game.nakama.getDisplayNames([game.currentUserId]);
                     const dname = names.get(game.currentUserId!) ?? "";
-                    if (dname) {
-                        game.updatePlayerNameTag(dname);
+                    {
+                        const lbl = resolveDisplayLabel(dname, name);
+                        game.updatePlayerNameTag(lbl.text, lbl.color);
                         if (displayNameInput) displayNameInput.value = dname;
                         confirmedDisplayName = dname;
                         game.nakama.selfDisplayName = dname;
@@ -1173,27 +1192,20 @@ export function setupHtmlUI(game: GameScene): void {
         };
         if (displayNameInput && displayNameBtn) {
             displayNameInput.addEventListener("keydown", (e) => {
-                if (displayNameInput.value.length >= 10 && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-                    showDnStatus("表示名は10文字以内です。", "#ff4444");
+                if (displayNameInput.value.length >= 20 && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+                    showDnStatus("表示名は20文字以内です。", "#ff4444");
                 }
             });
             displayNameInput.addEventListener("input", () => {
                 const val = displayNameInput.value.trim();
-                if (val.length === 0 && displayNameInput.value.length === 0 && confirmedDisplayName !== "") {
-                    showDnStatus("表示名は1～10文字です", "#ff4444");
+                if (val.length > 20) {
+                    showDnStatus("表示名は20文字以内です。", "#ff4444");
                     displayNameBtn.disabled = true;
                     displayNameBtn.style.display = "none";
                     displayNameBtn.style.background = "";
                     return;
                 }
-                if (val.length > 10) {
-                    showDnStatus("表示名は10文字以内です。", "#ff4444");
-                    displayNameBtn.disabled = true;
-                    displayNameBtn.style.display = "none";
-                    displayNameBtn.style.background = "";
-                    return;
-                }
-                const changed = !displayNameInput.disabled && val !== confirmedDisplayName && val !== "";
+                const changed = !displayNameInput.disabled && val !== confirmedDisplayName;
                 displayNameBtn.disabled = !changed;
                 displayNameBtn.style.display = changed ? "" : "none";
                 displayNameBtn.style.background = changed ? "#28a745" : "";
@@ -1204,7 +1216,6 @@ export function setupHtmlUI(game: GameScene): void {
             try {
             if (!displayNameInput) return;
             const name = displayNameInput.value.trim();
-            if (!name) return;
             if (/[\x00-\x1f\x7f]/.test(name)) {
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ 制御文字は使えません"; }
                 return;
@@ -1217,7 +1228,9 @@ export function setupHtmlUI(game: GameScene): void {
                 await game.nakama.updateDisplayName(name);
                 game.nakama.selfDisplayName = name;
                 game.nakama.sendDisplayName(name).catch(() => {});
-                game.updatePlayerNameTag(name);
+                const selfUsername = loginNameInput?.value ?? "";
+                const lbl = resolveDisplayLabel(name, selfUsername);
+                game.updatePlayerNameTag(lbl.text, lbl.color);
                 // 自分のユーザリスト表示名も更新
                 const mySid = game.nakama.selfSessionId;
                 if (mySid) {
@@ -1229,7 +1242,7 @@ export function setupHtmlUI(game: GameScene): void {
                 showDnStatus("✓ 表示名変更しました！", "#00dd55");
                 addServerLog(loggedInHost || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1"), loggedInPort || (import.meta.env.VITE_DEFAULT_PORT ?? "7350"), "表示名変更", `表示名を「${name}」に設定しました`);
             } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
+                const msg = err instanceof Error ? err.message : (typeof err === "object" && err !== null && "message" in err) ? String((err as any).message) : String(err);
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ " + msg; }
                 addServerLog(loggedInHost || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1"), loggedInPort || (import.meta.env.VITE_DEFAULT_PORT ?? "7350"), "表示名変更失敗", msg);
             }

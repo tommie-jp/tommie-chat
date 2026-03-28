@@ -216,7 +216,7 @@ export class AvatarSystem {
         adt.addControl(textBlock);
 
         _end();
-        return { update: (newName: string) => { textBlock.text = newName; }, plane: namePlane };
+        return { update: (newName: string, color?: string) => { textBlock.text = newName; if (color) textBlock.color = color; }, plane: namePlane };
     }
 
     createSpeechBubble(namePlane: Mesh, speechText: string): (newText: string) => void {
