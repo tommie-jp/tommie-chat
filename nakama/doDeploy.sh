@@ -10,7 +10,7 @@
 case "${1:-}" in
     -h|--help)
         echo "Usage: $0"
-        echo "  VPS に tommChat をデプロイします"
+        echo "  VPS に tommieChat をデプロイします"
         echo ""
         echo "実行内容:"
         echo "  1. ファイアウォール設定"

@@ -327,7 +327,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-ping",           "ping-panel",            "Ping グラフ",   "showPing");
         makeToggle("menu-ccu",            "ccu-panel",             "同接グラフ",    "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
-        makeToggle("menu-about",          "about-panel",           "tommChatについて", "showAbout");
+        makeToggle("menu-about",          "about-panel",           "tommieChatについて", "showAbout");
         updateMobileLayout();
         window.addEventListener("orientationchange", () => setTimeout(updateMobileLayout, 200));
         if (isMobileMenu) {
@@ -598,7 +598,7 @@ export function setupDebugOverlay(game: GameScene): void {
             { text: "What a beautiful day for an adventure, don't you think?" },
             { text: "Hey, have you seen the new area?\nIt's really cool!" },
             { text: "Pro tip:\nDon't forget to save\nbefore you explore!" },
-            { text: "Welcome to tommChat!\nFeel free to look around\nMeet new friends\nBuild something cool\nHave fun!" },
+            { text: "Welcome to tommieChat!\nFeel free to look around\nMeet new friends\nBuild something cool\nHave fun!" },
             // 顔文字・エモーション
             { text: "(´・ω・｀)" }, { text: "ｷﾀ━━━(ﾟ∀ﾟ)━━━!!" }, { text: "(；´Д｀)" }, { text: "( ﾟДﾟ)ﾊｧ?" },
             { text: "ﾜﾛﾀwww" }, { text: "(´;ω;｀)ﾌﾞﾜｯ" }, { text: "( ´∀｀)σ)∀`)" }, { text: "m9(^Д^)ﾌﾟｷﾞｬｰ" },
