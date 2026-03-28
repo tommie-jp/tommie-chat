@@ -449,10 +449,12 @@ export function setupHtmlUI(game: GameScene): void {
         return match ? decodeURIComponent(match[1]) : null;
     };
 
-    /** 表示名が空なら @username（青色）、あればそのまま（白色）を返す */
+    /** 表示名が空なら @username（@だけ色付き）、あればそのまま（白色）を返す */
     const resolveDisplayLabel = (displayName: string, username: string): { text: string; color: string } => {
         if (displayName) return { text: displayName, color: "white" };
-        return { text: "@" + username, color: "#1177dd" };
+        const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
+        const color = uidColorInput?.value ?? "#00bbfa";
+        return { text: "@" + username, color };
     };
 
     const loginNameInput = document.getElementById("loginName") as HTMLInputElement;
@@ -2112,6 +2114,32 @@ export function setupHtmlUI(game: GameScene): void {
                 game.spriteAvatarSystem.refreshAllSpeeches();
                 if (game.updatePlayerSpeech && lastSpeechText) {
                     game.updatePlayerSpeech(bubbleHidden ? "" : lastSpeechText);
+                }
+            });
+        }
+    }
+
+    // UID Color 変更時に全アバターの名前タグを更新
+    {
+        const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
+        if (uidColorInput) {
+            uidColorInput.addEventListener("input", () => {
+                // 自分のアバター
+                const selfDn = game.nakama.selfDisplayName ?? "";
+                const selfUsername = loginNameInput?.value ?? "";
+                if (!selfDn) {
+                    const lbl = resolveDisplayLabel("", selfUsername);
+                    game.updatePlayerNameTag(lbl.text, lbl.color);
+                }
+                // リモートアバター
+                for (const [sid, entry] of userMap) {
+                    if (sid === game.nakama.selfSessionId) continue;
+                    const dn = entry.displayName ?? "";
+                    if (!dn) {
+                        const lbl = resolveDisplayLabel("", entry.username);
+                        const updater = game.remoteNameUpdaters.get(sid);
+                        if (updater) updater(lbl.text, lbl.color);
+                    }
                 }
             });
         }

@@ -3,7 +3,7 @@ import {
     TransformNode, Texture, DynamicTexture, VertexData
 } from "@babylonjs/core";
 import { SpriteManager, Sprite } from "@babylonjs/core";
-import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
+import { AdvancedDynamicTexture, TextBlock, StackPanel } from "@babylonjs/gui";
 import {
     cellIndex, animRange, worldDirToSpriteDir,
     buildTransparentPNG, sampleBgColor, type SheetInfo
@@ -402,29 +402,65 @@ export class SpriteAvatarSystem {
     }
 
     private createNameTag(parent: TransformNode, nameText: string, spriteHeight: number): { plane: Mesh; update: (name: string) => void } {
+        const nameTexW = 1024, nameTexH = 384;
         const nameW = 3.0;
-        const nameH = nameW * (256 / 1024);             // テクスチャ比に合わせて 0.75
+        const nameH = nameW * (nameTexH / nameTexW);
         const namePlane = MeshBuilder.CreatePlane("sprNameTag_" + parent.name, { width: nameW, height: nameH }, this.scene);
         namePlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
         namePlane.isPickable = false;
         namePlane.parent = parent;
         namePlane.position = new Vector3(0, spriteHeight + 0.05, 0);
 
-        const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 1024, 256);
-        const tb = new TextBlock();
-        tb.text = nameText;
-        tb.color = "white";
-        tb.fontSize = "48px";
-        tb.fontWeight = "bold";
-        tb.outlineWidth = 5;
-        tb.outlineColor = "black";
-        adt.addControl(tb);
+        const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, nameTexW, nameTexH);
+
+        // @マーク用（色付き）と ユーザID用（白）を横並びにする
+        const panel = new StackPanel();
+        panel.isVertical = false;
+        panel.adaptWidthToChildren = true;
+        panel.heightInPixels = nameTexH;
+        panel.horizontalAlignment = StackPanel.HORIZONTAL_ALIGNMENT_CENTER;
+        panel.verticalAlignment = StackPanel.VERTICAL_ALIGNMENT_TOP;
+        panel.clipChildren = false;
+        panel.clipContent = false;
+        adt.addControl(panel);
+
+        const tbAt = new TextBlock();
+        tbAt.text = "";
+        tbAt.color = "white";
+        tbAt.fontSize = "48px";
+        tbAt.fontWeight = "bold";
+        tbAt.outlineWidth = 5;
+        tbAt.outlineColor = "black";
+        tbAt.widthInPixels = 80;
+        tbAt.heightInPixels = nameTexH;
+        panel.addControl(tbAt);
+
+        const tbName = new TextBlock();
+        tbName.text = nameText;
+        tbName.color = "white";
+        tbName.fontSize = "48px";
+        tbName.fontWeight = "bold";
+        tbName.outlineWidth = 5;
+        tbName.outlineColor = "black";
+        tbName.resizeToFit = true;
+        tbName.heightInPixels = nameTexH;
+        panel.addControl(tbName);
 
         return { plane: namePlane, update: (n: string, color?: string) => {
-            tb.text = n;
-            if (color) {
-                tb.color = color;
-                tb.outlineColor = color === "white" ? "black" : "#0a2244";
+            if (color && color !== "white") {
+                // @マークだけ色付き、残りは白
+                tbAt.text = "@";
+                tbAt.color = color;
+                tbAt.outlineColor = "rgba(0,0,0,0.7)";
+                tbName.text = n.startsWith("@") ? n.slice(1) : n;
+                tbName.color = "white";
+                tbName.outlineColor = "black";
+            } else {
+                // 表示名モード: @マークなし、全部白
+                tbAt.text = "";
+                tbName.text = n;
+                tbName.color = "white";
+                tbName.outlineColor = "black";
             }
         } };
     }
