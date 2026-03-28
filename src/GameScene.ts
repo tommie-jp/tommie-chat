@@ -11,7 +11,8 @@ import {
     Color3,
     Mesh,
     PointerEventTypes,
-    DefaultRenderingPipeline
+    DefaultRenderingPipeline,
+    Matrix
 } from "@babylonjs/core";
 import { GridMaterial } from "@babylonjs/materials";
 import { AdvancedDynamicTexture, TextBlock, Rectangle } from "@babylonjs/gui";
@@ -36,6 +37,12 @@ export class GameScene {
 
     targetPosition: Vector3 | null = null;
     private readonly moveSpeed = 2.0;
+
+    // カメラパンオフセット（右ドラッグで操作、キャラ追従を維持）
+    panOffset = new Vector3(0, 0, 0);
+    private isPanning = false;
+    private panLastX = 0;
+    private panLastY = 0;
 
     private inputMap: { [key: string]: boolean } = {};
     private lastKeyboardSendTime = 0;
@@ -149,6 +156,22 @@ export class GameScene {
         this.camera.fovMode = ArcRotateCamera.FOVMODE_VERTICAL_FIXED;
         this.camera.inertia = 0;
         this.camera.useNaturalPinchZoom = true;
+        // デフォルトのパン機能を無効化（自前で右ドラッグパンを実装）
+        this.camera.panningSensibility = 0;
+        // 右ボタン・中ボタンでの操作を無効化（右ドラッグはパン専用にする）
+        this.camera._useCtrlForPanning = false;
+        const pointersInput = this.camera.inputs.attached["pointers"] as any;
+        if (pointersInput) {
+            pointersInput.buttons = [0];  // 左ボタンのみBabylon.jsで処理
+            // Babylon.js のポインター入力の onButtonDown をラップして右ボタンを無視
+            const origOnButtonDown = pointersInput.onButtonDown?.bind(pointersInput);
+            if (origOnButtonDown) {
+                pointersInput.onButtonDown = (evt: PointerEvent) => {
+                    if (evt.button === 2) return;
+                    origOnButtonDown(evt);
+                };
+            }
+        }
 
         this.camera.maxZ = 200;
         this.camera.fov = 60 * Math.PI / 180;
@@ -552,6 +575,8 @@ export class GameScene {
 
             if (pointerInfo.type === PointerEventTypes.POINTERTAP) {
                 if (this.buildMode) return; // ビルドモードはネイティブ click で処理
+                // 右クリックはパン操作なので移動しない
+                if (pointerInfo.event && (pointerInfo.event as PointerEvent).button === 2) return;
                 const pick = pointerInfo.pickInfo;
                 if (pick && pick.hit && pick.pickedMesh && pick.pickedMesh.name === "ground" && pick.pickedPoint) {
                     // 通常クリック → 移動
@@ -741,8 +766,103 @@ export class GameScene {
 
         });
 
+        // カメラをキャラ追従（パンオフセット付き）で毎フレーム更新
         if (this.camera && this.playerBox) {
-            this.camera.setTarget(this.playerBox);
+            this.camera.setTarget(this.playerBox.position.add(this.panOffset));
+
+            // 右ドラッグでパンオフセットを操作
+            const canvas = this.engine.getRenderingCanvas()!;
+            canvas.addEventListener("pointerdown", (e: PointerEvent) => {
+                if (e.button === 2) {
+                    this.isPanning = true;
+                    this.panLastX = e.clientX;
+                    this.panLastY = e.clientY;
+                    e.stopImmediatePropagation();
+                }
+            }, true);
+            const screenMargin = 0.15;
+            // 仮オフセットでのプレイヤーの正規化スクリーン座標を計算
+            const playerScreenPos = (testOffset: Vector3): { nx: number; ny: number } => {
+                const testTarget = this.playerBox.position.add(testOffset);
+                const alpha = this.camera.alpha;
+                const beta = this.camera.beta;
+                const radius = this.camera.radius;
+                const camX = testTarget.x + radius * Math.sin(beta) * Math.cos(alpha);
+                const camY = testTarget.y + radius * Math.cos(beta);
+                const camZ = testTarget.z + radius * Math.sin(beta) * Math.sin(alpha);
+                const camPos = new Vector3(camX, camY, camZ);
+                const vm = Matrix.LookAtLH(camPos, testTarget, Vector3.Up());
+                const pm = this.camera.getProjectionMatrix();
+                const vp = this.camera.viewport.toGlobal(
+                    this.engine.getRenderWidth(),
+                    this.engine.getRenderHeight()
+                );
+                const sp = Vector3.Project(this.playerBox.position, vm, pm, vp);
+                return { nx: sp.x / this.engine.getRenderWidth(), ny: sp.y / this.engine.getRenderHeight() };
+            };
+            const isPlayerInScreen = (testOffset: Vector3): boolean => {
+                const { nx, ny } = playerScreenPos(testOffset);
+                return nx >= screenMargin && nx <= 1 - screenMargin &&
+                       ny >= screenMargin && ny <= 1 - screenMargin;
+            };
+            const screenDistFromCenter = (testOffset: Vector3): number => {
+                const { nx, ny } = playerScreenPos(testOffset);
+                return (nx - 0.5) ** 2 + (ny - 0.5) ** 2;
+            };
+
+            // captureフェーズでBabylon.jsより先にイベントを捕捉
+            canvas.addEventListener("pointermove", (e: PointerEvent) => {
+                if (!this.isPanning) return;
+                // 右ドラッグ中はBabylon.jsにイベントを渡さない（ズーム防止）
+                e.stopImmediatePropagation();
+                const dx = e.clientX - this.panLastX;
+                const dy = e.clientY - this.panLastY;
+                this.panLastX = e.clientX;
+                this.panLastY = e.clientY;
+
+                // カメラの右方向・前方向をXZ平面で計算（コンテンツ移動方式）
+                const camPos = this.camera.position;
+                const camTarget = this.camera.target;
+                const fwdX = camTarget.x - camPos.x;
+                const fwdZ = camTarget.z - camPos.z;
+                const fwdLen = Math.sqrt(fwdX * fwdX + fwdZ * fwdZ) || 1;
+                const fnX = fwdX / fwdLen;
+                const fnZ = fwdZ / fwdLen;
+                const rnX = -fnZ;
+                const rnZ = fnX;
+                const sensitivity = this.camera.radius * 0.001;
+                const newX = this.panOffset.x + (dx * rnX + dy * fnX) * sensitivity;
+                const newZ = this.panOffset.z + (dx * rnZ + dy * fnZ) * sensitivity;
+
+                // 仮オフセットでプレイヤーが画面内に収まるか、
+                // 現在より画面中央に近づく方向なら許可
+                const testOffset = new Vector3(newX, 0, newZ);
+                const inScreen = isPlayerInScreen(testOffset);
+                const movesTowardCenter = !inScreen && (() => {
+                    const cur = screenDistFromCenter(this.panOffset);
+                    const nxt = screenDistFromCenter(testOffset);
+                    return nxt < cur;
+                })();
+                if (inScreen || movesTowardCenter) {
+                    this.panOffset.x = newX;
+                    this.panOffset.z = newZ;
+                }
+            }, true);  // capture phase
+            canvas.addEventListener("pointerup", (e: PointerEvent) => {
+                if (e.button === 2) {
+                    this.isPanning = false;
+                    e.stopImmediatePropagation();
+                }
+            }, true);
+            canvas.addEventListener("contextmenu", (e: Event) => { e.preventDefault(); });
+
+            // 毎フレームカメラターゲットを更新（target を直接書き換えて alpha/beta を維持）
+            this.scene.onBeforeRenderObservable.add(() => {
+                const p = this.playerBox.position;
+                this.camera.target.x = p.x + this.panOffset.x;
+                this.camera.target.y = p.y;
+                this.camera.target.z = p.z + this.panOffset.z;
+            });
         }
     }
 
