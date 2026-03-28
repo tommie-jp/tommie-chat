@@ -450,16 +450,37 @@ export function setupHtmlUI(game: GameScene): void {
     };
 
     /** 表示名が空なら @username（@だけ色付き）、あればそのまま（白色）を返す */
-    const resolveDisplayLabel = (displayName: string, username: string): { text: string; color: string } => {
-        if (displayName) return { text: displayName, color: "white" };
+    const resolveDisplayLabel = (displayName: string, username: string, sessionId?: string): { text: string; color: string; suffix: string } => {
         const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
         const color = uidColorInput?.value ?? "#00bbfa";
-        return { text: "@" + username, color };
+        // 同一UUIDが複数セッションあればサフィックスを付与
+        let suffix = "";
+        if (sessionId) {
+            const entry = userMap.get(sessionId);
+            if (entry) {
+                let count = 0;
+                for (const e of userMap.values()) {
+                    if (e.uuid === entry.uuid) count++;
+                }
+                if (count >= 2) suffix = "#" + sessionId.slice(0, 4);
+            }
+        }
+        if (displayName) return { text: displayName, color: "white", suffix };
+        return { text: "@" + username, color, suffix };
     };
 
     const loginNameInput = document.getElementById("loginName") as HTMLInputElement;
     const loginBtn = document.getElementById("loginBtn") as HTMLButtonElement;
 
+    /** ランダムユーザID生成（user_ + 6桁英数字 = 11文字） */
+    const generateRandomUserId = (): string => {
+        const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        let id = "user_";
+        for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+        return id;
+    };
+
+    const manualLoginMode = new URLSearchParams(location.search).has("login");
     const savedLoginName = getCookie("loginName");
     if (savedLoginName && loginNameInput) {
         loginNameInput.value = savedLoginName;
@@ -470,6 +491,11 @@ export function setupHtmlUI(game: GameScene): void {
     const userListBody = document.getElementById("user-list-body") as HTMLTableSectionElement;
 
     const formatTimestamp = (date: Date): string => {
+        const now = new Date();
+        const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+        if (isToday) {
+            return "今日 " + date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        }
         return date.toLocaleString(undefined, {
             year: "numeric", month: "2-digit", day: "2-digit",
             hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -659,7 +685,7 @@ export function setupHtmlUI(game: GameScene): void {
                 game.spriteAvatarSystem.setEnabled(sessionId, true);
             }
         } else {
-            const initLbl = resolveDisplayLabel(displayName, username);
+            const initLbl = resolveDisplayLabel(displayName, username, sessionId);
             game.spriteAvatarSystem.createAvatar(sessionId, sheetUrl, charCol, charRow, x, z, initLbl.text).then(root => {
                 game.remoteAvatars.set(sessionId, root as unknown as Mesh);
                 game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
@@ -667,7 +693,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (su) game.remoteSpeeches.set(sessionId, su);
                 // 初期色を反映
                 const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
-                if (upd) upd(initLbl.text, initLbl.color);
+                if (upd) upd(initLbl.text, initLbl.color, initLbl.suffix);
             });
         }
         game.remoteTargets.delete(sessionId);
@@ -688,9 +714,9 @@ export function setupHtmlUI(game: GameScene): void {
         }
         // アバターのnameTagを表示名で更新
         {
-            const lbl = resolveDisplayLabel(displayName, username);
+            const lbl = resolveDisplayLabel(displayName, username, sessionId);
             const updater = game.remoteNameUpdaters.get(sessionId);
-            if (updater) updater(lbl.text, lbl.color);
+            if (updater) updater(lbl.text, lbl.color, lbl.suffix);
         }
     };
     game.nakama.onAvatarMoveTarget = (sessionId: string, x: number, z: number) => {
@@ -703,7 +729,7 @@ export function setupHtmlUI(game: GameScene): void {
         const cached = profileCache.get(sessionId);
         const dn = cached?.displayName ?? userMap.get(sessionId)?.displayName ?? "";
         const uname = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
-        const chgLbl = resolveDisplayLabel(dn, uname);
+        const chgLbl = resolveDisplayLabel(dn, uname, sessionId);
         // 既存アバターの現在位置・回転を保持
         const oldRoot = game.remoteAvatars.get(sessionId);
         const px = oldRoot?.position.x ?? 0;
@@ -715,7 +741,7 @@ export function setupHtmlUI(game: GameScene): void {
             const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
             if (su) game.remoteSpeeches.set(sessionId, su);
             const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
-            if (upd) upd(chgLbl.text, chgLbl.color);
+            if (upd) upd(chgLbl.text, chgLbl.color, chgLbl.suffix);
         });
     };
     // --- プロフィールキャッシュ & debounced matchデータ要求 ---
@@ -757,9 +783,9 @@ export function setupHtmlUI(game: GameScene): void {
             // アバター更新（自分以外）
             if (sid !== game.nakama.selfSessionId) {
                 const uname = userMap.get(sid)?.username ?? sid.slice(0, 8);
-                const plbl = resolveDisplayLabel(prof.displayName ?? "", uname);
+                const plbl = resolveDisplayLabel(prof.displayName ?? "", uname, sid);
                 const updater = game.remoteNameUpdaters.get(sid);
-                if (updater) updater(plbl.text, plbl.color);
+                if (updater) updater(plbl.text, plbl.color, plbl.suffix);
                 // テクスチャURLが変わっていたらアバターを再作成
                 const newSheetUrl = (prof.textureUrl && prof.textureUrl.includes("/s3/")) ? prof.textureUrl : "/s3/avatars/pipo-nekonin008.png";
                 const cc = prof.charCol ?? 0;
@@ -775,7 +801,7 @@ export function setupHtmlUI(game: GameScene): void {
                         const su = game.spriteAvatarSystem.getSpeechUpdate(sid);
                         if (su) game.remoteSpeeches.set(sid, su);
                         const upd2 = game.spriteAvatarSystem.getNameUpdate(sid);
-                        if (upd2) upd2(plbl.text, plbl.color);
+                        if (upd2) upd2(plbl.text, plbl.color, plbl.suffix);
                     });
                 }
             }
@@ -789,7 +815,7 @@ export function setupHtmlUI(game: GameScene): void {
         const cached = profileCache.get(sessionId);
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const displayName = cached?.displayName ?? "";
-        const aoiLbl = resolveDisplayLabel(displayName, username);
+        const aoiLbl = resolveDisplayLabel(displayName, username, sessionId);
         const sheetUrl = (cached?.textureUrl && cached.textureUrl.includes("/s3/")) ? cached.textureUrl : "/s3/avatars/pipo-nekonin008.png";
         if (game.spriteAvatarSystem.has(sessionId)) {
             game.spriteAvatarSystem.setPosition(sessionId, x, z);
@@ -804,19 +830,19 @@ export function setupHtmlUI(game: GameScene): void {
                 const su = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
                 if (su) game.remoteSpeeches.set(sessionId, su);
                 const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
-                if (upd) upd(aoiLbl.text, aoiLbl.color);
+                if (upd) upd(aoiLbl.text, aoiLbl.color, aoiLbl.suffix);
                 // 作成中にprofileResponseが到着しキャッシュが更新されていたら再作成
                 const latest = profileCache.get(sessionId);
                 const latestUrl = (latest?.textureUrl && latest.textureUrl.includes("/s3/")) ? latest.textureUrl : null;
                 if (latestUrl && (latestUrl !== sheetUrl || (latest!.charCol ?? 0) !== cc || (latest!.charRow ?? 0) !== cr)) {
-                    const lbl2 = resolveDisplayLabel(latest!.displayName ?? "", userMap.get(sessionId)?.username ?? sessionId.slice(0, 8));
+                    const lbl2 = resolveDisplayLabel(latest!.displayName ?? "", userMap.get(sessionId)?.username ?? sessionId.slice(0, 8), sessionId);
                     game.spriteAvatarSystem.createAvatar(sessionId, latestUrl, latest!.charCol ?? 0, latest!.charRow ?? 0, root.position.x, root.position.z, lbl2.text, undefined, root.rotation.y).then(root2 => {
                         game.remoteAvatars.set(sessionId, root2 as unknown as Mesh);
                         game.remoteNameUpdaters.set(sessionId, game.spriteAvatarSystem.getNameUpdate(sessionId)!);
                         const su2 = game.spriteAvatarSystem.getSpeechUpdate(sessionId);
                         if (su2) game.remoteSpeeches.set(sessionId, su2);
                         const upd2 = game.spriteAvatarSystem.getNameUpdate(sessionId);
-                        if (upd2) upd2(lbl2.text, lbl2.color);
+                        if (upd2) upd2(lbl2.text, lbl2.color, lbl2.suffix);
                     });
                 }
             });
@@ -832,9 +858,9 @@ export function setupHtmlUI(game: GameScene): void {
         console.log(`rcv onDisplayName sid=${sessionId.slice(0, 8)} displayName=${displayName}`);
         // アバターのnameTag更新
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
-        const lbl = resolveDisplayLabel(displayName, username);
+        const lbl = resolveDisplayLabel(displayName, username, sessionId);
         const updater = game.remoteNameUpdaters.get(sessionId);
-        if (updater) updater(lbl.text, lbl.color);
+        if (updater) updater(lbl.text, lbl.color, lbl.suffix);
         // ユーザリストの表示名更新
         for (const [sid, entry] of userMap) {
             if (entry.sessionId === sessionId) {
@@ -919,14 +945,8 @@ export function setupHtmlUI(game: GameScene): void {
         _end();
     };
 
-    // 同じuserIdの古いセッションを削除（再接続時の重複防止）
-    const removeStaleEntries = (newSessionId: string, userId: string) => {
-        for (const [sid, entry] of userMap) {
-            if (entry.uuid === userId && sid !== newSessionId) {
-                userMap.delete(sid);
-            }
-        }
-    };
+    // 古いセッションのクリーンアップはサーバーの leave イベントに委任
+    // （同一ユーザが複数ブラウザでログインするケースをサポート）
 
     // チャンネル情報を付与してuserMapに追加/更新
     const addChannelFlag = (sessionId: string, flag: "chat" | "match") => {
@@ -938,18 +958,30 @@ export function setupHtmlUI(game: GameScene): void {
         }
     };
 
+    /** 同一UUIDのセッション数が変わったら自分の表示名サフィックスを更新 */
+    const refreshSelfSuffix = () => {
+        const selfSid = game.nakama.selfSessionId;
+        if (!selfSid) return;
+        const selfEntry = userMap.get(selfSid);
+        if (!selfEntry) return;
+        const selfDn = game.nakama.selfDisplayName ?? "";
+        const selfUsername = loginNameInput?.value ?? "";
+        const lbl = resolveDisplayLabel(selfDn, selfUsername, selfSid);
+        game.updatePlayerNameTag(lbl.text, lbl.color, lbl.suffix);
+    };
+    game.refreshSelfNameTag = refreshSelfSuffix;
+
     game.nakama.onPresenceJoin = (sessionId, userId, username) => {
         cc("onPresenceJoin");
-        removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
         ensureRemoteAvatar(sessionId, username);
+        refreshSelfSuffix();
     };
     game.nakama.onPresenceNewJoin = (sessionId, userId, username) => {
         cc("onPresenceNewJoin");
-        removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
@@ -971,15 +1003,22 @@ export function setupHtmlUI(game: GameScene): void {
         }
         scheduleRenderUserList();
         removeRemoteAvatar(sessionId);
+        refreshSelfSuffix();
     };
     game.nakama.onMatchPresenceJoin = (sessionId, userId, username) => {
         cc("onMatchPresenceJoin");
-        removeStaleEntries(sessionId, userId);
         const existing = userMap.get(sessionId);
         if (existing) {
             addChannelFlag(sessionId, "match");
         } else {
             userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: 0, loginTime: "…", channel: "match" });
+        }
+        // アバターが既に存在する場合、名前タグを更新（AOI_ENTER時にusername未取得だった場合のリカバリ）
+        if (sessionId !== game.nakama.selfSessionId && game.spriteAvatarSystem.has(sessionId)) {
+            const dn = userMap.get(sessionId)?.displayName ?? "";
+            const lbl = resolveDisplayLabel(dn, username, sessionId);
+            const updater = game.spriteAvatarSystem.getNameUpdate(sessionId);
+            if (updater) updater(lbl.text, lbl.color, lbl.suffix);
         }
         scheduleRenderUserList();
         // 相手がマッチ参加した時点で自分のInitPosを送る（チャットチャンネル参加時はまだマッチ未参加で届かないため）
@@ -1003,6 +1042,12 @@ export function setupHtmlUI(game: GameScene): void {
         scheduleRenderUserList();
     };
 
+    /** ログインUI行の表示/非表示 */
+    const setLoginRowVisible = (visible: boolean) => {
+        const loginRow = document.getElementById("login-row");
+        if (loginRow) loginRow.style.display = visible ? "" : "none";
+    };
+
     const setLoginMode = () => {
         if (loginBtn) {
             loginBtn.textContent = "ログイン";
@@ -1016,7 +1061,9 @@ export function setupHtmlUI(game: GameScene): void {
             };
         }
         { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
+        { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = "none"; }
         { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = ""; }
+        setLoginRowVisible(true);
     };
 
     const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
@@ -1093,8 +1140,8 @@ export function setupHtmlUI(game: GameScene): void {
                     const names = await game.nakama.getDisplayNames([game.currentUserId]);
                     const dname = names.get(game.currentUserId!) ?? "";
                     {
-                        const lbl = resolveDisplayLabel(dname, name);
-                        game.updatePlayerNameTag(lbl.text, lbl.color);
+                        const lbl = resolveDisplayLabel(dname, name, game.nakama.selfSessionId ?? undefined);
+                        game.updatePlayerNameTag(lbl.text, lbl.color, lbl.suffix);
                         if (displayNameInput) displayNameInput.value = dname;
                         confirmedDisplayName = dname;
                         game.nakama.selfDisplayName = dname;
@@ -1112,6 +1159,18 @@ export function setupHtmlUI(game: GameScene): void {
             }
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             await game.nakama.joinWorldMatch();
+            // 自分自身をプレイヤーリストに確実に登録（onPresenceJoinのタイミングで漏れる場合のフォールバック）
+            {
+                const sid = game.nakama.selfSessionId;
+                const uid = game.currentUserId;
+                if (sid && uid && !userMap.has(sid)) {
+                    userMap.set(sid, { username: name, displayName: game.nakama.selfDisplayName ?? "", uuid: uid, sessionId: sid, loginTimestamp: Date.now(), loginTime: "…", channel: "chat+match" });
+                } else if (sid && userMap.has(sid)) {
+                    const existing = userMap.get(sid)!;
+                    userMap.set(sid, { ...existing, channel: "chat+match" });
+                }
+                scheduleRenderUserList();
+            }
             // matchId確定後にinitPosを送信（joinWorldMatch前のpresenceイベントではmatchId未設定のため送信されない）
             { const p = game.playerBox; await game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow); }
             // 自分のプロフィールをサーバから取得（loginTime等）
@@ -1178,7 +1237,9 @@ export function setupHtmlUI(game: GameScene): void {
             if (loginBtn) {
                 loginBtn.style.display = "none";
             }
+            setLoginRowVisible(false);
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
+            { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
             { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = "none"; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) di.disabled = false; }
@@ -1227,6 +1288,8 @@ export function setupHtmlUI(game: GameScene): void {
                 loginStatus.style.color = "#ff4444";
                 loginStatus.textContent = isMobile ? "✗" : "✗ログイン失敗: " + reason;
             }
+            // 自動ログイン失敗時はログインUIを表示してリカバリ
+            setLoginRowVisible(true);
         } finally {
             if (loginBtn) loginBtn.disabled = false;
             _end();
@@ -1288,8 +1351,8 @@ export function setupHtmlUI(game: GameScene): void {
                 game.nakama.selfDisplayName = name;
                 game.nakama.sendDisplayName(name).catch(() => {});
                 const selfUsername = loginNameInput?.value ?? "";
-                const lbl = resolveDisplayLabel(name, selfUsername);
-                game.updatePlayerNameTag(lbl.text, lbl.color);
+                const lbl = resolveDisplayLabel(name, selfUsername, game.nakama.selfSessionId ?? undefined);
+                game.updatePlayerNameTag(lbl.text, lbl.color, lbl.suffix);
                 // 自分のユーザリスト表示名も更新
                 const mySid = game.nakama.selfSessionId;
                 if (mySid) {
@@ -2015,6 +2078,28 @@ export function setupHtmlUI(game: GameScene): void {
 
     setLoginMode();
 
+    // 自動ログイン: ?login パラメータがなければ自動ログインを実行
+    if (!manualLoginMode) {
+        // Cookie に保存されたユーザIDがあればそれを使用、なければランダム生成
+        const autoName = savedLoginName || generateRandomUserId();
+        if (loginNameInput) loginNameInput.value = autoName;
+        setLoginRowVisible(false);  // ログイン行を非表示
+        // 少し遅延させてDOMの初期化完了を待つ
+        setTimeout(() => { doLogin(); }, 100);
+    }
+
+    // メニュー「ログイン画面」ボタン
+    {
+        const menuLogin = document.getElementById("menu-login");
+        if (menuLogin) {
+            menuLogin.addEventListener("click", (e) => {
+                e.stopPropagation();
+                setLoginRowVisible(true);
+                document.getElementById("menu-popup")?.classList.remove("open");
+            });
+        }
+    }
+
     {
         const menuLogout = document.getElementById("menu-logout");
         const logoutPanel = document.getElementById("logout-panel");
@@ -2163,17 +2248,17 @@ export function setupHtmlUI(game: GameScene): void {
                 const selfDn = game.nakama.selfDisplayName ?? "";
                 const selfUsername = loginNameInput?.value ?? "";
                 if (!selfDn) {
-                    const lbl = resolveDisplayLabel("", selfUsername);
-                    game.updatePlayerNameTag(lbl.text, lbl.color);
+                    const lbl = resolveDisplayLabel("", selfUsername, game.nakama.selfSessionId ?? undefined);
+                    game.updatePlayerNameTag(lbl.text, lbl.color, lbl.suffix);
                 }
                 // リモートアバター
                 for (const [sid, entry] of userMap) {
                     if (sid === game.nakama.selfSessionId) continue;
                     const dn = entry.displayName ?? "";
                     if (!dn) {
-                        const lbl = resolveDisplayLabel("", entry.username);
+                        const lbl = resolveDisplayLabel("", entry.username, sid);
                         const updater = game.remoteNameUpdaters.get(sid);
-                        if (updater) updater(lbl.text, lbl.color);
+                        if (updater) updater(lbl.text, lbl.color, lbl.suffix);
                     }
                 }
             });
