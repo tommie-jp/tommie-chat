@@ -1675,15 +1675,15 @@
                     <tr><td class="label" title="45.AA Mode&#10;アスキーアート(AA)表示モードのON/OFF&#10;ON: ＭＳ Ｐゴシック 行間1.125&#10;OFF: 43/44の設定を使用&#10;初期値: Off">45.AA Mode:</td><td class="value">
                         <button id="aaModeBtn" class="debug-btn off">Off</button>
                     </td></tr>
-                    <tr><td class="label" title="46.Speech Size&#10;アバターのセリフ表示のフォントサイズ（ポイント）&#10;初期値: 14pt">46.Speech Size:</td><td class="value">
+                    <tr><td class="label" title="46.Speech Size&#10;アバターのセリフ表示のフォントサイズ（ポイント）&#10;初期値: 24pt">46.Speech Size:</td><td class="value">
                         <select id="speechSizeSelect" class="debug-select">
                             <option value="10">10pt</option>
                             <option value="12">12pt</option>
                             <option value="14">14pt</option>
-                            <option value="24">24pt</option>
+                            <option value="24" selected>24pt</option>
                             <option value="36">36pt</option>
                             <option value="48">48pt</option>
-                            <option value="60" selected>60pt</option>
+                            <option value="60">60pt</option>
                             <option value="72">72pt</option>
                             <option value="84">84pt</option>
                             <option value="96">96pt</option>
@@ -1820,7 +1820,7 @@
         </div>
         <div id="displayname-row">
             <label for="displayNameInput">表示名</label>
-            <input id="displayNameInput" type="text" placeholder="ログイン後に入力" disabled maxlength="10" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;1〜10文字（制御文字は使用不可）">
+            <input id="displayNameInput" type="text" placeholder="ログイン後に入力" disabled maxlength="20" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;0〜20文字（空欄でユーザID表示、制御文字は使用不可）">
             <button id="displayNameBtn" class="ui-btn" disabled style="display:none;width:auto;padding:0 8px;white-space:nowrap;font-size:12px;">変更</button>
             <span id="displayNameStatus" style="font-size:12px;white-space:nowrap;"></span>
         </div>

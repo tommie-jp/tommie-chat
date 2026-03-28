@@ -15,7 +15,7 @@ interface SpriteAvatarData {
     root: TransformNode;
     standBase: Mesh;
     namePlane: Mesh;
-    nameUpdate: (name: string) => void;
+    nameUpdate: (name: string, color?: string) => void;
     speechUpdate: (text: string) => void;
     speechRedraw: () => void;
     sheetInfo: SheetInfo;
@@ -247,7 +247,7 @@ export class SpriteAvatarSystem {
         data.sprite.position.z = z;
     }
 
-    getNameUpdate(id: string): ((name: string) => void) | undefined {
+    getNameUpdate(id: string): ((name: string, color?: string) => void) | undefined {
         return this.avatars.get(id)?.nameUpdate;
     }
 
@@ -392,13 +392,13 @@ export class SpriteAvatarSystem {
     }
 
     private createNameTag(parent: TransformNode, nameText: string, spriteHeight: number): { plane: Mesh; update: (name: string) => void } {
-        const nameW = 1.5;
-        const nameH = nameW * (256 / 1024);             // テクスチャ比に合わせて 0.375
+        const nameW = 3.0;
+        const nameH = nameW * (256 / 1024);             // テクスチャ比に合わせて 0.75
         const namePlane = MeshBuilder.CreatePlane("sprNameTag_" + parent.name, { width: nameW, height: nameH }, this.scene);
         namePlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
         namePlane.isPickable = false;
         namePlane.parent = parent;
-        namePlane.position = new Vector3(0, spriteHeight + 0.1, 0);
+        namePlane.position = new Vector3(0, spriteHeight + 0.05, 0);
 
         const adt = AdvancedDynamicTexture.CreateForMesh(namePlane, 1024, 256);
         const tb = new TextBlock();
@@ -410,21 +410,19 @@ export class SpriteAvatarSystem {
         tb.outlineColor = "black";
         adt.addControl(tb);
 
-        return { plane: namePlane, update: (n: string) => { tb.text = n; } };
+        return { plane: namePlane, update: (n: string, color?: string) => { tb.text = n; if (color) tb.color = color; } };
     }
 
     private createSpeechBubble(namePlane: Mesh): { updater: (text: string) => void; redraw: () => void } {
-        const nameW = 1.5;
-        const texW = 1024, texH = 384;
-        const planeW = texW / 512 * 1.5;               // 3.0
-        const bodyH1 = 108, triH = 36;
-        const baseTotalH = bodyH1 + triH;
-        const maxPlaneH = texH * (0.42 / baseTotalH);   // ≈1.12
-        const bubblePlane = MeshBuilder.CreatePlane("sprBubble_" + namePlane.name, { width: planeW, height: maxPlaneH }, this.scene);
+        const texW = 1024, texH = 1024;
+        // 1テクスチャpx = worldScale ワールド単位
+        const worldScale = 1 / 256;  // 256px = 1.0 ワールド単位
+
+        const bubblePlane = MeshBuilder.CreatePlane("sprBubble_" + namePlane.name,
+            { width: texW * worldScale, height: texH * worldScale }, this.scene);
         bubblePlane.isPickable = false;
         bubblePlane.parent = namePlane;
-        const fixedBottom = -(0.42 / 2);
-        bubblePlane.position = new Vector3(nameW / 2 + planeW / 2 - 0.5, 0, 0);
+        bubblePlane.position = new Vector3(0, 0, 0);
 
         const dynTex = new DynamicTexture("sprBubbleTex_" + namePlane.name, { width: texW, height: texH }, this.scene, true);
         dynTex.hasAlpha = true;
@@ -451,7 +449,7 @@ export class SpriteAvatarSystem {
             const clippedLines = rawLines.map(l => l.length > MAX_CHARS ? l.slice(0, MAX_CHARS) + "..." : l);
             const n = Math.max(1, clippedLines.length);
 
-            const ptSize = parseInt((document.getElementById("speechSizeSelect") as HTMLSelectElement | null)?.value ?? "60", 10);
+            const ptSize = parseInt((document.getElementById("speechSizeSelect") as HTMLSelectElement | null)?.value ?? "24", 10);
             const fontSize = Math.round(ptSize * 96 / 72);
             const aaMode = (document.getElementById("aaModeBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? false;
             let fontFamily: string;
@@ -465,8 +463,8 @@ export class SpriteAvatarSystem {
             }
             const lineSpacing = Math.round(fontSize * leadingMult);
 
-            const vertPad = 35;
-            let bH1 = Math.max(108, lineSpacing + vertPad * 2);
+            const vertPad = Math.round(fontSize / 2);
+            let bH1 = Math.max(fontSize + vertPad * 2, lineSpacing + vertPad * 2);
             let tH  = Math.max(36, Math.round(fontSize * 0.95));
             let lH  = Math.max(lineSpacing, 48);
             const rawTotalH = bH1 + (n - 1) * lH + tH;
@@ -478,28 +476,38 @@ export class SpriteAvatarSystem {
             }
             const drawFontSize = Math.round(fontSize * fit);
 
-            const ttX = Math.round(60 * (bH1 / 108));
-            const tbL = Math.round(30 * (bH1 / 108));
-            const tbR = Math.round(90 * (bH1 / 108));
             const rad = Math.max(4, Math.round(14 * (bH1 / 108)));
             const leftPad  = Math.max(8, Math.round(fontSize * fit * 0.5));
             const rightPad = leftPad;
 
             ctx.font = `bold ${drawFontSize}px ${fontFamily}`;
             const maxTextW = Math.max(...clippedLines.map(l => ctx.measureText(l).width));
-            const rawUsedTexW = Math.max(60, Math.ceil(leftPad + maxTextW + rightPad));
-            const fitX = rawUsedTexW > texW ? texW / rawUsedTexW : 1;
-            const usedTexW = rawUsedTexW > texW ? texW : rawUsedTexW;
+            const usedTexW = Math.min(texW, Math.max(60, Math.ceil(leftPad + maxTextW + rightPad)));
 
             const bodyH  = bH1 + (n - 1) * lH;
-            const totalH = bodyH + tH;
 
-            const s = totalH / texH;
-            const scaleX = s / fitX;
-            bubblePlane.scaling.y = s;
-            bubblePlane.scaling.x = scaleX;
-            bubblePlane.position.y = fixedBottom + s * maxPlaneH / 2;
-            bubblePlane.position.x = (nameW / 2 - 0.5) + planeW * scaleX / 2;
+            // プレーンのスケール = 1.0（テクスチャpx→ワールドはworldScaleで固定済み）
+            bubblePlane.scaling.x = 1;
+            bubblePlane.scaling.y = 1;
+            // 尻尾先端が表示名の少し上に来るよう配置
+            const nameH = 0.75;  // namePlane の高さ
+            const planeFullH = texH * worldScale;
+            bubblePlane.position.y = nameH * 0.1 + planeFullH / 2;
+            bubblePlane.position.x = 0;
+
+            // 外枠が小さいときは尻尾を縮小（尻尾基本幅60pxの2倍を閾値とする）
+            const tailBaseW = Math.round(60 * (bH1 / 108));
+            const tailScale = usedTexW < tailBaseW * 2 ? 0.5 : 1.0;
+            const drawTotalH = bodyH + Math.round(tH * tailScale);
+
+            // テクスチャの下端に尻尾が来るよう、下詰めで描画
+            const yOff = texH - drawTotalH;
+
+            // 吹き出しをテクスチャの水平中央に配置
+            const xOff = Math.round((texW - usedTexW) / 2);
+
+            ctx.save();
+            ctx.translate(xOff, yOff);
 
             ctx.beginPath();
             ctx.moveTo(rad, 0);
@@ -507,9 +515,15 @@ export class SpriteAvatarSystem {
             ctx.quadraticCurveTo(usedTexW, 0, usedTexW, rad);
             ctx.lineTo(usedTexW, bodyH - rad);
             ctx.quadraticCurveTo(usedTexW, bodyH, usedTexW - rad, bodyH);
-            ctx.lineTo(tbR, bodyH);
-            ctx.lineTo(ttX, totalH);
-            ctx.lineTo(tbL, bodyH);
+            // 尻尾を吹き出し本体の中央に描画（2文字以下は半分サイズ）
+            const tailX = Math.round(usedTexW / 2);
+            const tailHalf = Math.round(30 * (bH1 / 108) * tailScale);
+            const tailL = tailX - tailHalf;
+            const tailR = tailX + tailHalf;
+            const tailTip = bodyH + Math.round(tH * tailScale);
+            ctx.lineTo(tailR, bodyH);
+            ctx.lineTo(tailX, tailTip);
+            ctx.lineTo(tailL, bodyH);
             ctx.lineTo(rad, bodyH);
             ctx.quadraticCurveTo(0, bodyH, 0, bodyH - rad);
             ctx.lineTo(0, rad);
@@ -526,18 +540,10 @@ export class SpriteAvatarSystem {
             ctx.textBaseline = "middle";
             const totalTextH = n * lH;
             const textStartY = (bodyH - totalTextH) / 2 + lH / 2;
-            if (fitX < 1) {
-                ctx.save();
-                ctx.scale(fitX, 1);
-                for (let i = 0; i < n; i++) {
-                    ctx.fillText(clippedLines[i], leftPad / fitX, textStartY + i * lH);
-                }
-                ctx.restore();
-            } else {
-                for (let i = 0; i < n; i++) {
-                    ctx.fillText(clippedLines[i], leftPad, textStartY + i * lH);
-                }
+            for (let i = 0; i < n; i++) {
+                ctx.fillText(clippedLines[i], leftPad, textStartY + i * lH);
             }
+            ctx.restore();
             dynTex.update();
         };
 

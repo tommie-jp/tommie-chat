@@ -46,7 +46,7 @@ export class GameScene {
     previewMat!: StandardMaterial;
 
     updatePlayerSpeech!: (newText: string) => void;
-    updatePlayerNameTag!: (newName: string) => void;
+    updatePlayerNameTag!: (newName: string, color?: string) => void;
     nakama = new NakamaService();
     private renderingPipeline: DefaultRenderingPipeline | null = null;
     private camSpecLight!: DirectionalLight;
@@ -54,7 +54,7 @@ export class GameScene {
     remoteAvatars = new Map<string, Mesh>();
     remoteTargets = new Map<string, { x: number; z: number }>();
     remoteSpeeches = new Map<string, (text: string) => void>();
-    remoteNameUpdaters = new Map<string, (newName: string) => void>();
+    remoteNameUpdaters = new Map<string, (newName: string, color?: string) => void>();
 
     // ===== 地面ブロック =====
     chunks = new Map<string, { cells: Uint8Array; hash: bigint }>();
@@ -419,16 +419,14 @@ export class GameScene {
         const playerNameTag = this.avatarSystem.createNameTag(this.playerBox, "tommie.jp✅️");
         // スプライトアバターが有効ならメッシュ側の名前タグ・吹き出しを非表示
         playerNameTag.plane.isVisible = false;
-        this.updatePlayerNameTag = (name: string) => {
+        this.updatePlayerNameTag = (name: string, color?: string) => {
             playerNameTag.update(name);
             // スプライトアバターの名前タグも更新
             const sprNameUpdate = this.spriteAvatarSystem.getNameUpdate("__self__");
-            if (sprNameUpdate) sprNameUpdate(name);
+            if (sprNameUpdate) sprNameUpdate(name, color);
         };
-        const meshSpeechUpdater = this.avatarSystem.createSpeechBubble(playerNameTag.plane, "");
+        // メッシュ側の吹き出しはスプライトアバター使用時は作成しない（二重表示防止）
         this.updatePlayerSpeech = (text: string) => {
-            meshSpeechUpdater(text);
-            // スプライトアバターの吹き出しも更新
             const sprSpeechUpdate = this.spriteAvatarSystem.getSpeechUpdate("__self__");
             if (sprSpeechUpdate) sprSpeechUpdate(text);
         };
