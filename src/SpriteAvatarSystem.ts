@@ -135,9 +135,12 @@ export class SpriteAvatarSystem {
         // 新しいアバターの準備が完了してから旧アバターを破棄（ちらつき防止）
         if (this.avatars.has(id)) {
             this.dispose(id);
+            // dispose() が creating 中フラグを見て disposed に追加してしまうので、
+            // 内部呼び出し分をクリアする（外部からの dispose 要求とは区別）
+            this.disposed.delete(id);
         }
 
-        // creating中にdisposeが呼ばれていた場合、作成したものを即破棄
+        // creating中に外部からdisposeが呼ばれていた場合、作成したものを即破棄
         if (this.disposed.has(id)) {
             this.disposed.delete(id);
             this.creating.delete(id);

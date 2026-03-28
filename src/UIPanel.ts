@@ -698,6 +698,7 @@ export function setupHtmlUI(game: GameScene): void {
     };
     game.nakama.onAvatarChange = (sessionId: string, textureUrl: string, charCol: number, charRow: number) => {
         console.log(`rcv avatarChange sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl} cc=${charCol} cr=${charRow}`);
+        if (sessionId === game.nakama.selfSessionId) return;
         const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
         const cached = profileCache.get(sessionId);
         const dn = cached?.displayName ?? userMap.get(sessionId)?.displayName ?? "";
