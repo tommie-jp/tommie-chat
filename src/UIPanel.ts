@@ -772,6 +772,7 @@ export function setupHtmlUI(game: GameScene): void {
         if (sessionId === game.nakama.selfSessionId) return;
         const av = game.remoteAvatars.get(sessionId);
         if (av) av.setEnabled(false);
+        game.spriteAvatarSystem.setEnabled(sessionId, false);
         game.remoteTargets.delete(sessionId);
     };
 
@@ -821,6 +822,8 @@ export function setupHtmlUI(game: GameScene): void {
     const removeRemoteAvatar = (sessionId: string) => {
         cc("removeRemoteAvatar");
         const _end = prof("UIPanel.removeRemoteAvatar");
+        // スプライトアバターを破棄
+        game.spriteAvatarSystem.dispose(sessionId);
         const av = game.remoteAvatars.get(sessionId);
         if (!av) { _end(); return; }
         const nameUpdate = game.remoteNameUpdaters.get(sessionId);
