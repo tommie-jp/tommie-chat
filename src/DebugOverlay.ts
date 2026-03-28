@@ -591,6 +591,9 @@ export function setupDebugOverlay(game: GameScene): void {
             autoChatBtn.textContent = isAutoChatOn ? "On" : "Off";
             if (isAutoChatOn) {
                 autoChatBtn.classList.remove("off");
+                // 即座に1つ送信してから次をスケジュール
+                const msg = npcMessages[Math.floor(Math.random() * npcMessages.length)];
+                game.nakama.sendChatMessage(msg).catch(() => {});
                 scheduleNext();
             } else {
                 autoChatBtn.classList.add("off");
