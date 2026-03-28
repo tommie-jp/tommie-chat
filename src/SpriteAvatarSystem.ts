@@ -38,6 +38,7 @@ export class SpriteAvatarSystem {
     private avatars = new Map<string, SpriteAvatarData>();
     private processing = new Map<string, Promise<ManagerEntry>>();
     private creating = new Set<string>();
+    private disposed = new Set<string>();  // creating中にdisposeされたIDを記録
 
     constructor(private scene: Scene) {}
 
@@ -132,6 +133,24 @@ export class SpriteAvatarSystem {
         // 新しいアバターの準備が完了してから旧アバターを破棄（ちらつき防止）
         if (this.avatars.has(id)) {
             this.dispose(id);
+        }
+
+        // creating中にdisposeが呼ばれていた場合、作成したものを即破棄
+        if (this.disposed.has(id)) {
+            this.disposed.delete(id);
+            this.creating.delete(id);
+            s.dispose();
+            root.getChildMeshes().forEach(m => {
+                if (m.material) {
+                    const mat = m.material as StandardMaterial;
+                    if (mat.diffuseTexture) mat.diffuseTexture.dispose();
+                    mat.dispose();
+                }
+                m.dispose();
+            });
+            root.dispose();
+            _end();
+            return root;
         }
 
         const data: SpriteAvatarData = {
@@ -237,8 +256,41 @@ export class SpriteAvatarSystem {
     }
 
     dispose(id: string): void {
+        // creating中ならフラグを立てて、createAvatar完了時に破棄させる
+        if (this.creating.has(id)) {
+            this.disposed.add(id);
+        }
         const data = this.avatars.get(id);
         if (!data) return;
+
+        // 子メッシュのマテリアル・テクスチャを再帰的に破棄
+        const disposeMeshTree = (node: TransformNode) => {
+            for (const child of node.getChildTransformNodes(false)) {
+                disposeMeshTree(child);
+            }
+            if (node instanceof Mesh) {
+                if (node.material) {
+                    const mat = node.material as StandardMaterial;
+                    if (mat.diffuseTexture) mat.diffuseTexture.dispose();
+                    mat.dispose();
+                }
+                // AdvancedDynamicTexture (GUI) はメッシュの _linkedControls ではなくテクスチャリストに残る
+                const guiTextures = this.scene.textures.filter(
+                    t => t instanceof AdvancedDynamicTexture && (t as any)._meshByName === node.name
+                );
+                for (const gt of guiTextures) gt.dispose();
+                node.dispose();
+            }
+        };
+
+        // namePlane に付いた AdvancedDynamicTexture を直接破棄
+        const adtList = this.scene.textures.filter(
+            t => t instanceof AdvancedDynamicTexture
+                && (t as any)._mesh === data.namePlane
+        );
+        for (const adt of adtList) adt.dispose();
+
+        disposeMeshTree(data.root);
         data.sprite.dispose();
         data.root.dispose();
         this.avatars.delete(id);
