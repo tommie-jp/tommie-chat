@@ -5,6 +5,7 @@ export default defineConfig({
   // 開発サーバーの設定
   server: {
     port: 3000,
+    host: true, // 0.0.0.0でリッスン（LAN/スマホからのアクセス用）
     open: true, // 起動時にブラウザを開く
     proxy: {
       '/s3': {
