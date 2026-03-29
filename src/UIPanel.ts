@@ -595,12 +595,15 @@ export function setupHtmlUI(game: GameScene): void {
         _renderTimer = setTimeout(() => { _renderTimer = null; renderUserList(); }, 1000);
     };
 
+    const ulPanel = document.getElementById("user-list-panel");
+
     const renderUserList = () => {
         cc("renderUserList");
         const _end = prof("UIPanel.renderUserList");
         if (!userListBody) { _end(); return; }
+        // パネルが非表示ならスキップ（表示時に再レンダリングされる）
+        if (ulPanel && ulPanel.style.display === "none") { _end(); return; }
         const _rt0 = performance.now();
-        userListBody.innerHTML = "";
         const entries = [...userMap.values()].sort((a, b) => {
             if (ulSortKey === "loginTimestamp")
                 return ulSortAsc ? a.loginTimestamp - b.loginTimestamp : b.loginTimestamp - a.loginTimestamp;
@@ -622,25 +625,17 @@ export function setupHtmlUI(game: GameScene): void {
         const myChatId   = game.nakama.selfChannelId ?? "";
         const matchShort = myMatchId  ? myMatchId.slice(0, 8)  : "-";
         const chatShort  = myChatId   ? myChatId.slice(0, 8)   : "-";
+        // DocumentFragment でまとめて構築し一度だけ DOM に挿入
+        const frag = document.createDocumentFragment();
         for (const { username, displayName, uuid, sessionId, loginTimestamp, loginTime, channel } of entries) {
             const tr = document.createElement("tr");
             const bold = sessionId === myId ? " class=\"ul-self\"" : "";
             const rel = relativeTime(loginTimestamp);
             tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${displayName}">${displayName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td class="uuid-cell" data-copy="${myChatId}" title="${myChatId}&#10;クリックでコピー">${chatShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
-            // uuid-cell click to copy
-            tr.querySelectorAll(".uuid-cell").forEach(td => {
-                td.addEventListener("click", () => {
-                    const text = (td as HTMLElement).dataset.copy ?? (td as HTMLElement).textContent ?? "";
-                    navigator.clipboard.writeText(text).then(() => {
-                        const orig = (td as HTMLElement).textContent;
-                        (td as HTMLElement).textContent = "コピー済み";
-                        (td as HTMLElement).style.color = "#28a745";
-                        setTimeout(() => { (td as HTMLElement).textContent = orig; (td as HTMLElement).style.color = ""; }, 1000);
-                    });
-                });
-            });
-            userListBody.appendChild(tr);
+            frag.appendChild(tr);
         }
+        userListBody.innerHTML = "";
+        userListBody.appendChild(frag);
         // プロファイル集計（1秒ごとにリセット）
         const _rt1 = performance.now();
         const elapsed = _rt1 - _rt0;
@@ -654,6 +649,31 @@ export function setupHtmlUI(game: GameScene): void {
         }
         _end();
     };
+
+    // パネル表示時にレンダリングをトリガー（非表示中はスキップしているため）
+    if (ulPanel) {
+        let ulWasHidden = ulPanel.style.display === "none";
+        new MutationObserver(() => {
+            const isHidden = ulPanel.style.display === "none";
+            if (ulWasHidden && !isHidden) renderUserList();
+            ulWasHidden = isHidden;
+        }).observe(ulPanel, { attributes: true, attributeFilter: ["style"] });
+    }
+
+    // uuid-cell クリックをイベント委譲で処理（行ごとにリスナーを付けない）
+    if (userListBody) {
+        userListBody.addEventListener("click", (e) => {
+            const td = (e.target as HTMLElement).closest(".uuid-cell") as HTMLElement | null;
+            if (!td) return;
+            const text = td.dataset.copy ?? td.textContent ?? "";
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = td.textContent;
+                td.textContent = "コピー済み";
+                td.style.color = "#28a745";
+                setTimeout(() => { td.textContent = orig; td.style.color = ""; }, 1000);
+            });
+        });
+    }
 
     const setUlSort = (key: UlSortKey) => {
         if (ulSortKey === key) ulSortAsc = !ulSortAsc;
@@ -1297,7 +1317,6 @@ export function setupHtmlUI(game: GameScene): void {
             setLoginRowVisible(false);
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
-            { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = "none"; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) di.disabled = false; }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
@@ -2193,10 +2212,12 @@ export function setupHtmlUI(game: GameScene): void {
         if (dateEl) dateEl.textContent = "更新日 " + date;
         if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
             + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
-            + 'URL: <a href="https://mmo.tommie.jp" target="_blank">https://mmo.tommie.jp</a><br>'
-            + 'X: <a href="https://x.com/tommie_nico" target="_blank" rel="noopener" style="color:#1d9bf0;">@tommie_nico</a><br>'
-            + 'GitHub: <a href="https://github.com/open-tommie/tommie-chat" target="_blank">https://github.com/open-tommie/tommie-chat</a><br>'
-            + 'メール: 準備中'
+            + '<table style="border-collapse:collapse;font-size:inherit;line-height:1.6;">'
+            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">URL</td><td><a href="https://mmo.tommie.jp" target="_blank">https://mmo.tommie.jp</a></td></tr>'
+            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">X</td><td><a href="https://x.com/tommie_nico" target="_blank" rel="noopener" style="color:#1d9bf0;">@tommie_nico</a></td></tr>'
+            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">GitHub</td><td><a href="https://github.com/open-tommie/tommie-chat" target="_blank">open-tommie/tommie-chat</a></td></tr>'
+            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">メール</td><td><a href="mailto:open.tommie@gmail.com" style="color:#1d9bf0;">open.tommie@gmail.com</a></td></tr>'
+            + '</table>'
             + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
             + '本ソフトウェアは現状のまま（AS IS）提供され、一切の保証はありません。<br>'
             + '本ソフトウェアの使用により生じたいかなる損害についても、作者は責任を負いません。<br><br>'

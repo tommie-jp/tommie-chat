@@ -84,8 +84,7 @@
             height: 280px;
             min-width: 200px;
             min-height: 100px;
-            background: rgba(255, 255, 255, 0.35);
-            backdrop-filter: blur(2px);
+            background: rgba(255, 255, 255, 0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
@@ -124,6 +123,7 @@
         #user-list-close:hover { opacity: 1; }
         #user-list-panel.minimized #user-list-wrap { display: none; }
         #user-list-wrap {
+            overflow-x: hidden;
             overflow-y: auto;
             flex: 1;
             min-height: 0;
@@ -175,7 +175,7 @@
 
         #debug-overlay {
             position: fixed;
-            top: 15px;
+            top: 45px;
             right: 15px;
             width: 310px;
             min-width: 200px;
@@ -335,7 +335,7 @@
             height: 400px;
             min-width: 200px;
             min-height: 120px;
-            background: rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
@@ -347,7 +347,6 @@
             font-size: 12px;
             color: #000;
             user-select: none;
-            backdrop-filter: blur(2px);
         }
         #chat-history-header {
             background: rgba(255,255,255,0.4);
@@ -415,8 +414,7 @@
             width: 210px;
             min-width: 180px;
             min-height: 100px;
-            background: rgba(255, 255, 255, 0.35);
-            backdrop-filter: blur(2px);
+            background: rgba(255, 255, 255, 0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
@@ -509,8 +507,7 @@
             height: 240px;
             min-width: 200px;
             min-height: 80px;
-            background: rgba(255, 255, 255, 0.35);
-            backdrop-filter: blur(2px);
+            background: rgba(255, 255, 255, 0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
@@ -572,8 +569,7 @@
             height: 160px;
             min-width: 180px;
             min-height: 80px;
-            background: rgba(255,255,255,0.35);
-            backdrop-filter: blur(2px);
+            background: rgba(255,255,255,0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
@@ -625,8 +621,7 @@
             height: 160px;
             min-width: 180px;
             min-height: 80px;
-            background: rgba(255,255,255,0.35);
-            backdrop-filter: blur(2px);
+            background: rgba(255,255,255,0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
@@ -677,8 +672,7 @@
             left: 50%;
             transform: translate(-50%, -50%);
             width: 240px;
-            background: rgba(255, 255, 255, 0.35);
-            backdrop-filter: blur(6px);
+            background: rgba(255, 255, 255, 0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 400;
@@ -739,8 +733,7 @@
             top: 15px;
             left: 15px;
             width: 380px;
-            background: rgba(255, 255, 255, 0.35);
-            backdrop-filter: blur(6px);
+            background: rgba(255, 255, 255, 0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 300;
@@ -1915,7 +1908,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:none;z-index:1;line-height:1.5;"></div>
+    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:1;line-height:1.5;"></div>
 
     <script type="module" src="/src/main.ts"></script>
 </body>

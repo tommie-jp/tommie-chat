@@ -186,7 +186,7 @@ export function setupDebugOverlay(game: GameScene): void {
             const vh = window.innerHeight;
             const pad = 15;
             const dbgW = 270,  dbgH = Math.min(vh - pad * 2, 600),
-                         dbgT = pad,        dbgL = Math.max(pad, vw - dbgW - pad);
+                         dbgT = 45,         dbgL = Math.max(pad, vw - dbgW - pad);
             const ulW  = 140,  ulH  = 200,         ulL  = Math.max(pad, vw - ulW  - pad),  ulT  = dbgT + 36 + 10;
             const chW  = 280,  chH  = Math.min(360, vh - pad * 2), chL  = pad,             chT  = pad;
             const ssL  = pad,                      ssT  = chT + chH + 10;
@@ -317,7 +317,7 @@ export function setupDebugOverlay(game: GameScene): void {
                     // パネル表示時: クッキーから復元、小さすぎ/画面外ならデフォルト
                     const pad = 15;
                     const defaults: Record<string, { w: number; h: number; top: number; left: number }> = {
-                        "debug-overlay":         { w: 310, h: 0,   top: pad, left: window.innerWidth - 310 - pad },
+                        "debug-overlay":         { w: 310, h: 0,   top: 45,  left: window.innerWidth - 310 - pad },
                         "user-list-panel":       { w: 420, h: 280, top: pad, left: window.innerWidth - 420 - 300 },
                         "chat-history-panel":    { w: 360, h: 400, top: pad, left: pad },
                         "server-log-panel":      { w: 380, h: 240, top: 120, left: window.innerWidth - 380 - pad },
@@ -378,6 +378,45 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-ccu",            "ccu-panel",             "同接グラフ",    "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
         makeToggle("menu-about",          "about-panel",           "tommieChatについて", "showAbout");
+
+        // 右上クリック: ユーザID → プレイヤーリスト、ping/FPS → Pingグラフ
+        const pdEl = document.getElementById("ping-display");
+        if (pdEl) {
+            let pdAction: "userlist" | "ping" | "serverlog" | null = null;
+            pdEl.addEventListener("pointerdown", (e) => {
+                const target = e.target as HTMLElement;
+                if (target.id === "pd-uid") {
+                    pdAction = "userlist";
+                } else if (target.id === "pd-badge") {
+                    pdAction = "serverlog";
+                } else if (target.id === "pd-ping" || !!target.closest?.("#pd-ping")) {
+                    pdAction = "ping";
+                } else {
+                    pdAction = null;
+                    return;
+                }
+                e.stopPropagation();
+                e.preventDefault();
+            }, true);
+            pdEl.addEventListener("click", (e) => {
+                if (!pdAction) return;
+                e.stopPropagation();
+                e.preventDefault();
+                if (pdAction === "userlist") document.getElementById("menu-userlist")?.click();
+                else if (pdAction === "ping") document.getElementById("menu-ping")?.click();
+                else if (pdAction === "serverlog") document.getElementById("menu-serverlog")?.click();
+                pdAction = null;
+            }, true);
+        }
+
+        // 右下アプリ名クリック → tommieChatについて
+        const footerEl = document.getElementById("app-footer-version");
+        if (footerEl) {
+            footerEl.addEventListener("click", () => {
+                document.getElementById("menu-about")?.click();
+            });
+        }
+
         updateMobileLayout();
         window.addEventListener("orientationchange", () => setTimeout(updateMobileLayout, 200));
         if (isMobileMenu) {
@@ -1094,14 +1133,20 @@ export function setupDebugOverlay(game: GameScene): void {
             if (fv) fv.innerText = fps;
             const pd = document.getElementById("ping-display");
             if (pd) {
+                const uid = game.nakama.getSession()?.username ?? "";
+                const fpsStr = String(fps).padStart(2, "\u2007");
+                const mono = 'style="font-variant-numeric:tabular-nums;"';
+                const pingCursor = 'style="cursor:pointer;"';
+                const badgeCursor = 'cursor:pointer;';
                 if (game.latestPingAvg !== null && game.latestPingAvg < 0) {
-                    pd.innerHTML = `<span style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px">● 未接続</span> 回線切断中 FPS=${fps}`;
+                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> 回線切断中 <span id="pd-ping" ${pingCursor}>FPS=<span ${mono}>${fpsStr}</span></span>`;
                     pd.style.color = "#ff4444";
                 } else if (game.latestPingAvg !== null) {
-                    pd.innerHTML = `<span style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px">● ログイン中</span> ping=${game.latestPingAvg}ms FPS=${fps}`;
+                    const pingStr = String(game.latestPingAvg).padStart(3, "\u2007");
+                    pd.innerHTML = `<span id="pd-badge" style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● ログイン中</span> <span id="pd-uid" style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${pingCursor}>ping=<span ${mono}>${pingStr}</span>ms FPS=<span ${mono}>${fpsStr}</span></span>`;
                     pd.style.color = "";
                 } else {
-                    pd.innerHTML = `<span style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px">● 未接続</span> ping=--ms FPS=${fps}`;
+                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> <span id="pd-ping" ${pingCursor}>ping=<span ${mono}>\u2007--</span>ms FPS=<span ${mono}>${fpsStr}</span></span>`;
                     pd.style.color = "";
                 }
             }
