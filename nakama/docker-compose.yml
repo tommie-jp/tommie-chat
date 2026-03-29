@@ -65,7 +65,8 @@ services:
             --runtime.env MINIO_ENDPOINT=minio:9000 `# MinIO S3 API` \
             --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \
             --runtime.env MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin} \
-            --runtime.env MINIO_USE_SSL=false
+            --runtime.env MINIO_USE_SSL=false \
+            --socket.server_key tommie-chat
     restart: "no"
     stop_grace_period: 10s # SIGTERM後の猶予時間
     depends_on:
@@ -81,7 +82,7 @@ services:
       - "9100" # Prometheus metrics
     healthcheck:
       test: ["CMD", "/nakama/nakama", "healthcheck"]
-      interval: 10s
+      interval: 3s
       timeout: 5s
       retries: 5
 

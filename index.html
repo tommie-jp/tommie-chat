@@ -413,6 +413,8 @@
             top: 15px;
             right: 460px;
             width: 210px;
+            min-width: 180px;
+            min-height: 100px;
             background: rgba(255, 255, 255, 0.35);
             backdrop-filter: blur(2px);
             border-radius: 8px;
@@ -422,6 +424,9 @@
             font-family: "Courier New", Courier, monospace;
             font-size: 12px;
             color: #000;
+            resize: both;
+            display: flex;
+            flex-direction: column;
         }
         #server-settings-header {
             padding: 4px 8px;
@@ -450,6 +455,8 @@
             display: flex;
             flex-direction: column;
             gap: 5px;
+            flex: 1;
+            overflow: hidden;
         }
         .srv-row {
             display: flex;
@@ -462,7 +469,7 @@
             width: 72px;
             flex-shrink: 0;
         }
-        .srv-row input {
+        .srv-row input, .srv-row select {
             flex: 1;
             min-width: 0;
             font-size: 11px;
@@ -477,6 +484,20 @@
             font-size: 10px;
             color: #444;
             margin-bottom: 2px;
+        }
+        #srvPingResult {
+            flex: 1;
+            min-height: 32px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #333;
+            padding: 4px 8px;
+            border: 1px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            background: rgba(255,255,255,0.7);
         }
 
         /* ===== サーバ接続ログパネル ===== */
@@ -1043,6 +1064,19 @@
             .srv-desc {
                 color: #eee !important;
                 font-size: 13px !important;
+            }
+            #srvPingResult {
+                color: #eee !important;
+                font-size: 13px !important;
+                background: rgba(255,255,255,0.1) !important;
+                border-color: rgba(255,255,255,0.3) !important;
+            }
+            #serverKeyDisplay {
+                color: #aaa !important;
+            }
+            #srvPingBtn, #srvNakamaPingBtn {
+                font-size: 13px !important;
+                padding: 6px 14px !important;
             }
 
             /* --- チャット履歴暗背景対応 --- */
@@ -1726,12 +1760,21 @@
             <div class="srv-desc">接続するtommieChatサーバの設定<br>ローカルデバッグ時URL<br>127.0.0.1:7350</div>
             <div class="srv-row">
                 <label for="serverUrl">サーバURL:</label>
-                <input id="serverUrl" type="text" value="127.0.0.1">
+                <input id="serverUrl" type="text" value="127.0.0.1" placeholder="127.0.0.1">
             </div>
             <div class="srv-row">
                 <label for="serverPort">ポート番号:</label>
-                <input id="serverPort" type="text" value="7350">
+                <input id="serverPort" type="text" value="7350" placeholder="7350">
             </div>
+            <div class="srv-row" style="font-size:10px;color:#666;word-break:break-all;" title="Nakama公式: &quot;The server key is not a security mechanism and can be safely exposed.&quot;&#10;(Server Keyはセキュリティ機構ではなく、安全に公開できます)">
+                <span style="flex-shrink:0;">Server Key:</span>
+                <span id="serverKeyDisplay" style="flex:1;min-width:0;"></span>
+            </div>
+            <div class="srv-row" style="margin-top:8px;gap:6px;">
+                <button id="srvPingBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#4a90d9;color:#fff;border:1px solid #3570b0;" title="サーバURLへHTTPリクエストを送信し応答時間を計測します">HTTP応答</button>
+                <button id="srvNakamaPingBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#d98a4a;color:#fff;border:1px solid #b07035;" title="NakamaサーバへWebSocket RPCでpingを送信します（ログイン後に使用可能）">RPC応答</button>
+            </div>
+            <div id="srvPingResult"></div>
         </div>
     </div>
 
