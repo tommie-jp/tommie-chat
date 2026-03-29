@@ -1138,15 +1138,17 @@ export function setupDebugOverlay(game: GameScene): void {
                 const mono = 'style="font-variant-numeric:tabular-nums;"';
                 const pingCursor = 'style="cursor:pointer;"';
                 const badgeCursor = 'cursor:pointer;';
+                const pingLabel = isMobileDev ? "" : "ping=";
+                const fpsLabel = isMobileDev ? "FPS" : "FPS=";
                 if (game.latestPingAvg !== null && game.latestPingAvg < 0) {
-                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> 回線切断中 <span id="pd-ping" ${pingCursor}>FPS=<span ${mono}>${fpsStr}</span></span>`;
+                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> 回線切断中 <span id="pd-ping" ${pingCursor}><span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
                     pd.style.color = "#ff4444";
                 } else if (game.latestPingAvg !== null) {
                     const pingStr = String(game.latestPingAvg).padStart(3, "\u2007");
-                    pd.innerHTML = `<span id="pd-badge" style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● ログイン中</span> <span id="pd-uid" style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${pingCursor}>ping=<span ${mono}>${pingStr}</span>ms FPS=<span ${mono}>${fpsStr}</span></span>`;
+                    pd.innerHTML = `<span id="pd-badge" style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">ログイン中</span> <span id="pd-uid" style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${pingCursor}>${pingLabel}<span ${mono}>${pingStr}</span>ms <span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
                     pd.style.color = "";
                 } else {
-                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> <span id="pd-ping" ${pingCursor}>ping=<span ${mono}>\u2007--</span>ms FPS=<span ${mono}>${fpsStr}</span></span>`;
+                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> <span id="pd-ping" ${pingCursor}>${pingLabel}<span ${mono}>\u2007--</span>ms <span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
                     pd.style.color = "";
                 }
             }

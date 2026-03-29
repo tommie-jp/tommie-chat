@@ -132,9 +132,8 @@ export function setupHtmlUI(game: GameScene): void {
 
     const textarea = document.getElementById("chatInput") as HTMLTextAreaElement;
     const sendBtn = document.getElementById("sendBtn") as HTMLButtonElement;
-    const clearBtn = document.getElementById("clearBtn") as HTMLButtonElement;
 
-    if (!textarea || !sendBtn || !clearBtn) return;
+    if (!textarea || !sendBtn) return;
 
     const historyPanel = document.getElementById("chat-history-panel") as HTMLElement;
     const historyHeader = document.getElementById("chat-history-header") as HTMLElement;
@@ -1277,7 +1276,7 @@ export function setupHtmlUI(game: GameScene): void {
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
-            { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) di.disabled = false; }
+            { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = "表示名"; } }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
@@ -2104,7 +2103,7 @@ export function setupHtmlUI(game: GameScene): void {
         game.remoteAvatars.clear();
         if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.style.fontWeight = "bold"; loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)"; loginStatus.textContent = "ログアウトしました"; setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000); }
         if (loginBtn) { loginBtn.style.background = "#28a74580"; loginBtn.style.display = ""; }
-        { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = true; di.value = ""; } }
+        { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = true; di.value = ""; di.placeholder = "ログイン後に入力"; } }
         { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
         confirmedDisplayName = "";
         { const ds = document.getElementById("displayNameStatus") as HTMLSpanElement | null; if (ds) ds.textContent = ""; }
@@ -2217,10 +2216,27 @@ export function setupHtmlUI(game: GameScene): void {
         }
     }
 
+    // セリフ吹き出しトグル
+    let lastSpeechText = "";
+    let bubbleHidden = false;
+    const doUpdateSpeech = (text: string) => {
+        lastSpeechText = text;
+        if (bubbleHidden && text) bubbleHidden = false;
+        if (game.updatePlayerSpeech) game.updatePlayerSpeech(bubbleHidden ? "" : text);
+    };
+
     const sendMessage = async () => {
         const trimEnabled = (document.getElementById("speechTrimBtn") as HTMLButtonElement | null)?.classList.contains("on") ?? true;
         const text = trimEnabled ? textarea.value.trim() : textarea.value;
-        if (!text.trim()) return;
+        if (!text.trim()) {
+            // 空白送信 → 吹き出しトグル（旧クリアボタン機能）
+            if (lastSpeechText) {
+                bubbleHidden = !bubbleHidden;
+                if (game.updatePlayerSpeech) game.updatePlayerSpeech(bubbleHidden ? "" : lastSpeechText);
+            }
+            textarea.value = "";
+            return;
+        }
         doUpdateSpeech(text);
         textarea.value = "";
         if (game.nakama.getSession()) {
@@ -2234,33 +2250,6 @@ export function setupHtmlUI(game: GameScene): void {
             const name = loginNameInput?.value.trim() || "tommie.jp";
             addChatHistory(name, text);
         }
-    };
-
-    // セリフ吹き出しトグル
-    let lastSpeechText = "";
-    let bubbleHidden = false;
-    const spPc = clearBtn.querySelector(".btn-label-pc") as HTMLElement | null;
-    const spSp = clearBtn.querySelector(".btn-label-sp") as HTMLElement | null;
-    const updateClearBtnIcon = () => {
-        const showing = !bubbleHidden && lastSpeechText !== "";
-        if (spPc) spPc.textContent = showing ? "非表示" : "表示";
-        if (spSp) spSp.textContent = showing ? "🚫" : "💬";
-    };
-    const doUpdateSpeech = (text: string) => {
-        lastSpeechText = text;
-        if (bubbleHidden && text) bubbleHidden = false;
-        if (game.updatePlayerSpeech) game.updatePlayerSpeech(bubbleHidden ? "" : text);
-        updateClearBtnIcon();
-    };
-
-    clearBtn.onclick = () => {
-        if (lastSpeechText) {
-            bubbleHidden = !bubbleHidden;
-            if (game.updatePlayerSpeech) game.updatePlayerSpeech(bubbleHidden ? "" : lastSpeechText);
-        } else {
-            textarea.value = "";
-        }
-        updateClearBtnIcon();
     };
 
     // Speech Size 変更時に既存の吹き出しを即時再描画
