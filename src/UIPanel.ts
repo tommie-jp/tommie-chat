@@ -268,20 +268,10 @@ export function setupHtmlUI(game: GameScene): void {
         const srvPanel  = document.getElementById("server-settings-panel") as HTMLElement;
         const srvHeader = document.getElementById("server-settings-header") as HTMLElement;
         const srvClose  = document.getElementById("server-settings-close") as HTMLElement;
-        const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
-        const srvPortInput = document.getElementById("serverPort") as HTMLInputElement;
 
-        // 環境変数からデフォルト値を設定（本番ビルドでは mmo.tommie.jp:443）
-        const defaultHost = import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1";
-        const defaultPort = import.meta.env.VITE_DEFAULT_PORT ?? "7350";
-        if (srvUrlInput)  srvUrlInput.value  = defaultHost;
-        if (srvPortInput) srvPortInput.value = defaultPort;
-
-        // 本番ビルドではローカルデバッグ情報を非表示
+        // サーバURL表示（同一オリジン: location.host）
         const srvDesc = srvPanel?.querySelector(".srv-desc") as HTMLElement | null;
-        if (srvDesc && defaultHost !== "127.0.0.1") {
-            srvDesc.textContent = "接続するtommieChatサーバの設定";
-        }
+        if (srvDesc) srvDesc.textContent = "サーバ: " + location.host;
 
         if (srvPanel && srvHeader) {
             const sCk = (k: string, v: string) =>
@@ -291,18 +281,10 @@ export function setupHtmlUI(game: GameScene): void {
                 return m ? decodeURIComponent(m[1]) : null;
             };
 
-            const savedUrl  = gCk("srvUrl");
-            const savedPort = gCk("srvPort");
-            if (savedUrl  && srvUrlInput)  srvUrlInput.value  = savedUrl;
-            if (savedPort && srvPortInput) srvPortInput.value = savedPort;
-
             // Server Key 表示
             const srvKeyDisplay = document.getElementById("serverKeyDisplay") as HTMLElement | null;
             const activeServerKey = import.meta.env.VITE_SERVER_KEY || "defaultkey";
             if (srvKeyDisplay) srvKeyDisplay.textContent = activeServerKey;
-
-            srvUrlInput?.addEventListener("change",  () => sCk("srvUrl",  srvUrlInput.value.trim()));
-            srvPortInput?.addEventListener("change", () => sCk("srvPort", srvPortInput.value.trim()));
 
             if (!isMobileDev) {
                 const initRect = srvPanel.getBoundingClientRect();
@@ -365,37 +347,32 @@ export function setupHtmlUI(game: GameScene): void {
 
             if (srvPingBtn) {
                 srvPingBtn.addEventListener("click", async () => {
-                    const host = srvUrlInput?.value.trim() || defaultHost;
-                    const port = srvPortInput?.value.trim() || defaultPort;
-                    const proto = port === "443" ? "https" : "http";
-                    const url = `${proto}://${host}:${port}/`;
-                    pingLog(`HTTP応答を実行中… (${host}:${port})`);
+                    const url = `${location.origin}/`;
+                    pingLog(`HTTP応答を実行中… (${location.host})`);
                     const t0 = performance.now();
                     try {
-                        await fetch(url, { method: "HEAD", mode: "no-cors", cache: "no-store" });
+                        await fetch(url, { method: "HEAD", cache: "no-store" });
                         const ms = Math.round(performance.now() - t0);
-                        pingLog(`Nakamaサーバへ接続成功しました。 HTTP応答: ${ms}ms (${host}:${port})`);
+                        pingLog(`サーバへ接続成功しました。 HTTP応答: ${ms}ms (${location.host})`);
                     } catch (e) {
                         const ms = Math.round(performance.now() - t0);
-                        pingLog(`Nakamaサーバに接続できません HTTP応答: 失敗 ${ms}ms (${host}:${port}) ${e instanceof Error ? e.message : String(e)}`);
+                        pingLog(`サーバに接続できません HTTP応答: 失敗 ${ms}ms (${location.host}) ${e instanceof Error ? e.message : String(e)}`);
                     }
                 });
             }
 
             if (srvNakamaPingBtn) {
                 srvNakamaPingBtn.addEventListener("click", async () => {
-                    const host = srvUrlInput?.value.trim() || defaultHost;
-                    const port = srvPortInput?.value.trim() || defaultPort;
                     if (!game.nakama.selfSessionId) {
-                        pingLog(`RPC応答: 未ログイン (${host}:${port})`);
+                        pingLog(`RPC応答: 未ログイン (${location.host})`);
                         return;
                     }
-                    pingLog(`RPC応答を実行中… (${host}:${port})`);
+                    pingLog(`RPC応答を実行中… (${location.host})`);
                     const ms = await game.nakama.measurePing();
                     if (ms !== null) {
-                        pingLog(`NakamaサーバへPing(RPC)が成功しました。 RPC応答: ${ms}ms (${host}:${port})`);
+                        pingLog(`NakamaサーバへPing(RPC)が成功しました。 RPC応答: ${ms}ms (${location.host})`);
                     } else {
-                        pingLog(`RPC応答: 失敗 (${host}:${port})`);
+                        pingLog(`RPC応答: 失敗 (${location.host})`);
                     }
                 });
             }
@@ -1142,18 +1119,7 @@ export function setupHtmlUI(game: GameScene): void {
         setLoginRowVisible(true);
     };
 
-    const srvUrlInput  = document.getElementById("serverUrl")  as HTMLInputElement;
-    const srvPortInput = document.getElementById("serverPort") as HTMLInputElement;
-
-    const updateLoginTooltip = () => {
-        const url  = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
-        const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
-        if (loginBtn) loginBtn.title =
-            "tommieChatサーバへログインします。\nサーバURL: " + url + "\nポート番号: " + port;
-    };
-    srvUrlInput?.addEventListener("input",  updateLoginTooltip);
-    srvPortInput?.addEventListener("input", updateLoginTooltip);
-    updateLoginTooltip();
+    if (loginBtn) loginBtn.title = "tommieChatサーバへログインします。\nサーバURL: " + location.host;
 
     const isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
     if (loginStatus) {
@@ -1161,7 +1127,8 @@ export function setupHtmlUI(game: GameScene): void {
     }
 
     // ===== サーバ接続ログ =====
-    const addServerLog = (host: string, port: string, label: string, detail = "", hint = "") => {
+    const serverUrl = location.host;
+    const addServerLog = (label: string, detail = "", hint = "") => {
         const list = document.getElementById("server-log-list");
         if (!list) return;
         const now = new Date();
@@ -1173,15 +1140,12 @@ export function setupHtmlUI(game: GameScene): void {
         const entry = document.createElement("div");
         entry.className = "server-log-entry";
         entry.textContent = hint
-            ? `${ts} ${label} : ${hint} URL="${host}:${port}" ${detail}`.trimEnd()
-            : `${ts} ${label} URL="${host}:${port}"` + (detail ? ` ${detail}` : "");
+            ? `${ts} ${label} : ${hint} URL="${serverUrl}" ${detail}`.trimEnd()
+            : `${ts} ${label} URL="${serverUrl}"` + (detail ? ` ${detail}` : "");
         list.appendChild(entry);
         list.scrollTop = list.scrollHeight;
     };
     // ===========================
-
-    let loggedInHost = "";
-    let loggedInPort = "";
     const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
     const doLogin = async () => {
         const _end = prof("UIPanel.doLogin");
@@ -1200,15 +1164,12 @@ export function setupHtmlUI(game: GameScene): void {
             }
             _end(); return;
         }
-        const host = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
-        const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
-        const serverKey = import.meta.env.VITE_SERVER_KEY || undefined;
         game.updatePlayerNameTag(name);
         setCookie("loginName", name);
         if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : "接続中…"; }
         if (loginBtn)    loginBtn.disabled = true;
         try {
-            await game.nakama.login(name, host, port, serverKey);
+            await game.nakama.login(name);
             game.currentUserId = game.nakama.getSession()?.user_id ?? null;
             // 自分のdisplay_nameでアバター名を更新（joinWorldMatch前にawaitしてselfDisplayNameを確定）
             if (game.currentUserId) {
@@ -1301,9 +1262,7 @@ export function setupHtmlUI(game: GameScene): void {
             { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
             game.aoiManager.updateAOI();
             const srvInfo = await game.nakama.getServerInfo();
-            addServerLog(host, port, "ログイン成功", srvInfo);
-            loggedInHost = host;
-            loggedInPort = port;
+            addServerLog("ログイン成功", srvInfo);
             if (loginStatus) {
                 loginStatus.style.color = "#00dd55";
                 loginStatus.style.fontWeight = "bold";
@@ -1323,11 +1282,11 @@ export function setupHtmlUI(game: GameScene): void {
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
-                addServerLog(loggedInHost, loggedInPort, "マッチ切断", "WebSocket切断 — 自動再接続中…");
+                addServerLog("マッチ切断", "WebSocket切断 — 自動再接続中…");
             };
             game.nakama.onMatchReconnect = () => {
                 console.log("UIPanel match reconnected");
-                addServerLog(loggedInHost, loggedInPort, "マッチ再接続", "WebSocket復帰");
+                addServerLog("マッチ再接続", "WebSocket復帰");
                 // 再接続後にInitPos・AOI・アバターを再送信
                 const p = game.playerBox;
                 game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {});
@@ -1354,14 +1313,14 @@ export function setupHtmlUI(game: GameScene): void {
                 reason = String(e);
             }
             if (reason === "Not Found") reason += ": サーバに接続できません。サーバが動いていないか、URLかポート番号が間違っている可能性があります。";
-            const usedKey = serverKey || import.meta.env.VITE_SERVER_KEY || "defaultkey";
+            const usedKey = import.meta.env.VITE_SERVER_KEY || "defaultkey";
             const hint = reason.includes("Failed to parse URL") ? "URLの形式が違います。"
-                       : reason === "Failed to fetch"           ? "サーバが稼働していないか、URL、ポート番号が間違っている可能性があります。"
+                       : reason === "Failed to fetch"           ? "サーバが稼働していないか、サーバが停止している可能性があります。"
                        : reason.includes("Username is already in use") ? "Device auth error: username conflict. この名前は既に別の認証方式で使用されています。別の名前を試してください。"
                        : reason.includes("too many logins") ? "サーバが混雑しています。しばらく待ってから再接続してください。"
                        : /[Ss]erver key invalid|Invalid server key/.test(reason) ? `Server Keyが正しくありません。使用したKey: ${usedKey}`
                        : "";
-            addServerLog(host, port, "ログイン失敗", reason, hint);
+            addServerLog("ログイン失敗", reason, hint);
             if (loginStatus) {
                 loginStatus.style.color = "#ff4444";
                 loginStatus.textContent = isMobile ? "✗" : "✗ログイン失敗: " + reason;
@@ -1440,11 +1399,11 @@ export function setupHtmlUI(game: GameScene): void {
                 confirmedDisplayName = name;
                 if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.display = "none"; displayNameBtn.style.background = ""; }
                 showDnStatus("✓ 表示名変更しました！", "#00dd55");
-                addServerLog(loggedInHost || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1"), loggedInPort || (import.meta.env.VITE_DEFAULT_PORT ?? "7350"), "表示名変更", `表示名を「${name}」に設定しました`);
+                addServerLog("表示名変更", `表示名を「${name}」に設定しました`);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : (typeof err === "object" && err !== null && "message" in err) ? String((err as any).message) : String(err);
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ " + msg; }
-                addServerLog(loggedInHost || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1"), loggedInPort || (import.meta.env.VITE_DEFAULT_PORT ?? "7350"), "表示名変更失敗", msg);
+                addServerLog("表示名変更失敗", msg);
             }
             } finally { _end(); }
         };
@@ -1656,7 +1615,7 @@ export function setupHtmlUI(game: GameScene): void {
                 pingFailCount = 0;
                 if (pingDisconnected) {
                     pingDisconnected = false;
-                    addServerLog(loggedInHost, loggedInPort, "回線復帰");
+                    addServerLog("回線復帰");
                     hideDisconnectBanner();
                     if (loginStatus) {
                         loginStatus.style.color = "#00dd55";
@@ -1677,7 +1636,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (pingFailCount >= PING_FAIL_THRESHOLD && !pingDisconnected) {
                     pingDisconnected = true;
                     game.latestPingAvg = -1;
-                    addServerLog(loggedInHost, loggedInPort, "回線切断", "ネットワーク障害またはサーバ停止により切断されました");
+                    addServerLog("回線切断", "ネットワーク障害またはサーバ停止により切断されました");
                     showDisconnectBanner();
                     if (loginStatus) {
                         loginStatus.style.color = "#ff4444";
@@ -2133,14 +2092,12 @@ export function setupHtmlUI(game: GameScene): void {
     }
 
     const doLogout = () => {
-        const host = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
-        const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
         stopPing();
         stopCcu();
         game.saveChunksToDB();
         game.nakama.logout();
         game.currentUserId = null;
-        addServerLog(host, port, "ログアウト");
+        addServerLog("ログアウト");
         userMap.clear();
         scheduleRenderUserList();
         game.remoteAvatars.forEach(av => av.dispose());

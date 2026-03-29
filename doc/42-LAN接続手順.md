@@ -15,6 +15,19 @@ WSL2上で動作するtommieChatに、LAN内のiPhone等からアクセスする
 
 外部に開放するポートは **80番のみ**。7350, 9000, 9001, 5432 等はDocker内部通信のみで使用する。
 
+### 開発時（Vite devサーバ）
+
+Viteにも同等のプロキシ設定があり、`vite.config.ts` で定義されている。
+
+```
+localhost:3000 ─┬─ /            → Vite（HMR付き静的配信）
+                ├─ /v2/*        → localhost:7350（Nakama API）
+                ├─ /ws          → localhost:7350（WebSocket）
+                └─ /s3/*        → localhost:9000（MinIO）
+```
+
+開発時は `http://localhost:3000` でnginxなしでもログイン・WebSocket通信が可能。
+
 ## 手順
 
 ### 1. WSL2のIPアドレスを確認
