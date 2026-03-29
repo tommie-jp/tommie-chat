@@ -8,6 +8,15 @@ export default defineConfig({
     host: true, // 0.0.0.0でリッスン（LAN/スマホからのアクセス用）
     open: true, // 起動時にブラウザを開く
     proxy: {
+      '/v2': {
+        target: 'http://localhost:7350',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'http://localhost:7350',
+        changeOrigin: true,
+        ws: true,
+      },
       '/s3': {
         target: 'http://localhost:9000',
         changeOrigin: true,

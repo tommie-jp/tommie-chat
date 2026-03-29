@@ -25,8 +25,8 @@ export class NakamaService {
     private socket: Socket | null = null;
     private channelId: string | null = null;
     private matchId: string | null = null;
-    private host = "127.0.0.1";
-    private port = "7350";
+    private host = location.hostname;
+    private port = location.port || (location.protocol === "https:" ? "443" : "80");
     selfSessionId: string | null = null;
     get selfMatchId(): string | null { return this.matchId; }
     get selfChannelId(): string | null { return this.channelId; }
@@ -59,8 +59,9 @@ export class NakamaService {
     matchDataProfile = { calls: 0, totalMs: 0, maxMs: 0 };
     private _mdProfileAccum = { calls: 0, totalMs: 0, maxMs: 0, lastReset: performance.now() };
 
-    constructor(host = "127.0.0.1", port = "7350", useSSL = false) {
-        this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", host, port, useSSL);
+    constructor() {
+        const useSSL = location.protocol === "https:";
+        this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", this.host, this.port, useSSL);
     }
 
     private getOrCreateDeviceId(loginName: string): string {
@@ -69,23 +70,21 @@ export class NakamaService {
         if (!deviceId) {
             deviceId = (typeof crypto.randomUUID === "function")
                 ? crypto.randomUUID()
-                : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, (c: string) =>
+                : (([1e7] as unknown as string) + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c: string) =>
                     (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16));
-            localStorage.setItem(key, deviceId);
+            localStorage.setItem(key, deviceId!);
         }
-        return deviceId;
+        return deviceId!;
     }
 
-    async login(loginName: string, host = "127.0.0.1", port = "7350", serverKey?: string): Promise<Session> {
+    async login(loginName: string): Promise<Session> {
         const _end = prof("NakamaService.login");
         try {
-        this.host = host;
-        this.port = port;
         this.loginName = loginName;
-        const useSSL = port === "443";
-        const key = serverKey || import.meta.env.VITE_SERVER_KEY || "defaultkey";
-        console.log(`snd Connect ${useSSL ? "https" : "http"}://${host}:${port} (SSL=${useSSL})`);
-        this.client = new Client(key, host, port, useSSL);
+        const useSSL = location.protocol === "https:";
+        const key = import.meta.env.VITE_SERVER_KEY || "defaultkey";
+        console.log(`snd Connect ${useSSL ? "https" : "http"}://${this.host}:${this.port} (SSL=${useSSL})`);
+        this.client = new Client(key, this.host, this.port, useSSL);
         const deviceId = this.getOrCreateDeviceId(loginName);
         this.session = await this.client.authenticateDevice(deviceId, true);
         // デバイス認証後にusernameを設定し、セッションを再取得（JWTにusernameを反映）
@@ -159,7 +158,7 @@ export class NakamaService {
             if (!this.session) { this.reconnecting = false; return; } // logged out
             try {
                 console.log(`NakamaService reconnect attempt ${attempt + 1}/${delays.length}`);
-                this.socket = this.client.createSocket(this.port === "443", false);
+                this.socket = this.client.createSocket(location.protocol === "https:", false);
                 this.socket.setHeartbeatTimeoutMs(60000);
                 await this.socket.connect(this.session, true);
                 this.setupSocketHandlers();
@@ -407,9 +406,8 @@ export class NakamaService {
                 if (parts.length) return parts.join(" ");
             }
         } catch { /* RPC 未登録時はフォールバック */ }
-        // ② /v2/serverinfo (Nakama 3.x+)
-        const proto = "http";
-        const base = `${proto}://${this.host}:${this.port}`;
+        // ② /v2/serverinfo (Nakama 3.x+) — 同一オリジン経由
+        const base = location.origin;
         try {
             const res = await fetch(`${base}/v2/serverinfo`, {
                 headers: { "Authorization": `Bearer ${this.session?.token}` }
