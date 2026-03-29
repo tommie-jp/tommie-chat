@@ -73,15 +73,16 @@ export class NakamaService {
         return deviceId;
     }
 
-    async login(loginName: string, host = "127.0.0.1", port = "7350"): Promise<Session> {
+    async login(loginName: string, host = "127.0.0.1", port = "7350", serverKey?: string): Promise<Session> {
         const _end = prof("NakamaService.login");
         try {
         this.host = host;
         this.port = port;
         this.loginName = loginName;
         const useSSL = port === "443";
+        const key = serverKey || import.meta.env.VITE_SERVER_KEY || "defaultkey";
         console.log(`snd Connect ${useSSL ? "https" : "http"}://${host}:${port} (SSL=${useSSL})`);
-        this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", host, port, useSSL);
+        this.client = new Client(key, host, port, useSSL);
         const deviceId = this.getOrCreateDeviceId(loginName);
         this.session = await this.client.authenticateDevice(deviceId, true);
         // デバイス認証後にusernameを設定し、セッションを再取得（JWTにusernameを反映）

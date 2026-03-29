@@ -296,6 +296,11 @@ export function setupHtmlUI(game: GameScene): void {
             if (savedUrl  && srvUrlInput)  srvUrlInput.value  = savedUrl;
             if (savedPort && srvPortInput) srvPortInput.value = savedPort;
 
+            // Server Key 表示
+            const srvKeyDisplay = document.getElementById("serverKeyDisplay") as HTMLElement | null;
+            const activeServerKey = import.meta.env.VITE_SERVER_KEY || "defaultkey";
+            if (srvKeyDisplay) srvKeyDisplay.textContent = activeServerKey;
+
             srvUrlInput?.addEventListener("change",  () => sCk("srvUrl",  srvUrlInput.value.trim()));
             srvPortInput?.addEventListener("change", () => sCk("srvPort", srvPortInput.value.trim()));
 
@@ -341,6 +346,57 @@ export function setupHtmlUI(game: GameScene): void {
                     sCk("showSrvSettings", "0");
                     const mb = document.getElementById("menu-serversettings");
                     if (mb) mb.textContent = "　 サーバ設定";
+                });
+            }
+
+            // ping / nakamaサーバ ボタン
+            const pingResult = document.getElementById("srvPingResult");
+            const srvPingBtn = document.getElementById("srvPingBtn");
+            const srvNakamaPingBtn = document.getElementById("srvNakamaPingBtn");
+
+            const pingLog = (msg: string) => {
+                if (!pingResult) return;
+                const now = new Date();
+                const ts = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                const line = `${ts} ${msg}`;
+                pingResult.textContent = pingResult.textContent ? pingResult.textContent + "\n" + line : line;
+                pingResult.scrollTop = pingResult.scrollHeight;
+            };
+
+            if (srvPingBtn) {
+                srvPingBtn.addEventListener("click", async () => {
+                    const host = srvUrlInput?.value.trim() || defaultHost;
+                    const port = srvPortInput?.value.trim() || defaultPort;
+                    const proto = port === "443" ? "https" : "http";
+                    const url = `${proto}://${host}:${port}/`;
+                    pingLog(`HTTP応答を実行中… (${host}:${port})`);
+                    const t0 = performance.now();
+                    try {
+                        await fetch(url, { method: "HEAD", mode: "no-cors", cache: "no-store" });
+                        const ms = Math.round(performance.now() - t0);
+                        pingLog(`Nakamaサーバへ接続成功しました。 HTTP応答: ${ms}ms (${host}:${port})`);
+                    } catch (e) {
+                        const ms = Math.round(performance.now() - t0);
+                        pingLog(`Nakamaサーバに接続できません HTTP応答: 失敗 ${ms}ms (${host}:${port}) ${e instanceof Error ? e.message : String(e)}`);
+                    }
+                });
+            }
+
+            if (srvNakamaPingBtn) {
+                srvNakamaPingBtn.addEventListener("click", async () => {
+                    const host = srvUrlInput?.value.trim() || defaultHost;
+                    const port = srvPortInput?.value.trim() || defaultPort;
+                    if (!game.nakama.selfSessionId) {
+                        pingLog(`RPC応答: 未ログイン (${host}:${port})`);
+                        return;
+                    }
+                    pingLog(`RPC応答を実行中… (${host}:${port})`);
+                    const ms = await game.nakama.measurePing();
+                    if (ms !== null) {
+                        pingLog(`NakamaサーバへPing(RPC)が成功しました。 RPC応答: ${ms}ms (${host}:${port})`);
+                    } else {
+                        pingLog(`RPC応答: 失敗 (${host}:${port})`);
+                    }
                 });
             }
         }
@@ -1126,12 +1182,13 @@ export function setupHtmlUI(game: GameScene): void {
         }
         const host = srvUrlInput?.value.trim()  || (import.meta.env.VITE_DEFAULT_HOST ?? "127.0.0.1");
         const port = srvPortInput?.value.trim() || (import.meta.env.VITE_DEFAULT_PORT ?? "7350");
+        const serverKey = import.meta.env.VITE_SERVER_KEY || undefined;
         game.updatePlayerNameTag(name);
         setCookie("loginName", name);
         if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : "接続中…"; }
         if (loginBtn)    loginBtn.disabled = true;
         try {
-            await game.nakama.login(name, host, port);
+            await game.nakama.login(name, host, port, serverKey);
             game.currentUserId = game.nakama.getSession()?.user_id ?? null;
             // 自分のdisplay_nameでアバター名を更新（joinWorldMatch前にawaitしてselfDisplayNameを確定）
             if (game.currentUserId) {
@@ -1278,10 +1335,12 @@ export function setupHtmlUI(game: GameScene): void {
                 reason = String(e);
             }
             if (reason === "Not Found") reason += ": サーバに接続できません。サーバが動いていないか、URLかポート番号が間違っている可能性があります。";
+            const usedKey = serverKey || import.meta.env.VITE_SERVER_KEY || "defaultkey";
             const hint = reason.includes("Failed to parse URL") ? "URLの形式が違います。"
                        : reason === "Failed to fetch"           ? "サーバが稼働していないか、URL、ポート番号が間違っている可能性があります。"
                        : reason.includes("Username is already in use") ? "Device auth error: username conflict. この名前は既に別の認証方式で使用されています。別の名前を試してください。"
                        : reason.includes("too many logins") ? "サーバが混雑しています。しばらく待ってから再接続してください。"
+                       : /[Ss]erver key invalid|Invalid server key/.test(reason) ? `Server Keyが正しくありません。使用したKey: ${usedKey}`
                        : "";
             addServerLog(host, port, "ログイン失敗", reason, hint);
             if (loginStatus) {
