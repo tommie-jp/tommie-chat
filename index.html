@@ -800,7 +800,7 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            z-index: 200;
+            z-index: 9998;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -825,7 +825,7 @@
             background: rgba(30, 30, 30, 0.95);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-            z-index: 200;
+            z-index: 9998;
             overflow: hidden;
             display: none;
             min-width: 160px;
@@ -931,7 +931,7 @@
 
             /* --- ポートレート: canvasの高さをデバイダーに合わせる（パネル表示時のみ） --- */
             body.sp-panel-visible #renderCanvas {
-                height: var(--pt-divider, 60%) !important;
+                height: var(--pt-divider, 60vh) !important;
             }
 
             /* --- ポートレート水平デバイダー --- */
@@ -940,7 +940,7 @@
                 position: fixed;
                 left: 0;
                 right: 0;
-                top: calc(var(--pt-divider, 60%) - 10px);
+                top: calc(var(--pt-divider, 60vh) - 10px);
                 height: 32px;
                 padding: 0;
                 background: transparent;
@@ -974,7 +974,7 @@
                 position: fixed;
                 left: 0;
                 right: 0;
-                top: calc(var(--pt-divider, 60%) - 1px);
+                top: calc(var(--pt-divider, 60vh) - 1px);
                 bottom: 0;
                 background: #111;
                 z-index: 0;
@@ -995,7 +995,7 @@
                 right: 0 !important;
                 width: auto !important;
                 max-width: 100vw !important;
-                top: calc(var(--pt-divider, 60%) + 12px) !important;
+                top: calc(var(--pt-divider, 60vh) + 12px) !important;
                 bottom: var(--pt-panel-bottom, 90px) !important;
                 height: auto !important;
                 border-radius: 0;
@@ -1164,7 +1164,7 @@
 
             /* --- ハンバーガーメニュー --- */
             #menu-btn {
-                top: 24px !important;
+                top: 22px !important;
                 width: 40px !important;
                 height: 40px !important;
                 border-radius: 8px !important;
@@ -1226,6 +1226,8 @@
                 left: 8px !important;
                 bottom: auto !important;
                 right: auto !important;
+                text-align: left !important;
+                z-index: 9997 !important;
             }
         }
 
@@ -1458,7 +1460,7 @@
             if (rules.length) {
                 // 全パネル非表示ならデバイダー非表示＆全画面化
                 if (hidden.length === map.length) {
-                    rules.push(":root{--ls-divider:100%;--pt-divider:100%}");
+                    rules.push(":root{--ls-divider:100%;--pt-divider:100vh}");
                     rules.push("#landscape-divider{display:none}");
                     rules.push("#portrait-divider{display:none}");
                 }
@@ -1934,7 +1936,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:1;line-height:1.5;"></div>
+    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"></div>
 
     <script type="module" src="/src/main.ts"></script>
 </body>

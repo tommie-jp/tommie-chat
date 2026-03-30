@@ -228,8 +228,10 @@ export function setupDebugOverlay(game: GameScene): void {
         let savedDivider = gCk("lsDivider") || "60%";
         if (savedDivider === "100%") savedDivider = "60%";
 
-        let savedPtDivider = gCk("ptDivider") || "60%";
-        if (savedPtDivider === "100%") savedPtDivider = "60%";
+        let savedPtDivider = gCk("ptDivider") || "60vh";
+        if (savedPtDivider === "100%" || savedPtDivider === "100vh") savedPtDivider = "60vh";
+        // 旧クッキー（%単位）をvhに変換
+        if (savedPtDivider.endsWith("%")) savedPtDivider = savedPtDivider.replace("%", "vh");
 
         const updateMobileLayout = () => {
             if (!isMobileMenu) return;
@@ -258,17 +260,20 @@ export function setupDebugOverlay(game: GameScene): void {
                 }
             } else {
                 const ptDiv = document.getElementById("portrait-divider");
+                const cvs = document.getElementById("renderCanvas");
                 if (anyVisible) {
                     savedPtDivider = gCk("ptDivider") || savedPtDivider;
                     if (ptDiv) ptDiv.style.display = "";
                     document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
                     document.body.classList.add("sp-panel-visible");
+                    if (cvs) cvs.style.height = "";
                 } else {
                     const cur = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim();
-                    if (cur && cur !== "100%") savedPtDivider = cur;
+                    if (cur && cur !== "100%" && cur !== "100vh") savedPtDivider = cur;
                     if (ptDiv) ptDiv.style.display = "none";
-                    document.documentElement.style.setProperty("--pt-divider", "100%");
+                    document.documentElement.style.setProperty("--pt-divider", "100vh");
                     document.body.classList.remove("sp-panel-visible");
+                    if (cvs) cvs.style.height = "100vh";
                 }
                 const chatContainer = document.getElementById("chat-container");
                 if (chatContainer) {
