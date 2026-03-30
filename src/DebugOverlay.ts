@@ -1145,7 +1145,7 @@ export function setupDebugOverlay(game: GameScene): void {
                     pd.style.color = "#ff4444";
                 } else if (game.latestPingAvg !== null) {
                     const pingStr = String(game.latestPingAvg).padStart(3, "\u2007");
-                    pd.innerHTML = `<span id="pd-badge" style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">ログイン中</span> <span id="pd-uid" style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${pingCursor}>${pingLabel}<span ${mono}>${pingStr}</span>ms <span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
+                    pd.innerHTML = `<span id="pd-badge" style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">ON</span> <span id="pd-uid" style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${pingCursor}>${pingLabel}<span ${mono}>${pingStr}</span>ms <span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
                     pd.style.color = "";
                 } else {
                     pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> <span id="pd-ping" ${pingCursor}>${pingLabel}<span ${mono}>\u2007--</span>ms <span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
