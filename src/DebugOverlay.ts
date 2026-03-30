@@ -1147,7 +1147,7 @@ export function setupDebugOverlay(game: GameScene): void {
                 const pingCursor = 'style="cursor:pointer;"';
                 const badgeCursor = 'cursor:pointer;';
                 const pingLabel = isMobileDev ? "" : "ping=";
-                const fpsLabel = isMobileDev ? "FPS" : "FPS=";
+                const fpsLabel = "FPS";
                 if (game.latestPingAvg !== null && game.latestPingAvg < 0) {
                     pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> 回線切断中 <span id="pd-ping" ${pingCursor}><span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
                     pd.style.color = "#ff4444";
