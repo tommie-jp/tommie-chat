@@ -2,31 +2,38 @@
 
 WSL2上で動作するtommieChatに、LAN内のiPhone等からアクセスする手順。
 
-## ポート構成
+## ポート構成（開発時）
 
-ブラウザはポート80（本番は443）のみに接続する。nginxがリバースプロキシとして内部サービスに振り分ける。
+ブラウザはポート80のみに接続する。Docker内のnginxがリバースプロキシとしてVite devサーバーに転送し、ViteがHMR・静的配信・API/WSプロキシをすべて担当する。
 
 ```
-ブラウザ ── :80 ── nginx ─┬─ /            → 静的ファイル配信（HTML/JS/CSS）
-                           ├─ /v2/*        → nakama:7350（API）
-                           ├─ /ws          → nakama:7350（WebSocket）
-                           └─ /s3/*        → minio:9000（アセットストレージ）
+iPhone/PC :80 ── Docker nginx ── Vite devサーバー :3000 ─┬─ /       → HMR付き静的配信
+                                                         ├─ /v2/*   → nakama:7350（API）
+                                                         ├─ /ws     → nakama:7350（WebSocket）
+                                                         └─ /s3/*   → minio:9000（MinIO）
 ```
 
 外部に開放するポートは **80番のみ**。7350, 9000, 9001, 5432 等はDocker内部通信のみで使用する。
 
-### 開発時（Vite devサーバ）
+### 前提条件
 
-Viteにも同等のプロキシ設定があり、`vite.config.ts` で定義されている。
+- `npm run dev` が動いていること（Vite devサーバーが `:3000` で起動）
+- Vite が停止しているとポート80は 502 Bad Gateway を返す
 
-```
-localhost:3000 ─┬─ /            → Vite（HMR付き静的配信）
-                ├─ /v2/*        → localhost:7350（Nakama API）
-                ├─ /ws          → localhost:7350（WebSocket）
-                └─ /s3/*        → localhost:9000（MinIO）
-```
+### 関連する設定変更（2026/03/30）
 
-開発時は `http://localhost:3000` でnginxなしでもログイン・WebSocket通信が可能。
+1. **`nakama/nginx.conf`** — 静的ファイル配信から Vite へのリバースプロキシに変更
+2. **`nakama/docker-compose.yml`** — web サービスに `extra_hosts: host.docker.internal:host-gateway` を追加（Docker → ホストの名前解決）
+3. **`vite.config.ts`** — `server.allowedHosts: true` を追加（Docker nginx からのプロキシ許可）
+4. **UFW** — Docker ネットワーク（`172.16.0.0/12`）からポート 3000 への接続を許可
+   ```bash
+   sudo ufw allow from 172.16.0.0/12 to any port 3000 proto tcp comment "Vite dev from Docker"
+   ```
+5. **WSL2 nginx** — 不要になったため停止・無効化済み
+
+### PC単体での開発
+
+`http://localhost:3000` でnginxなしでもログイン・WebSocket通信が可能。
 
 ## 手順
 
@@ -66,7 +73,8 @@ Wi-Fi または イーサネットの IPv4 アドレス（例: `192.168.1.40`）
 ## 注意事項
 
 - **WSL2のIPは再起動で変わる**ため、手順2のポートフォワード設定はWSL2再起動のたびにやり直す必要がある
-- ビルド済みファイル（`dist/`）が古い場合は `npm run build` で更新する。Dockerコンテナ `nakama-web-1` は `dist/` をボリュームマウントしているため、ビルドだけで反映される
+- 開発時は `npm run dev` が必須。Vite が停止しているとポート80は 502 になる
+- 本番デプロイ時は `npm run build` で `dist/` を更新し、`nakama/nginx.conf` を静的配信用に戻す
 
 ### ポートフォワード管理コマンド
 

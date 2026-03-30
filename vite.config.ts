@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true, // 0.0.0.0でリッスン（LAN/スマホからのアクセス用）
+    allowedHosts: true, // Docker nginx からのプロキシを許可
     open: true, // 起動時にブラウザを開く
     proxy: {
       '/v2': {
