@@ -23,19 +23,22 @@ export function setupHtmlUI(game: GameScene): void {
                 }
             }
             if (isMobileDev) {
+                const cvs = document.getElementById("renderCanvas");
                 if (allHidden) {
                     if (matchMedia("(orientation:landscape)").matches) {
                         document.documentElement.style.setProperty("--ls-divider", "100%");
                         const div = document.getElementById("landscape-divider");
                         if (div) div.style.display = "none";
                     } else {
-                        document.documentElement.style.setProperty("--pt-divider", "100%");
+                        document.documentElement.style.setProperty("--pt-divider", "100vh");
                         const div = document.getElementById("portrait-divider");
                         if (div) div.style.display = "none";
                     }
                     document.body.classList.remove("sp-panel-visible");
+                    if (cvs) cvs.style.height = "100vh";
                 } else {
                     document.body.classList.add("sp-panel-visible");
+                    if (cvs) cvs.style.height = "";
                 }
             }
             guard.remove();
@@ -116,8 +119,10 @@ export function setupHtmlUI(game: GameScene): void {
             });
             document.addEventListener("pointermove", (e: PointerEvent) => {
                 if (!dragging) return;
-                const pct = Math.max(30, Math.min(85, (e.clientY / window.innerHeight) * 100));
-                document.documentElement.style.setProperty("--pt-divider", pct + "%");
+                // body.height=100vh なので getBoundingClientRect で 100vh のピクセル値を取得
+                const vhPx = document.body.getBoundingClientRect().height;
+                const pct = Math.max(30, Math.min(85, (e.clientY / vhPx) * 100));
+                document.documentElement.style.setProperty("--pt-divider", pct + "vh");
                 game.engine.resize();
             });
             document.addEventListener("pointerup", () => {
