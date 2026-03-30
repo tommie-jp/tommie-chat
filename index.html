@@ -1163,12 +1163,22 @@
             }
 
             /* --- ハンバーガーメニュー --- */
-            #hamburger-btn {
-                font-size: 22px !important;
-                padding: 8px 12px !important;
+            #menu-btn {
+                top: 24px !important;
+                width: 40px !important;
+                height: 40px !important;
+                border-radius: 8px !important;
             }
-            #hamburger-menu {
+            #menu-btn span {
+                width: 20px !important;
+                height: 3px !important;
+            }
+            #menu-popup {
                 font-size: 16px !important;
+            }
+            .menu-item {
+                padding: 10px 16px !important;
+                font-size: 15px !important;
             }
 
             /* --- ログアウト確認パネル --- */
@@ -1210,7 +1220,12 @@
 
             /* --- フッター --- */
             #app-footer-version {
-                display: none !important;
+                font-size: 11px !important;
+                opacity: 0.7;
+                top: 4px !important;
+                left: 8px !important;
+                bottom: auto !important;
+                right: auto !important;
             }
         }
 
@@ -1332,8 +1347,16 @@
             el = document.getElementById("app-footer-version");
             if (el) {
                 var dateDot = APP_DATE.replace(/\//g, ".");
-                el.innerHTML =
-                    '<div style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + '</div>';
+                var isDev = !!document.querySelector('script[src*="@vite/client"]');
+                var devTag = "";
+                if (isDev) {
+                    var now = new Date();
+                    devTag = " #" + ("0" + now.getHours()).slice(-2) + ("0" + now.getMinutes()).slice(-2);
+                }
+                var isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+                el.innerHTML = isMobile
+                    ? '<div style="color:#000;">tommieChat ' + APP_VERSION + devTag + '</div>'
+                    : '<div style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + devTag + '</div>';
             }
 
             el = document.getElementById("label-ver");
