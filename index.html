@@ -889,7 +889,7 @@
         }
         /* iOS Safari/Chrome: user-select:none な要素の長押しコピーメニューも抑制 */
         [style*="user-select"],
-        .ui-btn, .menu-item,
+        .ui-btn, .menu-item, #menu-btn,
         #user-list thead th,
         #debug-overlay td.label,
         .srv-row label,
@@ -1903,7 +1903,7 @@
         </div>
     </div>
 
-    <button id="menu-btn">
+    <button id="menu-btn" style="-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;">
         <span></span><span></span><span></span>
     </button>
     <div id="menu-popup">
