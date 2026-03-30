@@ -155,6 +155,8 @@
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
         #user-list thead th:hover { background: rgba(220,220,255,0.8); }
         #user-list thead th[data-sort]::after {
@@ -281,6 +283,8 @@
             cursor: help;
             transition: all 0.2s ease;
             text-overflow: ellipsis;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         #debug-overlay td.label:hover {
@@ -481,6 +485,8 @@
             font-size: 11px;
             width: 72px;
             flex-shrink: 0;
+            user-select: none;
+            -webkit-user-select: none;
         }
         .srv-row input, .srv-row select {
             flex: 1;
@@ -877,6 +883,17 @@
             pointer-events: none;
             display: none;
         }
+        /* iOS Safari/Chrome: user-select:none な要素の長押しコピーメニューも抑制 */
+        [style*="user-select"],
+        .ui-btn, .menu-item,
+        #user-list thead th,
+        #debug-overlay td.label,
+        .srv-row label,
+        #portrait-divider, #portrait-divider-knob,
+        #landscape-divider {
+            -webkit-touch-callout: none;
+        }
+
         /* 区切りコントロール（デフォルト非表示） */
         #landscape-divider {
             display: none;
@@ -1385,7 +1402,8 @@
                 "02.Update\n最終更新日\n初期値: " + APP_DATE +
                 "\n典型的なMMO: 週〜月単位で更新\nMinecraft: スナップショット毎週〜正式版数ヶ月単位");
 
-            // ===== モバイル用長押しツールチップ =====
+            // ===== カスタムツールチップ（PC/スマホ共通） =====
+            // PC: クリックで表示 / スマホ: 長押しで表示 / どちらも画面タップ/クリックで消去
             var tooltipEl = document.createElement("div");
             tooltipEl.id = "mobile-tooltip";
             document.body.appendChild(tooltipEl);
@@ -1393,25 +1411,24 @@
             var tooltipTimer = null;
             var tooltipVisible = false;
             var LONG_PRESS_MS = 500;
+            var tooltipSourceEl = null; // ツールチップの表示元要素
 
-            function showTooltip(text, touchX, touchY) {
+            function showTooltip(text, posX, posY) {
                 tooltipEl.textContent = text;
                 tooltipEl.style.display = "block";
                 tooltipVisible = true;
                 var vw = window.innerWidth, vh = window.innerHeight;
                 var tw = Math.min(280, vw - 20);
                 tooltipEl.style.maxWidth = tw + "px";
-                // 位置: タッチ点の上側に表示、はみ出し補正
-                var x = Math.min(touchX, vw - tw - 10);
-                var y = touchY - 12;
+                var x = Math.min(posX, vw - tw - 10);
+                var y = posY - 12;
                 tooltipEl.style.left = Math.max(5, x) + "px";
                 tooltipEl.style.top = "";
                 tooltipEl.style.bottom = "";
-                // 仮描画で高さ取得
                 requestAnimationFrame(function() {
                     var th = tooltipEl.offsetHeight;
                     if (y - th < 5) {
-                        tooltipEl.style.top = Math.min(touchY + 20, vh - th - 5) + "px";
+                        tooltipEl.style.top = Math.min(posY + 20, vh - th - 5) + "px";
                     } else {
                         tooltipEl.style.top = (y - th) + "px";
                     }
@@ -1421,31 +1438,62 @@
             function hideTooltip() {
                 tooltipEl.style.display = "none";
                 tooltipVisible = false;
+                tooltipSourceEl = null;
             }
 
-            document.addEventListener("touchstart", function(e) {
-                var target = e.target;
-                // title属性を持つ要素（またはその親）を探す
+            // title属性を持つ要素を探す
+            function findTitleEl(target) {
                 var el = target;
-                var titleText = null;
                 for (var i = 0; i < 4 && el && el !== document.body; i++) {
-                    if (el.getAttribute && el.getAttribute("title")) {
-                        titleText = el.getAttribute("title");
-                        break;
-                    }
+                    if (el.getAttribute && el.getAttribute("title")) return el;
                     el = el.parentElement;
                 }
-                if (!titleText) return;
+                return null;
+            }
+
+            // PC: クリックでツールチップ表示（ブラウザ標準titleを抑制）
+            document.addEventListener("click", function(e) {
+                if (tooltipVisible) {
+                    hideTooltip();
+                    return;
+                }
+                var el = findTitleEl(e.target);
+                if (!el) return;
+                tooltipSourceEl = el;
+                showTooltip(el.getAttribute("title"), e.clientX, e.clientY);
+            });
+
+            // title属性のブラウザ標準ツールチップを抑制
+            document.addEventListener("pointerenter", function(e) {
+                var el = findTitleEl(e.target);
+                if (el && el.getAttribute("title")) {
+                    el.dataset.titleBackup = el.getAttribute("title");
+                    el.removeAttribute("title");
+                }
+            }, true);
+            document.addEventListener("pointerleave", function(e) {
+                var el = e.target;
+                if (el && el.dataset && el.dataset.titleBackup) {
+                    el.setAttribute("title", el.dataset.titleBackup);
+                    delete el.dataset.titleBackup;
+                }
+            }, true);
+
+            // スマホ: 長押しでツールチップ表示
+            document.addEventListener("touchstart", function(e) {
+                var el = findTitleEl(e.target);
+                if (!el) return;
                 var touch = e.touches[0];
                 tooltipTimer = setTimeout(function() {
-                    showTooltip(titleText, touch.clientX, touch.clientY);
+                    tooltipSourceEl = el;
+                    showTooltip(el.getAttribute("title") || el.dataset.titleBackup || "", touch.clientX, touch.clientY);
                 }, LONG_PRESS_MS);
             }, { passive: true });
 
             document.addEventListener("touchend", function() {
                 clearTimeout(tooltipTimer);
                 tooltipTimer = null;
-                if (tooltipVisible) setTimeout(hideTooltip, 1500);
+                // 自動消去しない — タップで消す
             }, { passive: true });
 
             document.addEventListener("touchmove", function() {
