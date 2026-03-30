@@ -156,6 +156,8 @@ export function setupDebugOverlay(game: GameScene): void {
         menuBtn.addEventListener("click", () => {
             menuPopup.classList.toggle("open");
         });
+        // iOS: 長押しコピーメニュー抑制
+        menuBtn.addEventListener("contextmenu", (e) => e.preventDefault());
 
         // メニュー外クリックで閉じる
         document.addEventListener("mousedown", (e) => {
