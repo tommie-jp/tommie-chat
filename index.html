@@ -6,7 +6,8 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <title>tommieChat</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #87ceeb; height: 100vh; }
+        html { overflow: hidden; height: 100%; }
+        body { margin: 0; overflow: hidden; background-color: #87ceeb; height: 100vh; position: fixed; width: 100%; }
         #renderCanvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
         
         #chat-container {
@@ -80,6 +81,8 @@
             cursor: pointer;
             font-weight: bold;
             font-size: 12px;
+            user-select: none;
+            -webkit-user-select: none;
         }
         #sendBtn { background: #0076d7cc; color: #fff; }
 
@@ -849,6 +852,8 @@
             cursor: pointer;
             white-space: nowrap;
             box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
         }
         .menu-item:hover {
             background: rgba(255, 255, 255, 0.15);
@@ -951,15 +956,17 @@
                 z-index: 300;
                 touch-action: none;
                 cursor: row-resize;
+                user-select: none;
+                -webkit-user-select: none;
             }
             #portrait-divider::after {
                 content: "";
                 position: absolute;
                 left: 0;
                 right: 0;
-                top: 10px;
-                height: 12px;
-                background: rgba(0,0,0,0.15);
+                top: 6px;
+                height: 20px;
+                background: rgba(0,0,0,0.2);
             }
             #portrait-divider-knob {
                 position: absolute;
@@ -971,6 +978,8 @@
                 text-shadow: 0 1px 3px rgba(0,0,0,0.5);
                 line-height: 1;
                 pointer-events: none;
+                user-select: none;
+                -webkit-user-select: none;
             }
             /* デバイダー下側の背景（パネル表示時のみ） */
             body.sp-panel-visible::before {
@@ -1007,6 +1016,9 @@
                 background: #111 !important;
                 color: #eee !important;
                 backdrop-filter: none !important;
+                touch-action: pan-y !important;
+                overscroll-behavior: contain !important;
+                z-index: 350 !important;
             }
             #user-list-header,
             #chat-history-header,
@@ -1027,6 +1039,10 @@
                 background: rgba(255,255,255,0.1) !important;
                 color: #fff !important;
                 border-bottom-color: rgba(255,255,255,0.2) !important;
+                cursor: row-resize !important;
+                touch-action: none !important;
+                user-select: none !important;
+                -webkit-user-select: none !important;
             }
             #user-list-close,
             #chat-history-close,

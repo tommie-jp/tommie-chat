@@ -6,6 +6,22 @@ import { prof } from "./Profiler";
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
     const isMobileLandscape = () => isMobileDev && matchMedia("(orientation:landscape)").matches;
+
+    // スマホ: パネルのスクロール領域のタッチが canvas やデバイダーに伝播するのを防止
+    // ヘッダーはデバイダードラッグに使うので除外
+    if (isMobileDev) {
+        const wrapIds = ["user-list-wrap", "chat-history-wrap", "server-settings-body",
+                         "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body"];
+        for (const id of wrapIds) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            for (const evt of ["pointerdown", "pointermove", "pointerup"] as const) {
+                el.addEventListener(evt, (e) => e.stopPropagation());
+            }
+            el.addEventListener("touchmove", (e) => e.stopPropagation());
+        }
+    }
+
     // フラッシュガードの非表示状態をインラインスタイルに移してからCSS削除
     {
         const guard = document.getElementById("panel-flash-guard");
@@ -110,18 +126,39 @@ export function setupHtmlUI(game: GameScene): void {
         if (savedPt) {
             document.documentElement.style.setProperty("--pt-divider", savedPt);
         }
-        if (ptDivider) {
+        {
             let dragging = false;
-            ptDivider.addEventListener("pointerdown", (e: PointerEvent) => {
+            let dragOffsetPx = 0; // タッチ位置とデバイダー位置の差分
+            const startDrag = (e: PointerEvent, captureEl: HTMLElement) => {
+                // 現在のデバイダー位置（px）を取得
+                const vhPx = document.body.getBoundingClientRect().height;
+                const curVal = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pt-divider")) || 60;
+                const dividerPx = (curVal / 100) * vhPx;
+                dragOffsetPx = e.clientY - dividerPx;
                 dragging = true;
-                ptDivider.setPointerCapture(e.pointerId);
+                captureEl.setPointerCapture(e.pointerId);
                 e.preventDefault();
-            });
+            };
+            if (ptDivider) {
+                ptDivider.addEventListener("pointerdown", (e: PointerEvent) => startDrag(e, ptDivider));
+            }
+            // スマホ: パネルヘッダーのドラッグでもデバイダーを移動
+            if (isMobileDev) {
+                const headerIds = ["user-list-header", "chat-history-header", "server-settings-header",
+                                   "server-log-header", "ping-header", "ccu-header", "debug-title-bar", "about-panel-header"];
+                for (const hid of headerIds) {
+                    const hdr = document.getElementById(hid);
+                    if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
+                        const t = e.target as HTMLElement;
+                        if (t.closest("[id$='-close']")) return; // ✕ボタンは除外
+                        startDrag(e, hdr);
+                    });
+                }
+            }
             document.addEventListener("pointermove", (e: PointerEvent) => {
                 if (!dragging) return;
-                // body.height=100vh なので getBoundingClientRect で 100vh のピクセル値を取得
                 const vhPx = document.body.getBoundingClientRect().height;
-                const pct = Math.max(30, Math.min(85, (e.clientY / vhPx) * 100));
+                const pct = Math.max(30, Math.min(85, ((e.clientY - dragOffsetPx) / vhPx) * 100));
                 document.documentElement.style.setProperty("--pt-divider", pct + "vh");
                 game.engine.resize();
             });
@@ -165,7 +202,7 @@ export function setupHtmlUI(game: GameScene): void {
         let dragOffsetY = 0;
 
         historyHeader.addEventListener("pointerdown", (e: PointerEvent) => {
-            if (isMobileLandscape()) return;
+            if (isMobileDev) return;
             // Xボタン上のクリックはドラッグしない
             if ((e.target as HTMLElement).id === "chat-history-close") return;
             isDragging = true;
@@ -226,7 +263,7 @@ export function setupHtmlUI(game: GameScene): void {
             let isDrag = false, offX = 0, offY = 0;
             ulHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).id === "user-list-close") return;
-                if (isMobileLandscape()) return;
+                if (isMobileDev) return;
                 isDrag = true;
                 offX = e.clientX - ulPanel.getBoundingClientRect().left;
                 offY = e.clientY - ulPanel.getBoundingClientRect().top;
@@ -311,7 +348,7 @@ export function setupHtmlUI(game: GameScene): void {
             let isDrag = false, offX = 0, offY = 0;
             srvHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).id === "server-settings-close") return;
-                if (isMobileLandscape()) return;
+                if (isMobileDev) return;
                 isDrag = true;
                 offX = e.clientX - srvPanel.getBoundingClientRect().left;
                 offY = e.clientY - srvPanel.getBoundingClientRect().top;
@@ -421,7 +458,7 @@ export function setupHtmlUI(game: GameScene): void {
             let isDrag = false, offX = 0, offY = 0;
             slHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).id === "server-log-close") return;
-                if (isMobileLandscape()) return;
+                if (isMobileDev) return;
                 isDrag = true;
                 offX = e.clientX - slPanel.getBoundingClientRect().left;
                 offY = e.clientY - slPanel.getBoundingClientRect().top;
@@ -1706,7 +1743,7 @@ export function setupHtmlUI(game: GameScene): void {
             let isDragP = false, offXP = 0, offYP = 0;
             pheader.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).id === "ping-close") return;
-                if (isMobileLandscape()) return;
+                if (isMobileDev) return;
                 isDragP = true;
                 offXP = e.clientX - ppanel.getBoundingClientRect().left;
                 offYP = e.clientY - ppanel.getBoundingClientRect().top;
@@ -2046,7 +2083,7 @@ export function setupHtmlUI(game: GameScene): void {
             cheader.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).id === "ccu-close") return;
                 if ((e.target as HTMLElement).tagName === "SELECT") return;
-                if (isMobileLandscape()) return;
+                if (isMobileDev) return;
                 isDragC = true;
                 offXC = e.clientX - cpanel.getBoundingClientRect().left;
                 offYC = e.clientY - cpanel.getBoundingClientRect().top;
