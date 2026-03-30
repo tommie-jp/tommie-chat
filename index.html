@@ -72,6 +72,10 @@
             resize: vertical;
             min-height: 24px;
         }
+        /* 全ボタン: ダブルタップズーム抑制 */
+        button, .ui-btn, .menu-item, .debug-btn {
+            touch-action: manipulation;
+        }
         .ui-btn {
             width: 80px;
             height: 24px;
