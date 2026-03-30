@@ -7,7 +7,7 @@
     <title>tommieChat</title>
     <style>
         html { overflow: hidden; height: 100%; }
-        body { margin: 0; overflow: hidden; background-color: #87ceeb; height: 100vh; position: fixed; width: 100%; }
+        body { margin: 0; overflow: hidden; background-color: #87ceeb; height: 100vh; }
         #renderCanvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
         
         #chat-container {
@@ -904,6 +904,10 @@
 
         /* スマホ（タッチ＋高DPI）向けサイズ拡大 */
         @media (pointer: coarse) and (min-resolution: 2dppx) {
+            /* iOS Safari バウンス防止 */
+            html { overflow: hidden; height: 100%; }
+            body { position: fixed; width: 100%; }
+
             /* --- 画面下部 ログイン行・チャット行 --- */
             #chat-container {
                 bottom: 10px;
@@ -1266,6 +1270,11 @@
         @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: landscape) {
             #portrait-divider { display: none !important; }
             body::before { display: none !important; }
+            body.sp-panel-visible::before { display: none !important; }
+            /* ランドスケープ: メニュー項目を縮小して全項目表示 */
+            #menu-popup { top: 40px !important; }
+            .menu-item { padding: 2px 10px !important; font-size: 12px !important; }
+            #menu-popup hr { margin: 2px 0 !important; }
             #renderCanvas {
                 width: var(--ls-divider, 60%) !important;
                 height: 100vh !important;
@@ -1339,8 +1348,7 @@
             /* ping/FPS表示はcanvasの右上 */
             #ping-display {
                 right: calc(100% - var(--ls-divider, 60%) + 8px) !important;
-                text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-                color: #fff !important;
+                color: #000 !important;
             }
 
             /* パネルは区切り位置から右 */
@@ -1888,7 +1896,7 @@
         </div>
     </div>
 
-    <button id="menu-btn" title="メニュー">
+    <button id="menu-btn">
         <span></span><span></span><span></span>
     </button>
     <div id="menu-popup">
