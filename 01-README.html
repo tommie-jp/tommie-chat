@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>MMO Node&period;jS test</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+            
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-light">
+            <h1 id="mmo-nodejs-test">MMO Node.jS test</h1>
+<hr>
+<ul>
+<li>Node.jsでTypeScriptのテストプログラム。</li>
+<li>2026/03/01時点での最新の書き方を試す。</li>
+<li>実行方法
+<ul>
+<li><code>npm run dev</code>　TS実行</li>
+<li><code>npm run check</code> 型チェック</li>
+<li><code>npm run build</code>　TSコンパイル</li>
+<li><code>npm run start</code>　JS実行</li>
+</ul>
+</li>
+<li>Node.js v24 LTS</li>
+</ul>
+<hr>
+<h2 id="todo--bug">TODO &amp; BUG</h2>
+<p>2026/03/30</p>
+<p>✔Ver 0.1.9</p>
+<p>2026/03/29</p>
+<p>□iPhone Safariでエラー
+□iPhoenでテスト(LAN)
+□nakamaサーバのポートを80に
+#外部から80をリバースプロキシ変換する</p>
+<p>□（キッカーズグラフ）：HTTS更新自動化
+□HTTPS更新自動化
+□ツクールアバター
+□チャラチップの選択UI
+□DBへキャラチップ情報
+□アバター 名前検索
+□アバター タグ検索
+□お気に入りアバター
+□アバター履歴</p>
+<p>2026/03/27</p>
+<p>✔SpriteViewer
+☓MinIO経由で表示
+✔MinIO（S3互換)
+✔コンテナ
+✔テストファイル作成
+✔右クリックでパン
+✔自動ログイン</p>
+<p>φツクールアバター
+✔ライブラリ化
+✔tomChatへ取り込み</p>
+<p>2026/03/18</p>
+<p>□アバターをフリー対応(pic1, pic2, pic3)</p>
+<ul>
+<li>ブラウザ</li>
+</ul>
+<p>□画面に位置表示
+□プレイヤーリストにAOI追加　　
+□プレイヤーリストに位置追加</p>
+<ul>
+<li>未分別</li>
+</ul>
+<p>□地面データを再デプロイで引き継げるようにする
+□検討事項に
+□デプロイを効率化
+□全体をコンテナ化？
+□DockerHub経由にする
+□スマホでテストして直す
+□自動ログイン
+□チャットを画面に表示する（チャットパネルとは別に）
+□パネルの表示：サイズを見やすくする
+□ブロック更新のテストスクリプトをdoAll.shに加える
+□ブラウザ終了時、ログアウトするように。
+□docker hubに公開</p>
+<ul>
+<li>後回し
+□pprofでmainloopのボトルネック関数を調査
+□main.go mainloopでtick毎に通知まとめる。</li>
+</ul>
+<p>2026/03/15</p>
+<p>✔VerUp, 日付更新
+✔本日の目標：さくらVPSへデプロイ</p>
+<p>✔DNS設定 <a href="http://mmo.tommie.jp">mmo.tommie.jp</a>
+<a href="http://xn--t8jx73hngb.com">お名前.com</a>
+✔HTTPS対応
+/etc/nginx/sites-available/mmo.tommie.jp</p>
+<p>✔サーバキーを固定にする（開発localdev 本番tommie-chat)
+✔ドキュメント</p>
+<p>2026/03/14
+✔VerUp, 日付更新
+φ本日の目標：さくらVPSへデプロイ</p>
+<p>✔サーバサイドのpprof(goのprof)に対応</p>
+<p>2026/03/13</p>
+<p>✔VerUp, 日付更新
+✔テストスクリプト：レートで失敗したことをわかりやすく表示</p>
+<p>サーバ</p>
+<p>✔最大接続数：1610人</p>
+<p>✔以下への修正の案を示して（まだ修正しないで）
+4000人 試行1/1 134s
+4000人 試行1/1 135s
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+⎯⎯⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯⎯⎯
+Error: [vitest-pool]: Worker forks emitted error.
+Caused by: Error: Worker exited unexpectedly
+Tests  17 skipped (18)
+Errors  1 error
+4000人 試行1/1 136s
+4000人 試行1/1 137s
+4000人 試行1/1 138s</p>
+<p>2026/03/12</p>
+<p>✔commit
+✔Ver up</p>
+<p>ブラウザ
+✔コンソール：&quot;[]&quot;を削除
+✔&quot;rcv &quot;通知受信
+✔&quot;snd &quot;通知送信</p>
+<p>✔サーバ：./doLogs-tail-f-rpc.sh
+✔　　全出力にuidを先頭８文字にする。
+✔　　　表示名を出す。
+✔　　ブラウザからの受信通知を表示
+✔　　サーバから送通知を表示
+❌️プレイヤー情報のキャッシュは重複をやめる</p>
+<p>✔テストスクリプト
+✔送受信整合性テスト：人数を設定できるように。</p>
+<hr>
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox" checked=""type="checkbox"> 地上テーブル更新アルゴリズムの改良
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox" checked=""type="checkbox"> 16x16チャンク化
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox" checked=""type="checkbox"> サーバサイド</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox" checked=""type="checkbox"> クライアントサイド</li>
+</ul>
+</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox" checked=""type="checkbox"> 一旦、更新のあったチャンク単位で送受信</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> １箇所だけ更新に対応</li>
+</ul>
+</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> LANからiPhoneでブラウズ</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> デプロイ準備
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> 調査：Webサーバ コンテナが必要？
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> nakamaコンテナに含まれている？</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> 本番デプロイ(さくらVPS)</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> GitHub：プロジェクト作成</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> サーバ接続ログ：サーバサイドtommieChatのバージョンを返す
+<ul>
+<li>nakamaバージョンには残す。</li>
+</ul>
+</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> ブラウザ：IndexedDBを保存するタイミング（ログアウト以外）
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> 一定時間でSave？</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="done">Done</h2>
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox" checked=""type="checkbox"> BUG-2026-03-01
+<ul>
+<li>ブラウザをリサイズすると、立方体が見えなくなる（範囲外に行ってしまう）</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="ディレクトリ構成簡易">ディレクトリ構成（簡易）</h2>
+<pre><code class="language-text">24-mmo-Tommie-chat/
+├── public/              # 静的アセット（ビルドされずそのままコピーされる）
+│   ├── models/          # .glb, .gltf ファイル
+│   └── textures/        # .jpg, .png 等
+├── src/                 # ソースコード
+│   ├── shaders/         # カスタムシェーダー (.glsl)
+│   ├── app.ts           # Babylon.js のメインロジック
+│   └── main.ts          # エントリーポイント
+├── index.html           # Canvas要素を配置
+├── package.json
+└── vite.config.ts       # Vite の詳細設定
+</code></pre>
+<hr>
+<h2 id="ディレクトリ構成詳細">ディレクトリ構成（詳細）</h2>
+<ul>
+<li>更新：2026/03/08</li>
+</ul>
+<pre><code class="language-text">
+24-mmo-Tommie-chat/
+├── src/                     # クライアント側ソースコード (TypeScript)
+│   ├── main.ts              # エントリーポイント
+│   ├── GameScene.ts         # Babylon.js のゲームシーンロジック
+│   ├── NakamaService.ts     # Nakama サーバとの通信サービス
+│   └── typescript.svg       # SVGアセット
+├── public/                  # 静的アセット（ビルド時にそのままコピー）
+│   ├── favicon.png          # ファビコン
+│   ├── vite.svg             # Vite ロゴ
+│   └── textures/            # テクスチャファイル (.ktx2)
+│       ├── cube.ktx2
+│       ├── pic1.ktx2
+│       └── pic2.ktx2
+├── nakama/                  # MMOサーバー (Nakama) 関連
+│   ├── docker-compose.yml   # Nakama + PostgreSQL のコンテナ構成
+│   ├── doLog.sh             # ログ確認スクリプト
+│   ├── doPSQL.sh            # PostgreSQL 接続スクリプト
+│   ├── doRestart.sh         # 再起動スクリプト
+│   ├── package.json
+│   └── tsconfig.json
+├── dist/                    # ビルド出力先
+├── doc/                     # ドキュメント
+│   ├── 01-nakama-概要.txt
+│   └── 02-nakama-サーバ構築.txt
+├── pic/                     # 画像素材・変換スクリプト
+│   ├── png2ktx.sh           # PNG → KTX2 変換スクリプト
+│   ├── pic1.png
+│   └── pic2.png
+├── ss/                      # スクリーンショット/動画
+├── work/                    # 作業用ファイル (KTX-Software .deb等)
+├── index.html               # メインHTML (Canvas要素)
+├── package.json             # クライアント側依存関係
+├── tsconfig.json            # TypeScript 設定
+├── vite.config.ts           # Vite ビルド設定
+├── 01-README.md             # プロジェクト説明・TODO
+└── 24-mmo.code-workspace    # VSCode ワークスペース設定
+
+</code></pre>
+<ul>
+<li>
+<p>概要</p>
+</li>
+<li>
+<p>クライアント側 (src/): Babylon.js を使った3D MMOクライアント。Vite でビルド・開発サーバーを起動</p>
+</li>
+<li>
+<p>サーバー側 (nakama/): Nakama (Docker) を使ったMMOサーバー。PostgreSQL をバックエンドDBとして使用</p>
+</li>
+<li>
+<p>テクスチャ変換: pic/ に元画像を置き、toktx で KTX2 に変換して public/textures/ に配置するワークフロー</p>
+</li>
+</ul>
+<hr>
+<h2 id="ポート番号windows-11-からのアクセス">ポート番号（Windows 11 からのアクセス）</h2>
+<p>WSL2 上の Docker で動作。Windows ブラウザからは <code>localhost</code> でアクセス可能。</p>
+<table>
+<thead>
+<tr>
+<th>ポート</th>
+<th>URL</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5432</td>
+<td><code>localhost:5432</code></td>
+<td>PostgreSQL（DB クライアントから接続）</td>
+</tr>
+<tr>
+<td>7349</td>
+<td><code>localhost:7349</code></td>
+<td>Nakama gRPC API</td>
+</tr>
+<tr>
+<td>7350</td>
+<td><code>localhost:7350</code></td>
+<td>Nakama クライアント API（ブラウザゲームの接続先）</td>
+</tr>
+<tr>
+<td>7351</td>
+<td><a href="http://localhost:7351">http://localhost:7351</a></td>
+<td>Nakama 管理ダッシュボード（admin / password）</td>
+</tr>
+<tr>
+<td>9090</td>
+<td><a href="http://localhost:9090">http://localhost:9090</a></td>
+<td>Prometheus ダッシュボード</td>
+</tr>
+<tr>
+<td>9100</td>
+<td>（内部専用）</td>
+<td>Nakama メトリクス（Prometheus が内部で収集、外部公開なし）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="docker構成">Docker構成</h2>
+<p>3つのサービスで構成。</p>
+<table>
+<thead>
+<tr>
+<th>サービス</th>
+<th>イメージ</th>
+<th>ポート</th>
+<th>役割</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>postgres</td>
+<td>postgres:16-alpine</td>
+<td>5432</td>
+<td>データベース</td>
+</tr>
+<tr>
+<td>nakama</td>
+<td>heroiclabs/nakama:3.35.0</td>
+<td>7349, 7350, 7351</td>
+<td>MMOゲームサーバー</td>
+</tr>
+<tr>
+<td>prometheus</td>
+<td>prom/prometheus</td>
+<td>9090</td>
+<td>メトリクス監視</td>
+</tr>
+</tbody>
+</table>
+<h3 id="postgres">postgres</h3>
+<ul>
+<li>DB名: <code>nakama</code>, ユーザー: <code>nakama</code>, パスワード: <code>localdev</code></li>
+<li>名前付きボリューム <code>data</code> でデータ永続化</li>
+<li>ヘルスチェックで起動完了を確認</li>
+</ul>
+<h3 id="nakama">nakama</h3>
+<ul>
+<li>起動時にDBマイグレーション (<code>migrate up</code>) を実行後、サーバーを起動</li>
+<li><code>./</code> (nakamaディレクトリ) を <code>/nakama/data</code> にマウント → <code>main.js</code> がランタイムに読み込まれる</li>
+<li>主要ポート
+<ul>
+<li>7350: クライアントAPI (ブラウザからの接続先)</li>
+<li>7351: 管理ダッシュボード (admin/password)</li>
+<li>7349: gRPC API</li>
+<li>9100: Prometheusメトリクス</li>
+</ul>
+</li>
+<li>セッション有効期限: 7200秒 (2時間)</li>
+<li>ログレベル: DEBUG</li>
+</ul>
+<h3 id="prometheus">prometheus</h3>
+<ul>
+<li>Nakama のメトリクス (<code>nakama:9100</code>) を15秒間隔でスクレイピング</li>
+<li>ダッシュボード: <code>http://localhost:9090</code></li>
+</ul>
+<h3 id="依存関係">依存関係</h3>
+<p>prometheus (起動) → nakama (起動) → postgres (ヘルスチェックOK後)</p>
+<hr>
+<ul>
+<li>
+<p>デバッグ用</p>
+<ul>
+<li>ショートカットキー（Ctrl + Shift + I）による開閉機能</li>
+</ul>
+</li>
+<li>
+<p>クロームのコンソールログの以下は無視してよい</p>
+</li>
+</ul>
+<pre><code class="language-text">Download the React DevTools for a better development experience: https://react.dev/link/react-devtools
+
+Blocked aria-hidden on an element because its descendant retained focus...
+</code></pre>
+<ul>
+<li>Babylon.js（およびWebGPU/WebGL環境）で利用する場合、</li>
+<li>basisuよりも圧倒的に toktx がおすすめです。</li>
+</ul>
+<pre><code class="language-bash">toktx --t2 --encode uastc --genmipmap output.ktx2 input_transparent.png
+</code></pre>
+<hr>
+<h2 id="nakama-1">Nakama</h2>
+<ul>
+<li>MMOサーバー</li>
+<li><a href="http://127.0.0.1:7351">nakamaサーバのダッシュボードURL</a>
+<ul>
+<li><a href="http://127.0.0.1:7351">http://127.0.0.1:7351</a></li>
+</ul>
+</li>
+<li>ユーザー名: <code>admin</code></li>
+<li>パスワード: <code>password</code></li>
+<li>USERID制限: Nakama の authenticateCustom の第1引数（custom ID）には絵文字が使えません（英数字と ._@+- のみ許可）</li>
+</ul>
+<blockquote>
+<p><code>docker compose</code>（スペース区切り・v2）を使用。<code>docker-compose</code>（ハイフン・v1）は非推奨。</p>
+</blockquote>
+<h3 id="基本操作">基本操作</h3>
+<pre><code class="language-bash"><span class="hljs-built_in">cd</span> ./nakama
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>コマンド</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docker compose up -d</code></td>
+<td>全サービスをバックグラウンドで起動</td>
+</tr>
+<tr>
+<td><code>docker compose down</code></td>
+<td>全サービスを停止・コンテナ削除</td>
+</tr>
+<tr>
+<td><code>docker compose restart</code></td>
+<td>全サービスを再起動</td>
+</tr>
+<tr>
+<td><code>docker compose restart nakama</code></td>
+<td>Nakama のみ再起動</td>
+</tr>
+<tr>
+<td><code>docker compose ps</code></td>
+<td>コンテナの稼働状態を確認</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ログ">ログ</h3>
+<table>
+<thead>
+<tr>
+<th>コマンド</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docker compose logs nakama</code></td>
+<td>Nakama のログを表示</td>
+</tr>
+<tr>
+<td><code>docker compose logs -f nakama</code></td>
+<td>Nakama のログをリアルタイム表示</td>
+</tr>
+<tr>
+<td><code>docker compose logs --tail 100 nakama</code></td>
+<td>直近100行のログを表示</td>
+</tr>
+<tr>
+<td><code>docker compose logs</code></td>
+<td>全サービスのログを表示</td>
+</tr>
+</tbody>
+</table>
+<h3 id="go-プラグインビルド--反映">Go プラグインビルド &amp; 反映</h3>
+<pre><code class="language-bash"><span class="hljs-comment"># 1. Go プラグインをビルド</span>
+<span class="hljs-built_in">cd</span> ./nakama/go_src
+bash build.sh
+
+<span class="hljs-comment"># 2. Nakama を再起動して反映</span>
+<span class="hljs-built_in">cd</span> ..
+docker compose restart nakama
+</code></pre>
+<h3 id="データ管理">データ管理</h3>
+<table>
+<thead>
+<tr>
+<th>コマンド</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docker compose down</code></td>
+<td>コンテナ削除（データは保持）</td>
+</tr>
+<tr>
+<td><code>docker compose down -v</code></td>
+<td>コンテナ削除 + ボリューム削除（DB初期化）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="トラブルシューティング">トラブルシューティング</h3>
+<pre><code class="language-bash"><span class="hljs-comment"># コンテナの状態確認</span>
+docker compose ps
+
+<span class="hljs-comment"># Nakama のヘルスチェック状態</span>
+docker inspect --format=<span class="hljs-string">&#x27;{{.State.Health.Status}}&#x27;</span> nakama-nakama-1
+
+<span class="hljs-comment"># 全コンテナを停止・削除して再構築</span>
+docker compose down
+docker compose up -d
+</code></pre>
+<hr>
+<h2 id="postgres-1">Postgres</h2>
+<p>公式の docker-compose.yml をそのまま起動している場合、PostgreSQLの接続情報は以下のようになっています。</p>
+<p>ホスト: 127.0.0.1 (または localhost)
+ポート: 5432
+データベース名: nakama
+ユーザー名: nakama(postgresではないので注意)
+パスワード: localdev（localdbではない）</p>
+<h3 id="psqlコマンド">PSQLコマンド</h3>
+<pre><code class="language-bash"><span class="hljs-comment"># 1. postgresコンテナ内でpsqlコマンドを実行してログインします</span>
+docker compose <span class="hljs-built_in">exec</span> postgres psql -U nakama -d nakama
+
+<span class="hljs-comment"># --- ここからpsqlのプロンプト (nakama=#) に変わります ---</span>
+
+<span class="hljs-comment"># 2. テーブルの一覧を表示する</span>
+\dt
+
+<span class="hljs-comment"># 3. 特定のテーブル（例: users）の構造（カラム情報など）を確認する</span>
+\d <span class="hljs-built_in">users</span>
+
+<span class="hljs-comment"># 4. psqlを終了して元のターミナルに戻る</span>
+\q
+
+
+---
+2. ユーザー「nakama」のパスワードを「localdb」に強制変更する
+
+SQL
+ALTER USER nakama WITH PASSWORD <span class="hljs-string">&#x27;localdb&#x27;</span>;
+※ ALTER ROLE と表示されれば成功です。
+
+</code></pre>
+<hr>
+<h2 id="メモ">メモ</h2>
+<p>地面をBキー＋クリックで立方体</p>
+<hr>
+<h2 id="テスト用">テスト用</h2>
+<pre><code class="language-text">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+012345678911234567892123456789312345678941234567895123456789
+
+- 半角40文字
+
+a234567891123456789212345678931234567894
+
+- 1行 半角41文字
+
+a2345678911234567892123456789312345678941
+
+- 2行 半角41文字
+
+a2345678911234567892123456789312345678941
+b2345678911234567892123456789312345678941
+
+- 6行 半角41文字
+
+a2345678911234567892123456789312345678941
+b2345678911234567892123456789312345678941
+c2345678911234567892123456789312345678941
+d2345678911234567892123456789312345678941
+e2345678911234567892123456789312345678941
+f2345678911234567892123456789312345678941
+
+- x
+
+3
+4
+5
+6
+7
+8
+9
+10
+
+- 複数行 空白トリムを確認
+
+ 先頭に半角空白あり
+
+- 複数行 顔文字
+
+　 ∧＿∧
+　（　´∀｀）
+　（　　　　）
+　｜ ｜　|
+　（_＿）＿）
+
+- 顔文字
+  
+　　　∧∧
+　　　(,,ﾟДﾟ)
+　　 /　　|
+　～（,,＿ﾉ
+
+　　∩＿＿＿∩
+　 | ノ　　　　　 ヽ
+　/　　●　　　● |
+|　　　　( _●_)　 ミ
+彡､　　　|∪|　　､｀＼
+
+　　　＿＿＿_
+　　／　　 　 　＼
+　／　　─　 　 ─＼
+／ 　　 （●） 　（●） ＼
+|　 　　 　 （__人__）　 　 |
+/　　　　 　 ∩ノ ⊃　　／
+(　 ＼　／ ＿ノ　|　 |
+.＼　“　　／＿＿|　 |
+　　＼ ／＿＿＿ ／
+
+</code></pre>
+<hr>
+<h2 id="prometheus-クエリnakama-3350">Prometheus クエリ（Nakama 3.35.0）</h2>
+<p><a href="http://localhost:9090">http://localhost:9090</a> でクエリ実行。</p>
+<h3 id="プレイヤーセッション">プレイヤー・セッション</h3>
+<table>
+<thead>
+<tr>
+<th>クエリ</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=nakama_sessions&amp;g0.tab=graph">nakama_sessions</a></td>
+<td>アクティブセッション数</td>
+</tr>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=nakama_presences&amp;g0.tab=graph">nakama_presences</a></td>
+<td>プレゼンス数（マッチ参加者等）</td>
+</tr>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=nakama_socket_ws_opened%20-%20nakama_socket_ws_closed&amp;g0.tab=graph">nakama_socket_ws_opened - nakama_socket_ws_closed</a></td>
+<td>現在の WebSocket 接続数</td>
+</tr>
+</tbody>
+</table>
+<h3 id="マッチ">マッチ</h3>
+<table>
+<thead>
+<tr>
+<th>クエリ</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=nakama_authoritative_matches&amp;g0.tab=graph">nakama_authoritative_matches</a></td>
+<td>稼働中のマッチ数</td>
+</tr>
+</tbody>
+</table>
+<h3 id="api-パフォーマンス">API パフォーマンス</h3>
+<table>
+<thead>
+<tr>
+<th>クエリ</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=rate(nakama_Rpc_count%5B5m%5D)&amp;g0.tab=graph">rate(nakama_Rpc_count[5m])</a></td>
+<td>RPC コール数/秒</td>
+</tr>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=rate(nakama_overall_count%5B5m%5D)&amp;g0.tab=graph">rate(nakama_overall_count[5m])</a></td>
+<td>全 API コール数/秒</td>
+</tr>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=nakama_Rpc_latency_ms&amp;g0.tab=graph">nakama_Rpc_latency_ms</a></td>
+<td>RPC レイテンシ</td>
+</tr>
+</tbody>
+</table>
+<h3 id="データベース">データベース</h3>
+<table>
+<thead>
+<tr>
+<th>クエリ</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=nakama_db_in_use_conns&amp;g0.tab=graph">nakama_db_in_use_conns</a></td>
+<td>DB アクティブ接続数</td>
+</tr>
+<tr>
+<td><a href="http://localhost:9090/query?g0.expr=nakama_db_total_open_conns&amp;g0.tab=graph">nakama_db_total_open_conns</a></td>
+<td>DB 総接続数</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="goについて">GOについて</h2>
+<p>Nakama の場合、Go 一択がおすすめです。理由:</p>
+<p>Go は遅くない — 「JSと同程度」は誤解です。Go はコンパイル言語で、一般的にJSの2〜5倍高速です。Cより遅いのは事実ですが、ゲームサーバ用途では十分すぎる性能です。</p>
+<p>Nakama 公式の推奨 — Nakama 自体が Go で書かれており、Go プラグインはネイティブ実行されます。JS/Lua ランタイムはインタプリタ経由なので、Go プラグインの方が高速です。</p>
+<p>Go vs Lua vs JS（Nakama内）:</p>
+<p>Go: ネイティブ速度、型安全、並行処理が得意
+Lua: 軽量だが機能制限あり
+JS: TypeScript→JSにトランスパイル必要、VMオーバーヘッドあり
+今回のチャンク排他制御のように sync.RWMutex が使えるのも Go の強みです。JS/Lua ではこのレベルの並行制御はできません。</p>
+<p>結論: Nakama 拡張には Go が最適です。現在の選択は正しいです。</p>
+<hr>
+<h2 id="aoiメモ">AOIメモ</h2>
+<p>おすすめの対策（優先度順）
+✔1. AOIをFarClipから切り離す（必須・効果大）</p>
+<p>AOI半径 = 固定48セル（3チャンク分）
+→ 7×7 = 49チャンク / 256チャンク = カバー率19%
+→ setBlockの送信先: 平均190人/1000人
+デバッグツールで調整可能にしておく。</p>
+<ol start="2">
+<li>
+<p>ワールドを広くする（効果最大）
+チャンク数	セル数	AOI半径48のカバー率	setBlock送信先
+16×16（現在）	256×256	19%	~190人
+32×32	512×512	5%	~50人
+64×64	1024×1024	1.2%	~12人
+64×64チャンクなら1000人でも1回のsetBlockで約12人にしか送らない。</p>
+</li>
+<li>
+<p>MatchLoopのtick rate削減
+現在: tickRate=10（100ms毎）
+1000人のメッセージを毎tick処理するのは重い
+AOI更新は低頻度でよいのでtickRate=5で十分</p>
+</li>
+<li>
+<p>マッチ分割（シャーディング）
+1マッチ1000人はNakamaには重い
+ワールドをエリア別に複数マッチに分割
+例: 4×4エリア = 16マッチ、各マッチ最大~63人
+実装コストは大きいが、スケーラビリティは最高</p>
+</li>
+<li>
+<p>setBlockの送信レート制限
+1プレイヤーあたり秒間1〜2回に制限
+連打によるサーバ負荷スパイクを防止
+推奨ロードマップ
+フェーズ	対策	想定同時接続	工数
+Phase 1	AOIをFarClipから独立（固定半径）	~200人	小
+Phase 2	ワールド拡大（64×64チャンク）	~500人	中
+Phase 3	setBlockレート制限	~700人	小
+Phase 4	マッチ分割（シャーディング）	~1000人+	大</p>
+</li>
+</ol>
+<p>--</p>
+<h2 id="tommiechat-10241024への示唆">TommieChat 1024×1024への示唆</h2>
+<p>現在の設計との違い:</p>
+<p>項目	現在の設計	Minecraft方式
+ログイン時	全4,096チャンクのハッシュを送信	AOI内のチャンクだけ送信
+メモリ	全チャンクをクライアントに保持	AOI内だけ保持
+IndexedDB	全チャンクを保存	訪問済みだけ保存
+移動時	AOIだけ更新	AOI＋チャンクデータもロード</p>
+<hr>
+
+            
+            
+        </body>
+        </html>

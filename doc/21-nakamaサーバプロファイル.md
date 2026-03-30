@@ -125,7 +125,7 @@ go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile?seconds=30
 ## 4. よく確認するポイント
 
 | 指標 | 確認方法 | 注意すべき値 |
-|------|----------|-------------|
+| ------ | ---------- | ------------- |
 | goroutine 数 | `goroutine?debug=1` | 接続数の 3〜5 倍を超えたら異常 |
 | CPU 消費トップ | `profile?seconds=30` → `top 20` | match loop / AOI 配信が支配的か |
 | メモリ割り当て | `heap` → `top 20` | JSON marshal/unmarshal が多くないか |
@@ -134,7 +134,7 @@ go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile?seconds=30
 ## 5. 設定箇所
 
 | 項目 | ファイル | 場所 |
-|------|----------|------|
+| ------ | ---------- | ------ |
 | pprof サーバ起動 | [nakama/go_src/main.go](../nakama/go_src/main.go) | `InitModule` 内の goroutine |
 | ポート公開 | [nakama/docker-compose.yml](../nakama/docker-compose.yml) | `ports: "6060:6060"` |
 | ブラウザ側プロファイル | [doc/20-ブラウザプロファイル.md](20-ブラウザプロファイル.md) | — |
