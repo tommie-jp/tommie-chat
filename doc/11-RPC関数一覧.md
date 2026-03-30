@@ -8,7 +8,7 @@
 ## カスタムRPC（WebSocket `socket.rpc()`）
 
 | RPC名 | 用途 | クライアント側 | サーバ側ハンドラ |
-|--------|------|---------------|-----------------|
+| -------- | ------ | --------------- | ----------------- |
 | `getWorldMatch` | ワールドマッチID取得 | NakamaService.ts | `rpcGetWorldMatch` |
 | `getServerInfo` | サーバ情報取得 | NakamaService.ts | `rpcGetServerInfo` |
 | `ping` | レイテンシ計測 | NakamaService.ts | `rpcPing` |
@@ -25,7 +25,7 @@
 ## Nakama組み込みAPI（HTTP `client.*`）
 
 | API | 用途 | 呼び出し元関数 | 呼び出し箇所 |
-|-----|------|---------------|-------------|
+| ----- | ------ | --------------- | ------------- |
 | `client.authenticateDevice()` | デバイス認証・セッション再取得 | `login()` | NakamaService.ts |
 | `client.updateAccount()` | ユーザ名設定 | `login()` | NakamaService.ts |
 | `client.updateAccount()` | 表示名更新 | `updateDisplayName()` | NakamaService.ts |
@@ -35,7 +35,7 @@
 ## WebSocketリアルタイム通信（`socket.*`）
 
 | API | OpCode | 用途 |
-|-----|--------|------|
+| ----- | -------- | ------ |
 | `socket.sendMatchState()` | `OP_INIT_POS` | 初期位置・テクスチャ・表示名・ログイン時刻送信 |
 | `socket.sendMatchState()` | `OP_AVATAR_CHANGE` | アバター変更 |
 | `socket.sendMatchState()` | `OP_DISPLAY_NAME` | 表示名変更 |
@@ -48,7 +48,7 @@
 ## サーバ側フック（API呼び出し時に自動実行）
 
 | フック | トリガー |
-|--------|---------|
+| -------- | --------- |
 | `BeforeUpdateAccount` | 表示名バリデーション |
 | `AfterAuthenticateDevice` | デバイスログイン記録 |
 | `AfterAuthenticateCustom` | カスタムログイン記録 |

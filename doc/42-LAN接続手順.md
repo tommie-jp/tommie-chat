@@ -6,7 +6,7 @@ WSL2上で動作するtommieChatに、LAN内のiPhone等からアクセスする
 
 ブラウザはポート80のみに接続する。Docker内のnginxがリバースプロキシとしてVite devサーバーに転送し、ViteがHMR・静的配信・API/WSプロキシをすべて担当する。
 
-```
+```text
 iPhone/PC :80 ── Docker nginx ── Vite devサーバー :3000 ─┬─ /       → HMR付き静的配信
                                                          ├─ /v2/*   → nakama:7350（API）
                                                          ├─ /ws     → nakama:7350（WebSocket）
@@ -26,9 +26,11 @@ iPhone/PC :80 ── Docker nginx ── Vite devサーバー :3000 ─┬─ / 
 2. **`nakama/docker-compose.yml`** — web サービスに `extra_hosts: host.docker.internal:host-gateway` を追加（Docker → ホストの名前解決）
 3. **`vite.config.ts`** — `server.allowedHosts: true` を追加（Docker nginx からのプロキシ許可）
 4. **UFW** — Docker ネットワーク（`172.16.0.0/12`）からポート 3000 への接続を許可
+
    ```bash
    sudo ufw allow from 172.16.0.0/12 to any port 3000 proto tcp comment "Vite dev from Docker"
    ```
+
 5. **WSL2 nginx** — 不要になったため停止・無効化済み
 
 ### PC単体での開発
