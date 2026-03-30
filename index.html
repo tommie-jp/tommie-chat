@@ -929,8 +929,8 @@
                 font-size: 15px !important;
             }
 
-            /* --- ポートレート: canvasの高さをデバイダーに合わせる --- */
-            #renderCanvas {
+            /* --- ポートレート: canvasの高さをデバイダーに合わせる（パネル表示時のみ） --- */
+            body.sp-panel-visible #renderCanvas {
                 height: var(--pt-divider, 60%) !important;
             }
 
@@ -968,8 +968,8 @@
                 line-height: 1;
                 pointer-events: none;
             }
-            /* デバイダー下側の背景 */
-            body::before {
+            /* デバイダー下側の背景（パネル表示時のみ） */
+            body.sp-panel-visible::before {
                 content: "";
                 position: fixed;
                 left: 0;

@@ -22,15 +22,20 @@ export function setupHtmlUI(game: GameScene): void {
                     allHidden = false;
                 }
             }
-            if (allHidden && isMobileDev) {
-                if (matchMedia("(orientation:landscape)").matches) {
-                    document.documentElement.style.setProperty("--ls-divider", "100%");
-                    const div = document.getElementById("landscape-divider");
-                    if (div) div.style.display = "none";
+            if (isMobileDev) {
+                if (allHidden) {
+                    if (matchMedia("(orientation:landscape)").matches) {
+                        document.documentElement.style.setProperty("--ls-divider", "100%");
+                        const div = document.getElementById("landscape-divider");
+                        if (div) div.style.display = "none";
+                    } else {
+                        document.documentElement.style.setProperty("--pt-divider", "100%");
+                        const div = document.getElementById("portrait-divider");
+                        if (div) div.style.display = "none";
+                    }
+                    document.body.classList.remove("sp-panel-visible");
                 } else {
-                    document.documentElement.style.setProperty("--pt-divider", "100%");
-                    const div = document.getElementById("portrait-divider");
-                    if (div) div.style.display = "none";
+                    document.body.classList.add("sp-panel-visible");
                 }
             }
             guard.remove();

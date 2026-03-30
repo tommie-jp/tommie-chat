@@ -262,18 +262,21 @@ export function setupDebugOverlay(game: GameScene): void {
                     savedPtDivider = gCk("ptDivider") || savedPtDivider;
                     if (ptDiv) ptDiv.style.display = "";
                     document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
+                    document.body.classList.add("sp-panel-visible");
                 } else {
                     const cur = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim();
                     if (cur && cur !== "100%") savedPtDivider = cur;
                     if (ptDiv) ptDiv.style.display = "none";
                     document.documentElement.style.setProperty("--pt-divider", "100%");
+                    document.body.classList.remove("sp-panel-visible");
                 }
                 const chatContainer = document.getElementById("chat-container");
                 if (chatContainer) {
                     chatContainer.style.background = anyVisible ? "" : "transparent";
                 }
             }
-            game.engine.resize();
+            // CSS変数の反映を待ってからリサイズ
+            requestAnimationFrame(() => game.engine.resize());
         };
 
         const makeToggle = (btnId: string, targetId: string, label: string, cookieKey: string) => {
