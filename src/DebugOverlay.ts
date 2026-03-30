@@ -242,15 +242,18 @@ export function setupDebugOverlay(game: GameScene): void {
             const isLandscape = matchMedia("(orientation:landscape)").matches;
             if (isLandscape) {
                 const divider = document.getElementById("landscape-divider");
+                const cvs = document.getElementById("renderCanvas");
                 if (anyVisible) {
                     savedDivider = gCk("lsDivider") || savedDivider;
                     if (divider) divider.style.display = "";
                     document.documentElement.style.setProperty("--ls-divider", savedDivider);
+                    if (cvs) cvs.style.height = "";
                 } else {
                     const cur = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim();
                     if (cur && cur !== "100%") savedDivider = cur;
                     if (divider) divider.style.display = "none";
                     document.documentElement.style.setProperty("--ls-divider", "100%");
+                    if (cvs) cvs.style.height = "100vh";
                 }
                 const chatContainer = document.getElementById("chat-container");
                 if (chatContainer) {
