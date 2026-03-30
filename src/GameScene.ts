@@ -38,12 +38,11 @@ export class GameScene {
     targetPosition: Vector3 | null = null;
     private readonly moveSpeed = 2.0;
 
-    // カメラパンオフセット（PC: 右ドラッグ / スマホ: 2本指ドラッグ）
+    // カメラパンオフセット（右ドラッグで操作、キャラ追従を維持）
     panOffset = new Vector3(0, 0, 0);
     private isPanning = false;
     private panLastX = 0;
     private panLastY = 0;
-    private activeTouches = new Map<number, { x: number; y: number }>();
 
     private inputMap: { [key: string]: boolean } = {};
     private lastKeyboardSendTime = 0;
@@ -863,66 +862,6 @@ export class GameScene {
                 this.isPanning = false;
             });
             canvas.addEventListener("contextmenu", (e: Event) => { e.preventDefault(); });
-
-            // スマホ: 2本指ドラッグでパン
-            const twoFingerMidpoint = (): { x: number; y: number } | null => {
-                if (this.activeTouches.size < 2) return null;
-                const pts = [...this.activeTouches.values()];
-                return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
-            };
-            canvas.addEventListener("pointerdown", (e: PointerEvent) => {
-                if (e.pointerType !== "touch") return;
-                this.activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-                if (this.activeTouches.size === 2) {
-                    this.isPanning = true;
-                    const mid = twoFingerMidpoint()!;
-                    this.panLastX = mid.x;
-                    this.panLastY = mid.y;
-                }
-            });
-            canvas.addEventListener("pointermove", (e: PointerEvent) => {
-                if (e.pointerType !== "touch") return;
-                if (!this.activeTouches.has(e.pointerId)) return;
-                this.activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-                if (!this.isPanning || this.activeTouches.size < 2) return;
-                const mid = twoFingerMidpoint()!;
-                const dx = mid.x - this.panLastX;
-                const dy = mid.y - this.panLastY;
-                this.panLastX = mid.x;
-                this.panLastY = mid.y;
-
-                const camPos = this.camera.position;
-                const camTarget = this.camera.target;
-                const fwdX = camTarget.x - camPos.x;
-                const fwdZ = camTarget.z - camPos.z;
-                const fwdLen = Math.sqrt(fwdX * fwdX + fwdZ * fwdZ) || 1;
-                const fnX = fwdX / fwdLen;
-                const fnZ = fwdZ / fwdLen;
-                const rnX = -fnZ;
-                const rnZ = fnX;
-                const sensitivity = this.camera.radius * 0.001;
-                const newX = this.panOffset.x + (dx * rnX + dy * fnX) * sensitivity;
-                const newZ = this.panOffset.z + (dx * rnZ + dy * fnZ) * sensitivity;
-
-                const testOffset = new Vector3(newX, 0, newZ);
-                const inScreen = isPlayerInScreen(testOffset);
-                const movesTowardCenter = !inScreen && (() => {
-                    const cur = screenDistFromCenter(this.panOffset);
-                    const nxt = screenDistFromCenter(testOffset);
-                    return nxt < cur;
-                })();
-                if (inScreen || movesTowardCenter) {
-                    this.panOffset.x = newX;
-                    this.panOffset.z = newZ;
-                }
-            });
-            const endTouch = (e: PointerEvent) => {
-                if (e.pointerType !== "touch") return;
-                this.activeTouches.delete(e.pointerId);
-                if (this.activeTouches.size < 2) this.isPanning = false;
-            };
-            canvas.addEventListener("pointerup", endTouch);
-            canvas.addEventListener("pointercancel", endTouch);
 
             // 毎フレームカメラターゲットを更新（target を直接書き換えて alpha/beta を維持）
             this.scene.onBeforeRenderObservable.add(() => {
