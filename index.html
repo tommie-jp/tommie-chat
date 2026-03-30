@@ -842,7 +842,7 @@
             background: rgba(30, 30, 30, 0.95);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-            z-index: 9998;
+            z-index: 10000;
             overflow: hidden;
             display: none;
             min-width: 160px;
@@ -1280,10 +1280,10 @@
             #portrait-divider { display: none !important; }
             body::before { display: none !important; }
             body.sp-panel-visible::before { display: none !important; }
-            /* ランドスケープ: メニューをハンバーガーの横に配置 */
-            #menu-popup { top: 22px !important; left: 60px !important; max-height: calc(100vh - 30px); overflow-y: auto; }
-            .menu-item { padding: 6px 14px !important; font-size: 14px !important; min-height: 32px !important; box-sizing: border-box !important; }
-            #menu-popup hr { margin: 2px 0 !important; }
+            /* ランドスケープ: メニューをハンバーガーの横に配置、全項目表示 */
+            #menu-popup { top: 4px !important; left: 60px !important; max-height: calc(100vh - 8px); overflow-y: auto; }
+            .menu-item { padding: 4px 14px !important; font-size: 13px !important; min-height: 28px !important; box-sizing: border-box !important; }
+            #menu-popup hr { margin: 1px 0 !important; }
             #renderCanvas {
                 width: var(--ls-divider, 60%) !important;
             }
