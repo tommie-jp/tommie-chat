@@ -959,10 +959,7 @@
                 font-size: 15px !important;
             }
 
-            /* --- ポートレート: canvasの高さをデバイダーに合わせる（パネル表示時のみ） --- */
-            body.sp-panel-visible #renderCanvas {
-                height: var(--pt-divider, 60vh) !important;
-            }
+            /* --- ポートレート: canvasの高さはポートレート専用メディアクエリで設定 --- */
 
             /* --- ポートレート水平デバイダー --- */
             #portrait-divider {
@@ -1266,6 +1263,13 @@
             }
         }
 
+        /* スマホ縦長（ポートレート）: canvasの高さをデバイダーに合わせる */
+        @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: portrait) {
+            body.sp-panel-visible #renderCanvas {
+                height: var(--pt-divider, 60vh) !important;
+            }
+        }
+
         /* スマホ横長（ランドスケープ） */
         @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: landscape) {
             #portrait-divider { display: none !important; }
@@ -1277,7 +1281,6 @@
             #menu-popup hr { margin: 2px 0 !important; }
             #renderCanvas {
                 width: var(--ls-divider, 60%) !important;
-                height: 100vh !important;
             }
             #landscape-divider {
                 display: block;
