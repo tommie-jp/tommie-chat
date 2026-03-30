@@ -180,6 +180,10 @@
             text-overflow: ellipsis;
             max-width: 0;
         }
+        #user-list tbody td:first-child {
+            max-width: none;
+            overflow: visible;
+        }
 
         #debug-overlay {
             position: fixed;
@@ -792,7 +796,7 @@
         /* ===== ハンバーガーメニュー ===== */
         #menu-btn {
             position: fixed;
-            top: 15px;
+            top: 24px;
             left: 15px;
             width: 24px;
             height: 24px;
@@ -1222,12 +1226,6 @@
             #app-footer-version {
                 font-size: 11px !important;
                 opacity: 0.7;
-                top: 4px !important;
-                left: 8px !important;
-                bottom: auto !important;
-                right: auto !important;
-                text-align: left !important;
-                z-index: 9997 !important;
             }
         }
 
@@ -1936,7 +1934,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"></div>
+    <div id="app-footer-version" style="position:fixed;top:4px;left:8px;font-size:10px;font-family:monospace;text-align:left;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"></div>
 
     <script type="module" src="/src/main.ts"></script>
 </body>
