@@ -874,8 +874,9 @@
             position: fixed;
             z-index: 99999;
             max-width: 280px;
-            background: rgba(30, 30, 30, 0.93);
-            color: #fff;
+            background: rgba(255, 255, 230, 0.97);
+            color: #333;
+            border: 1px solid rgba(0, 0, 0, 0.15);
             font-family: "Courier New", Courier, monospace;
             font-size: 11px;
             line-height: 1.5;
@@ -1427,11 +1428,13 @@
             var tooltipVisible = false;
             var LONG_PRESS_MS = 500;
             var tooltipSourceEl = null; // ツールチップの表示元要素
+            var tooltipShowTime = 0; // 表示直後のclick誤消去防止用
 
             function showTooltip(text, posX, posY) {
                 tooltipEl.textContent = text;
                 tooltipEl.style.display = "block";
                 tooltipVisible = true;
+                tooltipShowTime = Date.now();
                 var vw = window.innerWidth, vh = window.innerHeight;
                 var tw = Math.min(280, vw - 20);
                 tooltipEl.style.maxWidth = tw + "px";
@@ -1460,22 +1463,28 @@
             function findTitleEl(target) {
                 var el = target;
                 for (var i = 0; i < 4 && el && el !== document.body; i++) {
-                    if (el.getAttribute && el.getAttribute("title")) return el;
+                    if (el.getAttribute && (el.getAttribute("title") || (el.dataset && el.dataset.titleBackup))) return el;
                     el = el.parentElement;
                 }
                 return null;
             }
+            function getTitleText(el) {
+                return el.getAttribute("title") || (el.dataset && el.dataset.titleBackup) || "";
+            }
 
-            // PC: クリックでツールチップ表示（ブラウザ標準titleを抑制）
+            // クリック/タップでツールチップを消去。PCのみクリックで表示も行う
+            var isTouchDevice = matchMedia("(pointer:coarse)").matches;
             document.addEventListener("click", function(e) {
                 if (tooltipVisible) {
+                    if (Date.now() - tooltipShowTime < 800) return; // 長押し表示後のclick無視
                     hideTooltip();
                     return;
                 }
+                if (isTouchDevice) return; // スマホは長押しで表示（clickでは表示しない）
                 var el = findTitleEl(e.target);
                 if (!el) return;
                 tooltipSourceEl = el;
-                showTooltip(el.getAttribute("title"), e.clientX, e.clientY);
+                showTooltip(getTitleText(el), e.clientX, e.clientY);
             });
 
             // title属性のブラウザ標準ツールチップを抑制
@@ -1501,7 +1510,7 @@
                 var touch = e.touches[0];
                 tooltipTimer = setTimeout(function() {
                     tooltipSourceEl = el;
-                    showTooltip(el.getAttribute("title") || el.dataset.titleBackup || "", touch.clientX, touch.clientY);
+                    showTooltip(getTitleText(el), touch.clientX, touch.clientY);
                 }, LONG_PRESS_MS);
             }, { passive: true });
 
