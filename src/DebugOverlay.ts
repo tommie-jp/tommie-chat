@@ -282,8 +282,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 }
                 const chatContainer = document.getElementById("chat-container");
                 if (chatContainer) {
-                    chatContainer.style.left = anyVisible ? "" : "0";
-                    chatContainer.style.right = anyVisible ? "" : "0";
+                    chatContainer.style.left = anyVisible ? "" : "env(safe-area-inset-left, 0px)";
+                    chatContainer.style.right = anyVisible ? "" : "env(safe-area-inset-right, 0px)";
                     chatContainer.style.background = anyVisible ? "" : "transparent";
                 }
             } else {
@@ -492,6 +492,40 @@ export function setupDebugOverlay(game: GameScene): void {
 
     const isWebGPU = (game.engine as any).isWebGPU || game.engine.name === "WebGPU";
     if (apiv) apiv.innerText = isWebGPU ? "WebGPU" : "WebGL2";
+
+    // ブラウザ種別 & 起動モード
+    {
+        const bv = document.getElementById("val-browser");
+        if (bv) {
+            const ua = navigator.userAgent;
+            const isPWA = window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
+            const mode = isPWA ? "PWA" : "Browser";
+            let browser = "Unknown";
+            const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+            if (/CriOS/.test(ua)) browser = "Chrome(iOS)";
+            else if (/Chrome/.test(ua) && !/Edg/.test(ua)) browser = isIOS ? "Chrome(iOS)" : "Chrome";
+            else if (/Safari/.test(ua) && !/Chrome/.test(ua)) browser = isIOS ? "Safari(iOS)" : "Safari";
+            else if (/Firefox/.test(ua)) browser = isIOS ? "Firefox(iOS)" : "Firefox";
+            else if (/Edg/.test(ua)) browser = "Edge";
+            bv.innerText = `${browser} / ${mode}`;
+            bv.style.cursor = "pointer";
+            let uaExpanded = false;
+            bv.addEventListener("click", () => {
+                uaExpanded = !uaExpanded;
+                if (uaExpanded) {
+                    bv.innerText = navigator.userAgent;
+                    bv.style.whiteSpace = "normal";
+                    bv.style.wordBreak = "break-all";
+                    bv.style.fontSize = "10px";
+                } else {
+                    bv.innerText = `${browser} / ${mode}`;
+                    bv.style.whiteSpace = "";
+                    bv.style.wordBreak = "";
+                    bv.style.fontSize = "";
+                }
+            });
+        }
+    }
 
     if (scaleSelect) {
         const initScale = 1 / window.devicePixelRatio;
