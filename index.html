@@ -1575,29 +1575,20 @@
                 return el.getAttribute("title") || (el.dataset && el.dataset.titleBackup) || "";
             }
 
-            // クリック/タップでツールチップを消去。PCのみクリックで表示も行う
-            var isTouchDevice = matchMedia("(pointer:coarse)").matches;
             // キャプチャフェーズで長押し後のclickを抑止（ボタン等のハンドラより先に止める）
             document.addEventListener("click", function(e) {
                 if (suppressNextClick) {
-                    // 長押しツールチップ表示直後 → ボタン発火を止めるがツールチップは残す
                     suppressNextClick = false;
                     e.stopImmediatePropagation();
                     e.preventDefault();
                     return;
                 }
                 if (tooltipVisible) {
-                    // ツールチップ表示中のタップ → ツールチップを消してボタン発火も止める
                     hideTooltip();
                     e.stopImmediatePropagation();
                     e.preventDefault();
                     return;
                 }
-                if (isTouchDevice) return; // スマホは長押しで表示（clickでは表示しない）
-                var el = findTitleEl(e.target);
-                if (!el) return;
-                tooltipSourceEl = el;
-                showTooltip(getTitleText(el), e.clientX, e.clientY, el);
             }, true);
 
             // title属性のブラウザ標準ツールチップを抑制
@@ -1616,8 +1607,67 @@
                 }
             }, true);
 
-            // スマホ: 長押しでツールチップ表示
-            var tooltipJustShown = false; // この長押しでツールチップが表示された
+            // PC: マウスホバーでツールチップ表示
+            var isTouchDevice = matchMedia("(pointer:coarse)").matches;
+            if (!isTouchDevice) {
+                var hoverEl = null;
+                var hoverTimer = null;
+                document.addEventListener("mouseover", function(e) {
+                    var el = findTitleEl(e.target);
+                    if (el === hoverEl) return;
+                    hoverEl = el;
+                    clearTimeout(hoverTimer);
+                    if (!el) return;
+                    hoverTimer = setTimeout(function() {
+                        if (!tooltipVisible) {
+                            tooltipSourceEl = el;
+                            showTooltip(getTitleText(el), 0, 0, el);
+                        }
+                    }, 800);
+                });
+                document.addEventListener("mouseout", function(e) {
+                    var el = findTitleEl(e.target);
+                    if (el === hoverEl) {
+                        hoverEl = null;
+                        clearTimeout(hoverTimer);
+                        hoverTimer = null;
+                        if (tooltipVisible && tooltipSourceEl === el) hideTooltip();
+                    }
+                });
+            }
+
+            // PC/スマホ共通: 長押しでツールチップ表示
+            var tooltipJustShown = false;
+            var suppressNextClick = false;
+
+            // PC: pointerdown/pointerup で長押し検出
+            document.addEventListener("pointerdown", function(e) {
+                if (e.pointerType === "touch") return; // タッチはtouchstart側で処理
+                tooltipJustShown = false;
+                var el = findTitleEl(e.target);
+                if (!el) return;
+                tooltipTimer = setTimeout(function() {
+                    tooltipSourceEl = el;
+                    showTooltip(getTitleText(el), e.clientX, e.clientY, el);
+                    tooltipJustShown = true;
+                }, LONG_PRESS_MS);
+            });
+            document.addEventListener("pointerup", function(e) {
+                if (e.pointerType === "touch") return;
+                clearTimeout(tooltipTimer);
+                tooltipTimer = null;
+                if (tooltipJustShown) {
+                    suppressNextClick = true;
+                    tooltipJustShown = false;
+                }
+            });
+            document.addEventListener("pointermove", function(e) {
+                if (e.pointerType === "touch") return;
+                clearTimeout(tooltipTimer);
+                tooltipTimer = null;
+            });
+
+            // スマホ: touchstart/touchend で長押し検出
             document.addEventListener("touchstart", function(e) {
                 tooltipJustShown = false;
                 var el = findTitleEl(e.target);
@@ -1629,12 +1679,10 @@
                 }, LONG_PRESS_MS);
             }, { passive: true });
 
-            var suppressNextClick = false;
             document.addEventListener("touchend", function() {
                 clearTimeout(tooltipTimer);
                 tooltipTimer = null;
                 if (tooltipJustShown) {
-                    // この長押しでツールチップが出た → 直後のclickを抑止
                     suppressNextClick = true;
                     tooltipJustShown = false;
                 }
@@ -2046,7 +2094,7 @@
         <button class="menu-item" id="menu-about">　 tommieChatについて</button>
         <button class="menu-item" id="menu-debug">✓ デバッグツール</button>
         <button class="menu-item" id="menu-cookie-reset">全パネル非表示（クッキー初期化）</button>
-        <button class="menu-item" id="menu-login" style="display:none;">ログイン画面</button>
+        <button class="menu-item" id="menu-login" style="display:none;">表示名設定</button>
         <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;">ログアウト</button>
     </div>
 
