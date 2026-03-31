@@ -1349,8 +1349,8 @@ export function setupHtmlUI(game: GameScene): void {
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
-            { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = "表示名"; } }
-            { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
+            { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = "表示名を入力して下さい！"; } }
+            { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
@@ -1432,13 +1432,11 @@ export function setupHtmlUI(game: GameScene): void {
                 if (val.length > 20) {
                     showDnStatus("表示名は20文字以内です。", "#ff4444");
                     displayNameBtn.disabled = true;
-                    displayNameBtn.style.display = "none";
                     displayNameBtn.style.background = "";
                     return;
                 }
                 const changed = !displayNameInput.disabled && val !== confirmedDisplayName;
                 displayNameBtn.disabled = !changed;
-                displayNameBtn.style.display = changed ? "" : "none";
                 displayNameBtn.style.background = changed ? "#28a745" : "";
             });
         }
@@ -1469,7 +1467,7 @@ export function setupHtmlUI(game: GameScene): void {
                     if (me) { userMap.set(mySid, { ...me, displayName: name }); scheduleRenderUserList(); }
                 }
                 confirmedDisplayName = name;
-                if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.display = "none"; displayNameBtn.style.background = ""; }
+                if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.background = ""; }
                 showDnStatus("✓ 表示名変更しました！", "#00dd55");
                 addServerLog("表示名変更", `表示名を「${name}」に設定しました`);
                 // 数秒後にユーザID行と表示名入力行を非表示
@@ -2184,7 +2182,7 @@ export function setupHtmlUI(game: GameScene): void {
         if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.style.fontWeight = "bold"; loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)"; loginStatus.textContent = "ログアウトしました"; setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000); }
         if (loginBtn) { loginBtn.style.background = "#28a74580"; loginBtn.style.display = ""; }
         { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = true; di.value = ""; di.placeholder = "ログイン後に入力"; } }
-        { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; db.style.display = "none"; } }
+        { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
         confirmedDisplayName = "";
         { const ds = document.getElementById("displayNameStatus") as HTMLSpanElement | null; if (ds) ds.textContent = ""; }
         setLoginMode();
