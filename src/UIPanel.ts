@@ -10,7 +10,7 @@ export function setupHtmlUI(game: GameScene): void {
     // ヘッダーはデバイダードラッグに使うので除外
     if (isMobileDev) {
         const wrapIds = ["user-list-wrap", "chat-history-wrap", "server-settings-body",
-                         "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body"];
+                         "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body", "displayname-body"];
         for (const id of wrapIds) {
             const el = document.getElementById(id);
             if (!el) continue;
@@ -119,7 +119,7 @@ export function setupHtmlUI(game: GameScene): void {
             if (!chatContainer) return;
             const h = chatContainer.getBoundingClientRect().height;
             const bottom = chatContainer.style.bottom ? parseInt(chatContainer.style.bottom) : 10;
-            document.documentElement.style.setProperty("--pt-panel-bottom", (h + bottom) + "px");
+            document.documentElement.style.setProperty("--pt-panel-bottom", (h + bottom + 4) + "px");
         };
         const savedPt = getDivCk("ptDivider");
         if (savedPt) {
@@ -144,7 +144,7 @@ export function setupHtmlUI(game: GameScene): void {
             // スマホ: パネルヘッダーのドラッグでもデバイダーを移動
             if (isMobileDev) {
                 const headerIds = ["user-list-header", "chat-history-header", "server-settings-header",
-                                   "server-log-header", "ping-header", "ccu-header", "debug-title-bar", "about-panel-header"];
+                                   "server-log-header", "ping-header", "ccu-header", "debug-title-bar", "about-panel-header", "displayname-header"];
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -1351,12 +1351,8 @@ export function setupHtmlUI(game: GameScene): void {
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = "表示名を入力して下さい！"; } }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
-            // 表示名が設定済みなら表示名入力行を非表示
-            {
-                const dnRow = document.getElementById("displayname-row");
-                const di = document.getElementById("displayNameInput") as HTMLInputElement | null;
-                if (dnRow && di && di.value.trim().length >= 1) dnRow.style.display = "none";
-            }
+            // 表示名パネルにユーザIDを反映
+            { const uid = document.getElementById("dn-panel-userid"); if (uid) uid.textContent = loginNameInput?.value ?? "-"; }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
@@ -1476,13 +1472,6 @@ export function setupHtmlUI(game: GameScene): void {
                 if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.background = ""; }
                 showDnStatus("✓ 表示名変更しました！", "#00dd55");
                 addServerLog("表示名変更", `表示名を「${name}」に設定しました`);
-                // 数秒後にユーザID行と表示名入力行を非表示
-                setTimeout(() => {
-                    const dnRow = document.getElementById("displayname-row");
-                    const loginRow = document.getElementById("login-row");
-                    if (dnRow) dnRow.style.display = "none";
-                    if (loginRow) loginRow.style.display = "none";
-                }, 3000);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : (typeof err === "object" && err !== null && "message" in err) ? String((err as any).message) : String(err);
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ " + msg; }
@@ -2206,21 +2195,14 @@ export function setupHtmlUI(game: GameScene): void {
         setTimeout(() => { doLogin(); }, 100);
     }
 
-    // メニュー「ログイン画面」ボタン
+    // 表示名パネルにユーザIDを反映
     {
-        const menuLogin = document.getElementById("menu-login");
-        if (menuLogin) {
-            menuLogin.addEventListener("click", (e) => {
-                e.stopPropagation();
-                // ユーザID行と表示名行をセットでトグル
-                const loginRow = document.getElementById("login-row");
-                const dnRow = document.getElementById("displayname-row");
-                const visible = dnRow ? dnRow.style.display === "none" : true;
-                if (loginRow) loginRow.style.display = visible ? "" : "none";
-                if (dnRow) dnRow.style.display = visible ? "" : "none";
-                const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
-                if (cl) cl(menuLogin); else document.getElementById("menu-popup")?.classList.remove("open");
-            });
+        const dnPanelUserId = document.getElementById("dn-panel-userid");
+        if (dnPanelUserId && loginNameInput) {
+            const updateDnPanelUserId = () => { dnPanelUserId.textContent = loginNameInput.value || "-"; };
+            new MutationObserver(updateDnPanelUserId).observe(loginNameInput, { attributes: true, attributeFilter: ["value"] });
+            loginNameInput.addEventListener("input", updateDnPanelUserId);
+            updateDnPanelUserId();
         }
     }
 
@@ -2303,6 +2285,38 @@ export function setupHtmlUI(game: GameScene): void {
                 if (!dragging) return;
                 aboutPanel.style.left = Math.max(0, e.clientX - dx) + "px";
                 aboutPanel.style.top  = Math.max(0, e.clientY - dy) + "px";
+            });
+            document.addEventListener("pointerup", () => { dragging = false; });
+        }
+    }
+
+    // 表示名パネル: 閉じるボタン & PCドラッグ
+    {
+        const dnPanel = document.getElementById("displayname-panel");
+        const dnHeader = document.getElementById("displayname-header");
+        const dnClose = document.getElementById("displayname-close");
+        if (dnClose && dnPanel) {
+            dnClose.addEventListener("click", () => {
+                dnPanel.style.display = "none";
+                const menuBtn = document.getElementById("menu-login");
+                if (menuBtn) menuBtn.textContent = "　 表示名設定";
+            });
+        }
+        if (dnHeader && dnPanel && !isMobileDev) {
+            let dragging = false;
+            let dx = 0, dy = 0;
+            dnHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                if ((e.target as HTMLElement).id === "displayname-close") return;
+                dragging = true;
+                dx = e.clientX - dnPanel.getBoundingClientRect().left;
+                dy = e.clientY - dnPanel.getBoundingClientRect().top;
+                dnHeader.setPointerCapture(e.pointerId);
+                e.preventDefault();
+            });
+            document.addEventListener("pointermove", (e: PointerEvent) => {
+                if (!dragging) return;
+                dnPanel.style.left = Math.max(0, e.clientX - dx) + "px";
+                dnPanel.style.top  = Math.max(0, e.clientY - dy) + "px";
             });
             document.addEventListener("pointerup", () => { dragging = false; });
         }

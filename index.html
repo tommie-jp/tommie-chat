@@ -91,6 +91,42 @@
         #sendBtn { background: #0076d7cc; color: #fff; }
 
         /* ===== ユーザーリスト ===== */
+        #displayname-panel {
+            position: fixed;
+            top: 80px;
+            left: 15px;
+            width: 280px;
+            background: rgba(255, 255, 255, 0.88);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+            z-index: 100;
+            overflow: hidden;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            color: #000;
+            display: flex;
+            flex-direction: column;
+        }
+        #displayname-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            padding: 4px 10px;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: move;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #displayname-close {
+            cursor: pointer;
+            opacity: 0.6;
+            font-size: 14px;
+        }
+        #displayname-close:hover { opacity: 1; }
+
         #user-list-panel {
             position: fixed;
             top: 15px;
@@ -1081,7 +1117,8 @@
             #ping-panel,
             #ccu-panel,
             #debug-overlay,
-            #about-panel {
+            #about-panel,
+            #displayname-panel {
                 font-size: 16px;
                 left: 0 !important;
                 right: 0 !important;
@@ -1106,7 +1143,8 @@
             #ping-header,
             #ccu-header,
             #debug-title-bar,
-            #about-panel-header {
+            #about-panel-header,
+            #displayname-header {
                 display: flex !important;
                 align-items: center !important;
                 justify-content: space-between !important;
@@ -1129,7 +1167,8 @@
             #server-log-close,
             #ping-close,
             #ccu-close,
-            #about-panel-close {
+            #about-panel-close,
+            #displayname-close {
                 font-size: 15px;
                 padding: 6px 8px;
                 color: #fff !important;
@@ -1354,6 +1393,13 @@
             #app-footer-version {
                 font-size: 11px !important;
                 opacity: 0.7;
+                top: auto !important;
+                bottom: 2px !important;
+                right: 8px !important;
+            }
+            body.sp-panel-visible #app-footer-version {
+                top: calc(var(--pt-divider, 60vh) - 16px) !important;
+                bottom: auto !important;
             }
         }
 
@@ -1436,10 +1482,11 @@
                 width: 40%;
             }
             #chat-row {
-                justify-content: flex-end;
+                justify-content: flex-start;
             }
             #chatInput {
-                flex-grow: 1;
+                flex-grow: 0;
+                width: 50%;
             }
 
             /* ping/FPS表示はcanvasの右上 */
@@ -1456,7 +1503,8 @@
             #ping-panel,
             #ccu-panel,
             #debug-overlay,
-            #about-panel {
+            #about-panel,
+            #displayname-panel {
                 left: calc(var(--ls-divider, 60%) + 12px) !important;
                 right: 0 !important;
                 top: 0 !important;
@@ -1464,6 +1512,16 @@
                 height: auto !important;
                 width: auto !important;
                 max-width: none !important;
+            }
+            #app-footer-version {
+                top: auto !important;
+                bottom: 4px !important;
+                right: 8px !important;
+            }
+            body.sp-panel-visible #app-footer-version {
+                right: calc(100% - var(--ls-divider, 60%) + 8px) !important;
+                top: auto !important;
+                bottom: 4px !important;
             }
         }
     </style>
@@ -2094,7 +2152,7 @@
         <button class="menu-item" id="menu-about">　 tommieChatについて</button>
         <button class="menu-item" id="menu-debug">✓ デバッグツール</button>
         <button class="menu-item" id="menu-cookie-reset">全パネル非表示（クッキー初期化）</button>
-        <button class="menu-item" id="menu-login" style="display:none;">表示名設定</button>
+        <button class="menu-item" id="menu-login" style="display:none;">　 表示名設定</button>
         <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;">ログアウト</button>
     </div>
 
@@ -2143,6 +2201,24 @@
         </div>
     </div>
 
+    <div id="displayname-panel" style="display:none;">
+        <div id="displayname-header">
+            <span>表示名設定</span>
+            <span id="displayname-close">❌️</span>
+        </div>
+        <div id="displayname-body" style="padding:10px;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <label style="font-size:12px;white-space:nowrap;">ユーザID</label>
+                <span id="dn-panel-userid" style="font-size:12px;font-family:monospace;"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <input id="displayNameInput" type="text" placeholder="ログイン後に入力" disabled maxlength="20" style="flex:1;min-width:0;" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;0〜20文字（空欄で @ユーザID を青色表示、制御文字は使用不可）">
+                <button id="displayNameBtn" class="ui-btn" disabled style="width:auto;padding:0 8px;white-space:nowrap;font-size:12px;">変更</button>
+            </div>
+            <span id="displayNameStatus" style="font-size:12px;white-space:nowrap;"></span>
+        </div>
+    </div>
+
     <div id="landscape-divider"><div id="landscape-divider-knob">⋮</div></div>
     <div id="portrait-divider"><div id="portrait-divider-knob">⋯</div></div>
     <div id="chat-container">
@@ -2151,11 +2227,6 @@
             <input id="loginName" type="text" placeholder="ユーザIDを入力" title="ユーザID（デバイス認証）&#10;パスワード不要。同じユーザIDで再ログインできます&#10;使える文字: 英数字 (a-z A-Z 0-9) と . _ @ + -&#10;6〜128文字&#10;例: tommie, user01, my.name">
             <button id="loginBtn" class="ui-btn" style="width:auto;padding:0 12px;white-space:nowrap;background:#28a74580;">ログイン</button>
             <span id="loginStatus" style="color:#00dd55;font-size:12px;text-shadow:0 1px 2px rgba(0,0,0,0.3);"></span>
-        </div>
-        <div id="displayname-row">
-            <input id="displayNameInput" type="text" placeholder="ログイン後に入力" disabled maxlength="20" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;0〜20文字（空欄で @ユーザID を青色表示、制御文字は使用不可）">
-            <button id="displayNameBtn" class="ui-btn" disabled style="width:auto;padding:0 8px;white-space:nowrap;font-size:12px;">変更</button>
-            <span id="displayNameStatus" style="font-size:12px;white-space:nowrap;"></span>
         </div>
         <div id="chat-row">
             <textarea id="chatInput" placeholder="セリフ" title="アバターのセリフを入力します&#10;【PC】Enter: 送信 / Shift+Enter: 改行&#10;【スマホ】改行キーで改行 / 送信ボタンで送信&#10;縦方向にリサイズ可能（行単位）&#10;──────────&#10;最大5行（長い行は自動折り返し）&#10;5行を超える分は省略されます&#10;フォントサイズ: デバッグツール46で変更可"></textarea>
@@ -2190,7 +2261,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;top:4px;left:8px;font-size:10px;font-family:monospace;text-align:left;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"></div>
+    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"></div>
 
     <script type="module" src="/src/main.ts"></script>
 </body>
