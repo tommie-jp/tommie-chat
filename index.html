@@ -1025,7 +1025,7 @@
                 right: 0;
                 top: calc(var(--pt-divider, 60vh) - 1px);
                 bottom: 0;
-                background: #111;
+                background: #2c2c2e;
                 z-index: 0;
                 pointer-events: none;
             }
@@ -1049,7 +1049,7 @@
                 height: auto !important;
                 border-radius: 0;
                 resize: none !important;
-                background: #111 !important;
+                background: #2c2c2e !important;
                 color: #eee !important;
                 backdrop-filter: none !important;
                 touch-action: pan-y !important;
@@ -1072,9 +1072,9 @@
                 padding: 4px 10px !important;
                 height: 28px !important;
                 box-sizing: border-box !important;
-                background: rgba(255,255,255,0.1) !important;
+                background: #3a3a3c !important;
                 color: #fff !important;
-                border-bottom-color: rgba(255,255,255,0.2) !important;
+                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
                 cursor: row-resize !important;
                 touch-action: none !important;
                 user-select: none !important;
@@ -1099,8 +1099,8 @@
                 color: #eee !important;
             }
             .server-settings-row input {
-                background: rgba(255,255,255,0.15) !important;
-                border-color: rgba(255,255,255,0.3) !important;
+                background: #3a3a3c !important;
+                border-color: rgba(255,255,255,0.2) !important;
             }
             .srv-row label {
                 color: #eee !important;
@@ -1109,8 +1109,8 @@
             }
             .srv-row input {
                 color: #eee !important;
-                background: rgba(255,255,255,0.15) !important;
-                border-color: rgba(255,255,255,0.3) !important;
+                background: #3a3a3c !important;
+                border-color: rgba(255,255,255,0.2) !important;
                 font-size: 13px !important;
             }
             .srv-desc {
@@ -1120,8 +1120,8 @@
             #srvPingResult {
                 color: #eee !important;
                 font-size: 13px !important;
-                background: rgba(255,255,255,0.1) !important;
-                border-color: rgba(255,255,255,0.3) !important;
+                background: #3a3a3c !important;
+                border-color: rgba(255,255,255,0.2) !important;
             }
             #serverKeyDisplay {
                 color: #aaa !important;
@@ -1154,13 +1154,13 @@
 
             /* --- ユーザリスト暗背景対応 --- */
             #user-list thead th {
-                background: rgba(255,255,255,0.12) !important;
+                background: #3a3a3c !important;
                 color: #eee !important;
-                border-bottom-color: rgba(255,255,255,0.2) !important;
+                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
                 font-size: 15px !important;
             }
             #user-list thead th:hover {
-                background: rgba(255,255,255,0.25) !important;
+                background: #48484a !important;
             }
             #user-list tbody td {
                 color: #eee !important;
@@ -1195,7 +1195,7 @@
                 border-bottom-color: rgba(255,255,255,0.3) !important;
             }
             #debug-overlay td[colspan] > div {
-                background: rgba(255,255,255,0.1) !important;
+                background: #3a3a3c !important;
             }
             #debug-overlay td.label,
             #debug-overlay td.value {
@@ -1231,23 +1231,35 @@
             }
             #menu-popup {
                 font-size: 16px !important;
+                background: rgba(80, 80, 84, 0.95) !important;
+                backdrop-filter: blur(20px) !important;
+                -webkit-backdrop-filter: blur(20px) !important;
+                border: 1px solid rgba(255,255,255,0.18) !important;
+                border-radius: 14px !important;
             }
             .menu-item {
                 padding: 10px 16px !important;
                 font-size: 15px !important;
+                border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+            }
+            .menu-item:last-child {
+                border-bottom: none !important;
+            }
+            .menu-item:active {
+                background: rgba(255,255,255,0.15) !important;
             }
 
             /* --- ログアウト確認パネル --- */
             #logout-panel {
                 width: 80vw;
                 max-width: 320px;
-                background: #222 !important;
+                background: #2c2c2e !important;
                 color: #eee !important;
             }
             #logout-panel-header {
-                background: rgba(255,255,255,0.1) !important;
+                background: #3a3a3c !important;
                 color: #fff !important;
-                border-bottom-color: rgba(255,255,255,0.2) !important;
+                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
                 font-size: 15px !important;
             }
             #logout-panel-close {
