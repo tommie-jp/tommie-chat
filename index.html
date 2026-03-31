@@ -146,7 +146,7 @@
         #user-list {
             width: 100%;
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 13px;
             table-layout: fixed;
         }
         #user-list thead th {
@@ -195,7 +195,8 @@
             cursor: col-resize;
         }
         #user-list tbody td {
-            padding: 2px 6px;
+            padding: 4px 6px;
+            height: 28px;
             border-bottom: 1px dotted rgba(0,0,0,0.1);
             white-space: nowrap;
             overflow: hidden;
@@ -205,6 +206,9 @@
         #user-list tbody td:first-child {
             max-width: none;
             overflow: visible;
+        }
+        #user-list tbody tr:nth-child(odd) td {
+            background-color: rgba(180, 220, 255, 0.35);
         }
 
         #debug-overlay {
@@ -289,9 +293,15 @@
             table-layout: fixed;
         }
         #debug-overlay td {
-            padding: 1px 0;
+            padding: 2px 4px;
             vertical-align: middle;
             white-space: nowrap;
+            height: 28px;
+            font-size: 13px;
+        }
+        #debug-overlay tr:nth-child(odd) > td.label,
+        #debug-overlay tr:nth-child(odd) > td.value {
+            background-color: rgba(180, 220, 255, 0.35);
         }
         #debug-overlay td.label {
             text-align: left;
@@ -319,10 +329,10 @@
         }
 
         .debug-select, .debug-btn, .debug-input, .debug-color {
-            border: 1px solid #000000; 
+            border: 1px solid #000000;
             border-radius: 4px;
             font-family: "Courier New", Courier, monospace;
-            font-size: 11px; 
+            font-size: 13px;
             width: 60px;
             float: right;
             outline: none;
@@ -929,7 +939,7 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.4);
             white-space: pre-wrap;
             word-break: break-word;
-            pointer-events: none;
+            pointer-events: auto;
             display: none;
         }
         /* iOS Safari/Chrome: user-select:none な要素の長押しコピーメニューも抑制 */
@@ -1204,6 +1214,11 @@
             #user-list tbody td {
                 color: #eee !important;
                 font-size: 15px !important;
+                height: 44px !important;
+                padding: 4px 8px !important;
+            }
+            #user-list tbody tr:nth-child(odd) td {
+                background-color: rgba(80, 150, 220, 0.25) !important;
             }
 
             /* --- デバッグオーバーレイ暗背景対応 --- */
@@ -1224,6 +1239,10 @@
             #debug-overlay td.value {
                 color: #eee !important;
             }
+            #debug-overlay tr:nth-child(odd) > td.label,
+            #debug-overlay tr:nth-child(odd) > td.value {
+                background-color: rgba(80, 150, 220, 0.25) !important;
+            }
             #debug-overlay td.label:hover {
                 background-color: rgba(255,255,255,0.1) !important;
                 color: #6cb4ff !important;
@@ -1239,6 +1258,8 @@
             #debug-overlay td.label,
             #debug-overlay td.value {
                 font-size: 15px !important;
+                height: 44px !important;
+                padding: 4px 8px !important;
             }
             #debug-overlay .debug-select,
             #debug-overlay .debug-btn,
@@ -1449,6 +1470,9 @@
 
         document.title = "tommieChat " + APP_VERSION;
 
+        // ブラウザ標準の右クリック/長押しコンテキストメニューを抑止
+        document.addEventListener("contextmenu", function(e) { e.preventDefault(); });
+
         document.addEventListener("DOMContentLoaded", function() {
             var el;
             el = document.getElementById("val-ver");
@@ -1487,6 +1511,8 @@
             var tooltipEl = document.createElement("div");
             tooltipEl.id = "mobile-tooltip";
             document.body.appendChild(tooltipEl);
+            tooltipEl.addEventListener("touchend", function() { if (tooltipVisible) hideTooltip(); });
+            tooltipEl.addEventListener("click", function() { if (tooltipVisible) hideTooltip(); });
 
             var tooltipTimer = null;
             var tooltipVisible = false;
@@ -1538,10 +1564,20 @@
 
             // クリック/タップでツールチップを消去。PCのみクリックで表示も行う
             var isTouchDevice = matchMedia("(pointer:coarse)").matches;
+            // キャプチャフェーズで長押し後のclickを抑止（ボタン等のハンドラより先に止める）
             document.addEventListener("click", function(e) {
+                if (suppressNextClick) {
+                    // 長押しツールチップ表示直後 → ボタン発火を止めるがツールチップは残す
+                    suppressNextClick = false;
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    return;
+                }
                 if (tooltipVisible) {
-                    if (Date.now() - tooltipShowTime < 800) return; // 長押し表示後のclick無視
+                    // ツールチップ表示中のタップ → ツールチップを消してボタン発火も止める
                     hideTooltip();
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
                     return;
                 }
                 if (isTouchDevice) return; // スマホは長押しで表示（clickでは表示しない）
@@ -1549,7 +1585,7 @@
                 if (!el) return;
                 tooltipSourceEl = el;
                 showTooltip(getTitleText(el), e.clientX, e.clientY);
-            });
+            }, true);
 
             // title属性のブラウザ標準ツールチップを抑制
             document.addEventListener("pointerenter", function(e) {
@@ -1568,20 +1604,28 @@
             }, true);
 
             // スマホ: 長押しでツールチップ表示
+            var tooltipJustShown = false; // この長押しでツールチップが表示された
             document.addEventListener("touchstart", function(e) {
+                tooltipJustShown = false;
                 var el = findTitleEl(e.target);
                 if (!el) return;
                 var touch = e.touches[0];
                 tooltipTimer = setTimeout(function() {
                     tooltipSourceEl = el;
                     showTooltip(getTitleText(el), touch.clientX, touch.clientY);
+                    tooltipJustShown = true;
                 }, LONG_PRESS_MS);
             }, { passive: true });
 
+            var suppressNextClick = false;
             document.addEventListener("touchend", function() {
                 clearTimeout(tooltipTimer);
                 tooltipTimer = null;
-                // 自動消去しない — タップで消す
+                if (tooltipJustShown) {
+                    // この長押しでツールチップが出た → 直後のclickを抑止
+                    suppressNextClick = true;
+                    tooltipJustShown = false;
+                }
             }, { passive: true });
 
             document.addEventListener("touchmove", function() {
@@ -1641,9 +1685,9 @@
         </div>
         <div id="debug-body">
         <table>
-            <tr><td id="label-ver" class="label">01.Ver:</td><td class="value" id="val-ver"></td></tr>
-            <tr><td id="label-update" class="label">02.Update:</td><td class="value" id="val-update"></td></tr>
-            <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale:</td><td class="value">
+            <tr><td id="label-ver" class="label">01.Ver</td><td class="value" id="val-ver"></td></tr>
+            <tr><td id="label-update" class="label">02.Update</td><td class="value" id="val-update"></td></tr>
+            <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale</td><td class="value">
                 <select id="scaleSelect" class="debug-select">
                     <option value="0.50">0.50 Retina/4K クッキリ</option>
                     <option value="0.75">0.75</option>
@@ -1652,30 +1696,30 @@
                     <option value="2.00">2.00 解像度50%</option>
                 </select>
             </td></tr>
-            <tr><td class="label" title="04.AntiAliasing&#10;アンチエイリアシング（MSAA）。ジャギーを軽減&#10;初期値: Off&#10;典型的なMMO: Off〜2x（パフォーマンス優先時はOff）&#10;Minecraft: バニラはAA非対応, OptiFine/シェーダー: 2〜16xMSAA">04.AntiAliasing:</td><td class="value">
+            <tr><td class="label" title="04.AntiAliasing&#10;アンチエイリアシング（MSAA）。ジャギーを軽減&#10;初期値: Off&#10;典型的なMMO: Off〜2x（パフォーマンス優先時はOff）&#10;Minecraft: バニラはAA非対応, OptiFine/シェーダー: 2〜16xMSAA">04.AntiAliasing</td><td class="value">
                 <select id="aaSelect" class="debug-select">
                     <option value="1">Off</option>
                     <option value="2" selected>2</option>
                     <option value="4">4</option>
                 </select>
             </td></tr>
-            <tr><td class="label" title="05.FPS&#10;フレームレート（Frames Per Second）&#10;初期値: 計測値&#10;典型的なMMO: 30〜60fps（60fps目標）&#10;Minecraft: 初期値 60fps上限, 無制限〜1000fps設定可（ビデオ設定）">05.FPS:</td><td class="value" id="val-fps">0</td></tr>
-            <tr><td class="label" title="06.CPU ms&#10;1フレームのCPU処理時間（ミリ秒）&#10;初期値: 計測値&#10;典型的なMMO: 1〜5ms（16ms超でCPUボトルネック）&#10;Minecraft: エンティティ処理・チャンク生成でCPU負荷大, シングルスレッド依存">06.CPU ms:</td><td class="value" id="val-cpu">0.00</td></tr>
-            <tr><td class="label" title="07.GPU ms&#10;1フレームのGPU描画時間（ミリ秒）&#10;初期値: 計測値&#10;典型的なMMO: 8〜16ms（16ms以下で60fps達成）&#10;Minecraft: チャンク再描画が主負荷, 描画距離・シェーダー設定で大幅変化">07.GPU ms:</td><td class="value" id="val-gpu">0.00</td></tr>
-            <tr><td class="label" title="08.DRAW&#10;ドローコール数（WebGL描画命令回数）&#10;初期値: 計測値&#10;典型的なMMO: 50〜300（少ないほど高速）&#10;Minecraft: チャンクをバッチ描画（1チャンク=1ドローコール程度）, 描画距離で増減">08.DRAW:</td><td class="value" id="val-draw">0</td></tr>
-            <tr><td class="label" title="09.MESH&#10;フラスタム内のアクティブメッシュ数&#10;初期値: 計測値&#10;典型的なMMO: 20〜200&#10;Minecraft: 16x16x16ブロックのサブチャンク単位でメッシュ化（描画距離12で約3000チャンク）">09.MESH:</td><td class="value" id="val-mesh">0</td></tr>
-            <tr><td class="label" title="10.Mats&#10;シーン内のマテリアル（シェーダー）数&#10;初期値: 計測値&#10;典型的なMMO: 10〜100&#10;Minecraft: テクスチャアトラス1枚にまとめて管理（マテリアル数を最小化）">10.Mats:</td><td class="value" id="val-mats">0</td></tr>
-            <tr><td class="label" title="11.Bones&#10;スケルタルアニメーションのボーン総数&#10;初期値: 0（板ポリキャラのため）&#10;典型的なMMO: 50〜500（3Dキャラ1体あたり30〜80本）&#10;Minecraft: モブは部位ごとにボーン（頭・胴・腕×2・脚×2）, プレイヤー: 6〜8ボーン">11.Bones:</td><td class="value" id="val-bones">0</td></tr>
-            <tr><td class="label" title="12.JS RAM&#10;JavaScriptヒープメモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 50〜300MB&#10;Minecraft: Java版はJVMヒープ（初期512MB〜8GB設定可）, Bedrock版は最適化済み">12.JS RAM:</td><td class="value" id="val-jsram">0.0 MB</td></tr>
-            <tr><td class="label" title="13.TexRAM&#10;GPUテクスチャメモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 50〜500MB（キャラ・地形テクスチャ含む）&#10;Minecraft: デフォルト16x: 約30MB, 高解像度テクスチャパック512x: 500MB+">13.TexRAM:</td><td class="value" id="val-texram">0.0 MB</td></tr>
-            <tr><td class="label" title="14.GeoRAM&#10;頂点バッファ（メッシュジオメトリ）メモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 1〜100MB&#10;Minecraft: チャンクVBO, 描画距離12でおよそ100〜300MB相当">14.GeoRAM:</td><td class="value" id="val-georam">0.0 MB</td></tr>
-            <tr><td class="label" title="15.Indices&#10;インデックスバッファの総要素数（頂点接続情報）&#10;初期値: 計測値&#10;典型的なMMO: 10,000〜500,000&#10;Minecraft: 各ブロック面が2三角形×3頂点インデックス, チャンク内全面で膨大な数">15.Indices:</td><td class="value" id="val-indices">0</td></tr>
-            <tr><td class="label" title="16.Polys&#10;描画ポリゴン（三角形）数&#10;初期値: 計測値&#10;典型的なMMO: 5,000〜200,000&#10;Minecraft: 描画距離12で数百万三角形（チャンク内の見える面のみ描画）">16.Polys:</td><td class="value" id="val-polys">0</td></tr>
-            <tr><td class="label" title="17.LOD&#10;Level of Detail：距離に応じて低品質メッシュに切り替え&#10;初期値: Off&#10;典型的なMMO: On（遠距離キャラのポリゴン削減に有効）&#10;Minecraft: 描画距離設定が疑似LOD, 遠景は低解像度チャンク（Fast/Fancy切替）">17.LOD:</td><td class="value">
+            <tr><td class="label" title="05.FPS&#10;フレームレート（Frames Per Second）&#10;初期値: 計測値&#10;典型的なMMO: 30〜60fps（60fps目標）&#10;Minecraft: 初期値 60fps上限, 無制限〜1000fps設定可（ビデオ設定）">05.FPS</td><td class="value" id="val-fps">0</td></tr>
+            <tr><td class="label" title="06.CPU ms&#10;1フレームのCPU処理時間（ミリ秒）&#10;初期値: 計測値&#10;典型的なMMO: 1〜5ms（16ms超でCPUボトルネック）&#10;Minecraft: エンティティ処理・チャンク生成でCPU負荷大, シングルスレッド依存">06.CPU ms</td><td class="value" id="val-cpu">0.00</td></tr>
+            <tr><td class="label" title="07.GPU ms&#10;1フレームのGPU描画時間（ミリ秒）&#10;初期値: 計測値&#10;典型的なMMO: 8〜16ms（16ms以下で60fps達成）&#10;Minecraft: チャンク再描画が主負荷, 描画距離・シェーダー設定で大幅変化">07.GPU ms</td><td class="value" id="val-gpu">0.00</td></tr>
+            <tr><td class="label" title="08.DRAW&#10;ドローコール数（WebGL描画命令回数）&#10;初期値: 計測値&#10;典型的なMMO: 50〜300（少ないほど高速）&#10;Minecraft: チャンクをバッチ描画（1チャンク=1ドローコール程度）, 描画距離で増減">08.DRAW</td><td class="value" id="val-draw">0</td></tr>
+            <tr><td class="label" title="09.MESH&#10;フラスタム内のアクティブメッシュ数&#10;初期値: 計測値&#10;典型的なMMO: 20〜200&#10;Minecraft: 16x16x16ブロックのサブチャンク単位でメッシュ化（描画距離12で約3000チャンク）">09.MESH</td><td class="value" id="val-mesh">0</td></tr>
+            <tr><td class="label" title="10.Mats&#10;シーン内のマテリアル（シェーダー）数&#10;初期値: 計測値&#10;典型的なMMO: 10〜100&#10;Minecraft: テクスチャアトラス1枚にまとめて管理（マテリアル数を最小化）">10.Mats</td><td class="value" id="val-mats">0</td></tr>
+            <tr><td class="label" title="11.Bones&#10;スケルタルアニメーションのボーン総数&#10;初期値: 0（板ポリキャラのため）&#10;典型的なMMO: 50〜500（3Dキャラ1体あたり30〜80本）&#10;Minecraft: モブは部位ごとにボーン（頭・胴・腕×2・脚×2）, プレイヤー: 6〜8ボーン">11.Bones</td><td class="value" id="val-bones">0</td></tr>
+            <tr><td class="label" title="12.JS RAM&#10;JavaScriptヒープメモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 50〜300MB&#10;Minecraft: Java版はJVMヒープ（初期512MB〜8GB設定可）, Bedrock版は最適化済み">12.JS RAM</td><td class="value" id="val-jsram">0.0 MB</td></tr>
+            <tr><td class="label" title="13.TexRAM&#10;GPUテクスチャメモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 50〜500MB（キャラ・地形テクスチャ含む）&#10;Minecraft: デフォルト16x: 約30MB, 高解像度テクスチャパック512x: 500MB+">13.TexRAM</td><td class="value" id="val-texram">0.0 MB</td></tr>
+            <tr><td class="label" title="14.GeoRAM&#10;頂点バッファ（メッシュジオメトリ）メモリ使用量&#10;初期値: 計測値&#10;典型的なMMO: 1〜100MB&#10;Minecraft: チャンクVBO, 描画距離12でおよそ100〜300MB相当">14.GeoRAM</td><td class="value" id="val-georam">0.0 MB</td></tr>
+            <tr><td class="label" title="15.Indices&#10;インデックスバッファの総要素数（頂点接続情報）&#10;初期値: 計測値&#10;典型的なMMO: 10,000〜500,000&#10;Minecraft: 各ブロック面が2三角形×3頂点インデックス, チャンク内全面で膨大な数">15.Indices</td><td class="value" id="val-indices">0</td></tr>
+            <tr><td class="label" title="16.Polys&#10;描画ポリゴン（三角形）数&#10;初期値: 計測値&#10;典型的なMMO: 5,000〜200,000&#10;Minecraft: 描画距離12で数百万三角形（チャンク内の見える面のみ描画）">16.Polys</td><td class="value" id="val-polys">0</td></tr>
+            <tr><td class="label" title="17.LOD&#10;Level of Detail：距離に応じて低品質メッシュに切り替え&#10;初期値: Off&#10;典型的なMMO: On（遠距離キャラのポリゴン削減に有効）&#10;Minecraft: 描画距離設定が疑似LOD, 遠景は低解像度チャンク（Fast/Fancy切替）">17.LOD</td><td class="value">
                 <button id="lodBtn" class="debug-btn off">Off</button>
             </td></tr>
-            <tr><td class="label" title="18.OcclQ&#10;オクルージョンクエリ数（障害物で隠れたオブジェクトの描画省略判定）&#10;初期値: 0&#10;典型的なMMO: 0〜50&#10;Minecraft: 洞窟内オクルージョンカリングあり（Java版は視線ベースのチャンクカリング）">18.OcclQ:</td><td class="value" id="val-occlq">0</td></tr>
-            <tr><td class="label" title="19.FarClip&#10;カメラの最遠クリップ距離（これより遠いオブジェクトを描画しない）&#10;初期値: 200&#10;典型的なMMO: 100〜1000（フォグ終点に合わせると自然）&#10;Minecraft: 描画距離 初期値12チャンク（192m）, 範囲2〜32チャンク（32〜512m）">19.FarClip:</td><td class="value">
+            <tr><td class="label" title="18.OcclQ&#10;オクルージョンクエリ数（障害物で隠れたオブジェクトの描画省略判定）&#10;初期値: 0&#10;典型的なMMO: 0〜50&#10;Minecraft: 洞窟内オクルージョンカリングあり（Java版は視線ベースのチャンクカリング）">18.OcclQ</td><td class="value" id="val-occlq">0</td></tr>
+            <tr><td class="label" title="19.FarClip&#10;カメラの最遠クリップ距離（これより遠いオブジェクトを描画しない）&#10;初期値: 200&#10;典型的なMMO: 100〜1000（フォグ終点に合わせると自然）&#10;Minecraft: 描画距離 初期値12チャンク（192m）, 範囲2〜32チャンク（32〜512m）">19.FarClip</td><td class="value">
                 <select id="farClipInput" class="debug-select">
                     <option value="10">10</option>
                     <option value="30">30</option>
@@ -1689,7 +1733,7 @@
                 </select>
             </td></tr>
             <tr>
-                <td class="label" title="20.FOV&#10;視野角（Field of View）。大きいほど広角・魚眼に近くなる&#10;初期値: 60°&#10;典型的なMMO: 60〜90°（TPSは60〜75°が多い）&#10;Minecraft: 初期値 70°（Normal）, 範囲 30〜110°（Quakepro=110°, Normal=70°）">20.FOV:</td>
+                <td class="label" title="20.FOV&#10;視野角（Field of View）。大きいほど広角・魚眼に近くなる&#10;初期値: 60°&#10;典型的なMMO: 60〜90°（TPSは60〜75°が多い）&#10;Minecraft: 初期値 70°（Normal）, 範囲 30〜110°（Quakepro=110°, Normal=70°）">20.FOV</td>
                 <td class="value">
                     <div style="display:flex; justify-content:flex-end; gap:2px; width:100%;">
                         <select id="fovSelect" class="debug-select" style="width:42px; float:none;">
@@ -1704,30 +1748,30 @@
                     </div>
                 </td>
             </tr>
-            <tr><td class="label" title="21.Fog&#10;リニアフォグ。遠景をスカイカラーに溶け込ませる&#10;初期値: On（fogStart=30, fogEnd=FarClip）&#10;典型的なMMO: On（視距離制限とパフォーマンス両立）&#10;Minecraft: 常にOn（描画距離端でフォグ）, OptiFineでFog OFF可能">21.Fog:</td><td class="value">
+            <tr><td class="label" title="21.Fog&#10;リニアフォグ。遠景をスカイカラーに溶け込ませる&#10;初期値: On（fogStart=30, fogEnd=FarClip）&#10;典型的なMMO: On（視距離制限とパフォーマンス両立）&#10;Minecraft: 常にOn（描画距離端でフォグ）, OptiFineでFog OFF可能">21.Fog</td><td class="value">
                 <button id="fogBtn" class="debug-btn">On</button>
             </td></tr>
-            <tr><td class="label" title="22.Fog Color&#10;フォグの色（スカイ・背景色と合わせると境界が自然に消える）&#10;初期値: #a0d7f3（空色）&#10;典型的なMMO: 背景clearColorと同色に設定&#10;Minecraft: バイオーム・天気・高度・水中で自動変化（晴れ空色〜雨灰色〜水中青）">22.Fog Color:</td><td class="value">
+            <tr><td class="label" title="22.Fog Color&#10;フォグの色（スカイ・背景色と合わせると境界が自然に消える）&#10;初期値: #a0d7f3（空色）&#10;典型的なMMO: 背景clearColorと同色に設定&#10;Minecraft: バイオーム・天気・高度・水中で自動変化（晴れ空色〜雨灰色〜水中青）">22.Fog Color</td><td class="value">
                 <input type="color" id="fogColorInput" class="debug-color" value="#a0d7f3">
             </td></tr>
-            <tr><td class="label" title="23.DoF&#10;被写界深度エフェクト（現在無効）&#10;初期値: Off&#10;典型的なMMO: Off（重いためカットシーンのみOnにすることが多い）&#10;Minecraft: バニラなし, SEUS・BSL等のシェーダーでサポート（負荷大）">23.DoF:</td><td class="value">
+            <tr><td class="label" title="23.DoF&#10;被写界深度エフェクト（現在無効）&#10;初期値: Off&#10;典型的なMMO: Off（重いためカットシーンのみOnにすることが多い）&#10;Minecraft: バニラなし, SEUS・BSL等のシェーダーでサポート（負荷大）">23.DoF</td><td class="value">
                 <button id="dofBtn" class="debug-btn off">Off</button>
             </td></tr>
-            <tr><td class="label" title="24.fStop&#10;絞り値（f値）。小さいほどボケが強くなる&#10;初期値: 5.6&#10;典型的なMMO: 2.8〜11&#10;Minecraft: バニラなし, シェーダーDoF設定で対応（SEUS: f/1.4〜f/16程度）">24.fStop:</td><td class="value">
+            <tr><td class="label" title="24.fStop&#10;絞り値（f値）。小さいほどボケが強くなる&#10;初期値: 5.6&#10;典型的なMMO: 2.8〜11&#10;Minecraft: バニラなし, シェーダーDoF設定で対応（SEUS: f/1.4〜f/16程度）">24.fStop</td><td class="value">
                 <input type="number" id="fStopInput" class="debug-input" value="5.6" step="0.1">
             </td></tr>
-            <tr><td class="label" title="25.FocalLen&#10;焦点距離（mm）。大きいほど遠くにピントが合う&#10;初期値: 50mm&#10;典型的なMMO: 35〜85mm&#10;Minecraft: バニラなし, シェーダーDoF設定依存（FOV連動で相対的に変化）">25.FocalLen:</td><td class="value">
+            <tr><td class="label" title="25.FocalLen&#10;焦点距離（mm）。大きいほど遠くにピントが合う&#10;初期値: 50mm&#10;典型的なMMO: 35〜85mm&#10;Minecraft: バニラなし, シェーダーDoF設定依存（FOV連動で相対的に変化）">25.FocalLen</td><td class="value">
                 <input type="number" id="focalLengthInput" class="debug-input" value="50" step="1">
             </td></tr>
-            <tr><td class="label" title="26.Default View&#10;カメラをデフォルト位置・角度にリセット&#10;初期値: α=90°, β=67°, r=10&#10;典型的なMMO: TPS視点（斜め後方俯瞰）&#10;Minecraft: F5キーで一人称↔三人称↔背面視点を切替">26.Default View:</td><td class="value">
+            <tr><td class="label" title="26.Default View&#10;カメラをデフォルト位置・角度にリセット&#10;初期値: α=90°, β=67°, r=10&#10;典型的なMMO: TPS視点（斜め後方俯瞰）&#10;Minecraft: F5キーで一人称↔三人称↔背面視点を切替">26.Default View</td><td class="value">
                 <button id="resetViewBtn" class="debug-btn">Reset</button>
             </td></tr>
-            <tr><td class="label" title="27.Top View&#10;真上から見下ろすミニマップ風トップビューに切り替え&#10;初期値: β=90°（真上）&#10;典型的なMMO: マップ確認・デバッグ用途&#10;Minecraft: マップMOD（Journeymap等）でミニマップ・全体マップ表示可">27.Top View:</td><td class="value">
+            <tr><td class="label" title="27.Top View&#10;真上から見下ろすミニマップ風トップビューに切り替え&#10;初期値: β=90°（真上）&#10;典型的なMMO: マップ確認・デバッグ用途&#10;Minecraft: マップMOD（Journeymap等）でミニマップ・全体マップ表示可">27.Top View</td><td class="value">
                 <button id="topViewBtn" class="debug-btn">Top View</button>
             </td></tr>
-            <tr><td class="label" title="28.Player Pos&#10;プレイヤーのワールド座標（X, Y, Z）&#10;初期値: 0.0, 0.0, 0.0（原点）&#10;典型的なMMO: ゾーン座標として使用&#10;Minecraft: F3デバッグ画面でXYZ座標表示（Y=64が海面レベル）">28.Player Pos:</td><td class="value" id="val-player-pos">0.0, 0.0, 0.0</td></tr>
-            <tr><td class="label" title="28b.Chunk&#10;プレイヤーが現在いるチャンク座標（CX, CZ）&#10;ワールド座標からチャンク座標に変換&#10;0〜15の範囲">28b.Chunk:</td><td class="value" id="val-chunk">-</td></tr>
-            <tr><td class="label" title="28c.AOI R&#10;AOI半径（セル単位）。ブロック更新の受信範囲&#10;FarClip（描画距離）とは独立&#10;小さいほどサーバ負荷が軽い&#10;初期値: 48（3チャンク分）">28c.AOI R:</td><td class="value">
+            <tr><td class="label" title="28.Player Pos&#10;プレイヤーのワールド座標（X, Y, Z）&#10;初期値: 0.0, 0.0, 0.0（原点）&#10;典型的なMMO: ゾーン座標として使用&#10;Minecraft: F3デバッグ画面でXYZ座標表示（Y=64が海面レベル）">28.Player Pos</td><td class="value" id="val-player-pos">0.0, 0.0, 0.0</td></tr>
+            <tr><td class="label" title="28b.Chunk&#10;プレイヤーが現在いるチャンク座標（CX, CZ）&#10;ワールド座標からチャンク座標に変換&#10;0〜15の範囲">28b.Chunk</td><td class="value" id="val-chunk">-</td></tr>
+            <tr><td class="label" title="28c.AOI R&#10;AOI半径（セル単位）。ブロック更新の受信範囲&#10;FarClip（描画距離）とは独立&#10;小さいほどサーバ負荷が軽い&#10;初期値: 48（3チャンク分）">28c.AOI R</td><td class="value">
                 <select id="aoiRadiusSelect" class="debug-select">
                     <option value="16">16 (1ch)</option>
                     <option value="32">32 (2ch)</option>
@@ -1737,24 +1781,24 @@
                     <option value="256">256 (全域)</option>
                 </select>
             </td></tr>
-            <tr><td class="label" title="28d.AOI&#10;Area of Interest（チャンク範囲）&#10;minCX,minCZ〜maxCX,maxCZ&#10;AOI半径に応じて自動計算されるチャンク受信範囲">28d.AOI:</td><td class="value" id="val-aoi" style="font-size: 11px;">-</td></tr>
-            <tr><td class="label" title="28e.AOI表示&#10;AOI範囲を緑色の矩形でワールド上に表示&#10;デフォルト: OFF">28e.AOI表示:</td><td class="value">
+            <tr><td class="label" title="28d.AOI&#10;Area of Interest（チャンク範囲）&#10;minCX,minCZ〜maxCX,maxCZ&#10;AOI半径に応じて自動計算されるチャンク受信範囲">28d.AOI</td><td class="value" id="val-aoi" style="font-size: 11px;">-</td></tr>
+            <tr><td class="label" title="28e.AOI表示&#10;AOI範囲を緑色の矩形でワールド上に表示&#10;デフォルト: OFF">28e.AOI表示</td><td class="value">
                 <button id="aoiVisBtn" class="debug-btn off">Off</button>
             </td></tr>
-            <tr><td class="label" title="28f.カメラ自動回転&#10;移動方向に合わせてカメラアングルを自動回転&#10;デフォルト: ON">28f.Cam AutoRot:</td><td class="value">
+            <tr><td class="label" title="28f.カメラ自動回転&#10;移動方向に合わせてカメラアングルを自動回転&#10;デフォルト: ON">28f.Cam AutoRot</td><td class="value">
                 <button id="camAutoRotBtn" class="debug-btn">On</button>
             </td></tr>
-            <tr><td class="label" title="28g.AOI test (North Up)&#10;AOIテスト用ビュー:&#10;・カメラを真上から見下ろし、画面上=北(-Z)&#10;・AOIが画面に収まるズーム&#10;・AOI表示=ON&#10;・カメラ自動回転=OFF&#10;・他プレイヤーAOI表示=ON&#10;・雲=OFF">28g.AOI test:</td><td class="value">
+            <tr><td class="label" title="28g.AOI test (North Up)&#10;AOIテスト用ビュー:&#10;・カメラを真上から見下ろし、画面上=北(-Z)&#10;・AOIが画面に収まるズーム&#10;・AOI表示=ON&#10;・カメラ自動回転=OFF&#10;・他プレイヤーAOI表示=ON&#10;・雲=OFF">28g.AOI test</td><td class="value">
                 <button id="eastUpBtn" class="debug-btn">Go</button>
             </td></tr>
-            <tr><td class="label" title="28h.他プレイヤーAOI表示&#10;他プレイヤーのAOI範囲を半透明緑の立方体で表示&#10;2秒ごとにサーバから取得して更新&#10;デフォルト: OFF">28h.Remote AOI:</td><td class="value">
+            <tr><td class="label" title="28h.他プレイヤーAOI表示&#10;他プレイヤーのAOI範囲を半透明緑の立方体で表示&#10;2秒ごとにサーバから取得して更新&#10;デフォルト: OFF">28h.Remote AOI</td><td class="value">
                 <button id="remoteAoiBtn" class="debug-btn off">Off</button>
             </td></tr>
-            <tr><td class="label" title="28i.雲の表示&#10;雲メッシュの表示/非表示を切り替え&#10;デフォルト: ON">28i.Cloud:</td><td class="value">
+            <tr><td class="label" title="28i.雲の表示&#10;雲メッシュの表示/非表示を切り替え&#10;デフォルト: ON">28i.Cloud</td><td class="value">
                 <button id="cloudToggleBtn" class="debug-btn">On</button>
             </td></tr>
-            <tr><td class="label" title="29.Cam Info&#10;カメラのα（水平回転角）, β（垂直仰角）, r（プレイヤーからの距離）&#10;初期値: α=90°, β=67°, r=10&#10;典型的なMMO: β=45〜80°, r=5〜20&#10;Minecraft: F3でFacing方向（N/S/E/W）と回転角（Yaw/Pitch）表示">29.Cam Info:</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
-            <tr><td class="label" title="29b.MaxZoom&#10;マウスホイールでズームアウトできる最大距離（upperRadiusLimit）&#10;初期値: 200&#10;大きいほど遠くまで引ける">29b.MaxZoom:</td><td class="value">
+            <tr><td class="label" title="29.Cam Info&#10;カメラのα（水平回転角）, β（垂直仰角）, r（プレイヤーからの距離）&#10;初期値: α=90°, β=67°, r=10&#10;典型的なMMO: β=45〜80°, r=5〜20&#10;Minecraft: F3でFacing方向（N/S/E/W）と回転角（Yaw/Pitch）表示">29.Cam Info</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
+            <tr><td class="label" title="29b.MaxZoom&#10;マウスホイールでズームアウトできる最大距離（upperRadiusLimit）&#10;初期値: 200&#10;大きいほど遠くまで引ける">29b.MaxZoom</td><td class="value">
                 <select id="maxZoomSelect" class="debug-select">
                     <option value="50">50</option>
                     <option value="100">100</option>
@@ -1763,39 +1807,39 @@
                     <option value="1000">1000</option>
                 </select>
             </td></tr>
-            <tr><td class="label" title="30.API&#10;使用中のグラフィックスAPI&#10;初期値: WebGL2&#10;典型的なMMO: WebGL2（WebGPUは次世代・高性能）&#10;Minecraft: Java版 OpenGL 3.2+, Bedrock版 DirectX11/Metal/Vulkan（プラットフォーム依存）">30.API:</td><td class="value" id="val-api">WebGL2</td></tr>
-            <tr><td class="label" title="30b.Profile&#10;フレーム内の各処理にかかる時間（ms）&#10;player=自キャラ移動  remote=他プレイヤー移動  npc=NPC  total=合計&#10;10フレーム移動平均">30b.Profile:</td><td class="value" id="val-profile" style="font-size:10px;white-space:nowrap;">-</td></tr>
-            <tr><td class="label" title="31.Glossiness&#10;マテリアルの鏡面反射強度（specularColor）&#10;初期値: 0.5&#10;典型的なMMO: 0.0（つや消し）〜1.0（金属・水面）&#10;Minecraft: バニラなし, PBRシェーダー（SEUS PTGI等）でSpecular/Roughness設定可">31.Glossiness:</td><td class="value">
+            <tr><td class="label" title="30.API&#10;使用中のグラフィックスAPI&#10;初期値: WebGL2&#10;典型的なMMO: WebGL2（WebGPUは次世代・高性能）&#10;Minecraft: Java版 OpenGL 3.2+, Bedrock版 DirectX11/Metal/Vulkan（プラットフォーム依存）">30.API</td><td class="value" id="val-api">WebGL2</td></tr>
+            <tr><td class="label" title="30b.Profile&#10;フレーム内の各処理にかかる時間（ms）&#10;player=自キャラ移動  remote=他プレイヤー移動  npc=NPC  total=合計&#10;10フレーム移動平均">30b.Profile</td><td class="value" id="val-profile" style="font-size:10px;white-space:nowrap;">-</td></tr>
+            <tr><td class="label" title="31.Glossiness&#10;マテリアルの鏡面反射強度（specularColor）&#10;初期値: 0.5&#10;典型的なMMO: 0.0（つや消し）〜1.0（金属・水面）&#10;Minecraft: バニラなし, PBRシェーダー（SEUS PTGI等）でSpecular/Roughness設定可">31.Glossiness</td><td class="value">
                 <input type="number" id="glossInput" class="debug-input" value="0.5" step="0.1" min="0" max="1">
             </td></tr>
-            <tr><td class="label" title="33.Def.Pos&#10;プレイヤーをデフォルト位置（原点 0,0,0）にテレポート&#10;初期値: X=0, Y=0, Z=0&#10;典型的なMMO: リスポーン・スタート地点に相当&#10;Minecraft: /tp @s 0 64 0 コマンド or スポーン地点設定でリスポーン">33.Def.Pos:</td><td class="value">
+            <tr><td class="label" title="33.Def.Pos&#10;プレイヤーをデフォルト位置（原点 0,0,0）にテレポート&#10;初期値: X=0, Y=0, Z=0&#10;典型的なMMO: リスポーン・スタート地点に相当&#10;Minecraft: /tp @s 0 64 0 コマンド or スポーン地点設定でリスポーン">33.Def.Pos</td><td class="value">
                 <button id="defaultPosBtn" class="debug-btn">Reset</button>
             </td></tr>
-            <tr><td class="label" title="33b.Teleport&#10;X, Zを入力してGoボタンで指定座標にテレポート&#10;ワールド座標（-128〜127）">33b.Teleport:</td><td class="value">
+            <tr><td class="label" title="33b.Teleport&#10;X, Zを入力してGoボタンで指定座標にテレポート&#10;ワールド座標（-128〜127）">33b.Teleport</td><td class="value">
                 <div style="display:flex; justify-content:flex-end; gap:2px; width:100%;">
                     <input type="number" id="teleportX" class="debug-input" placeholder="X" style="width:42px;">
                     <input type="number" id="teleportZ" class="debug-input" placeholder="Z" style="width:42px;">
                     <button id="teleportBtn" class="debug-btn" style="width:30px;">Go</button>
                 </div>
             </td></tr>
-            <tr><td class="label" title="32.Controls&#10;操作方法&#10;[移動] W/↑:前進  S/↓:後退  A/←:左  D/→:右&#10;[カメラ] マウス左ドラッグ:回転  ホイール:ズーム&#10;[移動先] 地面を左クリック:クリック位置へ移動&#10;[チャット] テキスト入力後 Enter または 送信ボタン&#10;[クリア] クリアボタン:吹き出しテキスト消去&#10;Minecraft: WASD:移動, Space:ジャンプ, Shift:スニーク, F5:視点切替, F3:デバッグ, T:チャット">32.Controls:</td><td class="value"></td></tr>
-            <tr><td class="label" title="34.自動デバッグチャット&#10;数秒毎にランダムなセリフを自動投稿します&#10;初期値: Off&#10;ログイン中のみ有効">34.AutoChat:</td><td class="value">
+            <tr><td class="label" title="32.Controls&#10;操作方法&#10;[移動] W/↑:前進  S/↓:後退  A/←:左  D/→:右&#10;[カメラ] マウス左ドラッグ:回転  ホイール:ズーム&#10;[移動先] 地面を左クリック:クリック位置へ移動&#10;[チャット] テキスト入力後 Enter または 送信ボタン&#10;[クリア] クリアボタン:吹き出しテキスト消去&#10;Minecraft: WASD:移動, Space:ジャンプ, Shift:スニーク, F5:視点切替, F3:デバッグ, T:チャット">32.Controls</td><td class="value"></td></tr>
+            <tr><td class="label" title="34.自動デバッグチャット&#10;数秒毎にランダムなセリフを自動投稿します&#10;初期値: Off&#10;ログイン中のみ有効">34.AutoChat</td><td class="value">
                 <button id="autoChatBtn" class="debug-btn off">Off</button>
             </td></tr>
             <tr><td colspan="2" style="padding:4px 0 0 0;">
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">AutoWalk</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="34b.AutoWalk&#10;指定した四角形を自動で巡回移動します&#10;初期値: Off">34b.AutoWalk:</td><td class="value">
+                    <tr><td class="label" title="34b.AutoWalk&#10;指定した四角形を自動で巡回移動します&#10;初期値: Off">34b.AutoWalk</td><td class="value">
                         <button id="autoWalkBtn" class="debug-btn off">Off</button>
                     </td></tr>
-                    <tr><td class="label">始点:</td><td class="value">
+                    <tr><td class="label">始点</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
                             <span style="font-size:10px;color:#555;">X</span><input type="number" id="autoWalkX" class="debug-input" value="0" style="width:40px;" title="始点X">
                             <span style="font-size:10px;color:#555;">Z</span><input type="number" id="autoWalkZ" class="debug-input" value="0" style="width:40px;" title="始点Z">
                         </div>
                     </td></tr>
-                    <tr><td class="label">サイズ:</td><td class="value">
+                    <tr><td class="label">サイズ</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
                             <span style="font-size:10px;color:#555;">dX</span><input type="number" id="autoWalkDX" class="debug-input" value="5" style="width:40px;" title="dX">
                             <span style="font-size:10px;color:#555;">dZ</span><input type="number" id="autoWalkDZ" class="debug-input" value="5" style="width:40px;" title="dZ">
@@ -1804,14 +1848,14 @@
                 </table>
                 </div>
             </td></tr>
-            <tr><td class="label" title="35.NPC Chat&#10;npc001〜003が数秒毎にチャット履歴へ自動投稿します&#10;初期値: Off">35.NPC Chat:</td><td class="value">
+            <tr><td class="label" title="35.NPC Chat&#10;npc001〜003が数秒毎にチャット履歴へ自動投稿します&#10;初期値: Off">35.NPC Chat</td><td class="value">
                 <button id="npcAutoChatBtn" class="debug-btn off">Off</button>
             </td></tr>
             <tr><td colspan="2" style="padding:4px 0 0 0;">
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Avatar</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="36.Avatar&#10;自分のアバターを選択します。変更すると他ユーザの画面にも反映されます。">36.Avatar:</td><td class="value">
+                    <tr><td class="label" title="36.Avatar&#10;自分のアバターを選択します。変更すると他ユーザの画面にも反映されます。">36.Avatar</td><td class="value">
                         <select id="avatarSelect" class="debug-select">
                             <option value="/textures/pic1.ktx2">pic1</option>
                             <option value="/textures/pic2.ktx2">pic2</option>
@@ -1823,13 +1867,13 @@
                             <button id="spriteApplyBtn" class="debug-btn">Apply</button>
                         </div>
                     </td></tr>
-                    <tr><td class="label" title="37.NPC&#10;NPC（npc001〜003）の表示をON/OFFします&#10;初期値: Off">37.NPC:</td><td class="value">
+                    <tr><td class="label" title="37.NPC&#10;NPC（npc001〜003）の表示をON/OFFします&#10;初期値: Off">37.NPC</td><td class="value">
                         <button id="npcVisBtn" class="debug-btn off">Off</button>
                     </td></tr>
-                    <tr><td class="label" title="38.Avatar Thick&#10;アバターの厚みを調節します&#10;初期値: 5 (depth=0.05)&#10;最小: 1 (depth=0.01) 最大: 50 (depth=0.50)">38.Avatar Thick:</td><td class="value">
+                    <tr><td class="label" title="38.Avatar Thick&#10;アバターの厚みを調節します&#10;初期値: 5 (depth=0.05)&#10;最小: 1 (depth=0.01) 最大: 50 (depth=0.50)">38.Avatar Thick</td><td class="value">
                         <input type="number" id="avatarThickInput" class="debug-input" min="1" max="50" step="1" value="5" style="width:60px;">
                     </td></tr>
-                    <tr><td class="label" title="38b.UID Color&#10;表示名未設定時の @ マークの色&#10;ユーザID部分は白で表示&#10;初期値: 青(#1177dd)">38b.UID Color:</td><td class="value">
+                    <tr><td class="label" title="38b.UID Color&#10;表示名未設定時の @ マークの色&#10;ユーザID部分は白で表示&#10;初期値: 青(#1177dd)">38b.UID Color</td><td class="value">
                         <input type="color" id="uidColorInput" value="#00bbfa" style="width:52px;height:22px;padding:0;border:1px solid #aaa;cursor:pointer;vertical-align:middle;">
                     </td></tr>
                 </table>
@@ -1839,13 +1883,13 @@
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Build Mode</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="39.Build Mode&#10;ビルドモードON/OFF&#10;Bキー: ON/OFF切り替え&#10;ESCキー: OFFにする&#10;ONのとき地面をクリックしてブロックを設置/削除できます">39.Build Mode:</td><td class="value">
+                    <tr><td class="label" title="39.Build Mode&#10;ビルドモードON/OFF&#10;Bキー: ON/OFF切り替え&#10;ESCキー: OFFにする&#10;ONのとき地面をクリックしてブロックを設置/削除できます">39.Build Mode</td><td class="value">
                         <button id="buildModeBtn" class="debug-btn off">Off</button>
                     </td></tr>
-                    <tr><td class="label" title="40.Block Color&#10;ビルドモードで置くブロックの色を選択します">40.Block Color:</td><td class="value">
+                    <tr><td class="label" title="40.Block Color&#10;ビルドモードで置くブロックの色を選択します">40.Block Color</td><td class="value">
                         <input type="color" id="blockColorInput" value="#3366ff" style="width:52px;height:22px;padding:0;border:1px solid #aaa;cursor:pointer;vertical-align:middle;">
                     </td></tr>
-                    <tr><td class="label" title="41.Block Opacity&#10;ビルドモードで置くブロックの不透明度&#10;0.0=透明 〜 1.0=不透明&#10;初期値: 0.5">41.Block Opacity:</td><td class="value">
+                    <tr><td class="label" title="41.Block Opacity&#10;ビルドモードで置くブロックの不透明度&#10;0.0=透明 〜 1.0=不透明&#10;初期値: 0.5">41.Block Opacity</td><td class="value">
                         <div style="display:flex; justify-content:flex-end; gap:2px; width:100%;">
                             <select id="blockOpacitySelect" class="debug-select" style="width:52px;" onchange="document.getElementById('blockOpacityInput').value=this.value">
                                 <option value="0.1">0.1</option>
@@ -1864,16 +1908,16 @@
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Speech</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="42.Speech Trim&#10;セリフ送信時に文字列前後の空白（半角・全角・タブ）をトリムします&#10;ON: 前後の空白を削除して送信&#10;OFF: 空白をそのまま送信（顔文字など向け）&#10;初期値: On">42.Speech Trim:</td><td class="value">
+                    <tr><td class="label" title="42.Speech Trim&#10;セリフ送信時に文字列前後の空白（半角・全角・タブ）をトリムします&#10;ON: 前後の空白を削除して送信&#10;OFF: 空白をそのまま送信（顔文字など向け）&#10;初期値: On">42.Speech Trim</td><td class="value">
                         <button id="speechTrimBtn" class="debug-btn on">On</button>
                     </td></tr>
-                    <tr><td class="label" title="43.Speech Font&#10;アバターのセリフ表示に使うフォントを選択します&#10;AA Mode OFFのとき有効&#10;初期値: 固定幅">43.Speech Font:</td><td class="value">
+                    <tr><td class="label" title="43.Speech Font&#10;アバターのセリフ表示に使うフォントを選択します&#10;AA Mode OFFのとき有効&#10;初期値: 固定幅">43.Speech Font</td><td class="value">
                         <select id="speechFontSelect" class="debug-select">
                             <option value="monospace" selected>固定幅</option>
                             <option value="sans-serif">プロポーショナル</option>
                         </select>
                     </td></tr>
-                    <tr><td class="label" title="44.Speech Leading&#10;アバターのセリフ表示の行間倍率&#10;AA Mode OFFのとき有効&#10;初期値: 1.3">44.Speech Leading:</td><td class="value">
+                    <tr><td class="label" title="44.Speech Leading&#10;アバターのセリフ表示の行間倍率&#10;AA Mode OFFのとき有効&#10;初期値: 1.3">44.Speech Leading</td><td class="value">
                         <select id="speechLeadingSelect" class="debug-select">
                             <option value="1.0">1.0</option>
                             <option value="1.125">1.125</option>
@@ -1882,10 +1926,10 @@
                             <option value="1.5">1.5</option>
                         </select>
                     </td></tr>
-                    <tr><td class="label" title="45.AA Mode&#10;アスキーアート(AA)表示モードのON/OFF&#10;ON: ＭＳ Ｐゴシック 行間1.125&#10;OFF: 43/44の設定を使用&#10;初期値: Off">45.AA Mode:</td><td class="value">
+                    <tr><td class="label" title="45.AA Mode&#10;アスキーアート(AA)表示モードのON/OFF&#10;ON: ＭＳ Ｐゴシック 行間1.125&#10;OFF: 43/44の設定を使用&#10;初期値: Off">45.AA Mode</td><td class="value">
                         <button id="aaModeBtn" class="debug-btn off">Off</button>
                     </td></tr>
-                    <tr><td class="label" title="46.Speech Size&#10;アバターのセリフ表示のフォントサイズ（ポイント）&#10;初期値: 24pt">46.Speech Size:</td><td class="value">
+                    <tr><td class="label" title="46.Speech Size&#10;アバターのセリフ表示のフォントサイズ（ポイント）&#10;初期値: 24pt">46.Speech Size</td><td class="value">
                         <select id="speechSizeSelect" class="debug-select">
                             <option value="10">10pt</option>
                             <option value="12">12pt</option>
@@ -1906,7 +1950,7 @@
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Profile</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="50.Profile&#10;パフォーマンス計測の開始/停止/ログ出力&#10;開始: profileStart() — DevTools Timings に mark/measure 出力&#10;停止: profileStop()&#10;ログ: profileDump() — コンソールにサマリ表示">50.Profile:</td><td class="value">
+                    <tr><td class="label" title="50.Profile&#10;パフォーマンス計測の開始/停止/ログ出力&#10;開始: profileStart() — DevTools Timings に mark/measure 出力&#10;停止: profileStop()&#10;ログ: profileDump() — コンソールにサマリ表示">50.Profile</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
                             <span id="profileStatus" style="display:none;color:red;font-size:11px;font-weight:bold;">計測中</span>
                             <button id="profileStartBtn" class="debug-btn" style="float:none;">Start</button>
@@ -1914,7 +1958,7 @@
                         <button id="profileStopBtn" class="debug-btn off" style="float:none;display:block;margin-left:auto;" disabled>Stop</button>
                         <button id="profileLogBtn" class="debug-btn" style="float:none;display:block;margin-left:auto;">Log</button>
                     </td></tr>
-                    <tr><td class="label" title="51.Server Profile&#10;サーバ側プロファイルのON/OFF">51.Server:</td><td class="value">
+                    <tr><td class="label" title="51.Server Profile&#10;サーバ側プロファイルのON/OFF">51.Server</td><td class="value">
                         <button id="serverProfileBtn" class="debug-btn off" style="float:none;display:block;margin-left:auto;">Off</button>
                     </td></tr>
                 </table>
