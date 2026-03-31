@@ -654,7 +654,9 @@ export function setupHtmlUI(game: GameScene): void {
             const tr = document.createElement("tr");
             const bold = sessionId === myId ? " class=\"ul-self\"" : "";
             const rel = relativeTime(loginTimestamp);
-            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${displayName}">${displayName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td class="uuid-cell" data-copy="${myChatId}" title="${myChatId}&#10;クリックでコピー">${chatShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
+            const lbl = resolveDisplayLabel(displayName, username, sessionId);
+            const fullName = lbl.suffix ? lbl.text + lbl.suffix : lbl.text;
+            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${fullName}">${fullName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td class="uuid-cell" data-copy="${myChatId}" title="${myChatId}&#10;クリックでコピー">${chatShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
             frag.appendChild(tr);
         }
         userListBody.innerHTML = "";
@@ -713,6 +715,31 @@ export function setupHtmlUI(game: GameScene): void {
 
     setInterval(scheduleRenderUserList, 10000);
 
+    // カラムリサイズハンドル
+    {
+        const ths = document.querySelectorAll<HTMLTableCellElement>("#user-list thead th");
+        ths.forEach(th => {
+            const handle = document.createElement("div");
+            handle.className = "ul-resize";
+            th.appendChild(handle);
+            let startX = 0, startW = 0;
+            const onMove = (e: PointerEvent) => {
+                th.style.width = Math.max(30, startW + e.clientX - startX) + "px";
+            };
+            const onUp = () => {
+                document.removeEventListener("pointermove", onMove);
+                document.removeEventListener("pointerup", onUp);
+            };
+            handle.addEventListener("pointerdown", (e) => {
+                e.stopPropagation(); // ソートを発火させない
+                e.preventDefault();
+                startX = e.clientX;
+                startW = th.offsetWidth;
+                document.addEventListener("pointermove", onMove);
+                document.addEventListener("pointerup", onUp);
+            });
+        });
+    }
 
     // Nakama コールバック設定
     // セリフ自動消去: 15秒後にフェードアウト開始、約1秒で透明→消去

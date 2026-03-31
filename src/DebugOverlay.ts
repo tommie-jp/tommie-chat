@@ -1146,9 +1146,7 @@ export function setupDebugOverlay(game: GameScene): void {
             if (fv) fv.innerText = fps;
             const pd = document.getElementById("ping-display");
             if (pd) {
-                const username = game.nakama.getSession()?.username ?? "";
-                const dnInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
-                const uid = dnInput?.value || ("@" + username);
+                const uid = game.selfNameLabel || ("@" + (game.nakama.getSession()?.username ?? ""));
                 const fpsStr = String(fps).padStart(2, "\u2007");
                 const mono = 'style="font-variant-numeric:tabular-nums;"';
                 const pingCursor = 'style="cursor:pointer;"';
