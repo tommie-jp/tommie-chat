@@ -1,5 +1,7 @@
 # tommieChat
 
+[English](README.md) | [日本語](README.ja.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Babylon.js](https://img.shields.io/badge/Babylon.js-8.x-red.svg)](https://www.babylonjs.com/)
 [![Nakama](https://img.shields.io/badge/Nakama-3.35-blueviolet.svg)](https://heroiclabs.com/nakama/)
@@ -8,215 +10,230 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1.svg)](https://www.postgresql.org/)
 
-2026/03/14 更新
+Updated: April 1, 2026
 
-> **プロジェクトの状態:** 現在、鋭意開発中です。まだサーバ公開していません。近日公開予定。
+> **Project Status:** Currently under active development. An experimental server is available at [mmo.tommie.jp](https://mmo.tommie.jp).
 
-ブラウザで動く3D MMOチャットゲームです。
-Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー環境で、ブロックを置いたりチャットしたりできます。
+A 3D MMO chat game that runs in the browser.
+Built with Babylon.js + Nakama, it provides a real-time multiplayer environment where you can place blocks and chat with others.
 
-## 目次
+## Table of Contents
 
-1. [スクリーンショット](#1-スクリーンショット)
-2. [特徴](#2-特徴)
-3. [技術スタック](#3-技術スタック)
-4. [必要な環境](#4-必要な環境)
-5. [セットアップ](#5-セットアップ)
-6. [ポート番号](#6-ポート番号)
-7. [操作方法](#7-操作方法)
-8. [ディレクトリ構成](#8-ディレクトリ構成)
-9. [ドキュメント](#9-ドキュメント)
-10. [開発ツール](#10-開発ツール)
-11. [貢献](#11-貢献)
-12. [ライセンス](#12-ライセンス)
-13. [作者](#13-作者)
+1. [Screenshots](#1-screenshots)
+2. [Features](#2-features)
+3. [Tech Stack](#3-tech-stack)
+4. [Requirements](#4-requirements)
+5. [Setup](#5-setup)
+6. [Port Numbers](#6-port-numbers)
+7. [Controls](#7-controls)
+8. [Directory Structure](#8-directory-structure)
+9. [Documentation](#9-documentation)
+10. [Development Tools](#10-development-tools)
+11. [Contributing](#11-contributing)
+12. [License](#12-license)
+13. [Author](#13-author)
 
-## 1. スクリーンショット
+## 1. Screenshots
 
-（準備中）
+*Screenshots are from the development version and may change significantly.*
 
-## 2. 特徴
+![tommieChat screenshot](ss/00-ver0.1.10.png)
 
-- ブラウザだけで動作（インストール不要）
-- 3Dワールドでリアルタイムチャット
-- ブロック配置によるワールド編集
-- 複数ユーザーの同時接続に対応
-- デバイス認証によるかんたんログイン
+![tommieChat screenshot](ss/01-ver0.1.5.png)
 
-## 3. 技術スタック
+## 2. Features
 
-| 項目 | 技術 |
+- Runs entirely in the browser (no installation required)
+- PWA support (installable to home screen for fullscreen experience)
+- Real-time chat in a 3D world with speech bubbles
+- Sprite-based avatar system
+- World editing through block placement
+- Supports multiple simultaneous users
+- Easy login via device authentication
+- Asset storage via MinIO
+
+## 3. Tech Stack
+
+| Component | Technology |
 |---|---|
-| 3Dエンジン | [Babylon.js](https://www.babylonjs.com/) 8.x |
-| ゲームサーバー | [Nakama](https://heroiclabs.com/nakama/) 3.35 |
-| サーバーロジック | Go |
-| フロントエンド | TypeScript |
-| ビルドツール | Vite |
-| データベース | PostgreSQL 16 |
-| コンテナ | Docker Compose |
+| 3D Engine | [Babylon.js](https://www.babylonjs.com/) 8.x |
+| Game Server | [Nakama](https://heroiclabs.com/nakama/) 3.35 |
+| Server Logic | Go |
+| Frontend | TypeScript |
+| Build Tool | Vite |
+| Database | PostgreSQL 16 |
+| Object Storage | [MinIO](https://min.io/) |
+| Container | Docker Compose |
 
-## 4. 必要な環境
+## 4. Requirements
 
-### 開発環境
+### Development Environment
 
-- Node.js v24+（フロントエンドのビルドに必要）
-- Docker / Docker Compose（サーバ起動に必要）
+- Node.js v24+ (required for frontend build)
+- Docker / Docker Compose (required for server startup)
 
-### 本番環境
+### Production Environment
 
-- Docker / Docker Compose のみ（ビルド済み `dist/` を配置）
+- Docker / Docker Compose only (deploy pre-built `dist/`)
 
-### ブラウザ
+### Browser
 
-- スマートフォン対応（iOS Safari, Android Chrome）
-- WebGL 2.0 対応ブラウザ（Chrome, Edge, Firefox, Safari）
+- Mobile support (iOS Safari, Android Chrome)
+- WebGL 2.0 compatible browsers (Chrome, Edge, Firefox, Safari)
 
-## 5. セットアップ
+## 5. Setup
 
-### 5.1 リポジトリのクローン
+### 5.1 Clone the Repository
 
 ```bash
 git clone https://github.com/open-tommie/tommie-chat.git
 cd tommie-chat
 ```
 
-### 5.2 クライアント（フロントエンド）
+### 5.2 Client (Frontend)
 
 ```bash
 npm install
 npm run build
 ```
 
-### 5.3 サーバー（Nakama）
+### 5.3 Server (Nakama)
 
 ```bash
-# 環境変数の設定
+# Set up environment variables
 cp nakama/.env.example nakama/.env
 
-# サーバー起動
+# Start the server
 cd nakama && docker compose up -d && cd ..
 
-# Go プラグインのビルド＆反映
+# Build & deploy the Go plugin
 bash nakama/doBuild.sh --fresh
 ```
 
-### 5.4 ブラウザで確認
+### 5.4 Open in Browser
 
-<http://localhost> を開きます（nginx 経由で `dist/` を配信）。
+Open <http://localhost> (serves `dist/` via nginx).
 
-開発中は `npm run dev` で Vite 開発サーバー (<http://localhost:5173>) も使えます。
+During development, you can also use the Vite dev server (<http://localhost:5173>) with `npm run dev`.
 
-Nakama 管理ダッシュボード: <http://localhost:7351>（初期ユーザー: `admin` / `password`）
+Nakama admin dashboard: <http://localhost:7351> (default credentials: `admin` / `password`)
 
-### 5.5 テスト
+### 5.5 Testing
 
 ```bash
-# 型チェック
+# Type checking
 npm run check
 
-# ユニットテスト
+# Unit tests
 npm test
 
-# 統合テスト（Nakamaサーバー起動中に実行）
+# Integration tests (run while Nakama server is running)
 bash test/doAll.sh
 
-# 全ファイル文法チェック
+# Lint all files
 bash test/doLint.sh
 ```
 
-## 6. ポート番号
+## 6. Port Numbers
 
-| ポート | 用途 |
+| Port | Purpose |
 |---|---|
-| 80 | Web フロントエンド (nginx) |
-| 5173 | Vite 開発サーバー |
+| 80 | Web frontend (nginx) |
+| 5173 | Vite dev server |
 | 5432 | PostgreSQL |
-| 6060 | Go pprof プロファイラ |
+| 6060 | Go pprof profiler |
 | 7349 | Nakama gRPC API |
-| 7350 | Nakama クライアント API |
-| 7351 | Nakama 管理ダッシュボード |
-| 9090 | Prometheus メトリクス |
+| 7350 | Nakama client API |
+| 7351 | Nakama admin dashboard |
+| 9090 | Prometheus metrics |
 
-## 7. 操作方法
+## 7. Controls
 
-- **ログイン**: ユーザIDを入力してログインボタン
-- **移動**: クリックまたはタップで移動先を指定
-- **ブロック配置**: Bキー + クリック（スマホ: 未対応）
-- **チャット**: 下部のテキスト入力欄からメッセージ送信
-- **カメラ**: ドラッグまたはスワイプで回転
+- **Login**: Enter a user ID and click the login button
+- **Move**: Click or tap to set a destination
+- **Place Block**: B key + click (mobile: not yet supported)
+- **Chat**: Send messages from the text input at the bottom
+- **Camera**: Drag or swipe to rotate
 
-## 8. ディレクトリ構成
+## 8. Directory Structure
 
 ```text
 tommieChat/
-├── src/                  # クライアント側ソースコード (TypeScript)
-│   ├── main.ts           # エントリーポイント
-│   ├── GameScene.ts      # Babylon.js ゲームシーン
-│   ├── NakamaService.ts  # Nakama サーバー通信
-│   ├── UIPanel.ts        # UI パネル
-│   ├── AOIManager.ts     # AOI (Area of Interest) 管理
-│   ├── AvatarSystem.ts   # アバター管理
-│   ├── ChunkDB.ts        # チャンクデータベース
-│   ├── CloudSystem.ts    # 雲エフェクト
-│   ├── NPCSystem.ts      # NPC 管理
-│   ├── Profiler.ts       # パフォーマンス計測
-│   ├── WorldConstants.ts # ワールド定数
-│   └── DebugOverlay.ts   # デバッグオーバーレイ
-├── public/               # 静的アセット
-│   └── textures/         # テクスチャ (.ktx2)
-├── nakama/               # サーバー側
+├── src/                  # Client-side source code (TypeScript)
+│   ├── main.ts           # Entry point
+│   ├── GameScene.ts      # Babylon.js game scene
+│   ├── NakamaService.ts  # Nakama server communication
+│   ├── UIPanel.ts        # UI panels
+│   ├── AOIManager.ts     # AOI (Area of Interest) management
+│   ├── AvatarSystem.ts   # Avatar management
+│   ├── SpriteAvatarSystem.ts # Sprite-based avatar system
+│   ├── ChunkDB.ts        # Chunk database
+│   ├── CloudSystem.ts    # Cloud effects
+│   ├── NPCSystem.ts      # NPC management
+│   ├── Profiler.ts       # Performance profiling
+│   ├── WorldConstants.ts # World constants
+│   └── DebugOverlay.ts   # Debug overlay
+├── public/               # Static assets
+│   ├── textures/         # Textures (.ktx2)
+│   ├── manifest.json     # PWA manifest
+│   └── sw.js             # Service Worker
+├── nakama/               # Server-side
 │   ├── docker-compose.yml
-│   ├── go_src/           # Go サーバープラグイン (main.go)
-│   ├── nginx.conf        # リバースプロキシ設定
-│   ├── doBuild.sh        # プラグインビルドスクリプト
-│   └── doRestart.sh      # サーバー再起動スクリプト
-├── test/                 # テストスクリプト・テストコード
-│   ├── doAll.sh          # 全テスト一括実行
-│   ├── doLint.sh         # 文法チェック
-│   ├── doNight.sh        # 夜間長時間テスト
-│   ├── doTest-*.sh       # 各種テストスクリプト
-│   ├── nakama-*.test.ts  # Vitest テストファイル
-│   └── log/              # テストレポート出力先
-├── doc/                  # ドキュメント
-├── pic/                  # 画像素材・変換スクリプト
+│   ├── go_src/           # Go server plugin (main.go)
+│   ├── nginx.conf        # Reverse proxy configuration
+│   ├── doBuild.sh        # Plugin build script
+│   └── doRestart.sh      # Server restart script
+├── test/                 # Test scripts & test code
+│   ├── doAll.sh          # Run all tests
+│   ├── doLint.sh         # Lint check
+│   ├── doNight.sh        # Overnight long-running tests
+│   ├── doTest-*.sh       # Various test scripts
+│   ├── nakama-*.test.ts  # Vitest test files
+│   └── log/              # Test report output
+├── doc/                  # Documentation
+├── pic/                  # Image assets & conversion scripts
 ├── .github/              # GitHub Actions / Dependabot
-├── index.html            # メイン HTML
+├── index.html            # Main HTML
 ├── package.json
 ├── vite.config.ts
 ├── vitest.config.ts
 └── tsconfig.json
 ```
 
-## 9. ドキュメント
+## 9. Documentation
 
-`doc/` ディレクトリに詳細ドキュメントがあります。
+Detailed documentation is available in the `doc/` directory.
 
-| ドキュメント | 内容 |
-|-------------|------|
-| [03-nakama-サーバ構築](doc/03-nakama-サーバ構築.md) | Nakama サーバの構築手順 |
-| [04-DB-同接データ](doc/04-DB-同接データ.md) | 同接データの DB 設計 |
-| [05-ユーザID削除](doc/05-ユーザID削除.md) | ユーザ ID 削除手順 |
-| [06-nakama-チューニング](doc/06-nakama-チューニング.md) | サーバチューニングパラメータ |
-| [10-ブラウザ側ファイル構成](doc/10-ブラウザ側ファイル構成.md) | フロントエンドのファイル構成 |
-| [11-RPC関数一覧](doc/11-RPC関数一覧.md) | サーバ RPC 関数の一覧 |
-| [20-ブラウザプロファイル](doc/20-ブラウザプロファイル.md) | ブラウザ側パフォーマンス計測 |
-| [21-nakamaサーバプロファイル](doc/21-nakamaサーバプロファイル.md) | サーバ側プロファイリング |
-| [30-テストスクリプト一覧](doc/30-テストスクリプト一覧.md) | テストスクリプトとオプション |
-| [40-デプロイ手順](doc/40-デプロイ手順.md) | さくらVPS デプロイ手順 |
+| Document | Description |
+|----------|-------------|
+| [03-nakama-server-setup](doc/03-nakama-サーバ構築.md) | Nakama server setup guide |
+| [04-DB-concurrent-connections](doc/04-DB-同接データ.md) | Concurrent connection DB design |
+| [05-user-ID-deletion](doc/05-ユーザID削除.md) | User ID deletion procedure |
+| [06-nakama-tuning](doc/06-nakama-チューニング.md) | Server tuning parameters |
+| [07-MinIO-asset-storage](doc/07-MinIO-アセットストレージ.md) | MinIO asset storage |
+| [10-frontend-file-structure](doc/10-ブラウザ側ファイル構成.md) | Frontend file structure |
+| [11-RPC-function-list](doc/11-RPC関数一覧.md) | Server RPC function list |
+| [20-browser-profiling](doc/20-ブラウザプロファイル.md) | Browser-side performance profiling |
+| [21-nakama-server-profiling](doc/21-nakamaサーバプロファイル.md) | Server-side profiling |
+| [30-test-script-list](doc/30-テストスクリプト一覧.md) | Test scripts and options |
+| [40-deployment-guide](doc/40-デプロイ手順.md) | Sakura VPS deployment guide |
+| [42-LAN-connection](doc/42-LAN接続手順.md) | LAN connection guide |
+| [43-mobile-display-test](doc/43-スマホ表示テスト.md) | Mobile display testing |
+| [51-SpriteViewer-demo](doc/51-SpriteViewerデモ.md) | SpriteViewer demo |
 
-## 10. 開発ツール
+## 10. Development Tools
 
-本プロジェクトの設計・実装・テスト・ドキュメント作成において、[Claude Code](https://docs.anthropic.com/en/docs/claude-code)（Anthropic）を全面的に活用しています。
+This project extensively uses [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (Anthropic) for design, implementation, testing, and documentation.
 
-## 11. 貢献
+## 11. Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md) をご覧ください。
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## 12. ライセンス
+## 12. License
 
 [MIT License](LICENSE)
 
-## 13. 作者
+## 13. Author
 
 - tommie.jp
 - X: [@tommie_nico](https://x.com/tommie_nico)

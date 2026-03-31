@@ -43,7 +43,7 @@ nakama/log
 *.old
 *.del
 work/
-ss/
+ss/*.mp4
 .claude/
 01-README.md
 
