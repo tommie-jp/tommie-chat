@@ -2203,7 +2203,8 @@ export function setupHtmlUI(game: GameScene): void {
             menuLogin.addEventListener("click", (e) => {
                 e.stopPropagation();
                 setLoginRowVisible(true);
-                document.getElementById("menu-popup")?.classList.remove("open");
+                const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
+                if (cl) cl(menuLogin); else document.getElementById("menu-popup")?.classList.remove("open");
             });
         }
     }
@@ -2218,6 +2219,8 @@ export function setupHtmlUI(game: GameScene): void {
         if (menuLogout && logoutPanel) {
             menuLogout.addEventListener("click", (e) => {
                 e.stopPropagation();
+                const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
+                if (cl) cl(menuLogout); else document.getElementById("menu-popup")?.classList.remove("open");
                 logoutPanel.style.display = "block";
             });
         }

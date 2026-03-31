@@ -153,8 +153,31 @@ export function setupDebugOverlay(game: GameScene): void {
         const menuPopup  = document.getElementById("menu-popup")!;
         const cookieReset = document.getElementById("menu-cookie-reset")!;
 
+        /** メニューを閉じる（選択項目のフラッシュ＋フェードアウト） */
+        const closeMenu = (selectedBtn?: HTMLElement) => {
+            if (!menuPopup.classList.contains("open")) return;
+            if (selectedBtn) {
+                selectedBtn.classList.add("menu-flash");
+                selectedBtn.addEventListener("animationend", () => selectedBtn.classList.remove("menu-flash"), { once: true });
+            }
+            const delay = selectedBtn ? 250 : 0;
+            setTimeout(() => {
+                menuPopup.classList.add("menu-fade-out");
+                menuPopup.addEventListener("animationend", () => {
+                    menuPopup.classList.remove("open", "menu-fade-out");
+                }, { once: true });
+            }, delay);
+        };
+        // GameScene 経由で他ファイルからも呼べるようにする
+        (game as any).closeMenu = closeMenu;
+
         menuBtn.addEventListener("click", () => {
-            menuPopup.classList.toggle("open");
+            if (menuPopup.classList.contains("open")) {
+                closeMenu();
+            } else {
+                menuPopup.classList.remove("menu-fade-out");
+                menuPopup.classList.add("open");
+            }
         });
         // iOS: 長押しコピーメニュー抑制
         menuBtn.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -164,7 +187,7 @@ export function setupDebugOverlay(game: GameScene): void {
             if (!menuPopup.classList.contains("open")) return;
             const t = e.target as HTMLElement;
             if (t.closest("#menu-popup") || t.closest("#menu-btn")) return;
-            menuPopup.classList.remove("open");
+            closeMenu();
         });
 
         cookieReset.addEventListener("click", () => {
@@ -302,6 +325,7 @@ export function setupDebugOverlay(game: GameScene): void {
 
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
+                closeMenu(btn);
                 const visible = target.style.display !== "none";
 
                 if (isMobileMenu && !visible) {
