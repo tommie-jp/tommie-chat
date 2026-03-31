@@ -1404,7 +1404,10 @@
                 opacity: 0.7;
                 top: auto !important;
                 bottom: 2px !important;
-                right: 8px !important;
+                left: auto !important;
+                right: calc(5% + 58px) !important;
+                transform: none !important;
+                text-align: right !important;
             }
             body.sp-panel-visible #app-footer-version {
                 top: calc(var(--pt-divider, 60vh) - 16px) !important;
@@ -1424,8 +1427,11 @@
             #portrait-divider { display: none !important; }
             body::before { display: none !important; }
             body.sp-panel-visible::before { display: none !important; }
-            /* ランドスケープ: メニューをハンバーガーの横に配置、全項目表示 */
-            #menu-popup { top: 4px !important; left: 60px !important; max-height: calc(100vh - 8px); overflow-y: auto; }
+            /* ランドスケープ: Safe Area対応 */
+            #menu-btn {
+                left: max(15px, env(safe-area-inset-left, 15px)) !important;
+            }
+            #menu-popup { top: 4px !important; left: max(60px, calc(env(safe-area-inset-left, 15px) + 45px)) !important; max-height: calc(100vh - 8px); overflow-y: auto; }
             .menu-item { padding: 4px 14px !important; font-size: 13px !important; min-height: 28px !important; box-sizing: border-box !important; }
             #menu-popup hr { margin: 1px 0 !important; }
             #renderCanvas {
@@ -1476,8 +1482,8 @@
                 pointer-events: none;
             }
             #chat-container {
-                left: calc(var(--ls-divider, 60%) + 12px);
-                right: 0;
+                left: max(calc(var(--ls-divider, 60%) + 12px), calc(env(safe-area-inset-left, 0px) + 12px));
+                right: env(safe-area-inset-right, 0px);
                 transform: none;
                 width: auto;
                 max-width: none;
@@ -1500,7 +1506,7 @@
 
             /* ping/FPS表示はcanvasの右上 */
             #ping-display {
-                right: calc(100% - var(--ls-divider, 60%) + 8px) !important;
+                right: max(calc(100% - var(--ls-divider, 60%) + 8px), calc(env(safe-area-inset-right, 8px) + 8px)) !important;
                 color: #000 !important;
             }
 
@@ -1524,11 +1530,12 @@
             }
             #app-footer-version {
                 top: auto !important;
-                bottom: 4px !important;
-                right: 8px !important;
+                bottom: 2px !important;
+                left: auto !important;
+                right: max(calc(100% - var(--ls-divider, 100%) + 24px), calc(env(safe-area-inset-right, 24px) + 24px)) !important;
+                transform: none !important;
             }
             body.sp-panel-visible #app-footer-version {
-                right: calc(100% - var(--ls-divider, 60%) + 8px) !important;
                 top: auto !important;
                 bottom: 4px !important;
             }
@@ -1536,7 +1543,7 @@
     </style>
     <script>
         // アプリバージョン・更新日の定数（ここだけ変更する）
-        var APP_VERSION = "0.1.10";
+        var APP_VERSION = "0.1.10.2";
         var APP_DATE    = "2026/03/31";
 
         document.title = "tommieChat " + APP_VERSION;
@@ -1935,7 +1942,8 @@
                 </select>
             </td></tr>
             <tr><td class="label" title="30.API&#10;使用中のグラフィックスAPI&#10;初期値: WebGL2&#10;典型的なMMO: WebGL2（WebGPUは次世代・高性能）&#10;Minecraft: Java版 OpenGL 3.2+, Bedrock版 DirectX11/Metal/Vulkan（プラットフォーム依存）">30.API</td><td class="value" id="val-api">WebGL2</td></tr>
-            <tr><td class="label" title="30b.Profile&#10;フレーム内の各処理にかかる時間（ms）&#10;player=自キャラ移動  remote=他プレイヤー移動  npc=NPC  total=合計&#10;10フレーム移動平均">30b.Profile</td><td class="value" id="val-profile" style="font-size:10px;white-space:nowrap;">-</td></tr>
+            <tr><td class="label" title="30b.Browser&#10;ブラウザ種別と起動モード&#10;PWA: ホーム画面から起動（スタンドアロン）&#10;Browser: Safari/Chrome等のブラウザ内">30b.Browser</td><td class="value" id="val-browser">-</td></tr>
+            <tr><td class="label" title="30c.Profile&#10;フレーム内の各処理にかかる時間（ms）&#10;player=自キャラ移動  remote=他プレイヤー移動  npc=NPC  total=合計&#10;10フレーム移動平均">30c.Profile</td><td class="value" id="val-profile" style="font-size:10px;white-space:nowrap;">-</td></tr>
             <tr><td class="label" title="31.Glossiness&#10;マテリアルの鏡面反射強度（specularColor）&#10;初期値: 0.5&#10;典型的なMMO: 0.0（つや消し）〜1.0（金属・水面）&#10;Minecraft: バニラなし, PBRシェーダー（SEUS PTGI等）でSpecular/Roughness設定可">31.Glossiness</td><td class="value">
                 <input type="number" id="glossInput" class="debug-input" value="0.5" step="0.1" min="0" max="1">
             </td></tr>
@@ -2276,8 +2284,7 @@
     <script>
         // Service Worker 登録（本番のみ — vite devでは無効）
         var isDev = document.querySelector('script[src*="@vite/client"]') !== null;
-        var isLAN = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(location.hostname);
-        if ("serviceWorker" in navigator && !isDev && !isLAN) {
+        if ("serviceWorker" in navigator && !isDev) {
             navigator.serviceWorker.register("/sw.js").then(function(reg) {
                 console.log("SW registered, scope:", reg.scope);
                 reg.addEventListener("updatefound", function() {
@@ -2293,8 +2300,8 @@
             }).catch(function(err) {
                 console.warn("SW registration failed:", err);
             });
-        } else if ("serviceWorker" in navigator && (isDev || isLAN)) {
-            // 開発中: 既存のSWを解除
+        } else if ("serviceWorker" in navigator && isDev) {
+            // vite dev: 既存のSWを解除
             navigator.serviceWorker.getRegistrations().then(function(regs) {
                 regs.forEach(function(r) { r.unregister(); });
                 if (regs.length) console.log("SW unregistered (dev mode)");
