@@ -1351,6 +1351,12 @@ export function setupHtmlUI(game: GameScene): void {
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = "表示名を入力して下さい！"; } }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
+            // 表示名が設定済みなら表示名入力行を非表示
+            {
+                const dnRow = document.getElementById("displayname-row");
+                const di = document.getElementById("displayNameInput") as HTMLInputElement | null;
+                if (dnRow && di && di.value.trim().length >= 1) dnRow.style.display = "none";
+            }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
