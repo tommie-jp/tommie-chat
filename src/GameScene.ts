@@ -54,6 +54,8 @@ export class GameScene {
 
     updatePlayerSpeech!: (newText: string) => void;
     updatePlayerNameTag!: (newName: string, color?: string, suffix?: string) => void;
+    /** 右上ping-displayに表示する自分の名前（アバター名タグと同一文字列） */
+    selfNameLabel = "";
     refreshSelfNameTag?: () => void;
     nakama = new NakamaService();
     private renderingPipeline: DefaultRenderingPipeline | null = null;
@@ -448,6 +450,8 @@ export class GameScene {
             // スプライトアバターの名前タグも更新
             const sprNameUpdate = this.spriteAvatarSystem.getNameUpdate("__self__");
             if (sprNameUpdate) sprNameUpdate(name, color, suffix);
+            // 右上表示用にフルラベルを保存
+            this.selfNameLabel = suffix ? name + suffix : name;
         };
         // メッシュ側の吹き出しはスプライトアバター使用時は作成しない（二重表示防止）
         this.updatePlayerSpeech = (text: string) => {
