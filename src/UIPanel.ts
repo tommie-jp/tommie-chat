@@ -2269,8 +2269,8 @@ export function setupHtmlUI(game: GameScene): void {
             });
         }
 
-        // ドラッグ移動
-        if (aboutHeader && aboutPanel) {
+        // ドラッグ移動（PC のみ — スマホではヘッダードラッグはデバイダー移動に使う）
+        if (aboutHeader && aboutPanel && !isMobileDev) {
             let dragging = false;
             let dx = 0, dy = 0;
             aboutHeader.addEventListener("pointerdown", (e: PointerEvent) => {
