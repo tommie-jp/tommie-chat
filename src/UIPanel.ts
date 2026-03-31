@@ -1472,6 +1472,13 @@ export function setupHtmlUI(game: GameScene): void {
                 if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.display = "none"; displayNameBtn.style.background = ""; }
                 showDnStatus("✓ 表示名変更しました！", "#00dd55");
                 addServerLog("表示名変更", `表示名を「${name}」に設定しました`);
+                // 数秒後にユーザID行と表示名入力行を非表示
+                setTimeout(() => {
+                    const dnRow = document.getElementById("displayname-row");
+                    const loginRow = document.getElementById("login-row");
+                    if (dnRow) dnRow.style.display = "none";
+                    if (loginRow) loginRow.style.display = "none";
+                }, 3000);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : (typeof err === "object" && err !== null && "message" in err) ? String((err as any).message) : String(err);
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ " + msg; }
@@ -2201,7 +2208,12 @@ export function setupHtmlUI(game: GameScene): void {
         if (menuLogin) {
             menuLogin.addEventListener("click", (e) => {
                 e.stopPropagation();
-                setLoginRowVisible(true);
+                // ユーザID行と表示名行をセットでトグル
+                const loginRow = document.getElementById("login-row");
+                const dnRow = document.getElementById("displayname-row");
+                const visible = dnRow ? dnRow.style.display === "none" : true;
+                if (loginRow) loginRow.style.display = visible ? "" : "none";
+                if (dnRow) dnRow.style.display = visible ? "" : "none";
                 const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
                 if (cl) cl(menuLogin); else document.getElementById("menu-popup")?.classList.remove("open");
             });
