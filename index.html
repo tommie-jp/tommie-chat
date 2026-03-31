@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#87ceeb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link rel="manifest" href="/manifest.json">
     <title>tommieChat</title>
     <style>
         html { overflow: hidden; height: 100%; }
@@ -2269,5 +2273,33 @@
     <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"></div>
 
     <script type="module" src="/src/main.ts"></script>
+    <script>
+        // Service Worker 登録（本番のみ — vite devでは無効）
+        var isDev = document.querySelector('script[src*="@vite/client"]') !== null;
+        var isLAN = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(location.hostname);
+        if ("serviceWorker" in navigator && !isDev && !isLAN) {
+            navigator.serviceWorker.register("/sw.js").then(function(reg) {
+                console.log("SW registered, scope:", reg.scope);
+                reg.addEventListener("updatefound", function() {
+                    var newSW = reg.installing;
+                    if (newSW) {
+                        newSW.addEventListener("statechange", function() {
+                            if (newSW.state === "activated") {
+                                console.log("SW updated — new cache active");
+                            }
+                        });
+                    }
+                });
+            }).catch(function(err) {
+                console.warn("SW registration failed:", err);
+            });
+        } else if ("serviceWorker" in navigator && (isDev || isLAN)) {
+            // 開発中: 既存のSWを解除
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(r) { r.unregister(); });
+                if (regs.length) console.log("SW unregistered (dev mode)");
+            });
+        }
+    </script>
 </body>
 </html>
