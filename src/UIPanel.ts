@@ -5,7 +5,6 @@ import { prof } from "./Profiler";
 
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
-    const isMobileLandscape = () => isMobileDev && matchMedia("(orientation:landscape)").matches;
 
     // スマホ: パネルのスクロール領域のタッチが canvas やデバイダーに伝播するのを防止
     // ヘッダーはデバイダードラッグに使うので除外
