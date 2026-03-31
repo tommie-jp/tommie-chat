@@ -1520,25 +1520,34 @@
             var tooltipSourceEl = null; // ツールチップの表示元要素
             var tooltipShowTime = 0; // 表示直後のclick誤消去防止用
 
-            function showTooltip(text, posX, posY) {
+            function showTooltip(text, posX, posY, sourceEl) {
                 tooltipEl.textContent = text;
                 tooltipEl.style.display = "block";
                 tooltipVisible = true;
                 tooltipShowTime = Date.now();
-                var vw = window.innerWidth, vh = window.innerHeight;
+                var vw = window.innerWidth;
                 var tw = Math.min(280, vw - 20);
                 tooltipEl.style.maxWidth = tw + "px";
-                var x = Math.min(posX, vw - tw - 10);
-                var y = posY - 12;
-                tooltipEl.style.left = Math.max(5, x) + "px";
-                tooltipEl.style.top = "";
+                tooltipEl.style.left = "0";
+                tooltipEl.style.top = "0";
                 tooltipEl.style.bottom = "";
                 requestAnimationFrame(function() {
                     var th = tooltipEl.offsetHeight;
-                    if (y - th < 5) {
-                        tooltipEl.style.top = Math.min(posY + 20, vh - th - 5) + "px";
+                    var rect = sourceEl ? sourceEl.getBoundingClientRect() : null;
+                    // fixed要素の座標系を取得（iOS Safari キーボード表示時の補正）
+                    var fixedRef = tooltipEl.getBoundingClientRect();
+                    var offsetX = fixedRef.left;  // left:0 の実際の位置
+                    var offsetY = fixedRef.top;   // top:0 の実際の位置
+                    var elTop = (rect ? rect.top : posY) - offsetY;
+                    var elBottom = (rect ? rect.bottom : posY + 20) - offsetY;
+                    var elLeft = (rect ? rect.left : posX) - offsetX;
+                    var x = Math.min(Math.max(5, elLeft), vw - tw - 5);
+                    tooltipEl.style.left = x + "px";
+                    // 要素のすぐ上に配置。収まらなければ要素のすぐ下
+                    if (elTop - th - 6 >= 0) {
+                        tooltipEl.style.top = (elTop - th - 6) + "px";
                     } else {
-                        tooltipEl.style.top = (y - th) + "px";
+                        tooltipEl.style.top = (elBottom + 6) + "px";
                     }
                 });
             }
@@ -1584,7 +1593,7 @@
                 var el = findTitleEl(e.target);
                 if (!el) return;
                 tooltipSourceEl = el;
-                showTooltip(getTitleText(el), e.clientX, e.clientY);
+                showTooltip(getTitleText(el), e.clientX, e.clientY, el);
             }, true);
 
             // title属性のブラウザ標準ツールチップを抑制
@@ -1609,10 +1618,9 @@
                 tooltipJustShown = false;
                 var el = findTitleEl(e.target);
                 if (!el) return;
-                var touch = e.touches[0];
                 tooltipTimer = setTimeout(function() {
                     tooltipSourceEl = el;
-                    showTooltip(getTitleText(el), touch.clientX, touch.clientY);
+                    showTooltip(getTitleText(el), 0, 0, el);
                     tooltipJustShown = true;
                 }, LONG_PRESS_MS);
             }, { passive: true });
