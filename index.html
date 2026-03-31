@@ -1156,6 +1156,14 @@
             }
             #serverKeyDisplay {
                 color: #aaa !important;
+                font-size: 13px !important;
+            }
+            #serverKeyDisplay:is(span) {
+                /* 親.srv-rowのinline font-size:10pxを上書き */
+            }
+            .srv-row:has(#serverKeyDisplay) {
+                font-size: 13px !important;
+                color: #aaa !important;
             }
             #srvPingBtn, #srvNakamaPingBtn {
                 font-size: 13px !important;
