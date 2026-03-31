@@ -305,6 +305,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 }
                 const chatContainer = document.getElementById("chat-container");
                 if (chatContainer) {
+                    chatContainer.style.left = "";
+                    chatContainer.style.right = "";
                     chatContainer.style.background = anyVisible ? "" : "transparent";
                 }
             }
