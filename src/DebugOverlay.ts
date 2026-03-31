@@ -362,6 +362,7 @@ export function setupDebugOverlay(game: GameScene): void {
                         "ping-panel":            { w: 300, h: 160, top: pad, left: window.innerWidth - 300 - 300 },
                         "ccu-panel":             { w: 300, h: 160, top: pad, left: window.innerWidth - 300 - 610 },
                         "about-panel":           { w: 380, h: 0,   top: -1, left: -1 },  // -1 = CSS中央配置を使用
+                        "displayname-panel":     { w: 280, h: 0,   top: 80, left: pad },
                     };
                     const d = defaults[targetId];
                     if (d) {
@@ -415,6 +416,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-ccu",            "ccu-panel",             "同接グラフ",    "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
         makeToggle("menu-about",          "about-panel",           "tommieChatについて", "showAbout");
+        makeToggle("menu-login",          "displayname-panel",     "表示名設定",       "showDisplayName");
 
         // 右上クリック: ユーザID → プレイヤーリスト、ping/FPS → Pingグラフ
         const pdEl = document.getElementById("ping-display");
@@ -439,7 +441,7 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (!pdAction) return;
                 e.stopPropagation();
                 e.preventDefault();
-                if (pdAction === "userlist") document.getElementById("menu-userlist")?.click();
+                if (pdAction === "userlist") document.getElementById("menu-login")?.click();
                 else if (pdAction === "ping") document.getElementById("menu-ping")?.click();
                 else if (pdAction === "serverlog") document.getElementById("menu-serverlog")?.click();
                 pdAction = null;
