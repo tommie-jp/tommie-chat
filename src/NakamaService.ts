@@ -64,17 +64,55 @@ export class NakamaService {
         this.client = new Client(import.meta.env.VITE_SERVER_KEY ?? "defaultkey", this.host, this.port, useSSL);
     }
 
+    /** Cookie からデバイスIDを取得（Safari↔PWA間の共有用） */
+    private getDeviceIdCookie(loginName: string): string | null {
+        const ckey = `nakama_did_${loginName}`;
+        const match = document.cookie.match(new RegExp("(?:^|; )" + ckey + "=([^;]*)"));
+        return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    /** Cookie にデバイスIDを保存（Safari→PWA引き継ぎ用、SameSite=Strict） */
+    private setDeviceIdCookie(loginName: string, deviceId: string): void {
+        const ckey = `nakama_did_${loginName}`;
+        const secure = location.protocol === "https:" ? ";Secure" : "";
+        document.cookie = `${ckey}=${encodeURIComponent(deviceId)};path=/;max-age=3600;SameSite=Strict${secure}`;
+    }
+
+    /** Cookie からデバイスIDを削除（引き継ぎ完了後） */
+    private deleteDeviceIdCookie(loginName: string): void {
+        const ckey = `nakama_did_${loginName}`;
+        document.cookie = `${ckey}=;path=/;max-age=0`;
+    }
+
+    private generateDeviceId(): string {
+        return (typeof crypto.randomUUID === "function")
+            ? crypto.randomUUID()
+            : (([1e7] as unknown as string) + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c: string) =>
+                (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16));
+    }
+
     private getOrCreateDeviceId(loginName: string): string {
         const key = `nakama_device_id_${loginName}`;
+        // 1. localStorage（同一コンテキスト内で最速）
         let deviceId = localStorage.getItem(key);
-        if (!deviceId) {
-            deviceId = (typeof crypto.randomUUID === "function")
-                ? crypto.randomUUID()
-                : (([1e7] as unknown as string) + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c: string) =>
-                    (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16));
-            localStorage.setItem(key, deviceId!);
+        if (deviceId) {
+            // Cookie にも同期（Safari→PWA引き継ぎ用）
+            this.setDeviceIdCookie(loginName, deviceId);
+            return deviceId;
         }
-        return deviceId!;
+        // 2. Cookie（Safari↔PWA間の共有フォールバック）
+        const cookieValue = this.getDeviceIdCookie(loginName);
+        if (cookieValue) {
+            localStorage.setItem(key, cookieValue);
+            this.deleteDeviceIdCookie(loginName);  // 引き継ぎ完了、Cookie削除
+            console.log("snd DeviceId restored from cookie (PWA bridge)");
+            return cookieValue;
+        }
+        // 3. 新規生成 → localStorage + Cookie に保存
+        deviceId = this.generateDeviceId();
+        localStorage.setItem(key, deviceId);
+        this.setDeviceIdCookie(loginName, deviceId);
+        return deviceId;
     }
 
     async login(loginName: string): Promise<Session> {
@@ -92,7 +130,15 @@ export class NakamaService {
             try {
                 await this.client.updateAccount(this.session, { username: loginName });
             } catch {
-                throw new Error(`ユーザーID "${loginName}" は既に使用されています。別のIDでログインしてください。ブラウザのキャッシュをクリアした場合、ユーザIDは使えなくなります。`);
+                const hasLocal = !!localStorage.getItem(`nakama_device_id_${loginName}`);
+                const hasCookie = !!this.getDeviceIdCookie(loginName);
+                const isPWA = window.matchMedia("(display-mode: standalone)").matches;
+                throw new Error(
+                    `ユーザーID "${loginName}" は既に使用されています。\n` +
+                    `原因: このブラウザに紐付くデバイスIDがサーバー上の "${loginName}" と一致しません。\n` +
+                    `状態: localStorage=${hasLocal ? "あり" : "なし"}, Cookie=${hasCookie ? "あり" : "なし"}, PWA=${isPWA ? "はい" : "いいえ"}\n` +
+                    `対処: メニュー→「クッキー初期化」を実行するか、別のユーザーIDでログインしてください。`
+                );
             }
             this.session = await this.client.authenticateDevice(deviceId, false);
         }
