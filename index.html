@@ -1009,8 +1009,10 @@
         #debug-overlay td.label,
         .srv-row label,
         #portrait-divider, #portrait-divider-knob,
-        #landscape-divider {
+        #landscape-divider, #landscape-divider-knob {
             -webkit-touch-callout: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         /* 区切りコントロール（デフォルト非表示） */
@@ -1029,7 +1031,7 @@
 
             /* --- 画面下部 ログイン行・チャット行 --- */
             #chat-container {
-                bottom: 10px;
+                bottom: calc(14px + env(safe-area-inset-bottom, 0px));
                 gap: 8px;
             }
             #login-row {
@@ -1130,7 +1132,7 @@
                 right: 0;
                 top: calc(var(--pt-divider, 60vh) - 1px);
                 bottom: 0;
-                background: #2c2c2e;
+                background: #f0e6ff;
                 z-index: 0;
                 pointer-events: none;
             }
@@ -1155,9 +1157,10 @@
                 height: auto !important;
                 border-radius: 0;
                 resize: none !important;
-                background: #2c2c2e !important;
-                color: #eee !important;
-                backdrop-filter: none !important;
+                background: rgba(255, 255, 255, 0.92) !important;
+                color: #333 !important;
+                backdrop-filter: blur(12px) !important;
+                -webkit-backdrop-filter: blur(12px) !important;
                 touch-action: pan-y !important;
                 overscroll-behavior: contain !important;
                 z-index: 350 !important;
@@ -1179,11 +1182,10 @@
                 padding: 4px 10px !important;
                 height: 28px !important;
                 box-sizing: border-box !important;
-                background: #3a3a3c !important;
+                background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
                 color: #fff !important;
-                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
-                cursor: row-resize !important;
-                touch-action: none !important;
+                border-bottom: none !important;
+                cursor: default !important;
                 user-select: none !important;
                 -webkit-user-select: none !important;
             }
@@ -1204,35 +1206,36 @@
             .server-settings-row,
             .server-settings-row input {
                 font-size: 13px;
-                color: #eee !important;
+                color: #333 !important;
             }
             .server-settings-row input {
-                background: #3a3a3c !important;
-                border-color: rgba(255,255,255,0.2) !important;
+                background: rgba(255,255,255,0.8) !important;
+                border-color: rgba(100,100,200,0.3) !important;
+                color: #333 !important;
             }
             .srv-row label {
-                color: #eee !important;
+                color: #444 !important;
                 font-size: 13px !important;
                 margin-right: 8px !important;
             }
             .srv-row input {
-                color: #eee !important;
-                background: #3a3a3c !important;
-                border-color: rgba(255,255,255,0.2) !important;
+                color: #333 !important;
+                background: rgba(255,255,255,0.8) !important;
+                border-color: rgba(100,100,200,0.3) !important;
                 font-size: 13px !important;
             }
             .srv-desc {
-                color: #eee !important;
+                color: #555 !important;
                 font-size: 13px !important;
             }
             #srvPingResult {
-                color: #eee !important;
+                color: #333 !important;
                 font-size: 13px !important;
-                background: #3a3a3c !important;
-                border-color: rgba(255,255,255,0.2) !important;
+                background: rgba(240,240,255,0.7) !important;
+                border-color: rgba(100,100,200,0.2) !important;
             }
             #serverKeyDisplay {
-                color: #aaa !important;
+                color: #777 !important;
                 font-size: 13px !important;
             }
             #serverKeyDisplay:is(span) {
@@ -1240,58 +1243,58 @@
             }
             .srv-row:has(#serverKeyDisplay) {
                 font-size: 13px !important;
-                color: #aaa !important;
+                color: #777 !important;
             }
             #srvPingBtn, #srvNakamaPingBtn {
                 font-size: 13px !important;
                 padding: 6px 14px !important;
             }
 
-            /* --- チャット履歴暗背景対応 --- */
+            /* --- チャット履歴 --- */
             #chat-history-list {
                 padding-bottom: 4px !important;
             }
             .chat-history-entry {
-                color: #eee !important;
-                border-bottom-color: rgba(255,255,255,0.15) !important;
+                color: #333 !important;
+                border-bottom-color: rgba(100,100,200,0.15) !important;
             }
             .chat-history-time {
-                color: #aaa !important;
+                color: #888 !important;
             }
             .chat-history-name {
-                color: #6cb4ff !important;
+                color: #5b6abf !important;
             }
             .chat-history-system {
-                color: #bbb !important;
+                color: #999 !important;
             }
             .chat-history-text {
-                color: #eee !important;
+                color: #333 !important;
             }
 
-            /* --- ユーザリスト暗背景対応 --- */
+            /* --- ユーザリスト --- */
             #user-list thead th {
-                background: #3a3a3c !important;
-                color: #eee !important;
-                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+                background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
+                color: #fff !important;
+                border-bottom: none !important;
                 font-size: 15px !important;
             }
             #user-list thead th:hover {
-                background: #48484a !important;
+                background: linear-gradient(135deg, #6a4cc8, #4a7cde) !important;
             }
             #user-list tbody td {
-                color: #eee !important;
+                color: #333 !important;
                 font-size: 15px !important;
                 height: 32px !important;
                 padding: 2px 8px !important;
                 line-height: 1.2 !important;
             }
             #user-list tbody tr:nth-child(odd) td {
-                background-color: rgba(80, 150, 220, 0.25) !important;
+                background-color: rgba(120, 100, 220, 0.1) !important;
             }
 
-            /* --- デバッグオーバーレイ暗背景対応 --- */
+            /* --- デバッグオーバーレイ --- */
             #debug-title-bar {
-                border-bottom-color: rgba(255,255,255,0.2) !important;
+                border-bottom: none !important;
             }
             #debug-title-text {
                 color: #fff !important;
@@ -1302,26 +1305,26 @@
                 color: #fff !important;
             }
             #debug-overlay td.label {
-                color: #ccc !important;
+                color: #555 !important;
             }
             #debug-overlay td.value {
-                color: #eee !important;
+                color: #333 !important;
             }
             #debug-overlay tr:nth-child(odd) > td.label,
             #debug-overlay tr:nth-child(odd) > td.value {
-                background-color: rgba(80, 150, 220, 0.25) !important;
+                background-color: rgba(120, 100, 220, 0.08) !important;
             }
             #debug-overlay td.label:hover {
-                background-color: rgba(255,255,255,0.1) !important;
-                color: #6cb4ff !important;
+                background-color: rgba(120, 100, 220, 0.15) !important;
+                color: #5b6abf !important;
             }
             /* デバッグ項目グループ名 */
             #debug-overlay td[colspan] div > div {
                 color: #fff !important;
-                border-bottom-color: rgba(255,255,255,0.3) !important;
+                border-bottom: none !important;
             }
             #debug-overlay td[colspan] > div {
-                background: #3a3a3c !important;
+                background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
             }
             #debug-overlay td.label,
             #debug-overlay td.value {
@@ -1342,7 +1345,7 @@
 
             /* --- 画面下部コントロール背景 --- */
             #chat-container {
-                background: rgba(0,0,0,0.85);
+                background: transparent;
                 border-radius: 0;
                 padding: 6px 8px;
             }
@@ -1360,35 +1363,36 @@
             }
             #menu-popup {
                 font-size: 16px !important;
-                background: rgba(80, 80, 84, 0.95) !important;
+                background: rgba(255, 255, 255, 0.92) !important;
                 backdrop-filter: blur(20px) !important;
                 -webkit-backdrop-filter: blur(20px) !important;
-                border: 1px solid rgba(255,255,255,0.18) !important;
+                border: 1px solid rgba(100,100,200,0.2) !important;
                 border-radius: 14px !important;
             }
             .menu-item {
                 padding: 10px 16px !important;
                 font-size: 15px !important;
-                border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+                color: #444 !important;
+                border-bottom: 1px solid rgba(100,100,200,0.1) !important;
             }
             .menu-item:last-child {
                 border-bottom: none !important;
             }
             .menu-item:active {
-                background: rgba(255,255,255,0.15) !important;
+                background: rgba(120, 100, 220, 0.15) !important;
             }
 
             /* --- ログアウト確認パネル --- */
             #logout-panel {
                 width: 80vw;
                 max-width: 320px;
-                background: #2c2c2e !important;
-                color: #eee !important;
+                background: rgba(255, 255, 255, 0.95) !important;
+                color: #333 !important;
             }
             #logout-panel-header {
-                background: #3a3a3c !important;
+                background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
                 color: #fff !important;
-                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+                border-bottom: none !important;
                 font-size: 15px !important;
             }
             #logout-panel-close {
@@ -1397,7 +1401,7 @@
                 color: #fff !important;
             }
             #logout-panel-body p {
-                color: #eee !important;
+                color: #444 !important;
                 font-size: 16px;
             }
             .logout-panel-btns button {
@@ -1407,10 +1411,10 @@
 
             /* --- tommieChatについてパネル --- */
             #about-panel-body p {
-                color: #eee !important;
+                color: #444 !important;
             }
             #about-panel-body a {
-                color: #6cb4ff !important;
+                color: #5b6abf !important;
             }
             .about-ops-pc { display: none !important; }
             .about-ops-sp { display: block !important; }
@@ -1420,7 +1424,7 @@
                 font-size: 11px !important;
                 opacity: 0.7;
                 top: auto !important;
-                bottom: 2px !important;
+                bottom: env(safe-area-inset-bottom, 0px) !important;
                 left: auto !important;
                 right: calc(5% + 58px) !important;
                 transform: none !important;
@@ -1432,10 +1436,23 @@
             }
         }
 
-        /* スマホ縦長（ポートレート）: canvasの高さをデバイダーに合わせる */
+        /* スマホ縦長（ポートレート） */
         @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: portrait) {
             body.sp-panel-visible #renderCanvas {
                 height: var(--pt-divider, 60vh) !important;
+            }
+            /* ポートレートのみ: ヘッダードラッグ用 */
+            #user-list-header,
+            #chat-history-header,
+            #server-settings-header,
+            #server-log-header,
+            #ping-header,
+            #ccu-header,
+            #debug-title-bar,
+            #about-panel-header,
+            #displayname-header {
+                touch-action: none !important;
+                cursor: row-resize !important;
             }
         }
 
@@ -1457,9 +1474,9 @@
             #landscape-divider {
                 display: block;
                 position: fixed;
-                left: calc(var(--ls-divider, 60%) - 10px);
+                left: calc(var(--ls-divider, 60%) - 22px);
                 top: 0;
-                width: 32px;
+                width: 44px;
                 height: 100vh;
                 background: transparent;
                 z-index: 300;
@@ -1469,16 +1486,16 @@
             #landscape-divider::after {
                 content: "";
                 position: absolute;
-                left: 10px;
+                left: 19px;
                 top: 0;
-                width: 12px;
+                width: 6px;
                 height: 100%;
                 background: rgba(0,0,0,0.15);
             }
             #landscape-divider-knob {
                 position: absolute;
                 top: 50%;
-                left: 16px;
+                left: 22px;
                 transform: translate(-50%, -50%);
                 font-size: 20px;
                 color: #fff;
@@ -1494,7 +1511,7 @@
                 left: calc(var(--ls-divider, 60%) - 1px);
                 right: 0;
                 bottom: 0;
-                background: #111;
+                background: #f0e6ff;
                 z-index: 0;
                 pointer-events: none;
             }
@@ -1517,8 +1534,8 @@
                 justify-content: flex-start;
             }
             #chatInput {
-                flex-grow: 0;
-                width: 50%;
+                flex-grow: 1;
+                width: auto;
             }
 
             /* ping/FPS表示はcanvasの右上 */
@@ -1527,7 +1544,7 @@
                 color: #000 !important;
             }
 
-            /* パネルは区切り位置から右 */
+            /* パネルは区切り位置から画面右端まで */
             #user-list-panel,
             #chat-history-panel,
             #server-settings-panel,
@@ -1545,6 +1562,32 @@
                 width: auto !important;
                 max-width: none !important;
             }
+            /* ランドスケープ: ヘッダーはドラッグ不要（touch-action/cursorは共通で既にauto/default） */
+            /* タイトルspanをヘッダー全幅に広げてタッチしやすくする */
+            #user-list-header > span:first-child,
+            #chat-history-header > span:first-child,
+            #server-settings-header > span:first-child,
+            #server-log-header > span:first-child,
+            #ping-header > span:first-child,
+            #ccu-header > span:first-child,
+            #debug-title-text,
+            #about-panel-header > span:first-child,
+            #displayname-header > span:first-child {
+                flex: 1 !important;
+            }
+            /* Xボタンだけsafe-area分内側にずらす */
+            #user-list-close,
+            #chat-history-close,
+            #server-settings-close,
+            #server-log-close,
+            #ping-close,
+            #ccu-close,
+            #about-panel-close,
+            #displayname-close,
+            #debug-minimize-btn,
+            #debug-restore-btn {
+                margin-right: env(safe-area-inset-right, 0px) !important;
+            }
             #app-footer-version {
                 top: auto !important;
                 bottom: 2px !important;
@@ -1559,6 +1602,140 @@
             #custom-tooltip {
                 font-size: 14px !important;
             }
+        }
+
+        /* ========== iPhone PWA ランドスケープ: 上端システムジェスチャー回避 ========== */
+        /* display-mode: standalone (PWA) + landscape + iPhone判定 (max-height: 440px = iPadを除外) */
+        @media (display-mode: standalone) and (pointer: coarse) and (min-resolution: 2dppx) and (orientation: landscape) and (max-height: 440px) {
+            #menu-btn { top: 20px !important; }
+            #menu-popup { top: 20px !important; max-height: calc(100vh - 28px) !important; }
+            #ping-display { top: 20px !important; }
+            #user-list-panel,
+            #chat-history-panel,
+            #server-settings-panel,
+            #server-log-panel,
+            #ping-panel,
+            #ccu-panel,
+            #debug-overlay,
+            #about-panel,
+            #displayname-panel {
+                top: 20px !important;
+            }
+        }
+
+        /* ========== テーマ: 背景黒（スマホ共通） ========== */
+        @media (pointer: coarse) and (min-resolution: 2dppx) {
+            body.theme-dark.sp-panel-visible::before { background: #2c2c2e !important; }
+            body.theme-dark::after { background: #111 !important; }
+
+            body.theme-dark #user-list-panel,
+            body.theme-dark #chat-history-panel,
+            body.theme-dark #server-settings-panel,
+            body.theme-dark #server-log-panel,
+            body.theme-dark #ping-panel,
+            body.theme-dark #ccu-panel,
+            body.theme-dark #debug-overlay,
+            body.theme-dark #about-panel,
+            body.theme-dark #displayname-panel {
+                background: #2c2c2e !important;
+                color: #eee !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+            }
+            body.theme-dark #user-list-header,
+            body.theme-dark #chat-history-header,
+            body.theme-dark #server-settings-header,
+            body.theme-dark #server-log-header,
+            body.theme-dark #ping-header,
+            body.theme-dark #ccu-header,
+            body.theme-dark #debug-title-bar,
+            body.theme-dark #about-panel-header,
+            body.theme-dark #displayname-header {
+                background: #3a3a3c !important;
+                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+            }
+            body.theme-dark #chat-container {
+                background: transparent !important;
+            }
+            body.theme-dark #server-log-list .server-log-entry,
+            body.theme-dark #chat-history-list,
+            body.theme-dark .server-settings-row,
+            body.theme-dark .server-settings-row input {
+                color: #eee !important;
+            }
+            body.theme-dark .server-settings-row input {
+                background: #3a3a3c !important;
+                border-color: rgba(255,255,255,0.2) !important;
+            }
+            body.theme-dark .srv-row label { color: #eee !important; }
+            body.theme-dark .srv-row input {
+                color: #eee !important;
+                background: #3a3a3c !important;
+                border-color: rgba(255,255,255,0.2) !important;
+            }
+            body.theme-dark .srv-desc { color: #eee !important; }
+            body.theme-dark #srvPingResult {
+                color: #eee !important;
+                background: #3a3a3c !important;
+                border-color: rgba(255,255,255,0.2) !important;
+            }
+            body.theme-dark #serverKeyDisplay { color: #aaa !important; }
+            body.theme-dark .srv-row:has(#serverKeyDisplay) { color: #aaa !important; }
+            body.theme-dark .chat-history-entry {
+                color: #eee !important;
+                border-bottom-color: rgba(255,255,255,0.15) !important;
+            }
+            body.theme-dark .chat-history-time { color: #aaa !important; }
+            body.theme-dark .chat-history-name { color: #6cb4ff !important; }
+            body.theme-dark .chat-history-system { color: #bbb !important; }
+            body.theme-dark .chat-history-text { color: #eee !important; }
+            body.theme-dark #user-list thead th {
+                background: #3a3a3c !important;
+                color: #eee !important;
+                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+            }
+            body.theme-dark #user-list thead th:hover { background: #48484a !important; }
+            body.theme-dark #user-list tbody td { color: #eee !important; }
+            body.theme-dark #user-list tbody tr:nth-child(odd) td {
+                background-color: rgba(80, 150, 220, 0.25) !important;
+            }
+            body.theme-dark #debug-title-bar { border-bottom-color: rgba(255,255,255,0.2) !important; }
+            body.theme-dark #debug-overlay td.label { color: #ccc !important; }
+            body.theme-dark #debug-overlay td.value { color: #eee !important; }
+            body.theme-dark #debug-overlay tr:nth-child(odd) > td.label,
+            body.theme-dark #debug-overlay tr:nth-child(odd) > td.value {
+                background-color: rgba(80, 150, 220, 0.25) !important;
+            }
+            body.theme-dark #debug-overlay td.label:hover {
+                background-color: rgba(255,255,255,0.1) !important;
+                color: #6cb4ff !important;
+            }
+            body.theme-dark #debug-overlay td[colspan] div > div {
+                color: #fff !important;
+                border-bottom-color: rgba(255,255,255,0.3) !important;
+            }
+            body.theme-dark #debug-overlay td[colspan] > div { background: #3a3a3c !important; }
+            body.theme-dark #menu-popup {
+                background: rgba(80, 80, 84, 0.95) !important;
+                border: 1px solid rgba(255,255,255,0.18) !important;
+            }
+            body.theme-dark .menu-item {
+                color: #fff !important;
+                border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+            }
+            body.theme-dark .menu-item:active { background: rgba(255,255,255,0.15) !important; }
+            body.theme-dark #logout-panel {
+                background: #2c2c2e !important;
+                color: #eee !important;
+            }
+            body.theme-dark #logout-panel-header {
+                background: #3a3a3c !important;
+                color: #fff !important;
+                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+            }
+            body.theme-dark #logout-panel-body p { color: #eee !important; }
+            body.theme-dark #about-panel-body p { color: #eee !important; }
+            body.theme-dark #about-panel-body a { color: #6cb4ff !important; }
         }
         /* ===== カスタムツールチップ（画面外に出ない） ===== */
         [data-tip] {
@@ -1613,7 +1790,7 @@
                 }
                 var isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
                 el.innerHTML = isMobile
-                    ? '<div style="color:#000;">tommieChat ' + APP_VERSION + devTag + '</div>'
+                    ? '<div style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + devTag + '</div>'
                     : '<div style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + devTag + '</div>';
             }
 
@@ -1844,6 +2021,14 @@
     </script>
 </head>
 <body>
+<script>
+// テーマ初期化（FOUC防止: body直後に実行）
+(function() {
+    var m = document.cookie.match(/(?:^|; )uiTheme=([^;]*)/);
+    var t = m ? decodeURIComponent(m[1]) : "pop1";
+    document.body.classList.add(t === "dark" ? "theme-dark" : "theme-pop1");
+})();
+</script>
     <canvas id="renderCanvas"></canvas>
 
     <div id="chat-history-panel">
@@ -1864,6 +2049,12 @@
         <table>
             <tr><td id="label-ver" class="label">01.Ver</td><td class="value" id="val-ver"></td></tr>
             <tr><td id="label-update" class="label">02.Update</td><td class="value" id="val-update"></td></tr>
+            <tr><td class="label" title="02b.Theme&#10;スマホ向けパネルの配色テーマを切り替えます。&#10;PCでは影響しません。&#10;・背景黒: ダークテーマ（暗い背景に白文字）&#10;・ポップ１: 明るく華やかな配色（紫グラデーション）">02b.Theme</td><td class="value">
+                <select id="themeSelect" class="debug-select">
+                    <option value="pop1">ポップ１</option>
+                    <option value="dark">背景黒</option>
+                </select>
+            </td></tr>
             <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale</td><td class="value">
                 <select id="scaleSelect" class="debug-select">
                     <option value="0.50">0.50 Retina/4K クッキリ</option>
@@ -2457,10 +2648,13 @@
             var pressTimer = null;
             var tipShown = false;  // 長押しでツールチップが表示されたか
             var hiddenByTap = false; // ツールチップをタップで閉じたか
+            var startX = 0, startY = 0; // touchstart位置（移動しきい値用）
             document.addEventListener("touchstart", function(e) {
                 tipShown = false;
                 hiddenByTap = false;
                 var touch = e.touches[0];
+                startX = touch.clientX;
+                startY = touch.clientY;
                 var hitEl = document.elementFromPoint(touch.clientX, touch.clientY);
                 // ツールチップ自体をタップ → 閉じるだけ（背面に貫通しない）
                 if (hitEl === tip || (hitEl && tip.contains(hitEl))) { hide(); hiddenByTap = true; return; }
@@ -2492,7 +2686,15 @@
                 }
             }, true);
             document.addEventListener("touchcancel", function() { clearTimeout(pressTimer); }, { passive: true });
-            document.addEventListener("touchmove", function() { clearTimeout(pressTimer); headerMoved = true; }, { passive: true });
+            document.addEventListener("touchmove", function(e) {
+                if (!pressTimer) return;
+                var touch = e.touches[0];
+                var dx = touch.clientX - startX, dy = touch.clientY - startY;
+                // 10px以上動いたら長押しキャンセル（指のブレは無視）
+                if (dx * dx + dy * dy > 100) {
+                    clearTimeout(pressTimer); pressTimer = null; headerMoved = true;
+                }
+            }, { passive: true });
         }
         document.addEventListener("scroll", hide, true);
     })();

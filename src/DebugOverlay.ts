@@ -527,6 +527,32 @@ export function setupDebugOverlay(game: GameScene): void {
         }
     }
 
+    // --- テーマ切替 ---
+    const themeSelect = document.getElementById("themeSelect") as HTMLSelectElement | null;
+    if (themeSelect) {
+        const getThemeCookie = (): string | null => {
+            const m = document.cookie.match(/(?:^|; )uiTheme=([^;]*)/);
+            return m ? decodeURIComponent(m[1]) : null;
+        };
+        const setThemeCookie = (v: string) => {
+            document.cookie = `uiTheme=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+        };
+        const applyTheme = (theme: string) => {
+            document.body.classList.remove("theme-dark", "theme-pop1");
+            if (theme === "dark") document.body.classList.add("theme-dark");
+            else document.body.classList.add("theme-pop1");
+        };
+        const saved = getThemeCookie() ?? "pop1";
+        themeSelect.value = saved;
+        applyTheme(saved);
+        themeSelect.addEventListener("change", () => {
+            console.log("Theme change:", themeSelect.value, "classList:", document.body.classList.toString());
+            applyTheme(themeSelect.value);
+            setThemeCookie(themeSelect.value);
+            console.log("Theme applied:", document.body.classList.toString());
+        });
+    }
+
     if (scaleSelect) {
         const initScale = 1 / window.devicePixelRatio;
         const initScaleStr = initScale.toFixed(2);

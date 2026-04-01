@@ -117,9 +117,10 @@ export function setupHtmlUI(game: GameScene): void {
         const chatContainer = document.getElementById("chat-container");
         const updatePtPanelBottom = () => {
             if (!chatContainer) return;
-            const h = chatContainer.getBoundingClientRect().height;
-            const bottom = chatContainer.style.bottom ? parseInt(chatContainer.style.bottom) : 10;
-            document.documentElement.style.setProperty("--pt-panel-bottom", (h + bottom + 4) + "px");
+            const rect = chatContainer.getBoundingClientRect();
+            const viewH = window.innerHeight;
+            const bottomFromViewport = viewH - rect.bottom;
+            document.documentElement.style.setProperty("--pt-panel-bottom", (rect.height + bottomFromViewport + 4) + "px");
         };
         const savedPt = getDivCk("ptDivider");
         if (savedPt) {
@@ -141,13 +142,15 @@ export function setupHtmlUI(game: GameScene): void {
             if (ptDivider) {
                 ptDivider.addEventListener("pointerdown", (e: PointerEvent) => startDrag(e, ptDivider));
             }
-            // スマホ: パネルヘッダーのドラッグでもデバイダーを移動
+            // スマホ: パネルヘッダーのドラッグでもデバイダーを移動（ポートレートのみ）
             if (isMobileDev) {
                 const headerIds = ["user-list-header", "chat-history-header", "server-settings-header",
                                    "server-log-header", "ping-header", "ccu-header", "debug-title-bar", "about-panel-header", "displayname-header"];
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
+                        // ランドスケープではヘッダードラッグ不要（ツールチップ優先）
+                        if (window.matchMedia("(orientation: landscape)").matches) return;
                         const t = e.target as HTMLElement;
                         if (t.closest("[id$='-close']")) return; // ✕ボタンは除外
                         startDrag(e, hdr);
@@ -1353,6 +1356,12 @@ export function setupHtmlUI(game: GameScene): void {
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
             // 表示名パネルにユーザIDを反映
             { const uid = document.getElementById("dn-panel-userid"); if (uid) uid.textContent = loginNameInput?.value ?? "-"; }
+            // 表示名が未設定なら表示名設定パネルを自動表示
+            if (!confirmedDisplayName) {
+                const mli = document.getElementById("menu-login");
+                const dnp = document.getElementById("displayname-panel");
+                if (mli && dnp && dnp.style.display === "none") mli.click();
+            }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
@@ -1517,7 +1526,7 @@ export function setupHtmlUI(game: GameScene): void {
         if (!ctx) return;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        const dark = isMobileDev;
+        const dark = document.body.classList.contains("theme-dark");
         const FONT_SIZE = dark ? 15 : 12;
         const FONT_MONO = '"Courier New", Courier, monospace';
         const FONT_STR  = `${FONT_SIZE}px ${FONT_MONO}`;
@@ -1852,7 +1861,7 @@ export function setupHtmlUI(game: GameScene): void {
 
         const cfg = getCcuConfig();
         const histMax = cfg.max;
-        const dark = isMobileDev;
+        const dark = document.body.classList.contains("theme-dark");
         const FONT_SIZE = dark ? 15 : 12;
         const FONT_MONO = '"Courier New", Courier, monospace';
         const FONT_STR  = `${FONT_SIZE}px ${FONT_MONO}`;

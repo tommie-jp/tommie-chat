@@ -1,6 +1,6 @@
 // tommieChat Service Worker
 // バージョンを変更するとキャッシュが自動クリアされます
-const CACHE_VERSION = "v0.1.10.4";
+const CACHE_VERSION = "v0.1.10.5";
 const CACHE_NAME = "tommiechat-" + CACHE_VERSION;
 
 // キャッシュ対象（アプリシェル）
