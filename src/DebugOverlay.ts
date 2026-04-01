@@ -592,6 +592,113 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
+    // --- チャットオーバーレイ行数 ---
+    const chatOlMaxSelect = document.getElementById("chatOlMaxSelect") as HTMLSelectElement | null;
+    if (chatOlMaxSelect) {
+        const getChatOlCookie = (): string | null => {
+            const m = document.cookie.match(/(?:^|; )chatOlMax=([^;]*)/);
+            return m ? decodeURIComponent(m[1]) : null;
+        };
+        const setChatOlCookie = (v: string) => {
+            document.cookie = `chatOlMax=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+        };
+        const savedOl = getChatOlCookie() ?? "5";
+        chatOlMaxSelect.value = savedOl;
+        (game as any).setChatOverlayMax?.(parseInt(savedOl));
+        chatOlMaxSelect.addEventListener("change", () => {
+            const val = parseInt(chatOlMaxSelect.value);
+            (game as any).setChatOverlayMax?.(val);
+            setChatOlCookie(chatOlMaxSelect.value);
+        });
+    }
+
+    // --- チャットオーバーレイ 背景色・透明度 ---
+    const chatOlOverlay = document.getElementById("chat-overlay");
+    const chatOlBgColor = document.getElementById("chatOlBgColor") as HTMLInputElement | null;
+    const chatOlBgAlpha = document.getElementById("chatOlBgAlpha") as HTMLSelectElement | null;
+    const chatOlFontColor = document.getElementById("chatOlFontColor") as HTMLInputElement | null;
+    const chatOlFontSize = document.getElementById("chatOlFontSize") as HTMLSelectElement | null;
+
+    const olCk = (k: string): string | null => {
+        const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+        return m ? decodeURIComponent(m[1]) : null;
+    };
+    const olSCk = (k: string, v: string) => {
+        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+    };
+
+    const hexToRgb = (hex: string) => {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return { r, g, b };
+    };
+
+    const applyOlBg = () => {
+        if (!chatOlOverlay) return;
+        const color = chatOlBgColor?.value ?? "#000000";
+        const alpha = chatOlBgAlpha?.value ?? "0.45";
+        const { r, g, b } = hexToRgb(color);
+        // CSS変数で各行の背景に反映
+        chatOlOverlay.style.setProperty("--ol-bg", `rgba(${r},${g},${b},${alpha})`);
+    };
+
+    const applyOlFont = () => {
+        if (!chatOlOverlay) return;
+        const color = chatOlFontColor?.value ?? "#ffffff";
+        const size = chatOlFontSize?.value ?? "13";
+        chatOlOverlay.style.setProperty("--ol-color", color);
+        chatOlOverlay.style.fontSize = size + "px";
+    };
+
+    // 初期値をCookieから復元
+    if (chatOlBgColor) { const v = olCk("chatOlBgColor"); if (v) chatOlBgColor.value = v; }
+    if (chatOlBgAlpha) { const v = olCk("chatOlBgAlpha"); if (v) chatOlBgAlpha.value = v; }
+    if (chatOlFontColor) { const v = olCk("chatOlFontColor"); if (v) chatOlFontColor.value = v; }
+    if (chatOlFontSize) { const v = olCk("chatOlFontSize"); if (v) chatOlFontSize.value = v; }
+    applyOlBg();
+    applyOlFont();
+
+    // イベントハンドラ
+    chatOlBgColor?.addEventListener("input", () => { applyOlBg(); olSCk("chatOlBgColor", chatOlBgColor!.value); });
+    chatOlBgAlpha?.addEventListener("change", () => { applyOlBg(); olSCk("chatOlBgAlpha", chatOlBgAlpha!.value); });
+    chatOlFontColor?.addEventListener("input", () => { applyOlFont(); olSCk("chatOlFontColor", chatOlFontColor!.value); });
+    chatOlFontSize?.addEventListener("change", () => { applyOlFont(); olSCk("chatOlFontSize", chatOlFontSize!.value); });
+
+    // --- チャットオーバーレイ 時刻色・名前色 ---
+    const chatOlTimeColor = document.getElementById("chatOlTimeColor") as HTMLInputElement | null;
+    const chatOlNameColor = document.getElementById("chatOlNameColor") as HTMLInputElement | null;
+
+    const applyOlPartColors = () => {
+        if (!chatOlOverlay) return;
+        if (chatOlTimeColor) chatOlOverlay.style.setProperty("--ol-time-color", chatOlTimeColor.value);
+        if (chatOlNameColor) chatOlOverlay.style.setProperty("--ol-name-color", chatOlNameColor.value);
+    };
+
+    if (chatOlTimeColor) { const v = olCk("chatOlTimeColor"); if (v) chatOlTimeColor.value = v; }
+    if (chatOlNameColor) { const v = olCk("chatOlNameColor"); if (v) chatOlNameColor.value = v; }
+    applyOlPartColors();
+
+    chatOlTimeColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlTimeColor", chatOlTimeColor!.value); });
+    chatOlNameColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlNameColor", chatOlNameColor!.value); });
+
+    // --- チャットオーバーレイ 折り返し ---
+    const chatOlWrapBtn = document.getElementById("chatOlWrapBtn") as HTMLButtonElement | null;
+    if (chatOlWrapBtn && chatOlOverlay) {
+        let olWrap = (olCk("chatOlWrap") ?? "1") === "1";
+        const applyOlWrap = () => {
+            chatOlOverlay!.classList.toggle("chat-ol-wrap", olWrap);
+            chatOlWrapBtn.textContent = olWrap ? "On" : "Off";
+            chatOlWrapBtn.classList.toggle("off", !olWrap);
+        };
+        applyOlWrap();
+        chatOlWrapBtn.addEventListener("click", () => {
+            olWrap = !olWrap;
+            applyOlWrap();
+            olSCk("chatOlWrap", olWrap ? "1" : "0");
+        });
+    }
+
     if (scaleSelect) {
         const initScale = 1 / window.devicePixelRatio;
         const initScaleStr = initScale.toFixed(2);
