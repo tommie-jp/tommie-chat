@@ -25,7 +25,7 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
-            z-index: 100;
+            z-index: 400;
         }
         #login-row, #displayname-row, #chat-row {
             display: flex;
@@ -1067,7 +1067,6 @@
                 box-sizing: border-box;
             }
             #chatInput {
-                flex-grow: 1;
                 width: auto;
             }
             #chat-row {
@@ -1153,12 +1152,13 @@
                 width: auto !important;
                 max-width: 100vw !important;
                 top: calc(var(--pt-divider, 60vh) + 12px) !important;
-                bottom: var(--pt-panel-bottom, 90px) !important;
+                bottom: 0 !important;
                 height: auto !important;
+                max-height: none !important;
                 border-radius: 0;
                 resize: none !important;
-                background: rgba(255, 255, 255, 0.92) !important;
-                color: #333 !important;
+                background: rgba(255, 255, 255, 0.96) !important;
+                color: #222 !important;
                 backdrop-filter: blur(12px) !important;
                 -webkit-backdrop-filter: blur(12px) !important;
                 touch-action: pan-y !important;
@@ -1206,36 +1206,36 @@
             .server-settings-row,
             .server-settings-row input {
                 font-size: 13px;
-                color: #333 !important;
+                color: #222 !important;
             }
             .server-settings-row input {
-                background: rgba(255,255,255,0.8) !important;
+                background: #fff !important;
                 border-color: rgba(100,100,200,0.3) !important;
-                color: #333 !important;
+                color: #222 !important;
             }
             .srv-row label {
-                color: #444 !important;
+                color: #222 !important;
                 font-size: 13px !important;
                 margin-right: 8px !important;
             }
             .srv-row input {
-                color: #333 !important;
-                background: rgba(255,255,255,0.8) !important;
+                color: #222 !important;
+                background: #fff !important;
                 border-color: rgba(100,100,200,0.3) !important;
                 font-size: 13px !important;
             }
             .srv-desc {
-                color: #555 !important;
+                color: #333 !important;
                 font-size: 13px !important;
             }
             #srvPingResult {
-                color: #333 !important;
+                color: #222 !important;
                 font-size: 13px !important;
-                background: rgba(240,240,255,0.7) !important;
+                background: rgba(250,250,255,0.9) !important;
                 border-color: rgba(100,100,200,0.2) !important;
             }
             #serverKeyDisplay {
-                color: #777 !important;
+                color: #555 !important;
                 font-size: 13px !important;
             }
             #serverKeyDisplay:is(span) {
@@ -1243,7 +1243,7 @@
             }
             .srv-row:has(#serverKeyDisplay) {
                 font-size: 13px !important;
-                color: #777 !important;
+                color: #555 !important;
             }
             #srvPingBtn, #srvNakamaPingBtn {
                 font-size: 13px !important;
@@ -1255,20 +1255,20 @@
                 padding-bottom: 4px !important;
             }
             .chat-history-entry {
-                color: #333 !important;
+                color: #222 !important;
                 border-bottom-color: rgba(100,100,200,0.15) !important;
             }
             .chat-history-time {
-                color: #888 !important;
+                color: #666 !important;
             }
             .chat-history-name {
-                color: #5b6abf !important;
+                color: #3a4ea0 !important;
             }
             .chat-history-system {
-                color: #999 !important;
+                color: #777 !important;
             }
             .chat-history-text {
-                color: #333 !important;
+                color: #222 !important;
             }
 
             /* --- ユーザリスト --- */
@@ -1282,7 +1282,7 @@
                 background: linear-gradient(135deg, #6a4cc8, #4a7cde) !important;
             }
             #user-list tbody td {
-                color: #333 !important;
+                color: #222 !important;
                 font-size: 15px !important;
                 height: 32px !important;
                 padding: 2px 8px !important;
@@ -1305,10 +1305,10 @@
                 color: #fff !important;
             }
             #debug-overlay td.label {
-                color: #555 !important;
+                color: #333 !important;
             }
             #debug-overlay td.value {
-                color: #333 !important;
+                color: #222 !important;
             }
             #debug-overlay tr:nth-child(odd) > td.label,
             #debug-overlay tr:nth-child(odd) > td.value {
@@ -1320,11 +1320,11 @@
             }
             /* デバッグ項目グループ名 */
             #debug-overlay td[colspan] div > div {
-                color: #fff !important;
-                border-bottom: none !important;
+                color: #5b4a9e !important;
+                border-bottom: 1px solid rgba(120, 100, 220, 0.2) !important;
             }
             #debug-overlay td[colspan] > div {
-                background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
+                background: rgba(120, 100, 220, 0.08) !important;
             }
             #debug-overlay td.label,
             #debug-overlay td.value {
@@ -1372,7 +1372,7 @@
             .menu-item {
                 padding: 10px 16px !important;
                 font-size: 15px !important;
-                color: #444 !important;
+                color: #222 !important;
                 border-bottom: 1px solid rgba(100,100,200,0.1) !important;
             }
             .menu-item:last-child {
@@ -1401,7 +1401,7 @@
                 color: #fff !important;
             }
             #logout-panel-body p {
-                color: #444 !important;
+                color: #222 !important;
                 font-size: 16px;
             }
             .logout-panel-btns button {
@@ -1411,10 +1411,10 @@
 
             /* --- tommieChatについてパネル --- */
             #about-panel-body p {
-                color: #444 !important;
+                color: #222 !important;
             }
             #about-panel-body a {
-                color: #5b6abf !important;
+                color: #2a4090 !important;
             }
             .about-ops-pc { display: none !important; }
             .about-ops-sp { display: block !important; }
@@ -1440,6 +1440,23 @@
         @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: portrait) {
             body.sp-panel-visible #renderCanvas {
                 height: var(--pt-divider, 60vh) !important;
+            }
+            /* ポートレート: パネルのbottomをセリフ入力の上に */
+            #user-list-panel,
+            #chat-history-panel,
+            #server-settings-panel,
+            #server-log-panel,
+            #ping-panel,
+            #ccu-panel,
+            #debug-overlay,
+            #about-panel,
+            #displayname-panel {
+                bottom: var(--pt-panel-bottom, 90px) !important;
+            }
+            /* ポートレート: セリフ入力は常に全幅 */
+            #chatInput {
+                flex-grow: 1 !important;
+                width: auto !important;
             }
             /* ポートレートのみ: ヘッダードラッグ用 */
             #user-list-header,
@@ -1521,7 +1538,7 @@
                 transform: none;
                 width: auto;
                 max-width: none;
-                bottom: 5px;
+                bottom: 18px;
                 margin-left: 0;
             }
             #login-row {
@@ -1533,10 +1550,7 @@
             #chat-row {
                 justify-content: flex-start;
             }
-            #chatInput {
-                flex-grow: 1;
-                width: auto;
-            }
+            /* chatInput のサイズはJSで制御（DebugOverlay.ts updateMobileLayout） */
 
             /* ping/FPS表示はcanvasの右上 */
             #ping-display {
@@ -1557,7 +1571,7 @@
                 left: calc(var(--ls-divider, 60%) + 12px) !important;
                 right: 0 !important;
                 top: 0 !important;
-                bottom: var(--ls-panel-bottom, 90px) !important;
+                bottom: var(--ls-panel-bottom, 60px) !important;
                 height: auto !important;
                 width: auto !important;
                 max-width: none !important;

@@ -74,7 +74,7 @@ export function setupDebugOverlay(game: GameScene): void {
             if (savedWidth !== null && savedMin !== "1") debugOverlay.style.width  = savedWidth + "px";
             if (savedHeight!== null && savedMin !== "1") debugOverlay.style.height = savedHeight + "px";
             if (savedMin === "1") debugOverlay.classList.add("minimized");
-            game.clampToViewport(debugOverlay);
+            if (!isMobileDev) game.clampToViewport(debugOverlay);
         }
 
         let isDragging = false;
@@ -257,9 +257,16 @@ export function setupDebugOverlay(game: GameScene): void {
         if (savedPtDivider === "100%" || savedPtDivider === "100vh") savedPtDivider = "60vh";
         // 旧クッキー（%単位）をvhに変換
         if (savedPtDivider.endsWith("%")) savedPtDivider = savedPtDivider.replace("%", "vh");
+        // 30〜75%にクランプ
+        { const v = parseFloat(savedPtDivider); if (!isNaN(v)) savedPtDivider = Math.max(30, Math.min(75, v)) + "vh"; }
 
         const updateMobileLayout = () => {
             if (!isMobileMenu) return;
+            // モバイル: パネルのインラインheight/widthをクリア（CSS !importantに任せる）
+            for (const reg of toggleRegistry) {
+                const el = document.getElementById(reg.targetId);
+                if (el) { el.style.height = ""; el.style.width = ""; }
+            }
             const anyVisible = toggleRegistry.some(reg => {
                 const el = document.getElementById(reg.targetId);
                 return el && el.style.display !== "none";
@@ -282,9 +289,34 @@ export function setupDebugOverlay(game: GameScene): void {
                 }
                 const chatContainer = document.getElementById("chat-container");
                 if (chatContainer) {
-                    chatContainer.style.left = anyVisible ? "" : "env(safe-area-inset-left, 0px)";
-                    chatContainer.style.right = anyVisible ? "" : "env(safe-area-inset-right, 0px)";
+                    if (anyVisible) {
+                        chatContainer.style.left = "";
+                        chatContainer.style.right = "";
+                        chatContainer.style.width = "";
+                        chatContainer.style.maxWidth = "";
+                        chatContainer.style.bottom = "";
+                    } else {
+                        // パネル非表示: 右下に短く配置
+                        chatContainer.style.left = "auto";
+                        chatContainer.style.right = "8px";
+                        chatContainer.style.width = "40%";
+                        chatContainer.style.maxWidth = "400px";
+                        chatContainer.style.bottom = "";
+                    }
                     chatContainer.style.background = anyVisible ? "" : "transparent";
+                    // --ls-panel-bottom を再計算（パネルをセリフ入力の上に制限）
+                    requestAnimationFrame(() => {
+                        const rect = chatContainer.getBoundingClientRect();
+                        const viewH = window.innerHeight;
+                        const bottomFromViewport = viewH - rect.bottom;
+                        document.documentElement.style.setProperty("--ls-panel-bottom", (rect.height + bottomFromViewport + 4) + "px");
+                    });
+                }
+                // セリフ入力: パネル表示時は全幅、非表示時はコンテナ内全幅（コンテナが短い）
+                const chatInput = document.getElementById("chatInput") as HTMLTextAreaElement | null;
+                if (chatInput) {
+                    chatInput.style.flexGrow = "1";
+                    chatInput.style.width = "auto";
                 }
             } else {
                 const ptDiv = document.getElementById("portrait-divider");
@@ -307,6 +339,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (chatContainer) {
                     chatContainer.style.left = "";
                     chatContainer.style.right = "";
+                    chatContainer.style.width = "";
+                    chatContainer.style.maxWidth = "";
                     chatContainer.style.background = anyVisible ? "" : "transparent";
                 }
             }
@@ -403,11 +437,16 @@ export function setupDebugOverlay(game: GameScene): void {
                             target.style.right  = "auto";
                         }
                     }
-                    game.clampToViewport(target);
+                    if (!isMobileDev) game.clampToViewport(target);
                 }
                 btn.textContent = (visible ? "　" : "✓") + " " + label;
                 sCk(cookieKey, visible ? "0" : "1");
                 updateMobileLayout();
+                // モバイル: clampToViewportのインラインheight/widthをクリア
+                if (isMobileDev) {
+                    target.style.height = "";
+                    target.style.width = "";
+                }
             });
         };
         makeToggle("menu-serversettings", "server-settings-panel", "サーバ設定",    "showSrvSettings");
