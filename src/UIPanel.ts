@@ -75,9 +75,10 @@ export function setupHtmlUI(game: GameScene): void {
         const chatContainer = document.getElementById("chat-container");
         const updatePanelBottom = () => {
             if (!chatContainer) return;
-            const h = chatContainer.getBoundingClientRect().height;
-            const bottom = chatContainer.style.bottom ? parseInt(chatContainer.style.bottom) : 5;
-            document.documentElement.style.setProperty("--ls-panel-bottom", (h + bottom) + "px");
+            const rect = chatContainer.getBoundingClientRect();
+            const viewH = window.innerHeight;
+            const bottomFromViewport = viewH - rect.bottom;
+            document.documentElement.style.setProperty("--ls-panel-bottom", (rect.height + bottomFromViewport + 4) + "px");
         };
         const savedLs = getDivCk("lsDivider");
         if (savedLs) {
@@ -124,7 +125,10 @@ export function setupHtmlUI(game: GameScene): void {
         };
         const savedPt = getDivCk("ptDivider");
         if (savedPt) {
-            document.documentElement.style.setProperty("--pt-divider", savedPt);
+            // 保存値を30〜75%にクランプ
+            const val = parseFloat(savedPt);
+            const clamped = Math.max(30, Math.min(75, isNaN(val) ? 60 : val));
+            document.documentElement.style.setProperty("--pt-divider", clamped + "vh");
         }
         {
             let dragging = false;
@@ -160,7 +164,7 @@ export function setupHtmlUI(game: GameScene): void {
             document.addEventListener("pointermove", (e: PointerEvent) => {
                 if (!dragging) return;
                 const vhPx = document.body.getBoundingClientRect().height;
-                const pct = Math.max(30, Math.min(85, ((e.clientY - dragOffsetPx) / vhPx) * 100));
+                const pct = Math.max(30, Math.min(75, ((e.clientY - dragOffsetPx) / vhPx) * 100));
                 document.documentElement.style.setProperty("--pt-divider", pct + "vh");
                 game.engine.resize();
             });
@@ -175,7 +179,14 @@ export function setupHtmlUI(game: GameScene): void {
         if (chatContainer) {
             new ResizeObserver(updatePtPanelBottom).observe(chatContainer);
             window.addEventListener("orientationchange", () => setTimeout(updatePtPanelBottom, 200));
+            window.addEventListener("resize", updatePtPanelBottom);
+            // sp-panel-visible クラス変更時にも再計算
+            new MutationObserver(() => requestAnimationFrame(updatePtPanelBottom))
+                .observe(document.body, { attributes: true, attributeFilter: ["class"] });
             updatePtPanelBottom();
+            // DOMレイアウト確定後に再計算
+            requestAnimationFrame(updatePtPanelBottom);
+            setTimeout(updatePtPanelBottom, 500);
         }
     }
 
@@ -344,7 +355,7 @@ export function setupHtmlUI(game: GameScene): void {
                 const savedT = gCk("srvTop");
                 if (savedL !== null) { srvPanel.style.left = savedL + "px"; srvPanel.style.right = "auto"; }
                 if (savedT !== null)   srvPanel.style.top  = savedT + "px";
-                game.clampToViewport(srvPanel);
+                if (!isMobileDev) game.clampToViewport(srvPanel);
             }
 
             let isDrag = false, offX = 0, offY = 0;
@@ -454,7 +465,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (savedT !== null)   slPanel.style.top   = savedT + "px";
                 if (savedW !== null) slPanel.style.width  = savedW + "px";
                 if (savedH !== null) slPanel.style.height = savedH + "px";
-                game.clampToViewport(slPanel);
+                if (!isMobileDev) game.clampToViewport(slPanel);
             }
 
             let isDrag = false, offX = 0, offY = 0;
@@ -1772,7 +1783,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (savedT !== null) ppanel.style.top    = savedT + "px";
                 if (savedW !== null) ppanel.style.width  = savedW + "px";
                 if (savedH !== null) ppanel.style.height = savedH + "px";
-                game.clampToViewport(ppanel);
+                if (!isMobileDev) game.clampToViewport(ppanel);
             }
 
             let isDragP = false, offXP = 0, offYP = 0;
@@ -2111,7 +2122,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (savedT !== null) cpanel.style.top    = savedT + "px";
                 if (savedW !== null) cpanel.style.width  = savedW + "px";
                 if (savedH !== null) cpanel.style.height = savedH + "px";
-                game.clampToViewport(cpanel);
+                if (!isMobileDev) game.clampToViewport(cpanel);
             }
 
             let isDragC = false, offXC = 0, offYC = 0;
