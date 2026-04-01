@@ -10,7 +10,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1.svg)](https://www.postgresql.org/)
 
-Updated: April 1, 2026
+Updated: April 1, 2026 (v0.1.11)
 
 > **Project Status:** Currently under active development. An experimental server is available at [mmo.tommie.jp](https://mmo.tommie.jp).
 
