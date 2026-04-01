@@ -2225,7 +2225,7 @@
         </div>
         <div id="displayname-body" style="padding:10px;display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;align-items:center;gap:6px;">
-                <label style="font-size:12px;white-space:nowrap;">ユーザID</label>
+                <label style="font-size:12px;white-space:nowrap;cursor:help;" title="ユーザID（デバイス認証）&#10;──────────&#10;ログイン時に入力したIDです。サーバー上でアカウントを&#10;識別するための一意なIDとして使われます。&#10;&#10;【仕組み】&#10;初回ログイン時にデバイスIDが自動生成され、&#10;ユーザIDと紐付けてサーバーに登録されます。&#10;デバイスIDはブラウザのlocalStorageに保存されるため、&#10;同じブラウザからはパスワードなしで再ログインできます。&#10;&#10;【注意】&#10;・ブラウザのキャッシュをクリアするとデバイスIDが&#10;　消え、同じユーザIDではログインできなくなります。&#10;・PWA（ホーム画面アプリ）へはCookie経由で&#10;　デバイスIDが自動引き継ぎされます（1時間有効）。&#10;・変更はできません。別のIDを使うには再ログインが必要です。">ユーザID</label>
                 <span id="dn-panel-userid" style="font-size:12px;font-family:monospace;"></span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
