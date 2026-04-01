@@ -510,6 +510,40 @@ export function setupHtmlUI(game: GameScene): void {
     }
     // ===============================================
 
+    let chatOverlayMax = 5;
+    const chatOverlay = document.getElementById("chat-overlay");
+    // GameScene 経由で外部からアクセスできるようにする
+    (game as any).chatOverlayMax = chatOverlayMax;
+    (game as any).setChatOverlayMax = (n: number) => {
+        chatOverlayMax = n;
+        (game as any).chatOverlayMax = n;
+        if (chatOverlay) {
+            chatOverlay.style.display = n === 0 ? "none" : "";
+            while (chatOverlay.children.length > n) chatOverlay.removeChild(chatOverlay.firstChild!);
+        }
+    };
+
+    const addChatOverlay = (avatarName: string, text: string, timeStr: string) => {
+        if (!chatOverlay || !text || chatOverlayMax === 0) return;
+        const isSystem = avatarName === "[system]";
+        const line = document.createElement("div");
+        line.className = "chat-ol-line";
+        if (isSystem) {
+            line.innerHTML =
+                `<span class="chat-ol-time">${timeStr}</span>` +
+                `<span class="chat-ol-system">${text}</span>`;
+        } else {
+            line.innerHTML =
+                `<span class="chat-ol-time">${timeStr}</span>` +
+                `<span class="chat-ol-name">${avatarName}:</span> ${text}`;
+        }
+        chatOverlay.appendChild(line);
+        // 上限を超えた古い行を削除
+        while (chatOverlay.children.length > chatOverlayMax) {
+            chatOverlay.removeChild(chatOverlay.firstChild!);
+        }
+    };
+
     const addChatHistory = (avatarName: string, text: string) => {
         const _end = prof("UIPanel.addChatHistory");
         if (!text) { _end(); return; }
@@ -530,6 +564,10 @@ export function setupHtmlUI(game: GameScene): void {
             `<span class="chat-history-text">${text}</span>`;
         list.appendChild(entry);
         entry.scrollIntoView({ block: "end", behavior: "instant" });
+
+        // チャットオーバーレイにも追加
+        addChatOverlay(avatarName, text, timeStr);
+
         _end();
     };
 
@@ -795,7 +833,15 @@ export function setupHtmlUI(game: GameScene): void {
     });
 
     game.nakama.onChatMessage = (username, text, userId) => {
-        addChatHistory(username, text);
+        // 表示名を優先（なければ @ユーザID）
+        let chatName = username;
+        for (const user of userMap.values()) {
+            if (user.uuid === userId) {
+                chatName = user.displayName || ("@" + user.username);
+                break;
+            }
+        }
+        addChatHistory(chatName, text);
         for (const [sessionId, user] of userMap) {
             if (user.uuid !== userId) continue;
             if (sessionId === game.nakama.selfSessionId) {
