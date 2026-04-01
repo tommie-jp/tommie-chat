@@ -93,6 +93,23 @@
             user-select: none;
             -webkit-user-select: none;
         }
+        .ui-btn:disabled {
+            background: #8a8a8a;
+            color: #ccc;
+            cursor: default;
+            opacity: 0.7;
+        }
+        .debug-btn:disabled {
+            background: #aaa;
+            color: #666;
+            cursor: default;
+            opacity: 0.7;
+        }
+        input:disabled, textarea:disabled {
+            background: rgba(200, 200, 200, 0.7);
+            color: #666;
+            cursor: default;
+        }
         #sendBtn { background: #0076d7cc; color: #fff; }
 
         /* ===== ユーザーリスト ===== */
@@ -1539,6 +1556,32 @@
                 top: auto !important;
                 bottom: 4px !important;
             }
+            #custom-tooltip {
+                font-size: 14px !important;
+            }
+        }
+        /* ===== カスタムツールチップ（画面外に出ない） ===== */
+        [data-tip] {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #custom-tooltip {
+            position: fixed;
+            z-index: 99999;
+            max-width: min(420px, 90vw);
+            padding: 6px 10px;
+            background: #ffffe1;
+            color: #000;
+            border: 1px solid #767676;
+            font-size: 12px;
+            font-family: "Courier New", Courier, monospace;
+            line-height: 1.5;
+            border-radius: 5px;
+            pointer-events: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: none;
         }
     </style>
     <script>
@@ -1805,7 +1848,7 @@
 
     <div id="chat-history-panel">
         <div id="chat-history-header">
-            <span>チャット履歴</span>
+            <span title="チャット履歴&#10;──────────&#10;過去のチャットメッセージを時系列で表示します。&#10;ログイン中に送受信されたメッセージが記録されます。">チャット履歴</span>
             <span id="chat-history-close">❌️</span>
         </div>
         <div id="chat-history-list"></div>
@@ -1813,7 +1856,7 @@
     
     <div id="debug-overlay">
         <div id="debug-title-bar">
-            <span id="debug-title-text" title="TomChatはアバターチャットです。">デバッグツール</span>
+            <span id="debug-title-text" title="デバッグツール&#10;──────────&#10;描画設定・カメラ・ワールドなどの詳細パラメータを&#10;調整できる開発者向けパネルです。&#10;各項目のラベルを長押し（PCはホバー）すると説明が表示されます。">デバッグツール</span>
             <button id="debug-minimize-btn" title="非表示">❌️</button>
             <button id="debug-restore-btn" title="復元">□</button>
         </div>
@@ -2105,12 +2148,12 @@
 
     <div id="server-settings-panel">
         <div id="server-settings-header">
-            <span>サーバ設定</span>
+            <span title="サーバ設定&#10;──────────&#10;サーバへの接続状態の確認やHTTP応答テストを行います。&#10;サーバURL・Nakama接続情報の表示、WebSocket/HTTPの疎通確認ができます。&#10;&#10;表示されるURLはNakamaサーバのURLですが、&#10;本アプリではWebサーバと同じURL（HTTPS接続先）を&#10;Nakamaサーバとしても使用しています。">サーバ設定</span>
             <span id="server-settings-close">❌️</span>
         </div>
         <div id="server-settings-body">
-            <div class="srv-desc">サーバ情報</div>
-            <div class="srv-row" style="font-size:10px;color:#666;word-break:break-all;" title="Nakama公式: &quot;The server key is not a security mechanism and can be safely exposed.&quot;&#10;(Server Keyはセキュリティ機構ではなく、安全に公開できます)">
+            <div class="srv-desc" title="サーバ情報&#10;──────────&#10;接続先サーバのURL・ポート番号・Server Keyを表示します。&#10;Server KeyはNakama公式の仕様上、安全に公開可能な値です。">サーバ情報</div>
+            <div class="srv-row" style="font-size:10px;color:#666;word-break:break-all;" title="Server Key（Nakamaサーバ）&#10;──────────&#10;クライアントがNakamaサーバに接続する際に使用する識別キーです。&#10;サーバの nakama/config.yml の socket.server_key で設定します。&#10;デフォルト値: defaultkey&#10;&#10;【重要】&#10;Server Keyはパスワードではありません。&#10;Nakama公式: &quot;The server key is not a security mechanism&#10;and can be safely exposed.&quot;&#10;（Server Keyはセキュリティ機構ではなく安全に公開できます）&#10;&#10;認証はデバイスID等の認証APIで行われるため、&#10;Server Keyが公開されても不正アクセスにはなりません。">
                 <span style="flex-shrink:0;">Server Key:</span>
                 <span id="serverKeyDisplay" style="flex:1;min-width:0;"></span>
             </div>
@@ -2124,7 +2167,7 @@
 
     <div id="server-log-panel">
         <div id="server-log-header">
-            <span>サーバ接続ログ</span>
+            <span title="サーバ接続ログ&#10;──────────&#10;サーバへの接続・切断・エラーなどのイベントを&#10;タイムスタンプ付きで記録します。&#10;ログイン失敗時の原因やWebSocket切断の詳細を確認できます。">サーバ接続ログ</span>
             <span id="server-log-close">❌️</span>
         </div>
         <div id="server-log-list"></div>
@@ -2132,7 +2175,7 @@
 
     <div id="user-list-panel">
         <div id="user-list-header">
-            <span>プレイヤーリスト</span>
+            <span title="プレイヤーリスト&#10;──────────&#10;現在ログイン中の全プレイヤーを表示します。&#10;ユーザID・表示名・ログイン時刻・接続チャンネルが確認できます。">プレイヤーリスト</span>
             <span id="user-list-close">❌️</span>
         </div>
         <div id="user-list-wrap">
@@ -2175,7 +2218,7 @@
 
     <div id="logout-panel">
         <div id="logout-panel-header">
-            <span>ログアウト</span>
+            <span title="ログアウト&#10;──────────&#10;サーバから切断してログイン画面に戻ります。&#10;ユーザIDとデバイスIDは保持されるため、&#10;同じIDで再ログインできます。">ログアウト</span>
             <span id="logout-panel-close">❌️</span>
         </div>
         <div id="logout-panel-body">
@@ -2189,7 +2232,7 @@
 
     <div id="about-panel" style="display:none;">
         <div id="about-panel-header">
-            <span>tommieChatについて</span>
+            <span title="tommieChatについて&#10;──────────&#10;アプリのバージョン情報・操作方法・クレジットを表示します。">tommieChatについて</span>
             <span id="about-panel-close">❌️</span>
         </div>
         <div id="about-panel-body">
@@ -2220,7 +2263,7 @@
 
     <div id="displayname-panel" style="display:none;">
         <div id="displayname-header">
-            <span>表示名設定</span>
+            <span title="表示名設定&#10;──────────&#10;アバターの頭上に表示される名前を設定します。&#10;ユーザIDとは別に、自由に変更できます。&#10;空欄にすると @ユーザID が青色で表示されます。">表示名設定</span>
             <span id="displayname-close">❌️</span>
         </div>
         <div id="displayname-body" style="padding:10px;display:flex;flex-direction:column;gap:8px;">
@@ -2230,7 +2273,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
                 <input id="displayNameInput" type="text" placeholder="ログイン後に入力" disabled maxlength="20" style="flex:1;min-width:0;" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;0〜20文字（空欄で @ユーザID を青色表示、制御文字は使用不可）">
-                <button id="displayNameBtn" class="ui-btn" disabled style="width:auto;padding:0 8px;white-space:nowrap;font-size:12px;">変更</button>
+                <button id="displayNameBtn" class="ui-btn" disabled style="width:auto;padding:0 8px;white-space:nowrap;font-size:12px;" title="表示名を変更します（Enterキーでも実行できます）&#10;ログイン後に使用可能になります">変更</button>
             </div>
             <span id="displayNameStatus" style="font-size:12px;white-space:nowrap;"></span>
         </div>
@@ -2256,7 +2299,7 @@
 
     <div id="ping-panel">
         <div id="ping-header">
-            <span>Ping グラフ</span>
+            <span title="Ping グラフ&#10;──────────&#10;サーバへの応答時間をリアルタイムでグラフ表示します。&#10;&#10;【目安】&#10;  〜50ms: 快適（LAN内・近距離サーバ）&#10; 50〜100ms: 良好（一般的なMMOの標準範囲）&#10;100〜200ms: やや遅い（操作に若干の遅延を感じる）&#10;200ms〜: 厳しい（アクション操作に支障が出る）&#10;&#10;【仕組み】&#10;WebSocketプロトコルのping/pongではなく、&#10;アプリ独自の実装です。&#10;NakamaサーバのRPC関数「ping」を呼び出し、&#10;送信から応答までの往復時間（ミリ秒）を計測しています。&#10;そのためサーバ側の処理時間も含まれます。">Ping グラフ</span>
             <span id="ping-close">❌️</span>
         </div>
         <canvas id="ping-canvas"></canvas>
@@ -2264,7 +2307,7 @@
 
     <div id="ccu-panel" style="display:none;">
         <div id="ccu-header">
-            <span>同接グラフ</span>
+            <span title="同接グラフ&#10;──────────&#10;現在サーバに接続しているユーザー数をリアルタイムで&#10;グラフ表示します。">同接グラフ</span>
             <select id="ccu-range" style="font-size:11px;font-family:monospace;border:1px solid rgba(0,0,0,0.2);border-radius:3px;background:rgba(255,255,255,0.5);padding:1px 2px;cursor:pointer;">
                 <option value="1m">1分</option>
                 <option value="5m" selected>5分</option>
@@ -2307,6 +2350,152 @@
                 if (regs.length) console.log("SW unregistered (dev mode)");
             });
         }
+    </script>
+    <div id="custom-tooltip"></div>
+    <script>
+    // カスタムツールチップ: title属性 → data-tip に変換し、画面内に収める
+    (function() {
+        var tip = document.getElementById("custom-tooltip");
+        var showTimer = null;
+        var currentEl = null;
+
+        // 全 title 属性を data-tip に変換（ネイティブツールチップを無効化）
+        document.querySelectorAll("[title]").forEach(function(el) {
+            if (!el.getAttribute("data-tip")) {
+                el.setAttribute("data-tip", el.getAttribute("title"));
+            }
+            el.removeAttribute("title");
+        });
+        // 動的に追加される title も対処（MutationObserver）
+        new MutationObserver(function(muts) {
+            muts.forEach(function(m) {
+                if (m.type === "attributes" && m.attributeName === "title") {
+                    var el = m.target;
+                    var t = el.getAttribute("title");
+                    if (t) { el.setAttribute("data-tip", t); el.removeAttribute("title"); }
+                }
+                if (m.type === "childList") {
+                    m.addedNodes.forEach(function(n) {
+                        if (n.nodeType === 1) {
+                            n.querySelectorAll && n.querySelectorAll("[title]").forEach(function(c) {
+                                c.setAttribute("data-tip", c.getAttribute("title"));
+                                c.removeAttribute("title");
+                            });
+                            if (n.getAttribute && n.getAttribute("title")) {
+                                n.setAttribute("data-tip", n.getAttribute("title"));
+                                n.removeAttribute("title");
+                            }
+                        }
+                    });
+                }
+            });
+        }).observe(document.body, { attributes: true, attributeFilter: ["title"], childList: true, subtree: true });
+
+        function show(el) {
+            var text = el.getAttribute("data-tip");
+            if (!text) return;
+            currentEl = el;
+            tip.textContent = text;
+            tip.style.display = "block";
+            // 位置計算（ソフトキーボード表示時は visualViewport を使用）
+            var vv = window.visualViewport;
+            var vw = vv ? vv.width : window.innerWidth;
+            var vh = vv ? vv.height : window.innerHeight;
+            var vpTop = vv ? vv.pageTop : window.scrollY;
+            var vpLeft = vv ? vv.pageLeft : window.scrollX;
+            var rect = el.getBoundingClientRect();
+            var tw = tip.offsetWidth, th = tip.offsetHeight;
+            // ページ上の絶対座標
+            var absTop = rect.top + window.scrollY;
+            var absBottom = rect.bottom + window.scrollY;
+            var absLeft = rect.left + window.scrollX;
+            // visual viewport 内での相対位置を計算
+            var relBottom = absBottom - vpTop;
+            var relTop = absTop - vpTop;
+            var left = absLeft + rect.width / 2 - tw / 2;
+            var top;
+            // 要素が visual viewport の下半分、または下に収まらない場合は上に表示
+            if (relBottom + th + 6 > vh - 4 || relTop > vh / 2) {
+                top = absTop - th - 6;
+            } else {
+                top = absBottom + 6;
+            }
+            // visual viewport 内に収める
+            var minTop = vpTop + 4;
+            var maxTop = vpTop + vh - th - 4;
+            if (top > maxTop) top = maxTop;
+            if (top < minTop) top = minTop;
+            var minLeft = vpLeft + 4;
+            var maxLeft = vpLeft + vw - tw - 4;
+            if (left > maxLeft) left = maxLeft;
+            if (left < minLeft) left = minLeft;
+            tip.style.left = left + "px";
+            tip.style.top = top + "px";
+        }
+
+        function hide() {
+            clearTimeout(showTimer); showTimer = null;
+            currentEl = null;
+            tip.style.display = "none";
+        }
+
+        var hasTouch = "ontouchstart" in window;
+
+        // PC: hover（タッチデバイスでは無効）
+        if (!hasTouch) {
+            document.addEventListener("pointerover", function(e) {
+                var el = e.target.closest("[data-tip]");
+                if (!el) { hide(); return; }
+                clearTimeout(showTimer);
+                showTimer = setTimeout(function() { show(el); }, 400);
+            });
+            document.addEventListener("pointerout", function() { hide(); });
+        }
+
+        // モバイル: touch イベントで長押し（pointercancel に影響されない）
+        if (hasTouch) {
+            var pressTimer = null;
+            var tipShown = false;  // 長押しでツールチップが表示されたか
+            var hiddenByTap = false; // ツールチップをタップで閉じたか
+            document.addEventListener("touchstart", function(e) {
+                tipShown = false;
+                hiddenByTap = false;
+                var touch = e.touches[0];
+                var hitEl = document.elementFromPoint(touch.clientX, touch.clientY);
+                // ツールチップ自体をタップ → 閉じるだけ（背面に貫通しない）
+                if (hitEl === tip || (hitEl && tip.contains(hitEl))) { hide(); hiddenByTap = true; return; }
+                var el = hitEl && hitEl.closest("[data-tip]");
+                // ツールチップ外タップで閉じる
+                if (!el) { if (currentEl) { hide(); hiddenByTap = true; } return; }
+                // 表示中の同じ要素をタップ → 閉じる
+                if (currentEl === el) { hide(); hiddenByTap = true; return; }
+                // 長押し500msで表示（ヘッダー含む全要素共通。指が動いたらキャンセル）
+                pressTimer = setTimeout(function() { show(el); pressTimer = null; tipShown = true; }, 500);
+            }, { passive: true });
+            var blockClick = false;
+            document.addEventListener("touchend", function(e) {
+                clearTimeout(pressTimer);
+                if (tipShown || hiddenByTap) {
+                    tipShown = false;
+                    hiddenByTap = false;
+                    blockClick = true;
+                    e.preventDefault();
+                    setTimeout(function() { blockClick = false; }, 400);
+                }
+            });
+            // click イベントをキャプチャフェーズで止める（iOS PWA で確実に抑制）
+            document.addEventListener("click", function(e) {
+                if (blockClick) {
+                    blockClick = false;
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+            }, true);
+            document.addEventListener("touchcancel", function() { clearTimeout(pressTimer); }, { passive: true });
+            document.addEventListener("touchmove", function() { clearTimeout(pressTimer); headerMoved = true; }, { passive: true });
+        }
+        document.addEventListener("scroll", hide, true);
+    })();
     </script>
 </body>
 </html>
