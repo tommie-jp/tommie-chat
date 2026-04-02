@@ -1483,7 +1483,7 @@
                 font-size: 10px !important;
                 opacity: 0.7;
                 top: auto !important;
-                bottom: env(safe-area-inset-bottom, 0px) !important;
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 4px) !important;
             }
             body.sp-panel-visible #app-footer-version {
                 top: calc(var(--pt-divider, 60vh) - 18px) !important;
@@ -1545,7 +1545,7 @@
                 bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
             }
             #app-footer-version {
-                bottom: calc(env(safe-area-inset-bottom, 0px) - 3px) !important;
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 1px) !important;
             }
         }
 
@@ -1688,7 +1688,6 @@
             }
             #app-footer-version {
                 top: auto !important;
-                bottom: 2px !important;
             }
             #custom-tooltip {
                 font-size: 14px !important;
@@ -2661,7 +2660,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="pointer-events:none;margin-right:2em;"></span><span id="app-footer-text"></span></div>
+    <div id="app-footer-version" style="position:fixed;bottom:6px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="pointer-events:none;margin-right:2em;"></span><span id="app-footer-text"></span></div>
 
     <script type="module" src="/src/main.ts"></script>
     <script>
