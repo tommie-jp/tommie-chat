@@ -600,6 +600,7 @@ export class GameScene {
         });
 
         // レンダーループ
+        let coordCounter = 0;
         this.scene.onBeforeRenderObservable.add(() => {
             const _t0 = performance.now();
             const deltaTime = this.engine.getDeltaTime() / 1000;
@@ -768,6 +769,22 @@ export class GameScene {
                 acc.playerMove = acc.remoteAvatars = acc.npc = acc.total = acc.frames = 0;
             }
 
+            // 座標表示の更新（30フレームごと）
+            if (++coordCounter >= 30) {
+                coordCounter = 0;
+                const cd = document.getElementById("coord-display");
+                if (cd) {
+                    const p = this.playerBox.position;
+                    cd.textContent = `(${Math.round(p.x)}, ${Math.round(p.z)})`;
+                    const fv = document.getElementById("app-footer-version");
+                    const ci = document.getElementById("chatInput");
+                    if (fv && ci) {
+                        const r = ci.getBoundingClientRect();
+                        fv.style.left = r.left + "px";
+                        fv.style.right = (window.innerWidth - r.right) + "px";
+                    }
+                }
+            }
 
         });
 
