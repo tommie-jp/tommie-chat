@@ -62,8 +62,10 @@ PostgreSQL, Nakama (port 7350/7351), Nginx (port 80), MinIO (S3), Prometheus
 
 ## Key Conventions
 
+- **応答は日本語** — Claudeの応答・説明・コミットメッセージは日本語で書く
 - **自動コミットしない** — コミットはユーザーが明示的に指示した場合のみ
 - **日本語UI** — ツールチップ、エラーメッセージ、パネルは日本語
+- **テスト** — `npm run test` は常にパスする状態を維持する
 - **モバイル対応** — `@media (pointer: coarse) and (min-resolution: 2dppx)` でスマホ判定。ポートレート/ランドスケープ/iPhone PWA standalone それぞれ個別対応
 - **テーマ** — デバッグツール 02b.Theme で「背景黒」「ポップ１」切替。`body.theme-dark` クラスで CSS 上書き
 - **パネルレイアウト** — モバイルではパネル位置を CSS `!important` で管理。`clampToViewport` はモバイルではスキップ
