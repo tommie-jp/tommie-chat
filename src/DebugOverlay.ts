@@ -3,6 +3,57 @@ import { Scene, Color3, Color4, Vector3, SceneInstrumentation, EngineInstrumenta
 import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
 import { profSetEnabled, profReset } from "./Profiler";
 
+/** コントロール要素の親行からラベルセルを取得し、デフォルト値と異なる場合に * を付ける */
+const _nonDefaultCtrls = new WeakMap<HTMLElement, Set<HTMLElement>>();
+const _resetFns = new WeakMap<HTMLElement, Map<HTMLElement, () => void>>();
+const _tapTimeMap = new WeakMap<HTMLElement, number>();
+const _listenersReady = new WeakSet<HTMLElement>();
+function markNonDefault(ctrl: HTMLElement, defaultVal: string, currentVal: string, resetFn?: () => void): void {
+    const td = ctrl.closest("td");
+    const labelTd = td?.previousElementSibling as HTMLElement | null;
+    if (!labelTd) return;
+    // 同一ラベルに複数コントロールがある場合でも正しく * を表示
+    if (!_nonDefaultCtrls.has(labelTd)) _nonDefaultCtrls.set(labelTd, new Set());
+    const nds = _nonDefaultCtrls.get(labelTd)!;
+    if (currentVal !== defaultVal) nds.add(ctrl); else nds.delete(ctrl);
+    const base = labelTd.textContent!.replace(/\*$/, "");
+    labelTd.textContent = nds.size > 0 ? base + "*" : base;
+    if (resetFn) {
+        if (!_resetFns.has(labelTd)) _resetFns.set(labelTd, new Map());
+        _resetFns.get(labelTd)!.set(ctrl, resetFn);
+    }
+    if (!_listenersReady.has(labelTd)) {
+        _listenersReady.add(labelTd);
+        labelTd.style.cursor = "pointer";
+        const runReset = () => {
+            const fns = _resetFns.get(labelTd);
+            if (fns) for (const fn of fns.values()) fn();
+        };
+        labelTd.addEventListener("dblclick", runReset);
+        // モバイル: dblclickが発火しないためtouchendでダブルタップ検出
+        labelTd.addEventListener("touchend", (e) => {
+            const now = Date.now();
+            const last = _tapTimeMap.get(labelTd) || 0;
+            if (now - last < 400) {
+                e.preventDefault();
+                runReset();
+                _tapTimeMap.set(labelTd, 0);
+            } else {
+                _tapTimeMap.set(labelTd, now);
+            }
+        });
+    }
+}
+
+/** デバッグ設定用Cookie読み書き */
+function dbgGetCookie(name: string): string | null {
+    const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : null;
+}
+function dbgSetCookie(name: string, value: string): void {
+    document.cookie = `${name}=${encodeURIComponent(value)};path=/;max-age=${60*60*24*365}`;
+}
+
 export function setupDebugOverlay(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
     const scaleSelect = document.getElementById("scaleSelect") as HTMLSelectElement;
@@ -584,10 +635,14 @@ export function setupDebugOverlay(game: GameScene): void {
         const saved = getThemeCookie() ?? "pop1";
         themeSelect.value = saved;
         applyTheme(saved);
+        markNonDefault(themeSelect, "pop1", saved, () => {
+            themeSelect.value = "pop1"; applyTheme("pop1"); setThemeCookie("pop1"); markNonDefault(themeSelect, "pop1", "pop1");
+        });
         themeSelect.addEventListener("change", () => {
             console.log("Theme change:", themeSelect.value, "classList:", document.body.classList.toString());
             applyTheme(themeSelect.value);
             setThemeCookie(themeSelect.value);
+            markNonDefault(themeSelect, "pop1", themeSelect.value);
             console.log("Theme applied:", document.body.classList.toString());
         });
     }
@@ -605,10 +660,14 @@ export function setupDebugOverlay(game: GameScene): void {
         const savedOl = getChatOlCookie() ?? "5";
         chatOlMaxSelect.value = savedOl;
         (game as any).setChatOverlayMax?.(parseInt(savedOl));
+        markNonDefault(chatOlMaxSelect, "5", savedOl, () => {
+            chatOlMaxSelect.value = "5"; (game as any).setChatOverlayMax?.(5); setChatOlCookie("5"); markNonDefault(chatOlMaxSelect, "5", "5");
+        });
         chatOlMaxSelect.addEventListener("change", () => {
             const val = parseInt(chatOlMaxSelect.value);
             (game as any).setChatOverlayMax?.(val);
             setChatOlCookie(chatOlMaxSelect.value);
+            markNonDefault(chatOlMaxSelect, "5", chatOlMaxSelect.value);
         });
     }
 
@@ -659,11 +718,24 @@ export function setupDebugOverlay(game: GameScene): void {
     applyOlBg();
     applyOlFont();
 
+    // 初期 * 表示
+    if (chatOlBgColor) markNonDefault(chatOlBgColor, "#dfeed4", chatOlBgColor.value, () => {
+        chatOlBgColor!.value = "#dfeed4"; applyOlBg(); olSCk("chatOlBgColor", "#dfeed4"); markNonDefault(chatOlBgColor!, "#dfeed4", "#dfeed4");
+    });
+    if (chatOlBgAlpha) markNonDefault(chatOlBgAlpha, "0.45", chatOlBgAlpha.value, () => {
+        chatOlBgAlpha!.value = "0.45"; applyOlBg(); olSCk("chatOlBgAlpha", "0.45"); markNonDefault(chatOlBgAlpha!, "0.45", "0.45");
+    });
+    if (chatOlFontColor) markNonDefault(chatOlFontColor, "#5c5c5c", chatOlFontColor.value, () => {
+        chatOlFontColor!.value = "#5c5c5c"; applyOlFont(); olSCk("chatOlFontColor", "#5c5c5c"); markNonDefault(chatOlFontColor!, "#5c5c5c", "#5c5c5c");
+    });
+    if (chatOlFontSize) markNonDefault(chatOlFontSize, "13", chatOlFontSize.value, () => {
+        chatOlFontSize!.value = "13"; applyOlFont(); olSCk("chatOlFontSize", "13"); markNonDefault(chatOlFontSize!, "13", "13");
+    });
     // イベントハンドラ
-    chatOlBgColor?.addEventListener("input", () => { applyOlBg(); olSCk("chatOlBgColor", chatOlBgColor!.value); });
-    chatOlBgAlpha?.addEventListener("change", () => { applyOlBg(); olSCk("chatOlBgAlpha", chatOlBgAlpha!.value); });
-    chatOlFontColor?.addEventListener("input", () => { applyOlFont(); olSCk("chatOlFontColor", chatOlFontColor!.value); });
-    chatOlFontSize?.addEventListener("change", () => { applyOlFont(); olSCk("chatOlFontSize", chatOlFontSize!.value); });
+    chatOlBgColor?.addEventListener("input", () => { applyOlBg(); olSCk("chatOlBgColor", chatOlBgColor!.value); markNonDefault(chatOlBgColor!, "#dfeed4", chatOlBgColor!.value); });
+    chatOlBgAlpha?.addEventListener("change", () => { applyOlBg(); olSCk("chatOlBgAlpha", chatOlBgAlpha!.value); markNonDefault(chatOlBgAlpha!, "0.45", chatOlBgAlpha!.value); });
+    chatOlFontColor?.addEventListener("input", () => { applyOlFont(); olSCk("chatOlFontColor", chatOlFontColor!.value); markNonDefault(chatOlFontColor!, "#5c5c5c", chatOlFontColor!.value); });
+    chatOlFontSize?.addEventListener("change", () => { applyOlFont(); olSCk("chatOlFontSize", chatOlFontSize!.value); markNonDefault(chatOlFontSize!, "13", chatOlFontSize!.value); });
 
     // --- チャットオーバーレイ 時刻色・名前色 ---
     const chatOlTimeColor = document.getElementById("chatOlTimeColor") as HTMLInputElement | null;
@@ -678,9 +750,15 @@ export function setupDebugOverlay(game: GameScene): void {
     if (chatOlTimeColor) { const v = olCk("chatOlTimeColor"); if (v) chatOlTimeColor.value = v; }
     if (chatOlNameColor) { const v = olCk("chatOlNameColor"); if (v) chatOlNameColor.value = v; }
     applyOlPartColors();
+    if (chatOlTimeColor) markNonDefault(chatOlTimeColor, "#999999", chatOlTimeColor.value, () => {
+        chatOlTimeColor!.value = "#999999"; applyOlPartColors(); olSCk("chatOlTimeColor", "#999999"); markNonDefault(chatOlTimeColor!, "#999999", "#999999");
+    });
+    if (chatOlNameColor) markNonDefault(chatOlNameColor, "#2a7a2a", chatOlNameColor.value, () => {
+        chatOlNameColor!.value = "#2a7a2a"; applyOlPartColors(); olSCk("chatOlNameColor", "#2a7a2a"); markNonDefault(chatOlNameColor!, "#2a7a2a", "#2a7a2a");
+    });
 
-    chatOlTimeColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlTimeColor", chatOlTimeColor!.value); });
-    chatOlNameColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlNameColor", chatOlNameColor!.value); });
+    chatOlTimeColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlTimeColor", chatOlTimeColor!.value); markNonDefault(chatOlTimeColor!, "#999999", chatOlTimeColor!.value); });
+    chatOlNameColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlNameColor", chatOlNameColor!.value); markNonDefault(chatOlNameColor!, "#2a7a2a", chatOlNameColor!.value); });
 
     // --- チャットオーバーレイ 折り返し ---
     const chatOlWrapBtn = document.getElementById("chatOlWrapBtn") as HTMLButtonElement | null;
@@ -692,10 +770,14 @@ export function setupDebugOverlay(game: GameScene): void {
             chatOlWrapBtn.classList.toggle("off", !olWrap);
         };
         applyOlWrap();
+        markNonDefault(chatOlWrapBtn, "On", chatOlWrapBtn.textContent!, () => {
+            olWrap = true; applyOlWrap(); olSCk("chatOlWrap", "1"); markNonDefault(chatOlWrapBtn, "On", "On");
+        });
         chatOlWrapBtn.addEventListener("click", () => {
             olWrap = !olWrap;
             applyOlWrap();
             olSCk("chatOlWrap", olWrap ? "1" : "0");
+            markNonDefault(chatOlWrapBtn, "On", chatOlWrapBtn.textContent!);
         });
     }
 
@@ -712,7 +794,20 @@ export function setupDebugOverlay(game: GameScene): void {
         } else {
             exactMatch.text = `${exactMatch.text.replace(/ \(初期値\)$/, "")} (初期値)`;
         }
-        scaleSelect.value = initScaleStr;
+        const savedScale = dbgGetCookie("dbgScale");
+        if (savedScale !== null) {
+            const opt = Array.from(scaleSelect.options).find(o => o.value === savedScale);
+            if (opt) { scaleSelect.value = savedScale; game.engine.setHardwareScalingLevel(parseFloat(savedScale)); }
+            else scaleSelect.value = initScaleStr;
+        } else {
+            scaleSelect.value = initScaleStr;
+        }
+        markNonDefault(scaleSelect, initScaleStr, scaleSelect.value, () => {
+            scaleSelect.value = initScaleStr;
+            game.engine.setHardwareScalingLevel(parseFloat(initScaleStr));
+            dbgSetCookie("dbgScale", initScaleStr);
+            markNonDefault(scaleSelect, initScaleStr, initScaleStr);
+        });
 
         const labelScale = document.getElementById("label-scale");
         if (labelScale) {
@@ -734,54 +829,101 @@ export function setupDebugOverlay(game: GameScene): void {
             const target = e.target as HTMLSelectElement;
             const newScale = parseFloat(target.value);
             game.engine.setHardwareScalingLevel(newScale);
+            dbgSetCookie("dbgScale", target.value);
+            markNonDefault(scaleSelect, initScaleStr, target.value);
         });
     }
 
     const aaSelect = document.getElementById("aaSelect") as HTMLSelectElement;
     if (aaSelect) {
+        const savedAA = dbgGetCookie("dbgAA");
+        if (savedAA !== null) { aaSelect.value = savedAA; game.setMSAA(parseInt(savedAA)); }
+        markNonDefault(aaSelect, "2", aaSelect.value, () => {
+            aaSelect.value = "2"; game.setMSAA(2); dbgSetCookie("dbgAA", "2"); markNonDefault(aaSelect, "2", "2");
+        });
         aaSelect.addEventListener("change", () => {
             game.setMSAA(parseInt(aaSelect.value));
+            dbgSetCookie("dbgAA", aaSelect.value);
+            markNonDefault(aaSelect, "2", aaSelect.value);
         });
     }
 
     let isLODEnabled = false;
     if (lodBtn) {
+        if (dbgGetCookie("dbgLOD") === "1") {
+            isLODEnabled = true;
+            lodBtn.innerText = "On"; lodBtn.classList.remove("off");
+        }
+        markNonDefault(lodBtn, "Off", lodBtn.innerText, () => {
+            isLODEnabled = false; lodBtn.innerText = "Off"; lodBtn.classList.add("off"); dbgSetCookie("dbgLOD", "0"); markNonDefault(lodBtn, "Off", "Off");
+        });
         lodBtn.addEventListener("click", () => {
             isLODEnabled = !isLODEnabled;
             lodBtn.innerText = isLODEnabled ? "On" : "Off";
             if (isLODEnabled) lodBtn.classList.remove("off");
             else lodBtn.classList.add("off");
+            dbgSetCookie("dbgLOD", isLODEnabled ? "1" : "0");
+            markNonDefault(lodBtn, "Off", lodBtn.innerText);
         });
     }
 
     if (farClipInput && game.camera) {
+        const savedFC = dbgGetCookie("dbgFarClip");
+        if (savedFC !== null) { farClipInput.value = savedFC; game.camera.maxZ = parseFloat(savedFC); game.scene.fogEnd = parseFloat(savedFC); }
+        markNonDefault(farClipInput, "200", farClipInput.value, () => {
+            farClipInput.value = "200"; game.camera.maxZ = 200; game.scene.fogEnd = 200; dbgSetCookie("dbgFarClip", "200"); markNonDefault(farClipInput, "200", "200");
+        });
         farClipInput.addEventListener("change", (e) => {
             const val = parseFloat((e.target as HTMLSelectElement).value);
             if (!isNaN(val) && val > 0) {
                 game.camera.maxZ = val;
                 game.scene.fogEnd = val;
             }
+            dbgSetCookie("dbgFarClip", (e.target as HTMLSelectElement).value);
+            markNonDefault(farClipInput, "200", (e.target as HTMLSelectElement).value);
         });
     }
 
     const aoiVisBtn = document.getElementById("aoiVisBtn") as HTMLButtonElement;
     if (aoiVisBtn) {
+        if (dbgGetCookie("dbgAoiVis") === "1") {
+            game.aoiManager.aoiVisEnabled = true;
+            aoiVisBtn.innerText = "On"; aoiVisBtn.classList.remove("off");
+            game.aoiManager.updateAOILines();
+        }
+        markNonDefault(aoiVisBtn, "Off", aoiVisBtn.innerText, () => {
+            game.aoiManager.aoiVisEnabled = false; aoiVisBtn.innerText = "Off"; aoiVisBtn.classList.add("off"); game.aoiManager.updateAOILines(); dbgSetCookie("dbgAoiVis", "0"); markNonDefault(aoiVisBtn, "Off", "Off");
+        });
         aoiVisBtn.addEventListener("click", () => {
             game.aoiManager.aoiVisEnabled = !game.aoiManager.aoiVisEnabled;
             aoiVisBtn.innerText = game.aoiManager.aoiVisEnabled ? "On" : "Off";
             if (game.aoiManager.aoiVisEnabled) aoiVisBtn.classList.remove("off");
             else aoiVisBtn.classList.add("off");
             game.aoiManager.updateAOILines();
+            dbgSetCookie("dbgAoiVis", game.aoiManager.aoiVisEnabled ? "1" : "0");
+            markNonDefault(aoiVisBtn, "Off", aoiVisBtn.innerText);
         });
     }
 
     const camAutoRotBtn = document.getElementById("camAutoRotBtn") as HTMLButtonElement;
     if (camAutoRotBtn) {
+        const savedCamRot = dbgGetCookie("dbgCamAutoRot");
+        if (savedCamRot !== null) {
+            game.camAutoRotate = savedCamRot === "1";
+            camAutoRotBtn.innerText = game.camAutoRotate ? "On" : "Off";
+            if (game.camAutoRotate) camAutoRotBtn.classList.remove("off");
+            else camAutoRotBtn.classList.add("off");
+        }
+        markNonDefault(camAutoRotBtn, "On", camAutoRotBtn.innerText, () => {
+            game.camAutoRotate = true; camAutoRotBtn.innerText = "On"; camAutoRotBtn.classList.remove("off"); dbgSetCookie("dbgCamAutoRot", "1"); markNonDefault(camAutoRotBtn, "On", "On");
+        });
         camAutoRotBtn.addEventListener("click", () => {
             game.camAutoRotate = !game.camAutoRotate;
             camAutoRotBtn.innerText = game.camAutoRotate ? "On" : "Off";
             if (game.camAutoRotate) camAutoRotBtn.classList.remove("off");
             else camAutoRotBtn.classList.add("off");
+            dbgSetCookie("dbgCamAutoRot", game.camAutoRotate ? "1" : "0");
+            markNonDefault(camAutoRotBtn, "On", camAutoRotBtn.innerText);
         });
     }
 
@@ -823,46 +965,86 @@ export function setupDebugOverlay(game: GameScene): void {
 
     const cloudToggleBtn = document.getElementById("cloudToggleBtn") as HTMLButtonElement;
     if (cloudToggleBtn) {
+        const savedCloud = dbgGetCookie("dbgCloud");
+        if (savedCloud !== null) {
+            game.cloudSystem.setEnabled(savedCloud === "1");
+            cloudToggleBtn.innerText = game.cloudSystem.enabled ? "On" : "Off";
+            if (game.cloudSystem.enabled) cloudToggleBtn.classList.remove("off");
+            else cloudToggleBtn.classList.add("off");
+        }
+        markNonDefault(cloudToggleBtn, "On", cloudToggleBtn.innerText, () => {
+            game.cloudSystem.setEnabled(true); cloudToggleBtn.innerText = "On"; cloudToggleBtn.classList.remove("off"); dbgSetCookie("dbgCloud", "1"); markNonDefault(cloudToggleBtn, "On", "On");
+        });
         cloudToggleBtn.addEventListener("click", () => {
             game.cloudSystem.setEnabled(!game.cloudSystem.enabled);
             cloudToggleBtn.innerText = game.cloudSystem.enabled ? "On" : "Off";
             if (game.cloudSystem.enabled) cloudToggleBtn.classList.remove("off");
             else cloudToggleBtn.classList.add("off");
+            dbgSetCookie("dbgCloud", game.cloudSystem.enabled ? "1" : "0");
+            markNonDefault(cloudToggleBtn, "On", cloudToggleBtn.innerText);
         });
     }
 
     const remoteAoiBtn = document.getElementById("remoteAoiBtn") as HTMLButtonElement;
     if (remoteAoiBtn) {
+        if (dbgGetCookie("dbgRemoteAoi") === "1") {
+            game.aoiManager.setRemoteAoiEnabled(true);
+            remoteAoiBtn.innerText = "On"; remoteAoiBtn.classList.remove("off");
+        }
+        markNonDefault(remoteAoiBtn, "Off", remoteAoiBtn.innerText, () => {
+            game.aoiManager.setRemoteAoiEnabled(false); remoteAoiBtn.innerText = "Off"; remoteAoiBtn.classList.add("off"); dbgSetCookie("dbgRemoteAoi", "0"); markNonDefault(remoteAoiBtn, "Off", "Off");
+        });
         remoteAoiBtn.addEventListener("click", () => {
             game.aoiManager.setRemoteAoiEnabled(!game.aoiManager.remoteAoiEnabled);
             remoteAoiBtn.innerText = game.aoiManager.remoteAoiEnabled ? "On" : "Off";
             if (game.aoiManager.remoteAoiEnabled) remoteAoiBtn.classList.remove("off");
             else remoteAoiBtn.classList.add("off");
+            dbgSetCookie("dbgRemoteAoi", game.aoiManager.remoteAoiEnabled ? "1" : "0");
+            markNonDefault(remoteAoiBtn, "Off", remoteAoiBtn.innerText);
         });
     }
 
     const aoiRadiusSelect = document.getElementById("aoiRadiusSelect") as HTMLSelectElement;
     if (aoiRadiusSelect) {
+        const savedAoiR = dbgGetCookie("dbgAoiRadius");
+        if (savedAoiR !== null) { aoiRadiusSelect.value = savedAoiR; game.aoiManager.aoiRadius = parseInt(savedAoiR, 10); game.aoiManager.updateAOI(); }
+        markNonDefault(aoiRadiusSelect, "48", aoiRadiusSelect.value, () => {
+            aoiRadiusSelect.value = "48"; game.aoiManager.aoiRadius = 48; game.aoiManager.updateAOI(); dbgSetCookie("dbgAoiRadius", "48"); markNonDefault(aoiRadiusSelect, "48", "48");
+        });
         aoiRadiusSelect.addEventListener("change", (e) => {
             const val = parseInt((e.target as HTMLSelectElement).value, 10);
             if (!isNaN(val) && val > 0) {
                 game.aoiManager.aoiRadius = val;
                 game.aoiManager.updateAOI();
             }
+            dbgSetCookie("dbgAoiRadius", (e.target as HTMLSelectElement).value);
+            markNonDefault(aoiRadiusSelect, "48", (e.target as HTMLSelectElement).value);
         });
     }
 
     const maxZoomSelect = document.getElementById("maxZoomSelect") as HTMLSelectElement;
     if (maxZoomSelect && game.camera) {
+        const savedMZ = dbgGetCookie("dbgMaxZoom");
+        if (savedMZ !== null) { maxZoomSelect.value = savedMZ; game.camera.upperRadiusLimit = parseFloat(savedMZ); }
+        markNonDefault(maxZoomSelect, "200", maxZoomSelect.value, () => {
+            maxZoomSelect.value = "200"; game.camera.upperRadiusLimit = 200; dbgSetCookie("dbgMaxZoom", "200"); markNonDefault(maxZoomSelect, "200", "200");
+        });
         maxZoomSelect.addEventListener("change", (e) => {
             const val = parseFloat((e.target as HTMLSelectElement).value);
             if (!isNaN(val) && val > 0) {
                 game.camera.upperRadiusLimit = val;
             }
+            dbgSetCookie("dbgMaxZoom", (e.target as HTMLSelectElement).value);
+            markNonDefault(maxZoomSelect, "200", (e.target as HTMLSelectElement).value);
         });
     }
 
     if (fovSelect && fovInput && game.camera) {
+        const savedFOV = dbgGetCookie("dbgFOV");
+        if (savedFOV !== null) { fovSelect.value = savedFOV; fovInput.value = savedFOV; game.camera.fov = parseFloat(savedFOV) * Math.PI / 180; }
+        markNonDefault(fovSelect, "60", fovInput.value, () => {
+            fovSelect.value = "60"; fovInput.value = "60"; game.camera.fov = 60 * Math.PI / 180; dbgSetCookie("dbgFOV", "60"); markNonDefault(fovSelect, "60", "60");
+        });
         fovInput.addEventListener("input", (e) => {
             const val = parseFloat((e.target as HTMLInputElement).value);
             if (!isNaN(val) && val > 0) {
@@ -872,6 +1054,8 @@ export function setupDebugOverlay(game: GameScene): void {
                     fovSelect.value = val.toString();
                 }
             }
+            dbgSetCookie("dbgFOV", fovInput.value);
+            markNonDefault(fovSelect, "60", fovInput.value);
         });
 
         fovSelect.addEventListener("change", (e) => {
@@ -881,26 +1065,50 @@ export function setupDebugOverlay(game: GameScene): void {
                 game.camera.fov = val * Math.PI / 180;
                 fovInput.value = target.value;
             }
+            dbgSetCookie("dbgFOV", target.value);
+            markNonDefault(fovSelect, "60", target.value);
         });
     }
 
     if (fogBtn) {
         let isFogEnabled = true;
+        if (dbgGetCookie("dbgFog") === "0") {
+            isFogEnabled = false;
+            game.scene.fogMode = Scene.FOGMODE_NONE;
+            fogBtn.innerText = "Off"; fogBtn.classList.add("off");
+        }
+        markNonDefault(fogBtn, "On", fogBtn.innerText, () => {
+            isFogEnabled = true; game.scene.fogMode = Scene.FOGMODE_LINEAR; fogBtn.innerText = "On"; fogBtn.classList.remove("off"); dbgSetCookie("dbgFog", "1"); markNonDefault(fogBtn, "On", "On");
+        });
         fogBtn.addEventListener("click", () => {
             isFogEnabled = !isFogEnabled;
             game.scene.fogMode = isFogEnabled ? Scene.FOGMODE_LINEAR : Scene.FOGMODE_NONE;
             fogBtn.innerText = isFogEnabled ? "On" : "Off";
             if (isFogEnabled) fogBtn.classList.remove("off");
             else fogBtn.classList.add("off");
+            dbgSetCookie("dbgFog", isFogEnabled ? "1" : "0");
+            markNonDefault(fogBtn, "On", fogBtn.innerText);
         });
     }
 
     if (fogColorInput) {
+        const savedFogColor = dbgGetCookie("dbgFogColor");
+        if (savedFogColor !== null) {
+            fogColorInput.value = savedFogColor;
+            const c = Color3.FromHexString(savedFogColor);
+            game.scene.fogColor = c;
+            game.scene.clearColor = new Color4(c.r, c.g, c.b, 1.0);
+        }
+        markNonDefault(fogColorInput, "#a0d7f3", fogColorInput.value, () => {
+            fogColorInput.value = "#a0d7f3"; const c = Color3.FromHexString("#a0d7f3"); game.scene.fogColor = c; game.scene.clearColor = new Color4(c.r, c.g, c.b, 1.0); dbgSetCookie("dbgFogColor", "#a0d7f3"); markNonDefault(fogColorInput, "#a0d7f3", "#a0d7f3");
+        });
         fogColorInput.addEventListener("input", (e) => {
             const val = (e.target as HTMLInputElement).value;
             const newColor = Color3.FromHexString(val);
             game.scene.fogColor = newColor;
             game.scene.clearColor = new Color4(newColor.r, newColor.g, newColor.b, 1.0);
+            dbgSetCookie("dbgFogColor", val);
+            markNonDefault(fogColorInput, "#a0d7f3", val);
         });
     }
 
@@ -1003,6 +1211,14 @@ export function setupDebugOverlay(game: GameScene): void {
                 scheduleNext();
             }, delay);
         };
+        const stopAutoChat = () => {
+            isAutoChatOn = false;
+            autoChatBtn.textContent = "Off";
+            autoChatBtn.classList.add("off");
+            if (autoChatTimer !== null) { clearTimeout(autoChatTimer); autoChatTimer = null; }
+            markNonDefault(autoChatBtn, "Off", "Off");
+        };
+        markNonDefault(autoChatBtn, "Off", autoChatBtn.textContent!, stopAutoChat);
         autoChatBtn.addEventListener("click", () => {
             isAutoChatOn = !isAutoChatOn;
             autoChatBtn.textContent = isAutoChatOn ? "On" : "Off";
@@ -1016,6 +1232,7 @@ export function setupDebugOverlay(game: GameScene): void {
                 autoChatBtn.classList.add("off");
                 if (autoChatTimer !== null) { clearTimeout(autoChatTimer); autoChatTimer = null; }
             }
+            markNonDefault(autoChatBtn, "Off", autoChatBtn.textContent!);
         });
     }
 
@@ -1052,6 +1269,14 @@ export function setupDebugOverlay(game: GameScene): void {
                 cornerIdx++;
             });
 
+            const stopAutoWalk = () => {
+                isOn = false;
+                autoWalkBtn.textContent = "Off";
+                autoWalkBtn.classList.add("off");
+                game.targetPosition = null;
+                markNonDefault(autoWalkBtn, "Off", "Off");
+            };
+            markNonDefault(autoWalkBtn, "Off", autoWalkBtn.textContent!, stopAutoWalk);
             autoWalkBtn.addEventListener("click", () => {
                 isOn = !isOn;
                 autoWalkBtn.textContent = isOn ? "On" : "Off";
@@ -1063,30 +1288,54 @@ export function setupDebugOverlay(game: GameScene): void {
                     autoWalkBtn.classList.add("off");
                     game.targetPosition = null;
                 }
+                markNonDefault(autoWalkBtn, "Off", autoWalkBtn.textContent!);
             });
         }
     }
 
     if (npcAutoChatBtn) {
+        markNonDefault(npcAutoChatBtn, "Off", npcAutoChatBtn.textContent!, () => {
+            game.npcSystem.isNpcChatOn = false;
+            npcAutoChatBtn.textContent = "Off";
+            npcAutoChatBtn.classList.add("off");
+            markNonDefault(npcAutoChatBtn, "Off", "Off");
+        });
         npcAutoChatBtn.addEventListener("click", () => {
             game.npcSystem.isNpcChatOn = !game.npcSystem.isNpcChatOn;
             npcAutoChatBtn.textContent = game.npcSystem.isNpcChatOn ? "On" : "Off";
             if (game.npcSystem.isNpcChatOn) npcAutoChatBtn.classList.remove("off");
             else npcAutoChatBtn.classList.add("off");
+            markNonDefault(npcAutoChatBtn, "Off", npcAutoChatBtn.textContent!);
         });
     }
 
     if (npcVisBtn) {
+        markNonDefault(npcVisBtn, "Off", npcVisBtn.textContent!, () => {
+            game.npcSystem.setEnabled(false);
+            npcVisBtn.textContent = "Off";
+            npcVisBtn.classList.add("off");
+            markNonDefault(npcVisBtn, "Off", "Off");
+        });
         npcVisBtn.addEventListener("click", () => {
             const visible = !game.npcSystem.npc001.isEnabled();
             game.npcSystem.setEnabled(visible);
             npcVisBtn.textContent = visible ? "On" : "Off";
             if (visible) npcVisBtn.classList.remove("off");
             else npcVisBtn.classList.add("off");
+            markNonDefault(npcVisBtn, "Off", npcVisBtn.textContent!);
         });
     }
 
     if (buildModeBtn) {
+        markNonDefault(buildModeBtn, "Off", buildModeBtn.textContent!, () => {
+            game.buildMode = false;
+            buildModeBtn.textContent = "Off";
+            buildModeBtn.classList.add("off");
+            const indicator = document.getElementById("build-mode-indicator");
+            if (indicator) indicator.style.display = "none";
+            game.previewBlock.isVisible = false;
+            markNonDefault(buildModeBtn, "Off", "Off");
+        });
         buildModeBtn.addEventListener("click", () => {
             game.buildMode = !game.buildMode;
             buildModeBtn.textContent = game.buildMode ? "On" : "Off";
@@ -1098,24 +1347,58 @@ export function setupDebugOverlay(game: GameScene): void {
             }
             if (game.buildMode) game.refreshPreviewBlock();
             else game.previewBlock.isVisible = false;
+            markNonDefault(buildModeBtn, "Off", buildModeBtn.textContent!);
+        });
+    }
+
+    // --- Block Color (40) ---
+    const blockColorInput = document.getElementById("blockColorInput") as HTMLInputElement | null;
+    if (blockColorInput) {
+        const savedBlockColor = dbgGetCookie("dbgBlockColor");
+        if (savedBlockColor !== null) blockColorInput.value = savedBlockColor;
+        markNonDefault(blockColorInput, "#3366ff", blockColorInput.value, () => {
+            blockColorInput.value = "#3366ff"; dbgSetCookie("dbgBlockColor", "#3366ff"); markNonDefault(blockColorInput, "#3366ff", "#3366ff");
+            if (game.buildMode) game.refreshPreviewBlock();
+        });
+        blockColorInput.addEventListener("input", () => {
+            dbgSetCookie("dbgBlockColor", blockColorInput.value);
+            markNonDefault(blockColorInput, "#3366ff", blockColorInput.value);
         });
     }
 
     if (speechTrimBtn) {
+        if (dbgGetCookie("dbgSpeechTrim") === "1") {
+            speechTrimBtn.textContent = "On";
+            speechTrimBtn.classList.add("on"); speechTrimBtn.classList.remove("off");
+        }
+        markNonDefault(speechTrimBtn, "Off", speechTrimBtn.textContent!, () => {
+            speechTrimBtn.textContent = "Off"; speechTrimBtn.classList.remove("on"); speechTrimBtn.classList.add("off"); dbgSetCookie("dbgSpeechTrim", "0"); markNonDefault(speechTrimBtn, "Off", "Off");
+        });
         speechTrimBtn.addEventListener("click", () => {
             const on = !speechTrimBtn.classList.contains("on");
             speechTrimBtn.textContent = on ? "On" : "Off";
             speechTrimBtn.classList.toggle("on", on);
             speechTrimBtn.classList.toggle("off", !on);
+            dbgSetCookie("dbgSpeechTrim", on ? "1" : "0");
+            markNonDefault(speechTrimBtn, "Off", speechTrimBtn.textContent!);
         });
     }
 
     if (aaModeBtn) {
+        if (dbgGetCookie("dbgAAMode") === "1") {
+            aaModeBtn.textContent = "On";
+            aaModeBtn.classList.add("on"); aaModeBtn.classList.remove("off");
+        }
+        markNonDefault(aaModeBtn, "Off", aaModeBtn.textContent!, () => {
+            aaModeBtn.textContent = "Off"; aaModeBtn.classList.remove("on"); aaModeBtn.classList.add("off"); dbgSetCookie("dbgAAMode", "0"); markNonDefault(aaModeBtn, "Off", "Off");
+        });
         aaModeBtn.addEventListener("click", () => {
             const on = !aaModeBtn.classList.contains("on");
             aaModeBtn.textContent = on ? "On" : "Off";
             aaModeBtn.classList.toggle("on", on);
             aaModeBtn.classList.toggle("off", !on);
+            dbgSetCookie("dbgAAMode", on ? "1" : "0");
+            markNonDefault(aaModeBtn, "Off", aaModeBtn.textContent!);
 
             if (on) {
                 const trimBtn = document.getElementById("speechTrimBtn") as HTMLButtonElement | null;
@@ -1123,6 +1406,7 @@ export function setupDebugOverlay(game: GameScene): void {
                     trimBtn.textContent = "Off";
                     trimBtn.classList.remove("on");
                     trimBtn.classList.add("off");
+                    markNonDefault(trimBtn, "Off", "Off");
                 }
                 const fontSel = document.getElementById("speechFontSelect") as HTMLSelectElement | null;
                 if (fontSel) fontSel.value = "sans-serif";
@@ -1133,10 +1417,35 @@ export function setupDebugOverlay(game: GameScene): void {
     }
 
     if (avatarThickInput) {
+        const savedThick = dbgGetCookie("dbgAvatarThick");
+        if (savedThick !== null) {
+            avatarThickInput.value = savedThick;
+            game.avatarDepth = Math.max(1, Math.min(50, parseInt(savedThick, 10) || 5)) / 100;
+            game.applyAvatarDepth();
+        }
+        markNonDefault(avatarThickInput, "5", avatarThickInput.value, () => {
+            avatarThickInput.value = "5"; game.avatarDepth = 0.05; game.applyAvatarDepth(); dbgSetCookie("dbgAvatarThick", "5"); markNonDefault(avatarThickInput, "5", "5");
+        });
         avatarThickInput.addEventListener("input", () => {
             const v = Math.max(1, Math.min(50, parseInt(avatarThickInput.value, 10) || 5));
             game.avatarDepth = v / 100;
             game.applyAvatarDepth();
+            dbgSetCookie("dbgAvatarThick", avatarThickInput.value);
+            markNonDefault(avatarThickInput, "5", avatarThickInput.value);
+        });
+    }
+
+    // --- UID Color (38b) ---
+    const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
+    if (uidColorInput) {
+        const savedUidColor = dbgGetCookie("dbgUidColor");
+        if (savedUidColor !== null) uidColorInput.value = savedUidColor;
+        markNonDefault(uidColorInput, "#00bbfa", uidColorInput.value, () => {
+            uidColorInput.value = "#00bbfa"; dbgSetCookie("dbgUidColor", "#00bbfa"); markNonDefault(uidColorInput, "#00bbfa", "#00bbfa");
+        });
+        uidColorInput.addEventListener("input", () => {
+            dbgSetCookie("dbgUidColor", uidColorInput.value);
+            markNonDefault(uidColorInput, "#00bbfa", uidColorInput.value);
         });
     }
 
@@ -1218,6 +1527,19 @@ export function setupDebugOverlay(game: GameScene): void {
     }
 
     if (glossInput) {
+        const savedGloss = dbgGetCookie("dbgGloss");
+        if (savedGloss !== null) {
+            glossInput.value = savedGloss;
+            const gv = Math.max(0, Math.min(1.0, parseFloat(savedGloss)));
+            game.scene.materials.forEach(mat => {
+                if (mat.name.endsWith("_frontMat") || mat.name.endsWith("_backMat")) {
+                    (mat as any).specularColor = new Color3(gv, gv, gv);
+                }
+            });
+        }
+        markNonDefault(glossInput, "0.1", glossInput.value, () => {
+            glossInput.value = "0.1"; const gv = 0.1; game.scene.materials.forEach(mat => { if (mat.name.endsWith("_frontMat") || mat.name.endsWith("_backMat")) (mat as any).specularColor = new Color3(gv, gv, gv); }); dbgSetCookie("dbgGloss", "0.1"); markNonDefault(glossInput, "0.1", "0.1");
+        });
         glossInput.addEventListener("input", (e) => {
             const val = parseFloat((e.target as HTMLInputElement).value);
             if (!isNaN(val)) {
@@ -1228,6 +1550,8 @@ export function setupDebugOverlay(game: GameScene): void {
                     }
                 });
             }
+            dbgSetCookie("dbgGloss", (e.target as HTMLInputElement).value);
+            markNonDefault(glossInput, "0.1", (e.target as HTMLInputElement).value);
         });
     }
 
