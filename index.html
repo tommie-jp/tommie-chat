@@ -112,6 +112,13 @@
         }
         #sendBtn { background: #0076d7cc; color: #fff; }
 
+        /* 座標表示は #app-footer-version 内の #coord-display span に表示 */
+        #app-footer-version {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: baseline !important;
+        }
+
         /* ===== チャットオーバーレイ（アバター画面上に常時表示） ===== */
         #chat-overlay {
             position: fixed;
@@ -1473,14 +1480,10 @@
 
             /* --- フッター --- */
             #app-footer-version {
-                font-size: 11px !important;
+                font-size: 10px !important;
                 opacity: 0.7;
                 top: auto !important;
                 bottom: env(safe-area-inset-bottom, 0px) !important;
-                left: auto !important;
-                right: calc(5% + 58px) !important;
-                transform: none !important;
-                text-align: right !important;
             }
             body.sp-panel-visible #app-footer-version {
                 top: calc(var(--pt-divider, 60vh) - 18px) !important;
@@ -1532,6 +1535,17 @@
             body.sp-panel-visible #chat-overlay {
                 bottom: calc(100dvh - var(--pt-divider, 60dvh) + 4px) !important;
                 left: 8px !important;
+            }
+        }
+
+        /* iPhone ポートレート: セリフ入力・クレジットを画面下部に近づける */
+        /* max-width:440px でiPadを除外 */
+        @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: portrait) and (max-width: 440px) {
+            #chat-container {
+                bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+            }
+            #app-footer-version {
+                bottom: calc(env(safe-area-inset-bottom, 0px) - 3px) !important;
             }
         }
 
@@ -1675,14 +1689,6 @@
             #app-footer-version {
                 top: auto !important;
                 bottom: 2px !important;
-                left: auto !important;
-                right: max(calc(100% - var(--ls-divider, 100%) + 24px), calc(env(safe-area-inset-right, 24px) + 24px)) !important;
-                transform: none !important;
-            }
-            body.sp-panel-visible #app-footer-version {
-                top: auto !important;
-                bottom: 4px !important;
-                right: calc(100% - var(--ls-divider, 60%) + 8px) !important;
             }
             #custom-tooltip {
                 font-size: 14px !important;
@@ -1874,9 +1880,12 @@
                     devTag = " #" + ("0" + now.getHours()).slice(-2) + ("0" + now.getMinutes()).slice(-2);
                 }
                 var isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
-                el.innerHTML = isMobile
-                    ? '<div style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + devTag + '</div>'
-                    : '<div style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + devTag + '</div>';
+                var ftEl = document.getElementById("app-footer-text");
+                if (ftEl) {
+                    ftEl.innerHTML = isMobile
+                        ? '<span style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + devTag + '</span>'
+                        : '<span style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + devTag + '</span>';
+                }
             }
 
             el = document.getElementById("label-ver");
@@ -2652,7 +2661,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;text-align:right;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"></div>
+    <div id="app-footer-version" style="position:fixed;bottom:4px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="pointer-events:none;margin-right:2em;"></span><span id="app-footer-text"></span></div>
 
     <script type="module" src="/src/main.ts"></script>
     <script>

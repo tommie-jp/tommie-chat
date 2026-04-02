@@ -531,7 +531,7 @@ export function setupHtmlUI(game: GameScene): void {
         if (isSystem) {
             line.innerHTML =
                 `<span class="chat-ol-time">${timeStr}</span>` +
-                `<span class="chat-ol-system">${text}</span>`;
+                `${text}`;
         } else {
             line.innerHTML =
                 `<span class="chat-ol-time">${timeStr}</span>` +
