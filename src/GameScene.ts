@@ -775,7 +775,13 @@ export class GameScene {
                 const cd = document.getElementById("coord-display");
                 if (cd) {
                     const p = this.playerBox.position;
-                    cd.textContent = `(${Math.round(p.x)}, ${Math.round(p.z)})`;
+                    const arrows = ["↓S","↙SW","←W","↖NW","↑N","↗NE","→E","↘SE"];
+                    let ry = this.playerBox.rotation.y % (Math.PI * 2);
+                    if (ry < 0) ry += Math.PI * 2;
+                    const idx = Math.round(ry / (Math.PI / 4)) % 8;
+                    const x3 = String(Math.round(p.x)).padStart(3, "\u2007");
+                    const z3 = String(Math.round(p.z)).padStart(3, "\u2007");
+                    cd.innerHTML = `(${x3}, ${z3}) <span style="font-size:14px;font-weight:bold">${arrows[idx]}</span>`;
                     const fv = document.getElementById("app-footer-version");
                     const ci = document.getElementById("chatInput");
                     if (fv && ci) {
