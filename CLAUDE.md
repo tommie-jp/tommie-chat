@@ -66,6 +66,7 @@ PostgreSQL, Nakama (port 7350/7351), Nginx (port 80), MinIO (S3), Prometheus
 - **自動コミットしない** — コミットはユーザーが明示的に指示した場合のみ
 - **日本語UI** — ツールチップ、エラーメッセージ、パネルは日本語
 - **テスト** — `npm run test` は常にパスする状態を維持する
+- **型チェック** — `npx tsc --noEmit` の実行には許可不要
 - **Markdownの文法チェック** — `*.md` ファイルを編集した後は、日本語の誤字脱字・文法を確認し、`npx markdownlint-cli <file>` でlintを通してから完了とする
 - **モバイル対応** — `@media (pointer: coarse) and (min-resolution: 2dppx)` でスマホ判定。ポートレート/ランドスケープ/iPhone PWA standalone それぞれ個別対応
 - **テーマ** — デバッグツール 02b.Theme で「背景黒」「ポップ１」切替。`body.theme-dark` クラスで CSS 上書き

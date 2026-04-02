@@ -2132,7 +2132,7 @@
     
     <div id="debug-overlay">
         <div id="debug-title-bar">
-            <span id="debug-title-text" title="デバッグツール&#10;──────────&#10;描画設定・カメラ・ワールドなどの詳細パラメータを&#10;調整できる開発者向けパネルです。&#10;各項目のラベルを長押し（PCはホバー）すると説明が表示されます。">デバッグツール</span>
+            <span id="debug-title-text" title="デバッグツール&#10;──────────&#10;描画設定・カメラ・ワールドなどの詳細パラメータを&#10;調整できる開発者向けパネルです。&#10;各項目のラベルを長押し（PCはホバー）すると説明が表示されます。&#10;──────────&#10;＊マーク … デフォルト値から変更された項目のラベル末尾に表示されます。&#10;ダブルタップ（PCはダブルクリック）… ＊が付いたラベルをダブルタップするとデフォルト値に戻ります。">デバッグツール</span>
             <button id="debug-minimize-btn" title="非表示">❌️</button>
             <button id="debug-restore-btn" title="復元">□</button>
         </div>
@@ -2337,14 +2337,14 @@
                 </div>
             </td></tr>
             <tr><td class="label" title="32.Controls&#10;操作方法&#10;[移動] W/↑:前進  S/↓:後退  A/←:左  D/→:右&#10;[カメラ] マウス左ドラッグ:回転  ホイール:ズーム&#10;[移動先] 地面を左クリック:クリック位置へ移動&#10;[チャット] テキスト入力後 Enter または 送信ボタン&#10;[クリア] クリアボタン:吹き出しテキスト消去&#10;Minecraft: WASD:移動, Space:ジャンプ, Shift:スニーク, F5:視点切替, F3:デバッグ, T:チャット">32.Controls</td><td class="value"></td></tr>
-            <tr><td class="label" title="34.自動デバッグチャット&#10;数秒毎にランダムなセリフを自動投稿します&#10;初期値: Off&#10;ログイン中のみ有効">34.AutoChat</td><td class="value">
+            <tr><td class="label" title="34.自動デバッグチャット&#10;数秒毎にランダムなセリフを自動投稿します&#10;初期値: Off&#10;ログイン中のみ有効&#10;※リロードでOffに戻ります">34.AutoChat</td><td class="value">
                 <button id="autoChatBtn" class="debug-btn off">Off</button>
             </td></tr>
             <tr><td colspan="2" style="padding:4px 0 0 0;">
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">AutoWalk</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="34b.AutoWalk&#10;指定した四角形を自動で巡回移動します&#10;初期値: Off">34b.AutoWalk</td><td class="value">
+                    <tr><td class="label" title="34b.AutoWalk&#10;指定した四角形を自動で巡回移動します&#10;初期値: Off&#10;※リロードでOffに戻ります">34b.AutoWalk</td><td class="value">
                         <button id="autoWalkBtn" class="debug-btn off">Off</button>
                     </td></tr>
                     <tr><td class="label">始点</td><td class="value">
@@ -2362,7 +2362,7 @@
                 </table>
                 </div>
             </td></tr>
-            <tr><td class="label" title="35.NPC Chat&#10;npc001〜003が数秒毎にチャット履歴へ自動投稿します&#10;初期値: Off">35.NPC Chat</td><td class="value">
+            <tr><td class="label" title="35.NPC Chat&#10;npc001〜003が数秒毎にチャット履歴へ自動投稿します&#10;初期値: Off&#10;※リロードでOffに戻ります">35.NPC Chat</td><td class="value">
                 <button id="npcAutoChatBtn" class="debug-btn off">Off</button>
             </td></tr>
             <tr><td colspan="2" style="padding:4px 0 0 0;">
@@ -2381,7 +2381,7 @@
                             <button id="spriteApplyBtn" class="debug-btn">Apply</button>
                         </div>
                     </td></tr>
-                    <tr><td class="label" title="37.NPC&#10;NPC（npc001〜003）の表示をON/OFFします&#10;初期値: Off">37.NPC</td><td class="value">
+                    <tr><td class="label" title="37.NPC&#10;NPC（npc001〜003）の表示をON/OFFします&#10;初期値: Off&#10;※リロードでOffに戻ります">37.NPC</td><td class="value">
                         <button id="npcVisBtn" class="debug-btn off">Off</button>
                     </td></tr>
                     <tr><td class="label" title="38.Avatar Thick&#10;アバターの厚みを調節します&#10;初期値: 5 (depth=0.05)&#10;最小: 1 (depth=0.01) 最大: 50 (depth=0.50)">38.Avatar Thick</td><td class="value">
@@ -2397,7 +2397,7 @@
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Build Mode</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="39.Build Mode&#10;ビルドモードON/OFF&#10;Bキー: ON/OFF切り替え&#10;ESCキー: OFFにする&#10;ONのとき地面をクリックしてブロックを設置/削除できます">39.Build Mode</td><td class="value">
+                    <tr><td class="label" title="39.Build Mode&#10;ビルドモードON/OFF&#10;Bキー: ON/OFF切り替え&#10;ESCキー: OFFにする&#10;ONのとき地面をクリックしてブロックを設置/削除できます&#10;※リロードでOffに戻ります">39.Build Mode</td><td class="value">
                         <button id="buildModeBtn" class="debug-btn off">Off</button>
                     </td></tr>
                     <tr><td class="label" title="40.Block Color&#10;ビルドモードで置くブロックの色を選択します">40.Block Color</td><td class="value">
