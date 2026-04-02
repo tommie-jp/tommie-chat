@@ -2,9 +2,34 @@ import type { GameScene } from "./GameScene";
 import { Color3, Mesh, StandardMaterial } from "@babylonjs/core";
 import { fnv1a64, CHUNK_SIZE } from "./WorldConstants";
 import { prof } from "./Profiler";
+import { t, getLang, setLang, applyI18n } from "./i18n";
+import type { Lang } from "./i18n";
 
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+
+    // --- i18n 言語セレクター ---
+    const langSelect = document.getElementById("langSelect") as HTMLSelectElement | null;
+    const onLangChangeCallbacks: (() => void)[] = [];
+    if (langSelect) {
+        langSelect.value = getLang();
+        langSelect.addEventListener("change", () => {
+            setLang(langSelect.value as Lang);
+            applyI18n();
+            applyI18nMenus();
+            for (const cb of onLangChangeCallbacks) cb();
+        });
+    }
+    /** メニュー項目のプレフィックス付きテキストを翻訳 */
+    const applyI18nMenus = () => {
+        document.querySelectorAll<HTMLElement>("[data-i18n-prefix]").forEach(el => {
+            const key = el.dataset.i18nPrefix as Parameters<typeof t>[0];
+            const prefix = el.textContent?.slice(0, 2) ?? "　 ";
+            el.textContent = prefix + t(key);
+        });
+    };
+    applyI18n();
+    applyI18nMenus();
 
     // スマホ: パネルのスクロール領域のタッチが canvas やデバイダーに伝播するのを防止
     // ヘッダーはデバイダードラッグに使うので除外
@@ -253,7 +278,7 @@ export function setupHtmlUI(game: GameScene): void {
                 historyPanel.style.display = "none";
                 setCookie("showChatHist", "0");
                 const mb = document.getElementById("menu-chathistory");
-                if (mb) mb.textContent = "　 チャット履歴";
+                if (mb) mb.textContent = "　 " + t("menu.chathistory");
             });
         }
     }
@@ -316,7 +341,7 @@ export function setupHtmlUI(game: GameScene): void {
                     ulPanel.style.display = "none";
                     sCookieFn("showUserList", "0");
                     const mb = document.getElementById("menu-userlist");
-                    if (mb) mb.textContent = "　 プレイヤーリスト";
+                    if (mb) mb.textContent = "　 " + t("menu.userlist");
                 });
             }
         }
@@ -330,7 +355,9 @@ export function setupHtmlUI(game: GameScene): void {
 
         // サーバURL表示（同一オリジン: location.host）
         const srvDesc = srvPanel?.querySelector(".srv-desc") as HTMLElement | null;
-        if (srvDesc) srvDesc.textContent = "サーバ: " + location.host;
+        const updateSrvDesc = () => { if (srvDesc) srvDesc.textContent = t("server.info") + ": " + location.host; };
+        updateSrvDesc();
+        onLangChangeCallbacks.push(updateSrvDesc);
 
         if (srvPanel && srvHeader) {
             const sCk = (k: string, v: string) =>
@@ -386,7 +413,7 @@ export function setupHtmlUI(game: GameScene): void {
                     srvPanel.style.display = "none";
                     sCk("showSrvSettings", "0");
                     const mb = document.getElementById("menu-serversettings");
-                    if (mb) mb.textContent = "　 サーバ設定";
+                    if (mb) mb.textContent = "　 " + t("menu.serversettings");
                 });
             }
 
@@ -407,15 +434,15 @@ export function setupHtmlUI(game: GameScene): void {
             if (srvPingBtn) {
                 srvPingBtn.addEventListener("click", async () => {
                     const url = `${location.origin}/`;
-                    pingLog(`HTTP応答を実行中… (${location.host})`);
+                    pingLog(`${t("log.http_testing")} (${location.host})`);
                     const t0 = performance.now();
                     try {
                         await fetch(url, { method: "HEAD", cache: "no-store" });
                         const ms = Math.round(performance.now() - t0);
-                        pingLog(`サーバへ接続成功しました。 HTTP応答: ${ms}ms (${location.host})`);
+                        pingLog(`${t("log.http_success").replace("{ms}", String(ms))} (${location.host})`);
                     } catch (e) {
                         const ms = Math.round(performance.now() - t0);
-                        pingLog(`サーバに接続できません HTTP応答: 失敗 ${ms}ms (${location.host}) ${e instanceof Error ? e.message : String(e)}`);
+                        pingLog(`HTTP: FAILED ${ms}ms (${location.host}) ${e instanceof Error ? e.message : String(e)}`);
                     }
                 });
             }
@@ -423,15 +450,15 @@ export function setupHtmlUI(game: GameScene): void {
             if (srvNakamaPingBtn) {
                 srvNakamaPingBtn.addEventListener("click", async () => {
                     if (!game.nakama.selfSessionId) {
-                        pingLog(`RPC応答: 未ログイン (${location.host})`);
+                        pingLog(`RPC: not logged in (${location.host})`);
                         return;
                     }
-                    pingLog(`RPC応答を実行中… (${location.host})`);
+                    pingLog(`${t("log.rpc_testing")} (${location.host})`);
                     const ms = await game.nakama.measurePing();
                     if (ms !== null) {
-                        pingLog(`NakamaサーバへPing(RPC)が成功しました。 RPC応答: ${ms}ms (${location.host})`);
+                        pingLog(`${t("log.rpc_success").replace("{ms}", String(ms))} (${location.host})`);
                     } else {
-                        pingLog(`RPC応答: 失敗 (${location.host})`);
+                        pingLog(`RPC: FAILED (${location.host})`);
                     }
                 });
             }
@@ -503,7 +530,7 @@ export function setupHtmlUI(game: GameScene): void {
                     slPanel.style.display = "none";
                     sCk("showSrvLog", "0");
                     const mb = document.getElementById("menu-serverlog");
-                    if (mb) mb.textContent = "　 サーバ接続ログ";
+                    if (mb) mb.textContent = "　 " + t("menu.serverlog");
                 });
             }
         }
@@ -1171,7 +1198,7 @@ export function setupHtmlUI(game: GameScene): void {
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
-        addChatHistory("[system]", `${username}がログインしました。`);
+        addChatHistory("[system]", t("system.user_joined").replace("{username}", username));
         { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
     };
     game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
@@ -1183,7 +1210,7 @@ export function setupHtmlUI(game: GameScene): void {
                 userMap.set(sessionId, { ...existing, channel: "match" });
             } else {
                 userMap.delete(sessionId);
-                addChatHistory("[system]", `${uname}がログアウトしました。`);
+                addChatHistory("[system]", t("system.user_left").replace("{username}", uname));
             }
         }
         scheduleRenderUserList();
@@ -1285,20 +1312,20 @@ export function setupHtmlUI(game: GameScene): void {
         if (!name || name.length < 6) {
             if (loginStatus) {
                 loginStatus.style.color = "#ff8800";
-                loginStatus.textContent = isMobile ? "✗" : "名前(6文字以上)を入力して下さい";
+                loginStatus.textContent = isMobile ? "✗" : t("login.validation.short");
             }
             _end(); return;
         }
         if (!NAKAMA_ID_RE.test(name)) {
             if (loginStatus) {
                 loginStatus.style.color = "#ff4444";
-                loginStatus.textContent = isMobile ? "✗" : "✗ 使えない文字が含まれています。使える文字: 英数字と . _ @ + -（6〜128文字）";
+                loginStatus.textContent = isMobile ? "✗" : t("login.validation.chars");
             }
             _end(); return;
         }
         game.updatePlayerNameTag(name);
         setCookie("loginName", name);
-        if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : "接続中…"; }
+        if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : t("login.connecting"); }
         if (loginBtn)    loginBtn.disabled = true;
         try {
             await game.nakama.login(name);
@@ -1394,12 +1421,12 @@ export function setupHtmlUI(game: GameScene): void {
             { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
             game.aoiManager.updateAOI();
             const srvInfo = await game.nakama.getServerInfo();
-            addServerLog("ログイン成功", srvInfo);
+            addServerLog(t("log.login_success"), srvInfo);
             if (loginStatus) {
                 loginStatus.style.color = "#00dd55";
                 loginStatus.style.fontWeight = "bold";
                 loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)";
-                loginStatus.textContent = isMobile ? "✓" : "✓ログイン成功しました";
+                loginStatus.textContent = isMobile ? "✓" : t("login.success");
                 setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000);
             }
             if (loginBtn) {
@@ -1409,7 +1436,7 @@ export function setupHtmlUI(game: GameScene): void {
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
-            { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = "表示名を入力して下さい！"; } }
+            { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = t("displayname.placeholder.enabled"); } }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
             // 表示名パネルにユーザIDを反映
             { const uid = document.getElementById("dn-panel-userid"); if (uid) uid.textContent = loginNameInput?.value ?? "-"; }
@@ -1422,11 +1449,11 @@ export function setupHtmlUI(game: GameScene): void {
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
-                addServerLog("マッチ切断", "WebSocket切断 — 自動再接続中…");
+                addServerLog(t("log.match_disconnect"), t("log.match_disconnect.detail"));
             };
             game.nakama.onMatchReconnect = () => {
                 console.log("UIPanel match reconnected");
-                addServerLog("マッチ再接続", "WebSocket復帰");
+                addServerLog(t("log.match_reconnect"), t("log.match_reconnect.detail"));
                 // 再接続後にInitPos・AOI・アバターを再送信
                 const p = game.playerBox;
                 game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {});
@@ -1452,18 +1479,18 @@ export function setupHtmlUI(game: GameScene): void {
             } else {
                 reason = String(e);
             }
-            if (reason === "Not Found") reason += ": サーバに接続できません。サーバが動いていないか、URLかポート番号が間違っている可能性があります。";
+            if (reason === "Not Found") reason += ": " + t("error.not_found");
             const usedKey = import.meta.env.VITE_SERVER_KEY || "defaultkey";
-            const hint = reason.includes("Failed to parse URL") ? "URLの形式が違います。"
-                       : reason === "Failed to fetch"           ? "サーバが稼働していないか、サーバが停止している可能性があります。"
-                       : reason.includes("Username is already in use") ? "Device auth error: username conflict. この名前は既に別の認証方式で使用されています。別の名前を試してください。"
-                       : reason.includes("too many logins") ? "サーバが混雑しています。しばらく待ってから再接続してください。"
-                       : /[Ss]erver key invalid|Invalid server key/.test(reason) ? `Server Keyが正しくありません。使用したKey: ${usedKey}`
+            const hint = reason.includes("Failed to parse URL") ? t("error.bad_url")
+                       : reason === "Failed to fetch"           ? t("error.fetch_failed")
+                       : reason.includes("Username is already in use") ? t("error.username_conflict")
+                       : reason.includes("too many logins") ? t("error.too_many_logins")
+                       : /[Ss]erver key invalid|Invalid server key/.test(reason) ? `Server Key invalid. Used: ${usedKey}`
                        : "";
-            addServerLog("ログイン失敗", reason, hint);
+            addServerLog(t("log.login_failed"), reason, hint);
             if (loginStatus) {
                 loginStatus.style.color = "#ff4444";
-                loginStatus.textContent = isMobile ? "✗" : "✗ログイン失敗: " + reason;
+                loginStatus.textContent = isMobile ? "✗" : t("login.failed") + reason;
             }
             // 自動ログイン失敗時はログインUIを表示してリカバリ
             setLoginRowVisible(true);
@@ -1492,13 +1519,13 @@ export function setupHtmlUI(game: GameScene): void {
         if (displayNameInput && displayNameBtn) {
             displayNameInput.addEventListener("keydown", (e) => {
                 if (displayNameInput.value.length >= 20 && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-                    showDnStatus("表示名は20文字以内です。", "#ff4444");
+                    showDnStatus(t("displayname.maxlen"), "#ff4444");
                 }
             });
             displayNameInput.addEventListener("input", () => {
                 const val = displayNameInput.value.trim();
                 if (val.length > 20) {
-                    showDnStatus("表示名は20文字以内です。", "#ff4444");
+                    showDnStatus(t("displayname.maxlen"), "#ff4444");
                     displayNameBtn.disabled = true;
                     displayNameBtn.style.background = "";
                     return;
@@ -1514,11 +1541,11 @@ export function setupHtmlUI(game: GameScene): void {
             if (!displayNameInput) return;
             const name = displayNameInput.value.trim();
             if (/[\x00-\x1f\x7f]/.test(name)) {
-                if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ 制御文字は使えません"; }
+                if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = t("displayname.control_char"); }
                 return;
             }
             if (!game.nakama.getSession()) {
-                if (displayNameStatus) { displayNameStatus.style.color = "#ff8800"; displayNameStatus.textContent = "先にログインしてください"; }
+                if (displayNameStatus) { displayNameStatus.style.color = "#ff8800"; displayNameStatus.textContent = t("displayname.need_login"); }
                 return;
             }
             try {
@@ -1536,12 +1563,12 @@ export function setupHtmlUI(game: GameScene): void {
                 }
                 confirmedDisplayName = name;
                 if (displayNameBtn) { displayNameBtn.disabled = true; displayNameBtn.style.background = ""; }
-                showDnStatus("✓ 表示名変更しました！", "#00dd55");
-                addServerLog("表示名変更", `表示名を「${name}」に設定しました`);
+                showDnStatus(t("displayname.success"), "#00dd55");
+                addServerLog(t("log.displayname_change"), t("log.displayname_set").replace("{name}", name));
             } catch (err) {
                 const msg = err instanceof Error ? err.message : (typeof err === "object" && err !== null && "message" in err) ? String((err as any).message) : String(err);
                 if (displayNameStatus) { displayNameStatus.style.color = "#ff4444"; displayNameStatus.textContent = "✗ " + msg; }
-                addServerLog("表示名変更失敗", msg);
+                addServerLog(t("log.displayname_failed"), msg);
             }
             } finally { _end(); }
         };
@@ -1690,7 +1717,7 @@ export function setupHtmlUI(game: GameScene): void {
         const avgBg = dark ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.65)";
         const avgBoxH = FONT_SIZE + 4;
         if (pingDisconnected) {
-            const label = "回線切断中";
+            const label = t("ping.disconnected");
             const lw = ctx.measureText(label).width;
             ctx.fillStyle = avgBg;
             ctx.fillRect(w - lw - 8, 3, lw + 6, avgBoxH);
@@ -1734,7 +1761,7 @@ export function setupHtmlUI(game: GameScene): void {
         disconnectBanner = document.createElement("div");
         disconnectBanner.id = "disconnect-banner";
         disconnectBanner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:10000;background:rgba(200,40,40,0.92);color:#fff;text-align:center;padding:10px 16px;font-size:15px;font-family:sans-serif;pointer-events:none;animation:fadeIn 0.3s ease;";
-        disconnectBanner.textContent = "サーバに接続できません — 再接続を試みています…";
+        disconnectBanner.textContent = t("connection.lost");
         document.body.appendChild(disconnectBanner);
     };
     const hideDisconnectBanner = () => {
@@ -1753,11 +1780,11 @@ export function setupHtmlUI(game: GameScene): void {
                 pingFailCount = 0;
                 if (pingDisconnected) {
                     pingDisconnected = false;
-                    addServerLog("回線復帰");
+                    addServerLog(t("log.network_restored"));
                     hideDisconnectBanner();
                     if (loginStatus) {
                         loginStatus.style.color = "#00dd55";
-                        loginStatus.textContent = isMobile ? "✓" : "✓回線復帰";
+                        loginStatus.textContent = isMobile ? "✓" : t("connection.restored");
                     }
                 }
                 pingSamples.push(ms);
@@ -1774,11 +1801,11 @@ export function setupHtmlUI(game: GameScene): void {
                 if (pingFailCount >= PING_FAIL_THRESHOLD && !pingDisconnected) {
                     pingDisconnected = true;
                     game.latestPingAvg = -1;
-                    addServerLog("回線切断", "ネットワーク障害またはサーバ停止により切断されました");
+                    addServerLog(t("log.network_disconnect"), t("log.network_disconnect.detail"));
                     showDisconnectBanner();
                     if (loginStatus) {
                         loginStatus.style.color = "#ff4444";
-                        loginStatus.textContent = isMobile ? "✗" : "✗回線切断";
+                        loginStatus.textContent = isMobile ? "✗" : t("connection.disconnected");
                     }
                 }
             }
@@ -1871,7 +1898,7 @@ export function setupHtmlUI(game: GameScene): void {
                     ppanel.style.display = "none";
                     sCkP("showPing", "0");
                     const mb = document.getElementById("menu-ping");
-                    if (mb) mb.textContent = "　 Ping グラフ";
+                    if (mb) mb.textContent = "　 " + t("menu.ping");
                 });
             }
         }
@@ -2212,7 +2239,7 @@ export function setupHtmlUI(game: GameScene): void {
                     cpanel.style.display = "none";
                     sCkC("showCcu", "0");
                     const mb = document.getElementById("menu-ccu");
-                    if (mb) mb.textContent = "　 同接グラフ";
+                    if (mb) mb.textContent = "　 " + t("menu.ccu");
                     stopCcu();
                 });
             }
@@ -2235,14 +2262,14 @@ export function setupHtmlUI(game: GameScene): void {
         game.saveChunksToDB();
         game.nakama.logout();
         game.currentUserId = null;
-        addServerLog("ログアウト");
+        addServerLog(t("log.logout"));
         userMap.clear();
         scheduleRenderUserList();
         game.remoteAvatars.forEach(av => av.dispose());
         game.remoteAvatars.clear();
-        if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.style.fontWeight = "bold"; loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)"; loginStatus.textContent = "ログアウトしました"; setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000); }
+        if (loginStatus) { loginStatus.style.color = "#00dd55"; loginStatus.style.fontWeight = "bold"; loginStatus.style.textShadow = "0 1px 2px rgba(0,0,0,0.4)"; loginStatus.textContent = t("logout.done"); setTimeout(() => { loginStatus.textContent = ""; loginStatus.style.fontWeight = ""; loginStatus.style.textShadow = ""; }, 3000); }
         if (loginBtn) { loginBtn.style.background = "#28a74580"; loginBtn.style.display = ""; }
-        { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = true; di.value = ""; di.placeholder = "ログイン後に入力"; } }
+        { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = true; di.value = ""; di.placeholder = t("displayname.placeholder.disabled"); } }
         { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
         confirmedDisplayName = "";
         { const ds = document.getElementById("displayNameStatus") as HTMLSpanElement | null; if (ds) ds.textContent = ""; }
@@ -2296,33 +2323,50 @@ export function setupHtmlUI(game: GameScene): void {
         const aboutPanel = document.getElementById("about-panel");
         const aboutHeader = document.getElementById("about-panel-header");
 
-        // コンテンツ初期化
+        // コンテンツ初期化（言語切替時にも再呼び出し）
         const ver = (window as any).APP_VERSION || "";
         const date = (window as any).APP_DATE || "";
-        const nameEl = document.getElementById("about-app-name");
-        const verEl = document.getElementById("about-app-ver");
-        const dateEl = document.getElementById("about-app-date");
-        const creditsEl = document.getElementById("about-app-credits");
-        if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommieChat';
-        if (verEl) verEl.textContent = "Ver. " + ver;
-        if (dateEl) dateEl.textContent = "更新日 " + date;
-        if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
-            + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
-            + '<table style="border-collapse:collapse;font-size:inherit;line-height:1.6;">'
-            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">URL</td><td><a href="https://mmo.tommie.jp" target="_blank">https://mmo.tommie.jp</a></td></tr>'
-            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">X</td><td><a href="https://x.com/tommie_nico" target="_blank" rel="noopener" style="color:#1d9bf0;">@tommie_nico</a></td></tr>'
-            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">GitHub</td><td><a href="https://github.com/open-tommie/tommie-chat" target="_blank">open-tommie/tommie-chat</a></td></tr>'
-            + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">メール</td><td><a href="mailto:open.tommie@gmail.com" style="color:#1d9bf0;">open.tommie@gmail.com</a></td></tr>'
-            + '</table>'
-            + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
-            + '本ソフトウェアは現状のまま（AS IS）提供され、一切の保証はありません。<br>'
-            + '本ソフトウェアの使用により生じたいかなる損害についても、作者は責任を負いません。<br><br>'
-            + 'This software is provided "AS IS" without warranty of any kind.<br>'
-            + 'License: MIT'
-            + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
-            + 'このプロジェクトの開発を支援していただける方を募集しています。<br>'
-            + 'We are looking for contributors to support the development of this project.<br>'
-            + '☕ 開発支援（準備中）';
+        const buildAboutContent = () => {
+            const nameEl = document.getElementById("about-app-name");
+            const verEl = document.getElementById("about-app-ver");
+            const dateEl = document.getElementById("about-app-date");
+            const creditsEl = document.getElementById("about-app-credits");
+            if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommieChat';
+            if (verEl) verEl.textContent = "Ver. " + ver;
+            if (dateEl) dateEl.textContent = t("about.date_label") + " " + date;
+            if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
+                + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
+                + '<table style="border-collapse:collapse;font-size:inherit;line-height:1.6;">'
+                + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">URL</td><td><a href="https://mmo.tommie.jp" target="_blank">https://mmo.tommie.jp</a></td></tr>'
+                + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">X</td><td><a href="https://x.com/tommie_nico" target="_blank" rel="noopener" style="color:#1d9bf0;">@tommie_nico</a></td></tr>'
+                + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">GitHub</td><td><a href="https://github.com/open-tommie/tommie-chat" target="_blank">open-tommie/tommie-chat</a></td></tr>'
+                + `<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">${t("about.email_label")}</td><td><a href="mailto:open.tommie@gmail.com" style="color:#1d9bf0;">open.tommie@gmail.com</a></td></tr>`
+                + '</table>'
+                + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
+                + t("about.disclaimer") + '<br><br>'
+                + 'This software is provided "AS IS" without warranty of any kind.<br>'
+                + 'License: MIT'
+                + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
+                + t("about.support");
+            // 操作方法
+            const opsPc = document.getElementById("about-ops-pc");
+            const opsSp = document.getElementById("about-ops-sp");
+            if (opsPc) opsPc.innerHTML =
+                `<p style="margin:0;"><b>${t("about.move")}</b> ${t("about.pc.move")}</p>`
+                + `<p style="margin:0;"><b>${t("about.camera_rotate")}</b> ${t("about.pc.camera_rotate")}</p>`
+                + `<p style="margin:0;"><b>${t("about.camera_pan")}</b> ${t("about.pc.camera_pan")}</p>`
+                + `<p style="margin:0;"><b>${t("about.zoom")}</b> ${t("about.pc.zoom")}</p>`
+                + `<p style="margin:0;"><b>${t("about.send_msg")}</b> ${t("about.send_key")}</p>`
+                + `<p style="margin:0;"><b>${t("about.newline")}</b> ${t("about.newline_key")}</p>`;
+            if (opsSp) opsSp.innerHTML =
+                `<p style="margin:0;"><b>${t("about.move")}</b> ${t("about.sp.move")}</p>`
+                + `<p style="margin:0;"><b>${t("about.camera_rotate")}</b> ${t("about.sp.camera_rotate")}</p>`
+                + `<p style="margin:0;"><b>${t("about.zoom")}</b> ${t("about.sp.zoom")}</p>`
+                + `<p style="margin:0;"><b>${t("about.send_msg")}</b> ${t("about.send_key_sp")}</p>`
+                + `<p style="margin:0;"><b>${t("about.newline")}</b> ${t("about.newline_key")}</p>`;
+        };
+        buildAboutContent();
+        onLangChangeCallbacks.push(buildAboutContent);
 
         // 閉じるボタン
         const aboutClose = document.getElementById("about-panel-close");
@@ -2331,7 +2375,7 @@ export function setupHtmlUI(game: GameScene): void {
                 aboutPanel.style.display = "none";
                 setDivCk("showAbout", "0");
                 const mb = document.getElementById("menu-about");
-                if (mb) mb.textContent = "　 tommieChatについて";
+                if (mb) mb.textContent = "　 " + t("menu.about");
             });
         }
 
@@ -2365,7 +2409,7 @@ export function setupHtmlUI(game: GameScene): void {
             dnClose.addEventListener("click", () => {
                 dnPanel.style.display = "none";
                 const menuBtn = document.getElementById("menu-login");
-                if (menuBtn) menuBtn.textContent = "　 表示名設定";
+                if (menuBtn) menuBtn.textContent = "　 " + t("menu.displayname");
             });
         }
         if (dnHeader && dnPanel && !isMobileDev) {
