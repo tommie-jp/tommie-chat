@@ -2,6 +2,7 @@ import type { GameScene } from "./GameScene";
 import { Scene, Color3, Color4, Vector3, SceneInstrumentation, EngineInstrumentation } from "@babylonjs/core";
 import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
 import { profSetEnabled, profReset } from "./Profiler";
+import { t } from "./i18n";
 
 /** コントロール要素の親行からラベルセルを取得し、デフォルト値と異なる場合に * を付ける */
 const _nonDefaultCtrls = new WeakMap<HTMLElement, Set<HTMLElement>>();
@@ -156,7 +157,7 @@ export function setupDebugOverlay(game: GameScene): void {
             debugOverlay.style.display = "none";
             document.cookie = `showDebug=${encodeURIComponent("0")};path=/;max-age=${60*60*24*365}`;
             const menuDebugBtn = document.getElementById("menu-debug");
-            if (menuDebugBtn) menuDebugBtn.textContent = "　 デバッグツール";
+            if (menuDebugBtn) menuDebugBtn.textContent = "　 " + t("menu.debug");
         });
         debugRestBtn.addEventListener("click", () => {
             debugOverlay.classList.remove("minimized");
@@ -399,15 +400,16 @@ export function setupDebugOverlay(game: GameScene): void {
             requestAnimationFrame(() => game.engine.resize());
         };
 
-        const makeToggle = (btnId: string, targetId: string, label: string, cookieKey: string) => {
+        type MK = Parameters<typeof t>[0];
+        const makeToggle = (btnId: string, targetId: string, labelKey: MK, cookieKey: string) => {
             const btn    = document.getElementById(btnId);
             const target = document.getElementById(targetId);
             if (!btn || !target) return;
-            toggleRegistry.push({ btnId, targetId, label, cookieKey });
+            toggleRegistry.push({ btnId, targetId, label: labelKey, cookieKey });
 
             if (gCk(cookieKey) === "0") {
                 target.style.display = "none";
-                btn.textContent = "　 " + label;
+                btn.textContent = "　 " + t(labelKey);
             }
 
             btn.addEventListener("click", (e) => {
@@ -422,7 +424,7 @@ export function setupDebugOverlay(game: GameScene): void {
                         const otherBtn   = document.getElementById(reg.btnId);
                         if (otherPanel && otherPanel.style.display !== "none") {
                             otherPanel.style.display = "none";
-                            if (otherBtn) otherBtn.textContent = "　 " + reg.label;
+                            if (otherBtn) otherBtn.textContent = "　 " + t(reg.label as MK);
                             sCk(reg.cookieKey, "0");
                         }
                     }
@@ -490,7 +492,7 @@ export function setupDebugOverlay(game: GameScene): void {
                     }
                     if (!isMobileDev) game.clampToViewport(target);
                 }
-                btn.textContent = (visible ? "　" : "✓") + " " + label;
+                btn.textContent = (visible ? "　" : "✓") + " " + t(labelKey);
                 sCk(cookieKey, visible ? "0" : "1");
                 updateMobileLayout();
                 // モバイル: clampToViewportのインラインheight/widthをクリア
@@ -500,15 +502,15 @@ export function setupDebugOverlay(game: GameScene): void {
                 }
             });
         };
-        makeToggle("menu-serversettings", "server-settings-panel", "サーバ設定",    "showSrvSettings");
-        makeToggle("menu-serverlog",      "server-log-panel",      "サーバ接続ログ", "showSrvLog");
-        makeToggle("menu-userlist",       "user-list-panel",       "プレイヤーリスト",  "showUserList");
-        makeToggle("menu-chathistory",    "chat-history-panel",    "チャット履歴",  "showChatHist");
-        makeToggle("menu-ping",           "ping-panel",            "Ping グラフ",   "showPing");
-        makeToggle("menu-ccu",            "ccu-panel",             "同接グラフ",    "showCcu");
-        makeToggle("menu-debug",          "debug-overlay",         "デバッグツール", "showDebug");
-        makeToggle("menu-about",          "about-panel",           "tommieChatについて", "showAbout");
-        makeToggle("menu-login",          "displayname-panel",     "表示名設定",       "showDisplayName");
+        makeToggle("menu-serversettings", "server-settings-panel", "menu.serversettings", "showSrvSettings");
+        makeToggle("menu-serverlog",      "server-log-panel",      "menu.serverlog",     "showSrvLog");
+        makeToggle("menu-userlist",       "user-list-panel",       "menu.userlist",      "showUserList");
+        makeToggle("menu-chathistory",    "chat-history-panel",    "menu.chathistory",   "showChatHist");
+        makeToggle("menu-ping",           "ping-panel",            "menu.ping",          "showPing");
+        makeToggle("menu-ccu",            "ccu-panel",             "menu.ccu",           "showCcu");
+        makeToggle("menu-debug",          "debug-overlay",         "menu.debug",         "showDebug");
+        makeToggle("menu-about",          "about-panel",           "menu.about",         "showAbout");
+        makeToggle("menu-login",          "displayname-panel",     "menu.displayname",   "showDisplayName");
 
         // 右上クリック: ユーザID → プレイヤーリスト、ping/FPS → Pingグラフ
         const pdEl = document.getElementById("ping-display");
@@ -1343,7 +1345,7 @@ export function setupDebugOverlay(game: GameScene): void {
             const indicator = document.getElementById("build-mode-indicator");
             if (indicator) {
                 indicator.style.display = game.buildMode ? "" : "none";
-                if (game.buildMode) indicator.textContent = "🔨 ビルドモード（B/ESCキーで解除）";
+                if (game.buildMode) indicator.textContent = t("buildmode.indicator");
             }
             if (game.buildMode) game.refreshPreviewBlock();
             else game.previewBlock.isVisible = false;

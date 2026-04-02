@@ -28,6 +28,7 @@ import { AOIManager } from "./AOIManager";
 import { setupHtmlUI } from "./UIPanel";
 import { setupDebugOverlay } from "./DebugOverlay";
 import { prof } from "./Profiler";
+import { t } from "./i18n";
 
 export class GameScene {
     engine: Engine;
@@ -494,7 +495,7 @@ export class GameScene {
                 const indicator = document.getElementById("build-mode-indicator");
                 if (indicator) {
                     indicator.style.display = this.buildMode ? "" : "none";
-                    if (this.buildMode) indicator.textContent = "🔨 ビルドモード（B/ESCキーで解除）";
+                    if (this.buildMode) indicator.textContent = t("buildmode.indicator");
                 }
                 const btn = document.getElementById("buildModeBtn") as HTMLButtonElement | null;
                 if (btn) {

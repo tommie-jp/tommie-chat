@@ -2124,7 +2124,7 @@
 
     <div id="chat-history-panel">
         <div id="chat-history-header">
-            <span title="チャット履歴&#10;──────────&#10;過去のチャットメッセージを時系列で表示します。&#10;ログイン中に送受信されたメッセージが記録されます。">チャット履歴</span>
+            <span data-i18n="chathistory.title" title="チャット履歴&#10;──────────&#10;過去のチャットメッセージを時系列で表示します。&#10;ログイン中に送受信されたメッセージが記録されます。">チャット履歴</span>
             <span id="chat-history-close">❌️</span>
         </div>
         <div id="chat-history-list"></div>
@@ -2132,7 +2132,7 @@
     
     <div id="debug-overlay">
         <div id="debug-title-bar">
-            <span id="debug-title-text" title="デバッグツール&#10;──────────&#10;描画設定・カメラ・ワールドなどの詳細パラメータを&#10;調整できる開発者向けパネルです。&#10;各項目のラベルを長押し（PCはホバー）すると説明が表示されます。&#10;──────────&#10;＊マーク … デフォルト値から変更された項目のラベル末尾に表示されます。&#10;ダブルタップ（PCはダブルクリック）… ＊が付いたラベルをダブルタップするとデフォルト値に戻ります。">デバッグツール</span>
+            <span id="debug-title-text" title="デバッグツール&#10;──────────&#10;描画設定・カメラ・ワールドなどの詳細パラメータを&#10;調整できる開発者向けパネルです。&#10;各項目のラベルを長押し（PCはホバー）すると説明が表示されます。&#10;──────────&#10;＊マーク … デフォルト値から変更された項目のラベル末尾に表示されます。&#10;ダブルタップ（PCはダブルクリック）… ＊が付いたラベルをダブルタップするとデフォルト値に戻ります。" data-i18n="menu.debug">デバッグツール</span>
             <button id="debug-minimize-btn" title="非表示">❌️</button>
             <button id="debug-restore-btn" title="復元">□</button>
         </div>
@@ -2142,26 +2142,26 @@
             <tr><td id="label-update" class="label">02.Update</td><td class="value" id="val-update"></td></tr>
             <tr><td class="label" title="02b.Theme&#10;スマホ向けパネルの配色テーマを切り替えます。&#10;PCでは影響しません。&#10;・背景黒: ダークテーマ（暗い背景に白文字）&#10;・ポップ１: 明るく華やかな配色（紫グラデーション）">02b.Theme</td><td class="value">
                 <select id="themeSelect" class="debug-select">
-                    <option value="pop1">ポップ１</option>
-                    <option value="dark">背景黒</option>
+                    <option value="pop1" data-i18n="dbg.theme.pop1">ポップ１</option>
+                    <option value="dark" data-i18n="dbg.theme.dark">背景黒</option>
                 </select>
             </td></tr>
             <tr><td colspan="2" style="padding:4px 0 0 0;">
                 <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
                 <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Chat Overlay</div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="02c.Chat OL&#10;チャットオーバーレイの最大表示行数を設定します。&#10;アバター画面の左下に表示されるリアルタイムチャットログの行数です。&#10;0にするとオーバーレイを非表示にします。">02c.行数</td><td class="value">
+                    <tr><td class="label" title="02c.Chat OL&#10;チャットオーバーレイの最大表示行数を設定します。&#10;アバター画面の左下に表示されるリアルタイムチャットログの行数です。&#10;0にするとオーバーレイを非表示にします。" data-i18n="dbg.02c">02c.行数</td><td class="value">
                         <select id="chatOlMaxSelect" class="debug-select">
-                            <option value="0">0 (非表示)</option>
-                            <option value="3">3行</option>
-                            <option value="5" selected>5行</option>
-                            <option value="8">8行</option>
-                            <option value="10">10行</option>
-                            <option value="15">15行</option>
-                            <option value="20">20行</option>
+                            <option value="0" data-i18n="dbg.ol.0">0 (非表示)</option>
+                            <option value="3" data-i18n="dbg.ol.3">3行</option>
+                            <option value="5" selected data-i18n="dbg.ol.5">5行</option>
+                            <option value="8" data-i18n="dbg.ol.8">8行</option>
+                            <option value="10" data-i18n="dbg.ol.10">10行</option>
+                            <option value="15" data-i18n="dbg.ol.15">15行</option>
+                            <option value="20" data-i18n="dbg.ol.20">20行</option>
                         </select>
                     </td></tr>
-                    <tr><td class="label" title="02d.OL BG&#10;チャットオーバーレイの背景色と透明度を設定します。">02d.背景</td><td class="value">
+                    <tr><td class="label" title="02d.OL BG&#10;チャットオーバーレイの背景色と透明度を設定します。" data-i18n="dbg.02d">02d.背景</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
                             <input id="chatOlBgColor" class="debug-color" type="color" value="#DFEED4" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;flex-shrink:0;">
                             <select id="chatOlBgAlpha" class="debug-select" style="width:auto;">
@@ -2174,27 +2174,27 @@
                             </select>
                         </div>
                     </td></tr>
-                    <tr><td class="label" title="02e.OL Font&#10;チャットオーバーレイの文字サイズと文字色を設定します。">02e.文字</td><td class="value">
+                    <tr><td class="label" title="02e.OL Font&#10;チャットオーバーレイの文字サイズと文字色を設定します。" data-i18n="dbg.02e">02e.文字</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
                             <input id="chatOlFontColor" class="debug-color" type="color" value="#5c5c5c" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;flex-shrink:0;">
                             <select id="chatOlFontSize" class="debug-select" style="width:auto;">
-                                <option value="9" style="font-size:9px;">すごく小さい</option>
-                                <option value="11" style="font-size:11px;">小さい</option>
-                                <option value="12" style="font-size:12px;">少し小さい</option>
-                                <option value="13" style="font-size:13px;" selected>普通</option>
-                                <option value="15" style="font-size:15px;">少し大きい</option>
-                                <option value="18" style="font-size:18px;">大きい</option>
-                                <option value="22" style="font-size:22px;">すごく大きい</option>
+                                <option value="9" style="font-size:9px;" data-i18n="dbg.font.9">すごく小さい</option>
+                                <option value="11" style="font-size:11px;" data-i18n="dbg.font.11">小さい</option>
+                                <option value="12" style="font-size:12px;" data-i18n="dbg.font.12">少し小さい</option>
+                                <option value="13" style="font-size:13px;" selected data-i18n="dbg.font.13">普通</option>
+                                <option value="15" style="font-size:15px;" data-i18n="dbg.font.15">少し大きい</option>
+                                <option value="18" style="font-size:18px;" data-i18n="dbg.font.18">大きい</option>
+                                <option value="22" style="font-size:22px;" data-i18n="dbg.font.22">すごく大きい</option>
                             </select>
                         </div>
                     </td></tr>
-                    <tr><td class="label" title="02e2.OL 時刻色&#10;チャットオーバーレイの時刻部分の文字色">02e2.時刻色</td><td class="value">
+                    <tr><td class="label" title="02e2.OL 時刻色&#10;チャットオーバーレイの時刻部分の文字色" data-i18n="dbg.02e2">02e2.時刻色</td><td class="value">
                         <input id="chatOlTimeColor" class="debug-color" type="color" value="#999999" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;">
                     </td></tr>
-                    <tr><td class="label" title="02e3.OL 名前色&#10;チャットオーバーレイの表示名部分の文字色">02e3.名前色</td><td class="value">
+                    <tr><td class="label" title="02e3.OL 名前色&#10;チャットオーバーレイの表示名部分の文字色" data-i18n="dbg.02e3">02e3.名前色</td><td class="value">
                         <input id="chatOlNameColor" class="debug-color" type="color" value="#2a7a2a" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;">
                     </td></tr>
-                    <tr><td class="label" title="02f.OL Wrap&#10;チャットオーバーレイの文字列を折り返すかどうかを設定します。&#10;On: 長い文字列を折り返して全文表示&#10;Off: 1行で省略（…）表示">02f.折返</td><td class="value">
+                    <tr><td class="label" title="02f.OL Wrap&#10;チャットオーバーレイの文字列を折り返すかどうかを設定します。&#10;On: 長い文字列を折り返して全文表示&#10;Off: 1行で省略（…）表示" data-i18n="dbg.02f">02f.折返</td><td class="value">
                         <button id="chatOlWrapBtn" class="debug-btn">On</button>
                     </td></tr>
                 </table>
@@ -2202,11 +2202,11 @@
             </td></tr>
             <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale</td><td class="value">
                 <select id="scaleSelect" class="debug-select">
-                    <option value="0.50">0.50 Retina/4K クッキリ</option>
+                    <option value="0.50" data-i18n="dbg.scale.050">0.50 Retina/4K クッキリ</option>
                     <option value="0.75">0.75</option>
-                    <option value="1.00">1.00 通常モニター</option>
+                    <option value="1.00" data-i18n="dbg.scale.100">1.00 通常モニター</option>
                     <option value="1.50">1.50</option>
-                    <option value="2.00">2.00 解像度50%</option>
+                    <option value="2.00" data-i18n="dbg.scale.200">2.00 解像度50%</option>
                 </select>
             </td></tr>
             <tr><td class="label" title="04.AntiAliasing&#10;アンチエイリアシング（MSAA）。ジャギーを軽減&#10;初期値: Off&#10;典型的なMMO: Off〜2x（パフォーマンス優先時はOff）&#10;Minecraft: バニラはAA非対応, OptiFine/シェーダー: 2〜16xMSAA">04.AntiAliasing</td><td class="value">
@@ -2291,11 +2291,11 @@
                     <option value="48" selected>48 (3ch)</option>
                     <option value="80">80 (5ch)</option>
                     <option value="128">128 (8ch)</option>
-                    <option value="256">256 (全域)</option>
+                    <option value="256" data-i18n="dbg.aoi.256">256 (全域)</option>
                 </select>
             </td></tr>
             <tr><td class="label" title="28d.AOI&#10;Area of Interest（チャンク範囲）&#10;minCX,minCZ〜maxCX,maxCZ&#10;AOI半径に応じて自動計算されるチャンク受信範囲">28d.AOI</td><td class="value" id="val-aoi" style="font-size: 11px;">-</td></tr>
-            <tr><td class="label" title="28e.AOI表示&#10;AOI範囲を緑色の矩形でワールド上に表示&#10;デフォルト: OFF">28e.AOI表示</td><td class="value">
+            <tr><td class="label" title="28e.AOI表示&#10;AOI範囲を緑色の矩形でワールド上に表示&#10;デフォルト: OFF" data-i18n="dbg.28e">28e.AOI表示</td><td class="value">
                 <button id="aoiVisBtn" class="debug-btn off">Off</button>
             </td></tr>
             <tr><td class="label" title="28f.カメラ自動回転&#10;移動方向に合わせてカメラアングルを自動回転&#10;デフォルト: ON">28f.Cam AutoRot</td><td class="value">
@@ -2347,13 +2347,13 @@
                     <tr><td class="label" title="34b.AutoWalk&#10;指定した四角形を自動で巡回移動します&#10;初期値: Off&#10;※リロードでOffに戻ります">34b.AutoWalk</td><td class="value">
                         <button id="autoWalkBtn" class="debug-btn off">Off</button>
                     </td></tr>
-                    <tr><td class="label">始点</td><td class="value">
+                    <tr><td class="label" data-i18n="dbg.aw.start">始点</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
                             <span style="font-size:10px;color:#555;">X</span><input type="number" id="autoWalkX" class="debug-input" value="0" style="width:40px;" title="始点X">
                             <span style="font-size:10px;color:#555;">Z</span><input type="number" id="autoWalkZ" class="debug-input" value="0" style="width:40px;" title="始点Z">
                         </div>
                     </td></tr>
-                    <tr><td class="label">サイズ</td><td class="value">
+                    <tr><td class="label" data-i18n="dbg.aw.size">サイズ</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
                             <span style="font-size:10px;color:#555;">dX</span><input type="number" id="autoWalkDX" class="debug-input" value="5" style="width:40px;" title="dX">
                             <span style="font-size:10px;color:#555;">dZ</span><input type="number" id="autoWalkDZ" class="debug-input" value="5" style="width:40px;" title="dZ">
@@ -2466,7 +2466,7 @@
                 <table style="width:100%;border-collapse:collapse;">
                     <tr><td class="label" title="50.Profile&#10;パフォーマンス計測の開始/停止/ログ出力&#10;開始: profileStart() — DevTools Timings に mark/measure 出力&#10;停止: profileStop()&#10;ログ: profileDump() — コンソールにサマリ表示">50.Profile</td><td class="value">
                         <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-                            <span id="profileStatus" style="display:none;color:red;font-size:11px;font-weight:bold;">計測中</span>
+                            <span id="profileStatus" style="display:none;color:red;font-size:11px;font-weight:bold;" data-i18n="dbg.profiling">計測中</span>
                             <button id="profileStartBtn" class="debug-btn" style="float:none;">Start</button>
                         </div>
                         <button id="profileStopBtn" class="debug-btn off" style="float:none;display:block;margin-left:auto;" disabled>Stop</button>
@@ -2484,18 +2484,18 @@
 
     <div id="server-settings-panel">
         <div id="server-settings-header">
-            <span title="サーバ設定&#10;──────────&#10;サーバへの接続状態の確認やHTTP応答テストを行います。&#10;サーバURL・Nakama接続情報の表示、WebSocket/HTTPの疎通確認ができます。&#10;&#10;表示されるURLはNakamaサーバのURLですが、&#10;本アプリではWebサーバと同じURL（HTTPS接続先）を&#10;Nakamaサーバとしても使用しています。">サーバ設定</span>
+            <span data-i18n="server.title" title="サーバ設定&#10;──────────&#10;サーバへの接続状態の確認やHTTP応答テストを行います。&#10;サーバURL・Nakama接続情報の表示、WebSocket/HTTPの疎通確認ができます。&#10;&#10;表示されるURLはNakamaサーバのURLですが、&#10;本アプリではWebサーバと同じURL（HTTPS接続先）を&#10;Nakamaサーバとしても使用しています。">サーバ設定</span>
             <span id="server-settings-close">❌️</span>
         </div>
         <div id="server-settings-body">
-            <div class="srv-desc" title="サーバ情報&#10;──────────&#10;接続先サーバのURL・ポート番号・Server Keyを表示します。&#10;Server KeyはNakama公式の仕様上、安全に公開可能な値です。">サーバ情報</div>
+            <div class="srv-desc" data-i18n="server.info" title="サーバ情報&#10;──────────&#10;接続先サーバのURL・ポート番号・Server Keyを表示します。&#10;Server KeyはNakama公式の仕様上、安全に公開可能な値です。">サーバ情報</div>
             <div class="srv-row" style="font-size:10px;color:#666;word-break:break-all;" title="Server Key（Nakamaサーバ）&#10;──────────&#10;クライアントがNakamaサーバに接続する際に使用する識別キーです。&#10;サーバの nakama/config.yml の socket.server_key で設定します。&#10;デフォルト値: defaultkey&#10;&#10;【重要】&#10;Server Keyはパスワードではありません。&#10;Nakama公式: &quot;The server key is not a security mechanism&#10;and can be safely exposed.&quot;&#10;（Server Keyはセキュリティ機構ではなく安全に公開できます）&#10;&#10;認証はデバイスID等の認証APIで行われるため、&#10;Server Keyが公開されても不正アクセスにはなりません。">
                 <span style="flex-shrink:0;">Server Key:</span>
                 <span id="serverKeyDisplay" style="flex:1;min-width:0;"></span>
             </div>
             <div class="srv-row" style="margin-top:8px;gap:6px;">
-                <button id="srvPingBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#4a90d9;color:#fff;border:1px solid #3570b0;" title="サーバURLへHTTPリクエストを送信し応答時間を計測します">HTTP応答</button>
-                <button id="srvNakamaPingBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#d98a4a;color:#fff;border:1px solid #b07035;" title="NakamaサーバへWebSocket RPCでpingを送信します（ログイン後に使用可能）">RPC応答</button>
+                <button id="srvPingBtn" class="ui-btn" data-i18n="server.http_ping" style="font-size:11px;padding:3px 10px;background:#4a90d9;color:#fff;border:1px solid #3570b0;" title="サーバURLへHTTPリクエストを送信し応答時間を計測します">HTTP応答</button>
+                <button id="srvNakamaPingBtn" class="ui-btn" data-i18n="server.rpc_ping" style="font-size:11px;padding:3px 10px;background:#d98a4a;color:#fff;border:1px solid #b07035;" title="NakamaサーバへWebSocket RPCでpingを送信します（ログイン後に使用可能）">RPC応答</button>
             </div>
             <div id="srvPingResult"></div>
         </div>
@@ -2503,7 +2503,7 @@
 
     <div id="server-log-panel">
         <div id="server-log-header">
-            <span title="サーバ接続ログ&#10;──────────&#10;サーバへの接続・切断・エラーなどのイベントを&#10;タイムスタンプ付きで記録します。&#10;ログイン失敗時の原因やWebSocket切断の詳細を確認できます。">サーバ接続ログ</span>
+            <span data-i18n="serverlog.title" title="サーバ接続ログ&#10;──────────&#10;サーバへの接続・切断・エラーなどのイベントを&#10;タイムスタンプ付きで記録します。&#10;ログイン失敗時の原因やWebSocket切断の詳細を確認できます。">サーバ接続ログ</span>
             <span id="server-log-close">❌️</span>
         </div>
         <div id="server-log-list"></div>
@@ -2511,22 +2511,22 @@
 
     <div id="user-list-panel">
         <div id="user-list-header">
-            <span title="プレイヤーリスト&#10;──────────&#10;現在ログイン中の全プレイヤーを表示します。&#10;ユーザID・表示名・ログイン時刻・接続チャンネルが確認できます。">プレイヤーリスト</span>
+            <span data-i18n="userlist.title" title="プレイヤーリスト&#10;──────────&#10;現在ログイン中の全プレイヤーを表示します。&#10;ユーザID・表示名・ログイン時刻・接続チャンネルが確認できます。">プレイヤーリスト</span>
             <span id="user-list-close">❌️</span>
         </div>
         <div id="user-list-wrap">
             <table id="user-list">
                 <thead>
                     <tr>
-                        <th id="ul-th-user" title="ログインに使用する名前&#10;Nakamaサーバ上の username">ユーザID</th>
-                        <th id="ul-th-dname" title="アバターに表示される名前&#10;ログイン後に自由に変更可能">表示名</th>
-                        <th id="ul-th-uuid" title="Nakamaサーバが発行するアカウントの内部UUID&#10;アカウントごとに一意&#10;先頭8文字のみ表示（クリックでフルIDをコピー）">アカウントID</th>
+                        <th id="ul-th-user" data-i18n="userlist.th.user" title="ログインに使用する名前&#10;Nakamaサーバ上の username">ユーザID</th>
+                        <th id="ul-th-dname" data-i18n="userlist.th.dname" title="アバターに表示される名前&#10;ログイン後に自由に変更可能">表示名</th>
+                        <th id="ul-th-uuid" data-i18n="userlist.th.uuid" title="Nakamaサーバが発行するアカウントの内部UUID&#10;アカウントごとに一意&#10;先頭8文字のみ表示（クリックでフルIDをコピー）">アカウントID</th>
                         <th id="ul-th-sid" title="接続ごとに発行されるセッションID&#10;ログインするたびに変わる&#10;先頭8文字のみ表示（クリックでコピー）">SessionID</th>
-                        <th id="ul-th-ch" title="接続チャンネル&#10;chat=チャット, match=マッチ, chat+match=両方">チャンネル</th>
+                        <th id="ul-th-ch" data-i18n="userlist.th.channel" title="接続チャンネル&#10;chat=チャット, match=マッチ, chat+match=両方">チャンネル</th>
                         <th id="ul-th-matchid" title="参加中のマッチID（先頭8文字）">MatchID</th>
                         <th id="ul-th-chatid" title="チャットチャンネルID（先頭8文字）">ChatID</th>
-                        <th id="ul-th-rel" title="ログインしてからの経過時間">ログイン時間</th>
-                        <th id="ul-th-time" title="ログインした日時（ISO 8601形式）">ログイン時刻</th>
+                        <th id="ul-th-rel" data-i18n="userlist.th.login_elapsed" title="ログインしてからの経過時間">ログイン時間</th>
+                        <th id="ul-th-time" data-i18n="userlist.th.login_time" title="ログインした日時（ISO 8601形式）">ログイン時刻</th>
                     </tr>
                 </thead>
                 <tbody id="user-list-body"></tbody>
@@ -2538,37 +2538,45 @@
         <span></span><span></span><span></span>
     </button>
     <div id="menu-popup">
-        <button class="menu-item" id="menu-serversettings">✓ サーバ設定</button>
-        <button class="menu-item" id="menu-serverlog">✓ サーバ接続ログ</button>
-        <button class="menu-item" id="menu-userlist">✓ プレイヤーリスト</button>
-        <button class="menu-item" id="menu-chathistory">✓ チャット履歴</button>
-        <button class="menu-item" id="menu-ping">✓ Ping グラフ</button>
-        <button class="menu-item" id="menu-ccu">　 同接グラフ</button>
+        <button class="menu-item" id="menu-serversettings" data-i18n-prefix="menu.serversettings">✓ サーバ設定</button>
+        <button class="menu-item" id="menu-serverlog" data-i18n-prefix="menu.serverlog">✓ サーバ接続ログ</button>
+        <button class="menu-item" id="menu-userlist" data-i18n-prefix="menu.userlist">✓ プレイヤーリスト</button>
+        <button class="menu-item" id="menu-chathistory" data-i18n-prefix="menu.chathistory">✓ チャット履歴</button>
+        <button class="menu-item" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
+        <button class="menu-item" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
-        <button class="menu-item" id="menu-about">　 tommieChatについて</button>
-        <button class="menu-item" id="menu-debug">✓ デバッグツール</button>
-        <button class="menu-item" id="menu-cookie-reset">全パネル非表示（クッキー初期化）</button>
-        <button class="menu-item" id="menu-login" style="display:none;">　 表示名設定</button>
-        <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;">ログアウト</button>
+        <button class="menu-item" id="menu-about" data-i18n-prefix="menu.about">　 tommieChatについて</button>
+        <button class="menu-item" id="menu-debug" data-i18n-prefix="menu.debug">✓ デバッグツール</button>
+        <button class="menu-item" id="menu-cookie-reset" data-i18n="menu.cookie_reset">全パネル非表示（クッキー初期化）</button>
+        <button class="menu-item" id="menu-login" style="display:none;" data-i18n-prefix="menu.displayname">　 表示名設定</button>
+        <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;" data-i18n="logout">ログアウト</button>
+        <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;">
+            <span style="font-size:12px;color:rgba(255,255,255,0.7);" data-i18n="lang.label">言語</span>
+            <select id="langSelect" style="font-size:12px;padding:1px 4px;border:1px solid #666;border-radius:3px;background:#333;color:#fff;cursor:pointer;">
+                <option value="ja">🇯🇵 日本語</option>
+                <option value="en">🇺🇸 English</option>
+            </select>
+        </div>
     </div>
 
     <div id="logout-panel">
         <div id="logout-panel-header">
-            <span title="ログアウト&#10;──────────&#10;サーバから切断してログイン画面に戻ります。&#10;ユーザIDとデバイスIDは保持されるため、&#10;同じIDで再ログインできます。">ログアウト</span>
+            <span data-i18n="logout">ログアウト</span>
             <span id="logout-panel-close">❌️</span>
         </div>
         <div id="logout-panel-body">
-            <p>ログアウトしますか？</p>
+            <p data-i18n="logout.confirm">ログアウトしますか？</p>
             <div class="logout-panel-btns">
-                <button id="logout-confirm-btn">ログアウト</button>
-                <button id="logout-cancel-btn">キャンセル</button>
+                <button id="logout-confirm-btn" data-i18n="logout.btn">ログアウト</button>
+                <button id="logout-cancel-btn" data-i18n="logout.cancel">キャンセル</button>
             </div>
         </div>
     </div>
 
     <div id="about-panel" style="display:none;">
         <div id="about-panel-header">
-            <span title="tommieChatについて&#10;──────────&#10;アプリのバージョン情報・操作方法・クレジットを表示します。">tommieChatについて</span>
+            <span data-i18n="about.title">tommieChatについて</span>
             <span id="about-panel-close">❌️</span>
         </div>
         <div id="about-panel-body">
@@ -2576,22 +2584,9 @@
             <p id="about-app-ver"></p>
             <p id="about-app-date"></p>
             <hr style="margin:8px 0;border-color:rgba(0,0,0,0.15);">
-            <p style="font-weight:bold;margin-bottom:2px;">操作方法</p>
-            <div class="about-ops-pc">
-                <p style="margin:0;"><b>移動:</b> 地面を左クリック</p>
-                <p style="margin:0;"><b>カメラ回転:</b> 左ドラッグ</p>
-                <p style="margin:0;"><b>カメラパン:</b> 右ドラッグ</p>
-                <p style="margin:0;"><b>ズーム:</b> マウスホイール</p>
-                <p style="margin:0;"><b>セリフ送信:</b> Enter</p>
-                <p style="margin:0;"><b>セリフ改行:</b> Shift+Enter</p>
-            </div>
-            <div class="about-ops-sp">
-                <p style="margin:0;"><b>移動:</b> 地面をタップ</p>
-                <p style="margin:0;"><b>カメラ回転:</b> 1本指ドラッグ</p>
-                <p style="margin:0;"><b>ズーム:</b> ピンチイン/アウト</p>
-                <p style="margin:0;"><b>セリフ送信:</b> Enter / 送信ボタン</p>
-                <p style="margin:0;"><b>セリフ改行:</b> Shift+Enter</p>
-            </div>
+            <p style="font-weight:bold;margin-bottom:2px;" data-i18n="about.controls">操作方法</p>
+            <div class="about-ops-pc" id="about-ops-pc"></div>
+            <div class="about-ops-sp" id="about-ops-sp"></div>
             <hr style="margin:8px 0;border-color:rgba(0,0,0,0.15);">
             <p style="margin-top:8px;" id="about-app-credits"></p>
         </div>
@@ -2599,17 +2594,17 @@
 
     <div id="displayname-panel" style="display:none;">
         <div id="displayname-header">
-            <span title="表示名設定&#10;──────────&#10;アバターの頭上に表示される名前を設定します。&#10;ユーザIDとは別に、自由に変更できます。&#10;空欄にすると @ユーザID が青色で表示されます。">表示名設定</span>
+            <span data-i18n="displayname.title" title="表示名設定&#10;──────────&#10;アバターの頭上に表示される名前を設定します。&#10;ユーザIDとは別に、自由に変更できます。&#10;空欄にすると @ユーザID が青色で表示されます。">表示名設定</span>
             <span id="displayname-close">❌️</span>
         </div>
         <div id="displayname-body" style="padding:10px;display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;align-items:center;gap:6px;">
-                <label style="font-size:12px;white-space:nowrap;cursor:help;" title="ユーザID（デバイス認証）&#10;──────────&#10;ログイン時に入力したIDです。サーバー上でアカウントを&#10;識別するための一意なIDとして使われます。&#10;&#10;【仕組み】&#10;初回ログイン時にデバイスIDが自動生成され、&#10;ユーザIDと紐付けてサーバーに登録されます。&#10;デバイスIDはブラウザのlocalStorageに保存されるため、&#10;同じブラウザからはパスワードなしで再ログインできます。&#10;&#10;【注意】&#10;・ブラウザのキャッシュをクリアするとデバイスIDが&#10;　消え、同じユーザIDではログインできなくなります。&#10;・PWA（ホーム画面アプリ）へはCookie経由で&#10;　デバイスIDが自動引き継ぎされます（1時間有効）。&#10;・変更はできません。別のIDを使うには再ログインが必要です。">ユーザID</label>
+                <label style="font-size:12px;white-space:nowrap;cursor:help;" title="ユーザID（デバイス認証）&#10;──────────&#10;ログイン時に入力したIDです。サーバー上でアカウントを&#10;識別するための一意なIDとして使われます。&#10;&#10;【仕組み】&#10;初回ログイン時にデバイスIDが自動生成され、&#10;ユーザIDと紐付けてサーバーに登録されます。&#10;デバイスIDはブラウザのlocalStorageに保存されるため、&#10;同じブラウザからはパスワードなしで再ログインできます。&#10;&#10;【注意】&#10;・ブラウザのキャッシュをクリアするとデバイスIDが&#10;　消え、同じユーザIDではログインできなくなります。&#10;・PWA（ホーム画面アプリ）へはCookie経由で&#10;　デバイスIDが自動引き継ぎされます（1時間有効）。&#10;・変更はできません。別のIDを使うには再ログインが必要です。" data-i18n="displayname.label">ユーザID</label>
                 <span id="dn-panel-userid" style="font-size:12px;font-family:monospace;"></span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
-                <input id="displayNameInput" type="text" placeholder="ログイン後に入力" disabled maxlength="20" style="flex:1;min-width:0;" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;0〜20文字（空欄で @ユーザID を青色表示、制御文字は使用不可）">
-                <button id="displayNameBtn" class="ui-btn" disabled style="width:auto;padding:0 8px;white-space:nowrap;font-size:12px;" title="表示名を変更します（Enterキーでも実行できます）&#10;ログイン後に使用可能になります">変更</button>
+                <input id="displayNameInput" type="text" placeholder="ログイン後に入力" data-i18n-placeholder="displayname.placeholder.disabled" disabled maxlength="20" style="flex:1;min-width:0;" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;0〜20文字（空欄で @ユーザID を青色表示、制御文字は使用不可）">
+                <button id="displayNameBtn" class="ui-btn" data-i18n="displayname.btn" disabled style="width:auto;padding:0 8px;white-space:nowrap;font-size:12px;" title="表示名を変更します（Enterキーでも実行できます）&#10;ログイン後に使用可能になります">変更</button>
             </div>
             <span id="displayNameStatus" style="font-size:12px;white-space:nowrap;"></span>
         </div>
@@ -2620,23 +2615,23 @@
     <div id="portrait-divider"><div id="portrait-divider-knob">⋯</div></div>
     <div id="chat-container">
         <div id="login-row">
-            <label for="loginName">ユーザID</label>
-            <input id="loginName" type="text" placeholder="ユーザIDを入力" title="ユーザID（デバイス認証）&#10;パスワード不要。同じユーザIDで再ログインできます&#10;使える文字: 英数字 (a-z A-Z 0-9) と . _ @ + -&#10;6〜128文字&#10;例: tommie, user01, my.name">
-            <button id="loginBtn" class="ui-btn" style="width:auto;padding:0 12px;white-space:nowrap;background:#28a74580;">ログイン</button>
+            <label for="loginName" data-i18n="login.label">ユーザID</label>
+            <input id="loginName" type="text" placeholder="ユーザIDを入力" data-i18n-placeholder="login.placeholder" title="ユーザID（デバイス認証）&#10;パスワード不要。同じユーザIDで再ログインできます&#10;使える文字: 英数字 (a-z A-Z 0-9) と . _ @ + -&#10;6〜128文字&#10;例: tommie, user01, my.name">
+            <button id="loginBtn" class="ui-btn" style="width:auto;padding:0 12px;white-space:nowrap;background:#28a74580;" data-i18n="login.btn">ログイン</button>
             <span id="loginStatus" style="color:#00dd55;font-size:12px;text-shadow:0 1px 2px rgba(0,0,0,0.3);"></span>
         </div>
         <div id="chat-row">
-            <textarea id="chatInput" placeholder="セリフ" title="アバターのセリフを入力します&#10;Enter: 送信 / Shift+Enter: 改行&#10;縦方向にリサイズ可能（行単位）&#10;──────────&#10;最大5行（長い行は自動折り返し）&#10;5行を超える分は省略されます&#10;フォントサイズ: デバッグツール46で変更可"></textarea>
-            <button id="sendBtn" class="ui-btn" title="セリフを送信します（Enter）&#10;空欄で送信すると吹き出しの表示/非表示を切り替えます">送信</button>
+            <textarea id="chatInput" placeholder="セリフ" data-i18n-placeholder="chat.placeholder" title="アバターのセリフを入力します&#10;Enter: 送信 / Shift+Enter: 改行&#10;縦方向にリサイズ可能（行単位）&#10;──────────&#10;最大5行（長い行は自動折り返し）&#10;5行を超える分は省略されます&#10;フォントサイズ: デバッグツール46で変更可"></textarea>
+            <button id="sendBtn" class="ui-btn" data-i18n="chat.send" title="セリフを送信します（Enter）&#10;空欄で送信すると吹き出しの表示/非表示を切り替えます">送信</button>
         </div>
     </div>
 
     <div id="ping-display" style="position:fixed;top:4px;right:8px;font-size:12px;font-family:monospace;color:#000;pointer-events:auto;z-index:9999;"></div>
-    <div id="build-mode-indicator" style="display:none;position:fixed;top:4px;left:50%;transform:translateX(-50%);font-size:13px;font-family:monospace;color:#fff;background:rgba(30,100,220,0.75);padding:2px 12px;border-radius:6px;text-shadow:0 1px 2px rgba(0,0,0,0.6);z-index:9999;pointer-events:auto;cursor:pointer;" title="クリックでビルドモード解除">🔨 ビルドモード（B/ESC/クリックで解除）</div>
+    <div id="build-mode-indicator" data-i18n="buildmode.indicator.click" style="display:none;position:fixed;top:4px;left:50%;transform:translateX(-50%);font-size:13px;font-family:monospace;color:#fff;background:rgba(30,100,220,0.75);padding:2px 12px;border-radius:6px;text-shadow:0 1px 2px rgba(0,0,0,0.6);z-index:9999;pointer-events:auto;cursor:pointer;" title="クリックでビルドモード解除">🔨 ビルドモード（B/ESC/クリックで解除）</div>
 
     <div id="ping-panel">
         <div id="ping-header">
-            <span title="Ping グラフ&#10;──────────&#10;サーバへの応答時間をリアルタイムでグラフ表示します。&#10;&#10;【目安】&#10;  〜50ms: 快適（LAN内・近距離サーバ）&#10; 50〜100ms: 良好（一般的なMMOの標準範囲）&#10;100〜200ms: やや遅い（操作に若干の遅延を感じる）&#10;200ms〜: 厳しい（アクション操作に支障が出る）&#10;&#10;【仕組み】&#10;WebSocketプロトコルのping/pongではなく、&#10;アプリ独自の実装です。&#10;NakamaサーバのRPC関数「ping」を呼び出し、&#10;送信から応答までの往復時間（ミリ秒）を計測しています。&#10;そのためサーバ側の処理時間も含まれます。">Ping グラフ</span>
+            <span title="Ping グラフ&#10;──────────&#10;サーバへの応答時間をリアルタイムでグラフ表示します。&#10;&#10;【目安】&#10;  〜50ms: 快適（LAN内・近距離サーバ）&#10; 50〜100ms: 良好（一般的なMMOの標準範囲）&#10;100〜200ms: やや遅い（操作に若干の遅延を感じる）&#10;200ms〜: 厳しい（アクション操作に支障が出る）&#10;&#10;【仕組み】&#10;WebSocketプロトコルのping/pongではなく、&#10;アプリ独自の実装です。&#10;NakamaサーバのRPC関数「ping」を呼び出し、&#10;送信から応答までの往復時間（ミリ秒）を計測しています。&#10;そのためサーバ側の処理時間も含まれます。" data-i18n="ping.title">Ping グラフ</span>
             <span id="ping-close">❌️</span>
         </div>
         <canvas id="ping-canvas"></canvas>
@@ -2644,7 +2639,7 @@
 
     <div id="ccu-panel" style="display:none;">
         <div id="ccu-header">
-            <span title="同接グラフ&#10;──────────&#10;現在サーバに接続しているユーザー数をリアルタイムで&#10;グラフ表示します。">同接グラフ</span>
+            <span data-i18n="ccu.title" title="同接グラフ&#10;──────────&#10;現在サーバに接続しているユーザー数をリアルタイムで&#10;グラフ表示します。">同接グラフ</span>
             <select id="ccu-range" style="font-size:11px;font-family:monospace;border:1px solid rgba(0,0,0,0.2);border-radius:3px;background:rgba(255,255,255,0.5);padding:1px 2px;cursor:pointer;">
                 <option value="1m">1分</option>
                 <option value="5m" selected>5分</option>
