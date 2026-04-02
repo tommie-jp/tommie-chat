@@ -117,6 +117,8 @@
             display: flex !important;
             justify-content: space-between !important;
             align-items: baseline !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
         }
 
         /* ===== チャットオーバーレイ（アバター画面上に常時表示） ===== */
@@ -1085,7 +1087,7 @@
 
             /* --- 画面下部 ログイン行・チャット行 --- */
             #chat-container {
-                bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+                bottom: calc(20px + env(safe-area-inset-bottom, 0px));
                 gap: 8px;
             }
             #login-row {
@@ -1483,7 +1485,7 @@
                 font-size: 10px !important;
                 opacity: 0.7;
                 top: auto !important;
-                bottom: calc(env(safe-area-inset-bottom, 0px) + 4px) !important;
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 1px) !important;
             }
         }
 
@@ -1537,7 +1539,7 @@
         /* max-width:440px でiPadを除外 */
         @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: portrait) and (max-width: 440px) {
             #chat-container {
-                bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+                bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
             }
             #app-footer-version {
                 bottom: calc(env(safe-area-inset-bottom, 0px) + 1px) !important;
@@ -2656,7 +2658,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:6px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="pointer-events:none;margin-right:2em;"></span><span id="app-footer-text"></span></div>
+    <div id="app-footer-version" style="position:fixed;bottom:2px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="pointer-events:none;margin-right:2em;"></span><span id="app-footer-text"></span></div>
 
     <script type="module" src="/src/main.ts"></script>
     <script>
