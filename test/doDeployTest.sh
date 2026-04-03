@@ -30,7 +30,13 @@ if [ -d "tommie-chat" ]; then
 fi
 
 git clone https://github.com/open-tommie/tommie-chat.git
-cd tommie-chat/nakama
+cd tommie-chat
+
+# フロントエンドビルド（本番では開発環境で事前ビルドする想定だが、テストではここで実行）
+npm install
+npm run build
+
+cd nakama
 bash doDeploy.sh
 
 # デプロイ後テスト
