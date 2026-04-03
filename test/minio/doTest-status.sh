@@ -27,6 +27,13 @@ fi
 
 COMPOSE="docker compose -f nakama/docker-compose.yml"
 
+# .env から MinIO 認証情報を読み込み
+if [ -f nakama/.env ]; then
+    set -a; source nakama/.env; set +a
+fi
+MINIO_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_PASS="${MINIO_ROOT_PASSWORD:-minioadmin}"
+
 # ── 1. コンテナ状態 ──
 echo "=== MinIO ステータス ==="
 echo ""
@@ -40,7 +47,7 @@ echo "コンテナ: ${MINIO_CONTAINER} (${STATUS})"
 echo ""
 
 # ── alias 設定 ──
-$COMPOSE exec -T minio mc alias set local http://localhost:9000 minioadmin minioadmin >/dev/null 2>&1
+$COMPOSE exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS" >/dev/null 2>&1
 
 # ── 2. バケット一覧 ──
 echo "--- バケット一覧 ---"

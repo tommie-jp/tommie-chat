@@ -41,3 +41,6 @@ set -a
 source ../nakama/.env
 set +a
 ./doTest-ping.sh
+echo ""
+echo "━━━ MinIO テスト ━━━"
+./minio/doTest-minio.sh
