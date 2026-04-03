@@ -38,6 +38,13 @@ TEST_BUCKET="test-minio-tmp"
 TEST_FILE="test-upload.txt"
 COMPOSE="docker compose -f nakama/docker-compose.yml"
 
+# .env から MinIO 認証情報を読み込み
+if [ -f nakama/.env ]; then
+    set -a; source nakama/.env; set +a
+fi
+MINIO_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_PASS="${MINIO_ROOT_PASSWORD:-minioadmin}"
+
 echo "--- MinIO 疎通テスト ---"
 
 # ── 1. コンテナ起動確認 ──
@@ -64,7 +71,7 @@ fi
 
 # ── 2. mc alias 設定 ──
 echo -n "  [2/11] mc alias   ... "
-ALIAS_OUT=$($COMPOSE exec -T minio mc alias set local http://localhost:9000 minioadmin minioadmin 2>&1)
+ALIAS_OUT=$($COMPOSE exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS" 2>&1)
 if echo "$ALIAS_OUT" | grep -q "successfully"; then
     echo "OK"
 else

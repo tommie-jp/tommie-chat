@@ -24,6 +24,11 @@ services:
 
   nakama:
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     logging:
       driver: json-file
       options:
@@ -59,6 +64,10 @@ services:
             --runtime.max_count 8192 \
             --match.max_empty_sec 30 \
             --runtime.env MAX_LOGIN_RATE_PER_SEC=50 \
+            --runtime.env MINIO_ENDPOINT=minio:9000 \
+            --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \
+            --runtime.env MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin} \
+            --runtime.env MINIO_USE_SSL=false \
             --socket.server_key ${NAKAMA_SERVER_KEY:-tommie-chat} \
             --console.username ${NAKAMA_CONSOLE_USER:-admin} \
             --console.password ${NAKAMA_CONSOLE_PASS:-password}
@@ -77,6 +86,17 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:9090:9090"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  minio:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9000:9000"  # S3 API（内部のみ）
+      - "127.0.0.1:9001:9001"  # Web管理コンソール（内部のみ）
     logging:
       driver: json-file
       options:

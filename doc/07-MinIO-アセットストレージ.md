@@ -371,10 +371,18 @@ docker compose -f nakama/docker-compose.yml up -d minio
 
 ## 本番デプロイ手順（さくらVPS）
 
-イメージは公式 (`minio/minio:latest`) をそのまま使うため DockerHub へのプッシュは不要。
-コピーが必要なのは volume のデータのみ。
+`doDeploy.sh` が MinIO のセットアップを自動で行います:
 
-### 1. ローカル: volume をエクスポート
+- `.env` に `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` を自動生成
+- `docker-compose.prod.yml` で MinIO を `127.0.0.1` バインド + `restart: unless-stopped` で起動
+- 起動後に `avatars`, `assets`, `uploads` バケットを作成し public-read ポリシーを設定
+- 本番用 `nginx.conf` に `/s3/` → MinIO プロキシを自動設定
+
+手動でのデプロイは不要ですが、ローカルの既存データを移行する場合は以下の手順を使用します。
+
+### データ移行: volume をエクスポート → インポート
+
+#### 1. ローカル: volume をエクスポート
 
 ```bash
 cd nakama
@@ -382,13 +390,13 @@ docker compose run --rm -v nakama_minio_data:/data -v $(pwd):/backup \
   alpine tar czf /backup/minio-data.tar.gz -C / data
 ```
 
-### 2. ローカル: さくらVPS へ転送
+#### 2. ローカル: さくらVPS へ転送
 
 ```bash
 scp minio-data.tar.gz user@sakura-vps:/path/to/nakama/
 ```
 
-### 3. さくらVPS: volume にインポート
+#### 3. さくらVPS: volume にインポート
 
 ```bash
 cd /path/to/nakama
@@ -402,13 +410,13 @@ docker compose run --rm -v nakama_minio_data:/data -v $(pwd):/backup \
   alpine tar xzf /backup/minio-data.tar.gz -C /
 ```
 
-### 4. さくらVPS: 本番起動
+#### 4. さくらVPS: 本番起動
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d minio
 ```
 
-### デプロイ時に必要なもの
+#### デプロイ時に必要なもの
 
 | 項目 | 方法 |
 | ------ | ------ |
@@ -417,7 +425,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d minio
 | 設定 | `docker-compose.yml` は Git で管理済み |
 | パスワード | `.env` で本番用に変更 |
 
-### データの更新デプロイ
+#### データの更新デプロイ
 
 ローカルでファイルを追加・変更した後、本番に反映する場合:
 
@@ -439,7 +447,7 @@ docker compose exec minio mc mirror --dry-run local/avatars prod/avatars
 
 ## 本番環境の注意事項
 
-- `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` を必ず変更する
-- TLS (HTTPS) を有効化する
+- `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` は `doDeploy.sh` が自動生成する（手動変更不要）
+- TLS (HTTPS) は `doSetupHTTPS.sh` で設定する（nginx が HTTPS 終端、MinIO は HTTP のまま）
 - バックアップ戦略を検討する (`mc mirror` 等)
-- `restart: "no"` を `restart: unless-stopped` に変更する
+- `docker-compose.prod.yml` で `restart: unless-stopped` 設定済み

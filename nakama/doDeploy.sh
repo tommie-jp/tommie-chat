@@ -16,11 +16,13 @@ case "${1:-}" in
         echo "  1. ファイアウォール設定"
         echo "  2. スワップ設定（2GB 以下の場合）"
         echo "  3. Docker インストール"
-        echo "  4. Node.js インストール"
+        echo "  4. (予約)"
         echo "  5. 環境変数・セキュリティ設定（パスワード・キー自動生成）"
-        echo "  6. フロントエンドビルド（server_key 自動設定）"
-        echo "  7. Docker ログローテーション設定"
-        echo "  8. サーバー起動（Go プラグインはビルド済み前提）"
+        echo "  6. 本番用 nginx.conf 生成"
+        echo "  7. フロントエンド配置（開発環境でビルド済みの dist/ を使用）"
+        echo "  8. Docker ログローテーション設定"
+        echo "  9. サーバー起動（Go プラグインはビルド済み前提）"
+        echo " 10. MinIO バケット初期化"
         exit 0 ;;
 esac
 
@@ -119,15 +121,7 @@ else
     warn "docker グループの反映には再ログインが必要です"
 fi
 
-# ── 4. Node.js インストール ──
-step "4. Node.js インストール"
-if command -v node &>/dev/null; then
-    echo "Node.js 既にインストール済み: $(node --version)"
-else
-    curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-    echo "✅ Node.js インストール完了: $(node --version)"
-fi
+# ── 4. (予約: 将来の拡張用) ──
 
 # ── 5. 環境変数の自動生成 ──
 step "5. 環境変数の設定"
@@ -136,11 +130,15 @@ ENV_FILE="$SCRIPT_DIR/.env"
 PG_PASS=$(openssl rand -hex 16)
 SERVER_KEY=tommie-chat
 CONSOLE_PASS=$(openssl rand -hex 12)
+MINIO_USER="minio-$(openssl rand -hex 4)"
+MINIO_PASS=$(openssl rand -hex 16)
 cat > "$ENV_FILE" <<EOV
 POSTGRES_PASSWORD=$PG_PASS
 NAKAMA_SERVER_KEY=$SERVER_KEY
 NAKAMA_CONSOLE_USER=admin
 NAKAMA_CONSOLE_PASS=$CONSOLE_PASS
+MINIO_ROOT_USER=$MINIO_USER
+MINIO_ROOT_PASSWORD=$MINIO_PASS
 EOV
 # シェル環境にも export（docker compose が確実に参照できるようにする）
 set -a; source "$ENV_FILE"; set +a
@@ -150,24 +148,94 @@ echo ""
 echo "  server_key:       $SERVER_KEY"
 echo "  console.username: admin"
 echo "  console.password: $CONSOLE_PASS"
+echo "  minio.user:       $MINIO_USER"
+echo "  minio.password:   $MINIO_PASS"
 
-# ── 6. フロントエンドビルド ──
-step "6. フロントエンドビルド"
-cd "$ROOT_DIR"
-npm install
+# ── 6. 本番用 nginx.conf 生成 ──
+step "6. 本番用 nginx.conf 生成"
+NGINX_CONF="$SCRIPT_DIR/nginx.conf"
+# 開発用 nginx.conf をバックアップ（初回のみ）
+if [ ! -f "$NGINX_CONF.dev" ]; then
+    cp "$NGINX_CONF" "$NGINX_CONF.dev"
+fi
+cat > "$NGINX_CONF" <<'NGINX_EOF'
+server {
+    listen 80;
 
-# server_key をフロントエンドに埋め込んでビルド
-cat > "$ROOT_DIR/.env" <<EOV2
-VITE_SERVER_KEY=$SERVER_KEY
-VITE_DEFAULT_HOST=mmo.tommie.jp
-VITE_DEFAULT_PORT=443
-EOV2
-NODE_OPTIONS="--max-old-space-size=3072" npm run build
-rm -f "$ROOT_DIR/.env"  # ビルド後は不要（server_key は dist/ に埋め込み済み）
-echo "✅ ビルド完了（server_key 自動設定済み）"
+    root /usr/share/nginx/html;
+    index index.html;
 
-# ── 7. Docker ログローテーション ──
-step "7. Docker ログローテーション設定"
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    types {
+        image/ktx2 ktx2;
+    }
+
+    # SPA フォールバック
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Vite ビルド済みアセット — 長期キャッシュ
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # テクスチャ — 長期キャッシュ
+    location /textures/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # MinIO S3 リバースプロキシ
+    location /s3/ {
+        proxy_pass http://minio:9000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;
+    }
+
+    # Nakama HTTP API
+    location /v2/ {
+        proxy_pass http://nakama:7350;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Nakama WebSocket
+    location /ws {
+        proxy_pass http://nakama:7350;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400s;
+    }
+}
+NGINX_EOF
+echo "✅ 本番用 nginx.conf 生成完了（/s3/ → MinIO プロキシ含む）"
+
+# ── 7. フロントエンド配置 ──
+step "7. フロントエンド配置"
+if [ ! -d "$ROOT_DIR/dist" ] || [ ! -f "$ROOT_DIR/dist/index.html" ]; then
+    fail "dist/ が見つかりません。開発環境で先にビルドしてください:
+   npm run build  （開発環境で実行）
+   rsync -avz --delete dist/ deploy@<VPS>:~/tommie-chat/dist/"
+fi
+DIST_FILES=$(find "$ROOT_DIR/dist" -type f | wc -l)
+echo "  dist/ 検出: ${DIST_FILES} ファイル"
+echo "✅ フロントエンド配置確認完了（開発環境でビルド済み）"
+
+# ── 8. Docker ログローテーション ──
+step "8. Docker ログローテーション設定"
 DAEMON_JSON="/etc/docker/daemon.json"
 if [ ! -f "$DAEMON_JSON" ]; then
     sudo tee "$DAEMON_JSON" > /dev/null <<'EOF'
@@ -185,8 +253,8 @@ else
     echo "daemon.json 既存（スキップ）"
 fi
 
-# ── 8. サーバー起動 ──
-step "8. サーバー起動"
+# ── 9. サーバー起動 ──
+step "9. サーバー起動"
 cd "$SCRIPT_DIR"
 echo "  NAKAMA_SERVER_KEY=${NAKAMA_SERVER_KEY}"
 echo "  .env server_key: $(grep NAKAMA_SERVER_KEY "$ENV_FILE" | cut -d= -f2)"
@@ -198,6 +266,26 @@ if [ ! -f "$SCRIPT_DIR/modules/world.so" ]; then
 fi
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
+# ── 10. MinIO バケット初期化 ──
+step "10. MinIO バケット初期化"
+echo "MinIO の起動を待機中..."
+for i in $(seq 1 30); do
+    if docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T minio mc ready local 2>/dev/null; then
+        break
+    fi
+    sleep 2
+done
+
+# mc エイリアス設定 & バケット作成
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T minio \
+    sh -c "mc alias set local http://localhost:9000 '$MINIO_USER' '$MINIO_PASS' && \
+           mc mb --ignore-existing local/avatars && \
+           mc mb --ignore-existing local/assets && \
+           mc mb --ignore-existing local/uploads && \
+           mc anonymous set download local/avatars && \
+           mc anonymous set download local/assets"
+echo "✅ MinIO バケット初期化完了（avatars, assets, uploads）"
+
 echo ""
 echo "${GREEN}=========================================${RESET}"
 echo "${GREEN}  デプロイ完了${RESET}"
@@ -205,6 +293,7 @@ echo "${GREEN}=========================================${RESET}"
 echo ""
 echo "  Web:       http://$(hostname -I | awk '{print $1}')"
 echo "  Console:   http://127.0.0.1:7351 (admin / $CONSOLE_PASS)"
+echo "  MinIO:     http://127.0.0.1:9001 ($MINIO_USER / $MINIO_PASS)"
 echo ""
 echo "次のステップ:"
 echo "  HTTPS を設定: ./nakama/doSetupHTTPS.sh <ドメイン名>"
