@@ -23,7 +23,7 @@
   "dependencies": {
     "@babylonjs/core": "^8.53.0",
     "@babylonjs/gui": "^8.53.0",
-    "@babylonjs/loaders": "^8.53.0",
+    "@babylonjs/loaders": "^9.1.0",
     "@babylonjs/materials": "^8.53.0",
     "@heroiclabs/nakama-js": "^2.8.0"
   },
