@@ -1,17 +1,26 @@
 #!/bin/bash
-# HTTPS 設定スクリプト（Let's Encrypt）
+# HTTPS 設定スクリプト（Let's Encrypt + ホスト nginx）
 # Usage: ./nakama/doSetupHTTPS.sh <ドメイン名> [-h]
 #
 # 前提:
 #   - doDeploy.sh 実行済み（サーバー起動済み）
 #   - DNS の A レコードがこのサーバーの IP を指している
+#   - VPS 上で実行する
+#
+# 構成:
+#   ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8080/HTTP) → Nakama
+#   Docker nginx は HTTP のまま変更しない。HTTPS はホスト nginx が終端する。
 
 case "${1:-}" in
     -h|--help|"")
         echo "Usage: $0 <ドメイン名>"
         echo "  Let's Encrypt で HTTPS を設定します"
         echo ""
-        echo "例: $0 chat.example.com"
+        echo "構成:"
+        echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8080/HTTP) → Nakama"
+        echo "  Docker nginx.conf は変更しません"
+        echo ""
+        echo "例: $0 mmo.tommie.jp"
         echo ""
         echo "前提:"
         echo "  - doDeploy.sh 実行済み"
@@ -23,9 +32,6 @@ set -euo pipefail
 
 DOMAIN="$1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
-NGINX_CONF="$SCRIPT_DIR/nginx.conf"
 
 # ── 色付き出力 ──
 GREEN=$'\e[32m'
@@ -42,8 +48,30 @@ if [ "$(id -u)" -eq 0 ]; then
     fail "root で実行しないでください。sudo 権限を持つ一般ユーザーで実行してください"
 fi
 
-# ── 1. certbot インストール ──
-step "1. certbot インストール"
+# Docker nginx が起動しているか
+cd "$SCRIPT_DIR"
+if ! docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --status running 2>/dev/null | grep -q web; then
+    fail "Docker nginx (web) が起動していません。先に doDeploy.sh を実行してください"
+fi
+
+# Docker nginx (8080) に接続できるか
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ --connect-timeout 3 --max-time 5 2>/dev/null)
+if [ "$HTTP_CODE" != "200" ]; then
+    fail "Docker nginx (8080) に接続できません (HTTP $HTTP_CODE)"
+fi
+
+# ── 1. ホスト nginx インストール ──
+step "1. ホスト nginx インストール"
+if command -v nginx &>/dev/null; then
+    echo "nginx 既にインストール済み: $(nginx -v 2>&1)"
+else
+    sudo apt-get update
+    sudo apt-get install -y nginx
+    echo "✅ nginx インストール完了"
+fi
+
+# ── 2. certbot インストール ──
+step "2. certbot インストール"
 if command -v certbot &>/dev/null; then
     echo "certbot 既にインストール済み"
 else
@@ -52,25 +80,31 @@ else
     echo "✅ certbot インストール完了"
 fi
 
-# ── 2. 証明書の取得 ──
-step "2. 証明書の取得（ドメイン: $DOMAIN）"
+# ── 3. 証明書の取得 ──
+step "3. 証明書の取得（ドメイン: $DOMAIN）"
 
-# nginx を一時停止してポート80を解放
-cd "$SCRIPT_DIR"
-docker compose -f docker-compose.yml -f docker-compose.prod.yml stop web
-
-sudo certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
-
-# ── 3. nginx.conf の HTTPS 化 ──
-step "3. nginx.conf の更新"
-
-# バックアップ
-if [ ! -f "$NGINX_CONF.http" ]; then
-    cp "$NGINX_CONF" "$NGINX_CONF.http"
-    echo "HTTP版を nginx.conf.http にバックアップ"
+# 既存の証明書を確認
+if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+    echo "証明書が既に存在します。更新を試みます..."
+    sudo certbot renew --dry-run 2>/dev/null && echo "✅ 証明書は有効です" || {
+        warn "証明書の更新に失敗しました。再取得します"
+        # ホスト nginx を一時停止してポート80を解放
+        sudo systemctl stop nginx 2>/dev/null || true
+        sudo certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
+        sudo systemctl start nginx
+    }
+else
+    # ホスト nginx を一時停止してポート80を解放
+    sudo systemctl stop nginx 2>/dev/null || true
+    sudo certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
+    sudo systemctl start nginx
+    echo "✅ 証明書取得完了"
 fi
 
-cat > "$NGINX_CONF" <<NGINX_EOF
+# ── 4. ホスト nginx の HTTPS 設定 ──
+step "4. ホスト nginx 設定（/etc/nginx/sites-available/$DOMAIN）"
+
+sudo tee "/etc/nginx/sites-available/$DOMAIN" > /dev/null <<NGINX_EOF
 server {
     listen 80;
     server_name $DOMAIN;
@@ -84,114 +118,51 @@ server {
     ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
-    root /usr/share/nginx/html;
-    index index.html;
-
-    include /etc/nginx/mime.types;
-    types {
-        image/ktx2 ktx2;
-    }
-
-    gzip on;
-    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
-
     location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    location /assets/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    location /textures/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # MinIO S3 リバースプロキシ
-    location /s3/ {
-        proxy_pass http://minio:9000/;
+        proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_buffering off;
-    }
-
-    # Nakama HTTP API
-    location /v2/ {
-        proxy_pass http://nakama:7350;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
-
-    # Nakama WebSocket
-    location /ws {
-        proxy_pass http://nakama:7350;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400s;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 NGINX_EOF
 
-echo "✅ nginx.conf を HTTPS 化"
+# 有効化
+sudo ln -sf "/etc/nginx/sites-available/$DOMAIN" /etc/nginx/sites-enabled/
+# default サイトを無効化（競合防止）
+sudo rm -f /etc/nginx/sites-enabled/default
 
-# ── 4. docker-compose.yml に証明書マウントと443ポートを追加 ──
-step "4. docker-compose.yml の更新"
-
-# web サービスに letsencrypt ボリュームを追加
-if ! grep -q 'letsencrypt' "$COMPOSE_FILE"; then
-    sed -i '/nginx.conf:\/etc\/nginx\/conf.d\/default.conf:ro/a\      - /etc/letsencrypt:/etc/letsencrypt:ro' "$COMPOSE_FILE"
+# 設定テスト
+if sudo nginx -t 2>&1; then
+    sudo systemctl reload nginx
+    echo "✅ ホスト nginx 設定完了"
+else
+    fail "nginx 設定テストに失敗しました"
 fi
 
-# 443 ポートを追加
-if ! grep -q '"443:443"' "$COMPOSE_FILE"; then
-    sed -i '/"80:80"/a\      - "443:443"' "$COMPOSE_FILE"
-fi
-
-echo "✅ docker-compose.yml 更新完了"
-
-# ── 5. クライアント接続先の変更 ──
-step "5. クライアント接続先の変更"
-INDEX_HTML="$ROOT_DIR/index.html"
-
-if [ -f "$INDEX_HTML" ]; then
-    # APP_NAKAMA_HOST を変更
-    sed -i "s|APP_NAKAMA_HOST.*=.*\"[^\"]*\"|APP_NAKAMA_HOST = \"$DOMAIN\"|" "$INDEX_HTML"
-    # APP_NAKAMA_PORT を 443 に変更
-    sed -i 's|APP_NAKAMA_PORT.*=.*"[^"]*"|APP_NAKAMA_PORT = "443"|' "$INDEX_HTML"
-    # APP_NAKAMA_USE_SSL を true に変更
-    sed -i 's|APP_NAKAMA_USE_SSL.*=.*false|APP_NAKAMA_USE_SSL = true|' "$INDEX_HTML"
-    echo "✅ index.html の接続先を $DOMAIN:443 (SSL) に変更"
-
-    # フロントエンド再ビルド
-    cd "$ROOT_DIR"
-    npm run build
-    echo "✅ フロントエンド再ビルド完了"
-fi
-
-# ── 6. nginx 再起動 ──
-step "6. サーバー再起動"
-cd "$SCRIPT_DIR"
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# ── 7. 証明書の自動更新 cron ──
-step "7. 証明書の自動更新設定"
-CRON_CMD="0 3 1,15 * * certbot renew --pre-hook 'cd $SCRIPT_DIR && docker compose -f docker-compose.yml -f docker-compose.prod.yml stop web' --post-hook 'cd $SCRIPT_DIR && docker compose -f docker-compose.yml -f docker-compose.prod.yml start web'"
+# ── 5. 証明書の自動更新 cron ──
+step "5. 証明書の自動更新設定"
+CRON_CMD="0 3 1,15 * * certbot renew --pre-hook 'systemctl stop nginx' --post-hook 'systemctl start nginx'"
 
 if crontab -l 2>/dev/null | grep -q 'certbot renew'; then
     echo "certbot cron 既に設定済み"
 else
     (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
     echo "✅ 自動更新 cron 設定完了（毎月1日・15日 3:00）"
+fi
+
+# ── 6. 確認 ──
+step "6. 動作確認"
+sleep 2
+HTTPS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/" --connect-timeout 5 --max-time 10 2>/dev/null)
+if [ "$HTTPS_CODE" = "200" ]; then
+    echo "✅ https://$DOMAIN/ → HTTP $HTTPS_CODE"
+else
+    warn "https://$DOMAIN/ → HTTP $HTTPS_CODE（確認してください）"
 fi
 
 echo ""
@@ -201,5 +172,9 @@ echo "${GREEN}=========================================${RESET}"
 echo ""
 echo "  URL: https://$DOMAIN"
 echo ""
+echo "構成:"
+echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8080/HTTP) → Nakama"
+echo ""
 echo "確認:"
 echo "  curl -I https://$DOMAIN"
+echo "  ./test/doTest-https.sh $DOMAIN"

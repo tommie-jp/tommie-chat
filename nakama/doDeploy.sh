@@ -17,7 +17,7 @@ case "${1:-}" in
         echo "  2. スワップ設定（2GB 以下の場合）"
         echo "  3. Docker インストール"
         echo "  4. (予約)"
-        echo "  5. 環境変数・セキュリティ設定（パスワード・キー自動生成）"
+        echo "  5. 環境変数設定（初回のみ生成、以降は再利用）"
         echo "  6. 本番用 nginx.conf 生成"
         echo "  7. フロントエンド配置（開発環境でビルド済みの dist/ を使用）"
         echo "  8. Docker ログローテーション設定"
@@ -47,13 +47,14 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # ── 既存コンテナの停止（ポート競合防止） ──
-# docker compose down -v で確実にコンテナ・ネットワーク・ボリュームを削除
+# Bind mount（./data/）を使用するため、データはコンテナ削除後も保持される
 cd "$SCRIPT_DIR"
+
 if [ -f docker-compose.prod.yml ]; then
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v 2>/dev/null || true
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
 fi
-docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v 2>/dev/null || true
-docker compose down -v 2>/dev/null || true
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
+docker compose down 2>/dev/null || true
 # 名前ベースでも残留コンテナを削除
 EXISTING=$(docker ps -aq --filter "name=nakama" 2>/dev/null; docker ps -aq --filter "name=tommchat-prod" 2>/dev/null)
 EXISTING=$(echo "$EXISTING" | sort -u | grep -v '^$' || true)
@@ -123,16 +124,20 @@ fi
 
 # ── 4. (予約: 将来の拡張用) ──
 
-# ── 5. 環境変数の自動生成 ──
+# ── 5. 環境変数の設定 ──
 step "5. 環境変数の設定"
 ENV_FILE="$SCRIPT_DIR/.env"
-# ボリュームを毎回削除するため、パスワードも毎回再生成する
-PG_PASS=$(openssl rand -hex 16)
-SERVER_KEY=tommie-chat
-CONSOLE_PASS=$(openssl rand -hex 12)
-MINIO_USER="minio-$(openssl rand -hex 4)"
-MINIO_PASS=$(openssl rand -hex 16)
-cat > "$ENV_FILE" <<EOV
+# Bind mount でデータ永続化するため、.env が既にあれば再利用する
+if [ -f "$ENV_FILE" ]; then
+    echo ".env が既に存在します（再利用）"
+    set -a; source "$ENV_FILE"; set +a
+else
+    PG_PASS=$(openssl rand -hex 16)
+    SERVER_KEY=tommie-chat
+    CONSOLE_PASS=$(openssl rand -hex 12)
+    MINIO_USER="minio-$(openssl rand -hex 4)"
+    MINIO_PASS=$(openssl rand -hex 16)
+    cat > "$ENV_FILE" <<EOV
 POSTGRES_PASSWORD=$PG_PASS
 NAKAMA_SERVER_KEY=$SERVER_KEY
 NAKAMA_CONSOLE_USER=admin
@@ -140,13 +145,18 @@ NAKAMA_CONSOLE_PASS=$CONSOLE_PASS
 MINIO_ROOT_USER=$MINIO_USER
 MINIO_ROOT_PASSWORD=$MINIO_PASS
 EOV
-# シェル環境にも export（docker compose が確実に参照できるようにする）
-set -a; source "$ENV_FILE"; set +a
-echo "✅ .env 生成完了（パスワード・キー自動生成済み）"
+    set -a; source "$ENV_FILE"; set +a
+    echo "✅ .env 生成完了（初回生成）"
+fi
+
+SERVER_KEY="${NAKAMA_SERVER_KEY}"
+CONSOLE_PASS="${NAKAMA_CONSOLE_PASS}"
+MINIO_USER="${MINIO_ROOT_USER}"
+MINIO_PASS="${MINIO_ROOT_PASSWORD}"
 
 echo ""
 echo "  server_key:       $SERVER_KEY"
-echo "  console.username: admin"
+echo "  console.username: ${NAKAMA_CONSOLE_USER:-admin}"
 echo "  console.password: $CONSOLE_PASS"
 echo "  minio.user:       $MINIO_USER"
 echo "  minio.password:   $MINIO_PASS"
@@ -257,6 +267,8 @@ fi
 # ── 9. サーバー起動 ──
 step "9. サーバー起動"
 cd "$SCRIPT_DIR"
+# Bind mount 用ディレクトリ作成（初回のみ）
+mkdir -p "$SCRIPT_DIR/data/postgres-prod" "$SCRIPT_DIR/data/minio"
 echo "  NAKAMA_SERVER_KEY=${NAKAMA_SERVER_KEY}"
 echo "  .env server_key: $(grep NAKAMA_SERVER_KEY "$ENV_FILE" | cut -d= -f2)"
 # Go プラグイン（world.so）は開発環境でビルド済み（git に含まれる）

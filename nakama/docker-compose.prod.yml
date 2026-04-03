@@ -15,7 +15,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - data-prod:/var/lib/postgresql/data # dev の data とは別ボリューム
+      - ./data/postgres-prod:/var/lib/postgresql/data # 本番用（dev とは別ディレクトリ）
     logging:
       driver: json-file
       options:
@@ -103,5 +103,4 @@ services:
         max-size: "50m"
         max-file: "3"
 
-volumes:
-  data-prod: # 本番用 PostgreSQL データ（dev の data とは別）
+# volumes は Bind mount（./data/）を使用するため定義不要

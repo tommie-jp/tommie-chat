@@ -1,34 +1,49 @@
 #!/bin/bash
-# MinIO データマイグレーション（ローカル → さくらVPS / さくらVPS → ローカル）
+# MinIO データマイグレーション（ローカル ↔ さくらVPS）
 # Usage: ./nakama/doMigrateMinIO.sh <VPSホスト> [--pull] [SSHユーザー] [-h]
 #
-# ローカルと VPS の MinIO 間でバケットデータを同期する。
-# SSH トンネル経由で VPS の MinIO にアクセスし、mc mirror で差分同期する。
+# ローカルと VPS の MinIO データディレクトリ（Bind mount）をコピーする。
+# tar.gz にエクスポートし、SCP で転送してインポートする。
 #
 # 前提:
 #   - さくらVPS に SSH 接続可能（鍵認証）
-#   - ローカル・VPS 両方で MinIO コンテナが起動中
+#   - 開発環境（WSL2 Ubuntu 24.04）から実行する
 #
 # デフォルト: ローカル → VPS（push）
 # --pull:     VPS → ローカル（pull）
 
 case "${1:-}" in
     -h|--help|"")
-        echo "Usage: $0 <VPSホスト> [--pull] [SSHユーザー]"
-        echo "  ローカルと VPS の MinIO 間でデータを同期します"
-        echo ""
-        echo "引数:"
-        echo "  VPSホスト    SSH接続先（例: mmo.tommie.jp）"
-        echo "  --pull       VPS → ローカル（デフォルトはローカル → VPS）"
-        echo "  SSHユーザー  SSHユーザー名（デフォルト: deploy）"
-        echo ""
-        echo "例:"
-        echo "  $0 mmo.tommie.jp                    # ローカル → VPS"
-        echo "  $0 mmo.tommie.jp --pull              # VPS → ローカル"
-        echo "  $0 mmo.tommie.jp --pull ubuntu        # ユーザー指定"
-        echo ""
-        echo "同期対象バケット: avatars, assets, uploads"
-        echo "差分同期（mc mirror）: 変更・追加ファイルのみ転送"
+        cat <<'EOF'
+Usage: ./nakama/doMigrateMinIO.sh <VPSホスト> [--pull] [SSHユーザー]
+
+開発環境（WSL2 Ubuntu 24.04）から実行する。
+ローカルと VPS の MinIO データをコピーする。
+
+引数:
+  VPSホスト    SSH接続先（例: mmo.tommie.jp）
+  --pull       VPS → ローカル（デフォルトはローカル → VPS）
+  SSHユーザー  SSHユーザー名（デフォルト: deploy）
+
+処理内容:
+  1. 転送元の MinIO データディレクトリを tar.gz にエクスポート
+  2. SCP で転送先に送信
+  3. 転送先に展開
+  4. 転送先の MinIO を自動再起動
+
+バックアップ:
+  push 時、エクスポートした tar.gz を nakama/backup/ にも保存
+  3世代まで保持（それ以前は自動削除）
+
+前提:
+  - さくらVPS に SSH 鍵認証で接続可能
+  - データは Bind mount（nakama/data/minio/）で永続化
+
+例:
+  ./nakama/doMigrateMinIO.sh mmo.tommie.jp                # ローカル → VPS
+  ./nakama/doMigrateMinIO.sh mmo.tommie.jp --pull          # VPS → ローカル
+  ./nakama/doMigrateMinIO.sh mmo.tommie.jp --pull ubuntu   # ユーザー指定
+EOF
         exit 0 ;;
 esac
 
@@ -47,11 +62,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+SSH_TARGET="${SSH_USER}@${VPS_HOST}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUCKETS=("avatars" "assets" "uploads")
+TMP_DIR=$(mktemp -d)
+TMP_FILE="${TMP_DIR}/minio-data.tar.gz"
 
-# SSH トンネルのローカルポート（VPS の MinIO 9000 をフォワード）
-TUNNEL_PORT=19000
+LOCAL_DATA="$SCRIPT_DIR/data/minio"
+REMOTE_DATA="~/tommie-chat/nakama/data/minio"
 
 # ── 色付き出力 ──
 GREEN=$'\e[32m'
@@ -63,149 +80,100 @@ step() { echo ""; echo "${GREEN}━━━ $1 ━━━${RESET}"; }
 warn() { echo "${YELLOW}⚠️  $1${RESET}"; }
 fail() { echo "${RED}❌ $1${RESET}"; exit 1; }
 
-# .env から MinIO 認証情報を読み込み（ローカル用）
-if [ -f "$SCRIPT_DIR/.env" ]; then
-    set -a; source "$SCRIPT_DIR/.env"; set +a
-fi
-LOCAL_MINIO_USER="${MINIO_ROOT_USER:-minioadmin}"
-LOCAL_MINIO_PASS="${MINIO_ROOT_PASSWORD:-minioadmin}"
+# スクリプト終了時に一時ファイルを削除
+cleanup() { rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
 
 # ── 前提チェック ──
 step "0. 前提チェック"
 
-# ローカルの MinIO が起動しているか
-cd "$SCRIPT_DIR"
-LOCAL_MINIO=$(docker ps --format '{{.Names}}' --filter "name=minio" 2>/dev/null | head -1)
-if [ -z "$LOCAL_MINIO" ]; then
-    fail "ローカルの MinIO コンテナが起動していません。docker compose up -d minio を実行してください"
-fi
-echo "  ローカル MinIO: ${LOCAL_MINIO}"
-
 # SSH 接続テスト
-echo "  SSH 接続テスト: ${SSH_USER}@${VPS_HOST}"
-if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "${SSH_USER}@${VPS_HOST}" "echo ok" >/dev/null 2>&1; then
-    fail "SSH 接続に失敗しました: ${SSH_USER}@${VPS_HOST}"
+echo "  SSH 接続テスト: ${SSH_TARGET}"
+if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "${SSH_TARGET}" "echo ok" >/dev/null 2>&1; then
+    fail "SSH 接続に失敗しました: ${SSH_TARGET}"
 fi
+echo "  ✅ SSH 接続 OK"
 
-# VPS の MinIO 認証情報を取得
-REMOTE_MINIO_USER=$(ssh "${SSH_USER}@${VPS_HOST}" \
-    "grep MINIO_ROOT_USER ~/tommie-chat/nakama/.env 2>/dev/null | cut -d= -f2" || echo "")
-REMOTE_MINIO_PASS=$(ssh "${SSH_USER}@${VPS_HOST}" \
-    "grep MINIO_ROOT_PASSWORD ~/tommie-chat/nakama/.env 2>/dev/null | cut -d= -f2" || echo "")
-
-if [ -z "$REMOTE_MINIO_USER" ] || [ -z "$REMOTE_MINIO_PASS" ]; then
-    warn "VPS の .env から MinIO 認証情報を取得できません。デフォルト値を使用します"
-    REMOTE_MINIO_USER="minioadmin"
-    REMOTE_MINIO_PASS="minioadmin"
-fi
-
-# ── 1. SSH トンネル開設 ──
-step "1. SSH トンネル開設（VPS MinIO:9000 → localhost:${TUNNEL_PORT}）"
-
-# 既存トンネルがあれば終了
-if lsof -i :${TUNNEL_PORT} >/dev/null 2>&1; then
-    warn "ポート ${TUNNEL_PORT} が使用中です。既存のトンネルを終了します"
-    kill $(lsof -t -i :${TUNNEL_PORT}) 2>/dev/null || true
-    sleep 1
-fi
-
-ssh -f -N -L ${TUNNEL_PORT}:127.0.0.1:9000 "${SSH_USER}@${VPS_HOST}"
-TUNNEL_PID=$(lsof -t -i :${TUNNEL_PORT} 2>/dev/null | head -1)
-
-if [ -z "$TUNNEL_PID" ]; then
-    fail "SSH トンネルの開設に失敗しました"
-fi
-echo "  トンネル開設完了 (PID: ${TUNNEL_PID})"
-
-# スクリプト終了時にトンネルを閉じる
-cleanup() {
-    if [ -n "${TUNNEL_PID:-}" ]; then
-        kill "$TUNNEL_PID" 2>/dev/null || true
-        echo "  SSH トンネルを閉じました"
-    fi
-}
-trap cleanup EXIT
-
-# ── 2. mc エイリアス設定 ──
-step "2. mc エイリアス設定"
-
-# ローカル MinIO
-docker exec "$LOCAL_MINIO" mc alias set local http://localhost:9000 \
-    "$LOCAL_MINIO_USER" "$LOCAL_MINIO_PASS" >/dev/null 2>&1
-echo "  local  → localhost:9000"
-
-# VPS MinIO（SSH トンネル経由）
-docker exec "$LOCAL_MINIO" mc alias set remote http://host.docker.internal:${TUNNEL_PORT} \
-    "$REMOTE_MINIO_USER" "$REMOTE_MINIO_PASS" >/dev/null 2>&1
-echo "  remote → VPS:9000 (via SSH tunnel :${TUNNEL_PORT})"
-
-# 接続テスト
-if ! docker exec "$LOCAL_MINIO" mc ls remote/ >/dev/null 2>&1; then
-    fail "VPS の MinIO に接続できません。SSH トンネルまたは認証情報を確認してください"
-fi
-echo "  接続テスト OK"
-
-# ── 3. バケット同期 ──
 if [ "$DIRECTION" = "push" ]; then
-    step "3. バケット同期（ローカル → VPS）"
-    SRC="local"
-    DST="remote"
+    # ── ローカル → VPS ──
+    step "1. ローカルの MinIO データを確認"
+    if [ ! -d "$LOCAL_DATA" ] || [ -z "$(ls -A "$LOCAL_DATA" 2>/dev/null)" ]; then
+        fail "ローカルに MinIO データがありません: ${LOCAL_DATA}"
+    fi
+    LOCAL_SIZE=$(du -sh "$LOCAL_DATA" | cut -f1)
+    echo "  データ: ${LOCAL_DATA}（${LOCAL_SIZE}）"
+
+    step "2. エクスポート"
+    tar czf "$TMP_FILE" -C "$SCRIPT_DIR/data" minio
+    DUMP_SIZE=$(du -h "$TMP_FILE" | cut -f1)
+    echo "  ✅ エクスポート完了（${DUMP_SIZE}）"
+
+    # ローカルにもバックアップを保存
+    BACKUP_DIR="$SCRIPT_DIR/backup"
+    mkdir -p "$BACKUP_DIR"
+    BACKUP_FILE="$BACKUP_DIR/minio-data-$(date +%Y%m%d-%H%M%S).tar.gz"
+    cp "$TMP_FILE" "$BACKUP_FILE"
+    # 3世代まで保持
+    ls -t "$BACKUP_DIR"/minio-data-*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
+    echo "  バックアップ保存: ${BACKUP_FILE}"
+
+    step "3. VPS に転送（SCP）"
+    REMOTE_TMP=$(ssh "${SSH_TARGET}" "mktemp -d")
+    scp "$TMP_FILE" "${SSH_TARGET}:${REMOTE_TMP}/minio-data.tar.gz"
+    echo "  ✅ 転送完了"
+
+    step "4. VPS に展開"
+    ssh "${SSH_TARGET}" "mkdir -p ~/tommie-chat/nakama/data && \
+        tar xzf ${REMOTE_TMP}/minio-data.tar.gz -C ~/tommie-chat/nakama/data && \
+        rm -rf ${REMOTE_TMP}"
+    echo "  ✅ 展開完了"
+
+    step "5. VPS の MinIO を再起動"
+    ssh "${SSH_TARGET}" "cd ~/tommie-chat/nakama && \
+        docker compose -f docker-compose.yml -f docker-compose.prod.yml restart minio 2>/dev/null || \
+        docker compose restart minio 2>/dev/null || true"
+    echo "  ✅ VPS の MinIO を再起動しました"
+
 else
-    step "3. バケット同期（VPS → ローカル）"
-    SRC="remote"
-    DST="local"
-fi
-
-TOTAL_SYNCED=0
-for bucket in "${BUCKETS[@]}"; do
-    echo ""
-    echo "  --- ${bucket} ---"
-
-    # 転送元バケットの存在チェック
-    if ! docker exec "$LOCAL_MINIO" mc ls "${SRC}/${bucket}/" >/dev/null 2>&1; then
-        echo "  スキップ（転送元にバケットなし）"
-        continue
+    # ── VPS → ローカル ──
+    step "1. VPS の MinIO データを確認"
+    REMOTE_EXISTS=$(ssh "${SSH_TARGET}" "[ -d ${REMOTE_DATA} ] && ls -A ${REMOTE_DATA} 2>/dev/null | head -1")
+    if [ -z "$REMOTE_EXISTS" ]; then
+        fail "VPS に MinIO データがありません: ${REMOTE_DATA}"
     fi
+    REMOTE_SIZE=$(ssh "${SSH_TARGET}" "du -sh ${REMOTE_DATA} | cut -f1")
+    echo "  データ: ${REMOTE_DATA}（${REMOTE_SIZE}）"
 
-    # 転送先バケットがなければ作成
-    docker exec "$LOCAL_MINIO" mc mb --ignore-existing "${DST}/${bucket}" >/dev/null 2>&1
+    step "2. VPS からエクスポート"
+    REMOTE_TMP=$(ssh "${SSH_TARGET}" "mktemp -d")
+    ssh "${SSH_TARGET}" "tar czf ${REMOTE_TMP}/minio-data.tar.gz -C ~/tommie-chat/nakama/data minio"
+    echo "  ✅ エクスポート完了"
 
-    # ドライラン（転送量の確認）
-    DRY_OUTPUT=$(docker exec "$LOCAL_MINIO" mc mirror --dry-run "${SRC}/${bucket}/" "${DST}/${bucket}/" 2>&1 || true)
-    FILE_COUNT=$(echo "$DRY_OUTPUT" | grep -c "^http" || echo 0)
+    step "3. ローカルに転送（SCP）"
+    scp "${SSH_TARGET}:${REMOTE_TMP}/minio-data.tar.gz" "$TMP_FILE"
+    ssh "${SSH_TARGET}" "rm -rf ${REMOTE_TMP}"
+    DUMP_SIZE=$(du -h "$TMP_FILE" | cut -f1)
+    echo "  ✅ 転送完了（${DUMP_SIZE}）"
 
-    if [ "$FILE_COUNT" -eq 0 ]; then
-        echo "  同期済み（差分なし）"
-        continue
-    fi
+    step "4. ローカルに展開"
+    mkdir -p "$SCRIPT_DIR/data"
+    tar xzf "$TMP_FILE" -C "$SCRIPT_DIR/data"
+    echo "  ✅ 展開完了"
 
-    echo "  転送ファイル数: ${FILE_COUNT}"
-
-    # 同期実行
-    docker exec "$LOCAL_MINIO" mc mirror --overwrite "${SRC}/${bucket}/" "${DST}/${bucket}/" 2>&1 | \
-        while IFS= read -r line; do echo "    $line"; done
-
-    TOTAL_SYNCED=$((TOTAL_SYNCED + FILE_COUNT))
-    echo "  ✅ ${bucket} 同期完了"
-done
-
-# ── 4. 公開ポリシーの設定（push 時のみ） ──
-if [ "$DIRECTION" = "push" ]; then
-    step "4. 公開ポリシー設定（VPS 側）"
-    docker exec "$LOCAL_MINIO" mc anonymous set download remote/avatars >/dev/null 2>&1 && echo "  avatars: public-read" || true
-    docker exec "$LOCAL_MINIO" mc anonymous set download remote/assets >/dev/null 2>&1 && echo "  assets:  public-read" || true
-    echo "  uploads: private（変更なし）"
+    step "5. ローカルの MinIO を再起動"
+    cd "$SCRIPT_DIR"
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml restart minio 2>/dev/null || \
+        docker compose restart minio 2>/dev/null || true
+    echo "  ✅ ローカルの MinIO を再起動しました"
 fi
 
 echo ""
 echo "${GREEN}=========================================${RESET}"
-echo "${GREEN}  MinIO データ同期完了${RESET}"
+echo "${GREEN}  MinIO データコピー完了${RESET}"
 echo "${GREEN}=========================================${RESET}"
 echo ""
 if [ "$DIRECTION" = "push" ]; then
-    echo "  方向:   ローカル → VPS (${SSH_USER}@${VPS_HOST})"
+    echo "  方向: ローカル → VPS (${SSH_TARGET})"
 else
-    echo "  方向:   VPS (${SSH_USER}@${VPS_HOST}) → ローカル"
+    echo "  方向: VPS (${SSH_TARGET}) → ローカル"
 fi
-echo "  転送数: ${TOTAL_SYNCED} ファイル"
-echo "  バケット: ${BUCKETS[*]}"
