@@ -57,12 +57,12 @@ cd "$SCRIPT_DIR"
 if [ -d "tommie-chat" ]; then
     read -p "tommie-chat ディレクトリが既に存在します。削除しますか？ (y/N): " ans
     if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-        # 既存コンテナ・ボリュームを停止・削除
+        # 既存コンテナを停止・削除（Bind mount のデータは保持される）
         echo "既存のコンテナを停止・削除します..."
         cd tommie-chat/nakama 2>/dev/null && {
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v 2>/dev/null || true
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v 2>/dev/null || true
-            docker compose down -v 2>/dev/null || true
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
+            docker compose down 2>/dev/null || true
             cd "$SCRIPT_DIR"
         } || true
         # 残留コンテナがあれば強制削除

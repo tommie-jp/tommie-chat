@@ -24,7 +24,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
     restart: "no"
     volumes:
-      - data:/var/lib/postgresql/data # DB永続化
+      - ./data/postgres:/var/lib/postgresql/data # DB永続化（Bind mount）
     expose:
       - "5432"
     healthcheck:
@@ -135,7 +135,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     restart: "no"
     volumes:
-      - minio_data:/data
+      - ./data/minio:/data # MinIO永続化（Bind mount）
     expose:
       - "9000"  # S3 API
       - "9001"  # Web管理コンソール
@@ -145,6 +145,4 @@ services:
       timeout: 3s
       retries: 5
 
-volumes:
-  data: # PostgreSQL データ永続化ボリューム
-  minio_data: # MinIO データ永続化ボリューム
+# volumes は Bind mount（./data/）を使用するため定義不要

@@ -36,6 +36,7 @@ nakama/modules/main.js
 nakama/node_modules/
 data/
 nakama/log
+nakama/backup/
 
 # --- Temporary / Work ---
 *.tmp

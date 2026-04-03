@@ -107,9 +107,9 @@ if ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
         echo "  既存コンテナを停止・削除中..."
         ssh "${SSH_TARGET}" bash -c "'
             cd ${REMOTE_DIR}/nakama 2>/dev/null && {
-                docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v 2>/dev/null || true
-                docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v 2>/dev/null || true
-                docker compose down -v 2>/dev/null || true
+                docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
+                docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
+                docker compose down 2>/dev/null || true
             } || true
             REMAINING=\$(docker ps -aq --filter \"name=nakama\" 2>/dev/null; docker ps -aq --filter \"name=tommchat-prod\" 2>/dev/null)
             REMAINING=\$(echo \"\$REMAINING\" | sort -u | grep -v \"^\$\" || true)
