@@ -122,16 +122,22 @@ if [ "$DIRECTION" = "push" ]; then
     scp "$TMP_FILE" "${SSH_TARGET}:${REMOTE_TMP}/minio-data.tar.gz"
     echo "  ✅ 転送完了"
 
-    step "4. VPS に展開"
+    step "4. VPS の MinIO を停止 → 展開 → 再起動"
+    # MinIO を停止してからデータを上書き
+    ssh "${SSH_TARGET}" "cd ~/tommie-chat/nakama && \
+        docker compose -f docker-compose.yml -f docker-compose.prod.yml stop minio 2>/dev/null || \
+        docker compose stop minio 2>/dev/null || true"
+    echo "  MinIO 停止"
+
     ssh "${SSH_TARGET}" "mkdir -p ~/tommie-chat/nakama/data && \
+        sudo rm -rf ~/tommie-chat/nakama/data/minio && \
         tar xzf ${REMOTE_TMP}/minio-data.tar.gz -C ~/tommie-chat/nakama/data && \
         rm -rf ${REMOTE_TMP}"
     echo "  ✅ 展開完了"
 
-    step "5. VPS の MinIO を再起動"
     ssh "${SSH_TARGET}" "cd ~/tommie-chat/nakama && \
-        docker compose -f docker-compose.yml -f docker-compose.prod.yml restart minio 2>/dev/null || \
-        docker compose restart minio 2>/dev/null || true"
+        docker compose -f docker-compose.yml -f docker-compose.prod.yml start minio 2>/dev/null || \
+        docker compose start minio 2>/dev/null || true"
     echo "  ✅ VPS の MinIO を再起動しました"
 
 else
@@ -155,15 +161,19 @@ else
     DUMP_SIZE=$(du -h "$TMP_FILE" | cut -f1)
     echo "  ✅ 転送完了（${DUMP_SIZE}）"
 
-    step "4. ローカルに展開"
+    step "4. ローカルの MinIO を停止 → 展開 → 再起動"
+    cd "$SCRIPT_DIR"
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml stop minio 2>/dev/null || \
+        docker compose stop minio 2>/dev/null || true
+    echo "  MinIO 停止"
+
+    rm -rf "$SCRIPT_DIR/data/minio"
     mkdir -p "$SCRIPT_DIR/data"
     tar xzf "$TMP_FILE" -C "$SCRIPT_DIR/data"
     echo "  ✅ 展開完了"
 
-    step "5. ローカルの MinIO を再起動"
-    cd "$SCRIPT_DIR"
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml restart minio 2>/dev/null || \
-        docker compose restart minio 2>/dev/null || true
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml start minio 2>/dev/null || \
+        docker compose start minio 2>/dev/null || true
     echo "  ✅ ローカルの MinIO を再起動しました"
 fi
 
