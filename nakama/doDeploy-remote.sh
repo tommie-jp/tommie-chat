@@ -6,10 +6,16 @@
 # フロントエンドビルド → git clone → dist/ 転送 → doDeploy.sh を一括で行う。
 SCRIPT_VERSION="2026-04-03"
 
-case "${1:-}" in
-    -h|--help)
-        cat <<'EOF'
-Usage: ./nakama/doDeploy-remote.sh <VPSホスト> [SSHユーザー]
+# ── 引数解析 ──
+VPS_HOST=""
+SSH_USER="deploy"
+FORCE_YES=false
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)
+            cat <<'EOF'
+Usage: ./nakama/doDeploy-remote.sh [-y] <VPSホスト> [SSHユーザー]
 
 開発環境（WSL2 Ubuntu 24.04）から VPS へ一括デプロイ
 
@@ -22,6 +28,7 @@ Usage: ./nakama/doDeploy-remote.sh <VPSホスト> [SSHユーザー]
 引数:
   VPSホスト    SSH接続先（例: mmo.tommie.jp, 123.45.67.89）
   SSHユーザー  SSHユーザー名（デフォルト: deploy）
+  -y, --yes    既存ディレクトリを確認なしで削除
 
 前提:
   - VPS に SSH 鍵認証で接続可能
@@ -29,27 +36,29 @@ Usage: ./nakama/doDeploy-remote.sh <VPSホスト> [SSHユーザー]
 
 例:
   ./nakama/doDeploy-remote.sh mmo.tommie.jp
-  ./nakama/doDeploy-remote.sh mmo.tommie.jp deploy
+  ./nakama/doDeploy-remote.sh -y mmo.tommie.jp
+  ./nakama/doDeploy-remote.sh mmo.tommie.jp -y deploy
 EOF
-        exit 0 ;;
-    -v|--version)
-        echo "doDeploy-remote.sh  version: ${SCRIPT_VERSION}"
-        exit 0 ;;
-    "")
-        echo "Usage: $0 <VPSホスト> [SSHユーザー]  (-h でヘルプ表示)"
-        exit 1 ;;
-esac
-
-VPS_HOST="$1"
-shift
-SSH_USER="deploy"
-FORCE_YES=false
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -y|--yes) FORCE_YES=true; shift ;;
-        *) SSH_USER="$1"; shift ;;
+            exit 0 ;;
+        -v|--version)
+            echo "doDeploy-remote.sh  version: ${SCRIPT_VERSION}"
+            exit 0 ;;
+        -y|--yes)
+            FORCE_YES=true ;;
+        *)
+            if [ -z "$VPS_HOST" ]; then
+                VPS_HOST="$arg"
+            else
+                SSH_USER="$arg"
+            fi ;;
     esac
 done
+
+if [ -z "$VPS_HOST" ]; then
+    echo "Usage: $0 [-y] <VPSホスト> [SSHユーザー]  (-h でヘルプ表示)"
+    exit 1
+fi
+
 SSH_TARGET="${SSH_USER}@${VPS_HOST}"
 REMOTE_DIR="~/tommie-chat"
 
