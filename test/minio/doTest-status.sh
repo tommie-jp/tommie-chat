@@ -25,7 +25,12 @@ EOF
     exit 0
 fi
 
-COMPOSE="docker compose -f nakama/docker-compose.yml"
+# prod 構成を検出（docker-compose.prod.yml があれば使用）
+if [ -f nakama/docker-compose.prod.yml ] && docker compose -f nakama/docker-compose.yml -f nakama/docker-compose.prod.yml ps --status running 2>/dev/null | grep -q minio; then
+    COMPOSE="docker compose -f nakama/docker-compose.yml -f nakama/docker-compose.prod.yml"
+else
+    COMPOSE="docker compose -f nakama/docker-compose.yml"
+fi
 
 # .env から MinIO 認証情報を読み込み
 if [ -f nakama/.env ]; then
