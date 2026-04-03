@@ -41,7 +41,15 @@ EOF
 esac
 
 VPS_HOST="$1"
-SSH_USER="${2:-deploy}"
+shift
+SSH_USER="deploy"
+FORCE_YES=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y|--yes) FORCE_YES=true; shift ;;
+        *) SSH_USER="$1"; shift ;;
+    esac
+done
 SSH_TARGET="${SSH_USER}@${VPS_HOST}"
 REMOTE_DIR="~/tommie-chat"
 
@@ -102,7 +110,13 @@ step "2. VPS に git clone"
 # 既存ディレクトリの確認
 if ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
     echo "  ${REMOTE_DIR} が既に存在します"
-    read -p "  削除して再クローンしますか？ (y/N): " ans
+    ans="n"
+    if [ "$FORCE_YES" = true ]; then
+        ans="y"
+        echo "  -y 指定: 自動削除"
+    else
+        read -p "  削除して再クローンしますか？ (y/N): " ans
+    fi
     if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
         echo "  既存コンテナを停止・削除中..."
         ssh "${SSH_TARGET}" bash -c "'
