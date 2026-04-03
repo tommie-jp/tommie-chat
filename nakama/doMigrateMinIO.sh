@@ -49,18 +49,28 @@ esac
 
 set -euo pipefail
 
-VPS_HOST="$1"
-shift
-
-# オプション解析
-DIRECTION="push"
+# ── 引数解析 ──
+VPS_HOST=""
 SSH_USER="deploy"
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --pull) DIRECTION="pull"; shift ;;
-        *) SSH_USER="$1"; shift ;;
+DIRECTION="push"
+
+for arg in "$@"; do
+    case "$arg" in
+        --pull) DIRECTION="pull" ;;
+        -*) ;; # 不明なフラグは無視
+        *)
+            if [ -z "$VPS_HOST" ]; then
+                VPS_HOST="$arg"
+            else
+                SSH_USER="$arg"
+            fi ;;
     esac
 done
+
+if [ -z "$VPS_HOST" ]; then
+    echo "Usage: $0 <VPSホスト> [--pull] [SSHユーザー]  (-h でヘルプ表示)"
+    exit 1
+fi
 
 SSH_TARGET="${SSH_USER}@${VPS_HOST}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
