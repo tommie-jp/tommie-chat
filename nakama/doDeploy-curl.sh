@@ -3,8 +3,7 @@
 # Usage: ./doDeploy-curl.sh [-h] [-v]
 #
 # さくらVPS 上で実行する。
-# git clone → doDeploy.sh を一括で行う。
-# フロントエンド（dist/）は開発環境から rsync で事前に転送しておくこと。
+# git clone 後、開発環境から dist/ を rsync してもらい、doDeploy.sh を実行する。
 SCRIPT_VERSION="2026-04-03"
 
 case "${1:-}" in
@@ -12,24 +11,33 @@ case "${1:-}" in
         cat <<'EOF'
 Usage: ./doDeploy-curl.sh [-h] [-v]
 
-さくらVPS への本番デプロイ（VPS 上で実行）
+さくらVPS 本番デプロイ（VPS 上で実行）
 
-git clone して doDeploy.sh を実行します。
+git clone → dist/ 転送待ち → doDeploy.sh を実行します。
 任意のディレクトリに配置して使えます。
 
 処理内容:
   1. tommie-chat リポジトリを git clone
-  2. nakama/doDeploy.sh（Docker 環境構築・サーバー起動・MinIO 初期化）
+  2. dist/ の転送を待機（開発環境から rsync）
+  3. nakama/doDeploy.sh（Docker 環境構築・サーバー起動・MinIO 初期化）
 
 前提:
   - VPS に deploy ユーザーで SSH ログイン済み
-  - フロントエンド（dist/）を開発環境から rsync 済み
-    （rsync -avz --delete dist/ deploy@<VPS>:~/tommie-chat/dist/）
+  - 開発環境（WSL2 Ubuntu 24.04）に Node.js がインストール済み
 
-セットアップ:
+手順:
+  # --- VPS で実行 ---
   curl -fsSL https://raw.githubusercontent.com/open-tommie/tommie-chat/main/nakama/doDeploy-curl.sh -o doDeploy-curl.sh
   chmod +x doDeploy-curl.sh
   ./doDeploy-curl.sh
+  # → git clone 後に rsync コマンドが表示される
+
+  # --- 開発環境（WSL2）で実行 ---
+  cd ~/24-mmo-Tommie-chat
+  npm run build
+  rsync -avz --delete dist/ deploy@<VPS_IP>:~/tommie-chat/dist/
+
+  # → VPS 側で Enter を押すとデプロイが続行される
 EOF
         exit 0 ;;
     -v|--version)
@@ -74,17 +82,36 @@ fi
 # ── git clone ──
 git clone https://github.com/open-tommie/tommie-chat.git
 
-# ── dist/ の確認（rsync 済みか） ──
-if [ ! -d "tommie-chat/dist" ] || [ ! -f "tommie-chat/dist/index.html" ]; then
+# ── dist/ の転送待ち ──
+VPS_IP=$(hostname -I | awk '{print $1}')
+DIST_DIR="${SCRIPT_DIR}/tommie-chat/dist"
+
+if [ ! -d "$DIST_DIR" ] || [ ! -f "$DIST_DIR/index.html" ]; then
     echo ""
-    echo "⚠️  dist/ が見つかりません。"
-    echo "   開発環境（WSL2）で以下を実行してから再度このスクリプトを実行してください:"
+    echo "━━━ dist/ の転送待ち ━━━"
     echo ""
-    echo "   npm run build"
-    echo "   rsync -avz --delete dist/ deploy@$(hostname -I | awk '{print $1}'):${SCRIPT_DIR}/tommie-chat/dist/"
+    echo "開発環境（WSL2）で以下を実行してください:"
     echo ""
-    exit 1
+    echo "  cd ~/24-mmo-Tommie-chat"
+    echo "  cat > .env <<'EOF'"
+    echo "  VITE_SERVER_KEY=tommie-chat"
+    echo "  VITE_DEFAULT_HOST=mmo.tommie.jp"
+    echo "  VITE_DEFAULT_PORT=443"
+    echo "  EOF"
+    echo "  npm run build"
+    echo "  rm .env"
+    echo "  rsync -avz --delete dist/ deploy@${VPS_IP}:${DIST_DIR}/"
+    echo ""
+    read -p "rsync 完了後、Enter を押してください..."
+
+    if [ ! -f "$DIST_DIR/index.html" ]; then
+        echo "❌ dist/index.html が見つかりません。rsync が正しく実行されたか確認してください。"
+        exit 1
+    fi
 fi
+
+DIST_FILES=$(find "$DIST_DIR" -type f | wc -l)
+echo "✅ dist/ 確認完了（${DIST_FILES} ファイル）"
 
 # ── doDeploy.sh 実行 ──
 cd tommie-chat/nakama
