@@ -87,12 +87,13 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    gzip on;
-    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
-
+    include /etc/nginx/mime.types;
     types {
         image/ktx2 ktx2;
     }
+
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
 
     location / {
         try_files \$uri \$uri/ /index.html;
