@@ -116,6 +116,13 @@ if ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
             if [ -n \"\$REMAINING\" ]; then
                 echo \"\$REMAINING\" | xargs -r docker rm -f
             fi
+            # data/ と .env は保持し、それ以外を削除して再クローン
+            if [ -d ${REMOTE_DIR}/nakama/data ]; then
+                mv ${REMOTE_DIR}/nakama/data /tmp/_tommie_data_bak
+            fi
+            if [ -f ${REMOTE_DIR}/nakama/.env ]; then
+                cp ${REMOTE_DIR}/nakama/.env /tmp/_tommie_env_bak
+            fi
             rm -rf ${REMOTE_DIR}
         '"
         echo "  削除しました"
@@ -129,6 +136,18 @@ fi
 if ! ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
     ssh "${SSH_TARGET}" "git clone https://github.com/open-tommie/tommie-chat.git ${REMOTE_DIR}"
 fi
+
+# data/ と .env を復元
+ssh "${SSH_TARGET}" bash -c "'
+    if [ -d /tmp/_tommie_data_bak ]; then
+        mv /tmp/_tommie_data_bak ${REMOTE_DIR}/nakama/data
+        echo \"  data/ を復元しました\"
+    fi
+    if [ -f /tmp/_tommie_env_bak ]; then
+        mv /tmp/_tommie_env_bak ${REMOTE_DIR}/nakama/.env
+        echo \"  .env を復元しました\"
+    fi
+'"
 echo "✅ リポジトリ準備完了"
 
 # ── 3. dist/ を VPS に転送 ──
