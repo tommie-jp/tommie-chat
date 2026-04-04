@@ -115,12 +115,15 @@
         /* 座標表示は #app-footer-version 内の #coord-display span に表示 */
         #app-footer-version {
             display: flex !important;
-            justify-content: space-between !important;
+            justify-content: flex-end !important;
             align-items: baseline !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             -webkit-user-select: none;
             user-select: none;
+        }
+        body.dev-mode #app-footer-version {
+            justify-content: space-between !important;
         }
 
         /* ===== チャットオーバーレイ（アバター画面上に常時表示） ===== */
