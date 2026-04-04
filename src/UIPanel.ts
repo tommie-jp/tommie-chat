@@ -173,8 +173,8 @@ export function setupHtmlUI(game: GameScene): void {
             }
             // スマホ: パネルヘッダーのドラッグでもデバイダーを移動（ポートレートのみ）
             if (isMobileDev) {
-                const headerIds = ["user-list-header", "chat-history-header", "server-settings-header",
-                                   "server-log-header", "ping-header", "ccu-header", "debug-title-bar", "about-panel-header", "displayname-header"];
+                const headerIds = ["user-list-header", "chat-history-header", "chat-settings-header",
+                                   "server-settings-header", "server-log-header", "ping-header", "ccu-header", "debug-title-bar", "about-panel-header", "displayname-header"];
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -460,6 +460,47 @@ export function setupHtmlUI(game: GameScene): void {
                     } else {
                         pingLog(`RPC: FAILED (${location.host})`);
                     }
+                });
+            }
+        }
+    }
+    // ===== チャット設定パネル ドラッグ & 閉じる =====
+    {
+        const csPanel  = document.getElementById("chat-settings-panel") as HTMLElement;
+        const csHeader = document.getElementById("chat-settings-header") as HTMLElement;
+        const csClose  = document.getElementById("chat-settings-close") as HTMLElement;
+
+        if (csPanel && csHeader) {
+            if (!isMobileDev) {
+                let isDrag = false, offX = 0, offY = 0;
+                csHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                    if ((e.target as HTMLElement).id === "chat-settings-close") return;
+                    isDrag = true;
+                    offX = e.clientX - csPanel.getBoundingClientRect().left;
+                    offY = e.clientY - csPanel.getBoundingClientRect().top;
+                    csHeader.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+                document.addEventListener("pointermove", (e: PointerEvent) => {
+                    if (!isDrag) return;
+                    csPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    csPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                    csPanel.style.right = "auto";
+                });
+                document.addEventListener("pointerup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                });
+            }
+
+            if (csClose) {
+                csClose.addEventListener("click", () => {
+                    csPanel.style.display = "none";
+                    const sCk = (k: string, v: string) =>
+                        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                    sCk("showChatSettings", "0");
+                    const mb = document.getElementById("menu-chatsettings");
+                    if (mb) mb.textContent = "　 " + t("menu.chatsettings");
                 });
             }
         }
@@ -1198,7 +1239,7 @@ export function setupHtmlUI(game: GameScene): void {
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
-        addChatHistory("[system]", t("system.user_joined").replace("{username}", username));
+        addChatHistory("[system]", t("system.user_joined").replace("{username}", `<span class="chat-ol-name">${username}</span>`));
         { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
     };
     game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
@@ -1210,7 +1251,7 @@ export function setupHtmlUI(game: GameScene): void {
                 userMap.set(sessionId, { ...existing, channel: "match" });
             } else {
                 userMap.delete(sessionId);
-                addChatHistory("[system]", t("system.user_left").replace("{username}", uname));
+                addChatHistory("[system]", t("system.user_left").replace("{username}", `<span class="chat-ol-name">${uname}</span>`));
             }
         }
         scheduleRenderUserList();

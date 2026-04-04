@@ -896,6 +896,63 @@
         #logout-cancel-btn { background: rgba(100,100,100,0.6); }
         #logout-cancel-btn:hover { background: rgba(100,100,100,0.8); }
 
+        /* ===== チャット設定パネル ===== */
+        #chat-settings-panel {
+            position: fixed;
+            top: 15px;
+            right: 320px;
+            width: 240px;
+            min-width: 180px;
+            background: rgba(255, 255, 255, 0.88);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+            z-index: 100;
+            overflow: hidden;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            color: #000;
+            resize: both;
+            display: flex;
+            flex-direction: column;
+        }
+        #chat-settings-header {
+            padding: 4px 8px;
+            font-weight: bold;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(0,0,0,0.15);
+            background: rgba(255,255,255,0.4);
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            touch-action: none;
+        }
+        #chat-settings-close {
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            opacity: 0.6;
+            padding: 4px 6px;
+        }
+        #chat-settings-close:hover { opacity: 1; }
+        #chat-settings-body {
+            padding: 6px 8px;
+        }
+        #chat-settings-body table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #chat-settings-body .label {
+            font-size: 11px;
+            padding: 3px 4px;
+            white-space: nowrap;
+        }
+        #chat-settings-body .value {
+            text-align: right;
+            padding: 3px 4px;
+        }
+
         /* ===== tommieChatについてパネル ===== */
         #about-panel {
             position: fixed;
@@ -1262,6 +1319,7 @@
             /* --- パネル共通 --- */
             #user-list-panel,
             #chat-history-panel,
+            #chat-settings-panel,
             #server-settings-panel,
             #server-log-panel,
             #ping-panel,
@@ -1560,6 +1618,7 @@
             /* ポートレート: パネルのbottomをセリフ入力の上に */
             #user-list-panel,
             #chat-history-panel,
+            #chat-settings-panel,
             #server-settings-panel,
             #server-log-panel,
             #ping-panel,
@@ -1705,6 +1764,7 @@
             /* パネルは区切り位置から画面右端まで */
             #user-list-panel,
             #chat-history-panel,
+            #chat-settings-panel,
             #server-settings-panel,
             #server-log-panel,
             #ping-panel,
@@ -1763,6 +1823,7 @@
             #ping-display { top: 20px !important; }
             #user-list-panel,
             #chat-history-panel,
+            #chat-settings-panel,
             #server-settings-panel,
             #server-log-panel,
             #ping-panel,
@@ -1778,6 +1839,7 @@
         /* ===== ダークテーマ（PC・モバイル共通） ===== */
         body.theme-dark #user-list-panel,
         body.theme-dark #chat-history-panel,
+        body.theme-dark #chat-settings-panel,
         body.theme-dark #server-settings-panel,
         body.theme-dark #server-log-panel,
         body.theme-dark #ping-panel,
@@ -2223,60 +2285,6 @@
                     <option value="dark" data-i18n="dbg.theme.dark">背景黒</option>
                 </select>
             </td></tr>
-            <tr><td colspan="2" style="padding:4px 0 0 0;">
-                <div style="background:rgba(0,0,0,0.12);border-radius:4px;padding:2px 6px 4px 6px;">
-                <div style="font-weight:bold;font-size:11px;color:#333;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.2);padding-bottom:1px;">Chat Overlay</div>
-                <table style="width:100%;border-collapse:collapse;">
-                    <tr><td class="label" title="02c.Chat OL&#10;チャットオーバーレイの最大表示行数を設定します。&#10;アバター画面の左下に表示されるリアルタイムチャットログの行数です。&#10;0にするとオーバーレイを非表示にします。" data-i18n="dbg.02c">02c.行数</td><td class="value">
-                        <select id="chatOlMaxSelect" class="debug-select">
-                            <option value="0" data-i18n="dbg.ol.0">0 (非表示)</option>
-                            <option value="3" data-i18n="dbg.ol.3">3行</option>
-                            <option value="5" selected data-i18n="dbg.ol.5">5行</option>
-                            <option value="8" data-i18n="dbg.ol.8">8行</option>
-                            <option value="10" data-i18n="dbg.ol.10">10行</option>
-                            <option value="15" data-i18n="dbg.ol.15">15行</option>
-                            <option value="20" data-i18n="dbg.ol.20">20行</option>
-                        </select>
-                    </td></tr>
-                    <tr><td class="label" title="02d.OL BG&#10;チャットオーバーレイの背景色と透明度を設定します。" data-i18n="dbg.02d">02d.背景</td><td class="value">
-                        <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-                            <input id="chatOlBgColor" class="debug-color" type="color" value="#DFEED4" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;flex-shrink:0;">
-                            <select id="chatOlBgAlpha" class="debug-select" style="width:auto;">
-                                <option value="0">0%</option>
-                                <option value="0.2">20%</option>
-                                <option value="0.3">30%</option>
-                                <option value="0.45" selected>45%</option>
-                                <option value="0.6">60%</option>
-                                <option value="0.8">80%</option>
-                            </select>
-                        </div>
-                    </td></tr>
-                    <tr><td class="label" title="02e.OL Font&#10;チャットオーバーレイの文字サイズと文字色を設定します。" data-i18n="dbg.02e">02e.文字</td><td class="value">
-                        <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-                            <input id="chatOlFontColor" class="debug-color" type="color" value="#5c5c5c" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;flex-shrink:0;">
-                            <select id="chatOlFontSize" class="debug-select" style="width:auto;">
-                                <option value="9" style="font-size:9px;" data-i18n="dbg.font.9">すごく小さい</option>
-                                <option value="11" style="font-size:11px;" data-i18n="dbg.font.11">小さい</option>
-                                <option value="12" style="font-size:12px;" data-i18n="dbg.font.12">少し小さい</option>
-                                <option value="13" style="font-size:13px;" selected data-i18n="dbg.font.13">普通</option>
-                                <option value="15" style="font-size:15px;" data-i18n="dbg.font.15">少し大きい</option>
-                                <option value="18" style="font-size:18px;" data-i18n="dbg.font.18">大きい</option>
-                                <option value="22" style="font-size:22px;" data-i18n="dbg.font.22">すごく大きい</option>
-                            </select>
-                        </div>
-                    </td></tr>
-                    <tr><td class="label" title="02e2.OL 時刻色&#10;チャットオーバーレイの時刻部分の文字色" data-i18n="dbg.02e2">02e2.時刻色</td><td class="value">
-                        <input id="chatOlTimeColor" class="debug-color" type="color" value="#999999" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;">
-                    </td></tr>
-                    <tr><td class="label" title="02e3.OL 名前色&#10;チャットオーバーレイの表示名部分の文字色" data-i18n="dbg.02e3">02e3.名前色</td><td class="value">
-                        <input id="chatOlNameColor" class="debug-color" type="color" value="#2a7a2a" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;">
-                    </td></tr>
-                    <tr><td class="label" title="02f.OL Wrap&#10;チャットオーバーレイの文字列を折り返すかどうかを設定します。&#10;On: 長い文字列を折り返して全文表示&#10;Off: 1行で省略（…）表示" data-i18n="dbg.02f">02f.折返</td><td class="value">
-                        <button id="chatOlWrapBtn" class="debug-btn">On</button>
-                    </td></tr>
-                </table>
-                </div>
-            </td></tr>
             <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale</td><td class="value">
                 <select id="scaleSelect" class="debug-select">
                     <option value="0.50" data-i18n="dbg.scale.050">0.50 Retina/4K クッキリ</option>
@@ -2619,6 +2627,7 @@
         <button class="menu-item dev-only" id="menu-serverlog" data-i18n-prefix="menu.serverlog">✓ サーバ接続ログ</button>
         <button class="menu-item" id="menu-userlist" data-i18n-prefix="menu.userlist">✓ プレイヤーリスト</button>
         <button class="menu-item" id="menu-chathistory" data-i18n-prefix="menu.chathistory">✓ チャット履歴</button>
+        <button class="menu-item" id="menu-chatsettings" data-i18n-prefix="menu.chatsettings">　 チャット設定</button>
         <button class="menu-item dev-only" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
         <button class="menu-item dev-only" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
@@ -2666,6 +2675,64 @@
             <div class="about-ops-sp" id="about-ops-sp"></div>
             <hr style="margin:8px 0;border-color:rgba(0,0,0,0.15);">
             <p style="margin-top:8px;" id="about-app-credits"></p>
+        </div>
+    </div>
+
+    <div id="chat-settings-panel" style="display:none;">
+        <div id="chat-settings-header">
+            <span title="チャット設定&#10;──────────&#10;チャットオーバーレイ（アバター画面に重ねて表示される&#10;リアルタイムチャットログ）の表示設定を変更できます。" data-i18n="menu.chatsettings">チャット設定</span>
+            <span id="chat-settings-close">❌️</span>
+        </div>
+        <div id="chat-settings-body">
+        <table>
+            <tr><td class="label" title="1.行数&#10;チャットオーバーレイの最大表示行数を設定します。&#10;アバター画面の左下に表示されるリアルタイムチャットログの行数です。&#10;0にするとオーバーレイを非表示にします。" data-i18n="dbg.02c">1.行数</td><td class="value">
+                <select id="chatOlMaxSelect" class="debug-select">
+                    <option value="0" data-i18n="dbg.ol.0">0 (非表示)</option>
+                    <option value="3" data-i18n="dbg.ol.3">3行</option>
+                    <option value="5" selected data-i18n="dbg.ol.5">5行</option>
+                    <option value="8" data-i18n="dbg.ol.8">8行</option>
+                    <option value="10" data-i18n="dbg.ol.10">10行</option>
+                    <option value="15" data-i18n="dbg.ol.15">15行</option>
+                    <option value="20" data-i18n="dbg.ol.20">20行</option>
+                </select>
+            </td></tr>
+            <tr><td class="label" title="2.背景&#10;チャットオーバーレイの背景色と透明度を設定します。" data-i18n="dbg.02d">2.背景</td><td class="value">
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+                    <input id="chatOlBgColor" class="debug-color" type="color" value="#DFEED4" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;flex-shrink:0;">
+                    <select id="chatOlBgAlpha" class="debug-select" style="width:auto;">
+                        <option value="0">0%</option>
+                        <option value="0.2">20%</option>
+                        <option value="0.3">30%</option>
+                        <option value="0.45" selected>45%</option>
+                        <option value="0.6">60%</option>
+                        <option value="0.8">80%</option>
+                    </select>
+                </div>
+            </td></tr>
+            <tr><td class="label" title="3.文字&#10;チャットオーバーレイの文字サイズと文字色を設定します。" data-i18n="dbg.02e">3.文字</td><td class="value">
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+                    <input id="chatOlFontColor" class="debug-color" type="color" value="#5c5c5c" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;flex-shrink:0;">
+                    <select id="chatOlFontSize" class="debug-select" style="width:auto;">
+                        <option value="9" style="font-size:9px;" data-i18n="dbg.font.9">すごく小さい</option>
+                        <option value="11" style="font-size:11px;" data-i18n="dbg.font.11">小さい</option>
+                        <option value="12" style="font-size:12px;" data-i18n="dbg.font.12">少し小さい</option>
+                        <option value="13" style="font-size:13px;" selected data-i18n="dbg.font.13">普通</option>
+                        <option value="15" style="font-size:15px;" data-i18n="dbg.font.15">少し大きい</option>
+                        <option value="18" style="font-size:18px;" data-i18n="dbg.font.18">大きい</option>
+                        <option value="22" style="font-size:22px;" data-i18n="dbg.font.22">すごく大きい</option>
+                    </select>
+                </div>
+            </td></tr>
+            <tr><td class="label" title="4.時刻色&#10;チャットオーバーレイの時刻部分の文字色" data-i18n="dbg.02e2">4.時刻色</td><td class="value">
+                <input id="chatOlTimeColor" class="debug-color" type="color" value="#999999" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;">
+            </td></tr>
+            <tr><td class="label" title="5.名前色&#10;チャットオーバーレイの表示名部分の文字色。&#10;表示名が未設定の場合の @デバイスID にも適用されます。" data-i18n="dbg.02e3">5.名前色</td><td class="value">
+                <input id="chatOlNameColor" class="debug-color" type="color" value="#2a7a2a" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;">
+            </td></tr>
+            <tr><td class="label" title="6.折返&#10;チャットオーバーレイの文字列を折り返すかどうかを設定します。&#10;On: 長い文字列を折り返して全文表示&#10;Off: 1行で省略（…）表示" data-i18n="dbg.02f">6.折返</td><td class="value">
+                <button id="chatOlWrapBtn" class="debug-btn">On</button>
+            </td></tr>
+        </table>
         </div>
     </div>
 
