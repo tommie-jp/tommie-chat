@@ -190,11 +190,13 @@ export function setupMinimap(game: GameScene): void {
     let activePointerId = -1;
     container.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
+        const t = e.target as HTMLElement;
+        if (t.tagName === "BUTTON") return; // ボタンはclick処理に委任
         e.preventDefault();
         // 2本目の指が来たらドラッグ中断
         if (activePointerId >= 0 && e.pointerId !== activePointerId) { onEnd(); activePointerId = -1; return; }
         activePointerId = e.pointerId;
-        onStart(e.clientX, e.clientY, e.target as HTMLElement);
+        onStart(e.clientX, e.clientY, t);
         container.setPointerCapture(e.pointerId);
     });
     container.addEventListener("pointermove", (e) => {
