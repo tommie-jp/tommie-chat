@@ -868,6 +868,43 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
+    // --- チャットオーバーレイ 影 ---
+    const chatOlShadowBtn = document.getElementById("chatOlShadowBtn") as HTMLButtonElement | null;
+    const chatOlShadowColor = document.getElementById("chatOlShadowColor") as HTMLInputElement | null;
+    if (chatOlShadowBtn && chatOlShadowColor && chatOlOverlay) {
+        let olShadowOn = (olCk("chatOlShadow") ?? "1") === "1";
+        if (olCk("chatOlShadowColor")) chatOlShadowColor.value = olCk("chatOlShadowColor")!;
+        const applyOlShadow = () => {
+            const c = chatOlShadowColor.value;
+            chatOlOverlay!.style.setProperty("--ol-shadow", olShadowOn ? `0 0 3px ${c}, 0 0 6px ${c}` : "none");
+            chatOlShadowBtn.textContent = olShadowOn ? "On" : "Off";
+            chatOlShadowBtn.classList.toggle("off", !olShadowOn);
+            chatOlShadowColor.disabled = !olShadowOn;
+            chatOlShadowColor.style.opacity = olShadowOn ? "" : "0.3";
+        };
+        applyOlShadow();
+        markNonDefault(chatOlShadowBtn, "On", chatOlShadowBtn.textContent!, () => {
+            olShadowOn = true; chatOlShadowColor.value = "#ffffff";
+            applyOlShadow(); olSCk("chatOlShadow", "1"); olSCk("chatOlShadowColor", "#ffffff");
+            markNonDefault(chatOlShadowBtn, "On", "On"); markNonDefault(chatOlShadowColor, "#ffffff", "#ffffff");
+        });
+        markNonDefault(chatOlShadowColor, "#ffffff", chatOlShadowColor.value, () => {
+            chatOlShadowColor.value = "#ffffff"; applyOlShadow(); olSCk("chatOlShadowColor", "#ffffff");
+            markNonDefault(chatOlShadowColor, "#ffffff", "#ffffff");
+        });
+        chatOlShadowBtn.addEventListener("click", () => {
+            olShadowOn = !olShadowOn;
+            applyOlShadow();
+            olSCk("chatOlShadow", olShadowOn ? "1" : "0");
+            markNonDefault(chatOlShadowBtn, "On", chatOlShadowBtn.textContent!);
+        });
+        chatOlShadowColor.addEventListener("input", () => {
+            applyOlShadow();
+            olSCk("chatOlShadowColor", chatOlShadowColor.value);
+            markNonDefault(chatOlShadowColor, "#ffffff", chatOlShadowColor.value);
+        });
+    }
+
     if (scaleSelect) {
         const initScale = 1 / window.devicePixelRatio;
         const initScaleStr = initScale.toFixed(2);
