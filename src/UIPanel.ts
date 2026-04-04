@@ -1424,16 +1424,24 @@ export function setupHtmlUI(game: GameScene): void {
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             // joinMatch 1回で全て完結（メタデータに初期位置を含める）
             { const p = game.playerBox;
-              const multilogin = new URLSearchParams(location.search).has("multilogin") ? "1" : "";
+              // タブ固有キーで prevSid を管理（同一ブラウザの複数タブを区別）
+              const tabId = sessionStorage.getItem("tabId") ?? (typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+              sessionStorage.setItem("tabId", tabId);
+              const prevSidKey = `prevSessionId_${tabId}`;
+              const prevSid = localStorage.getItem(prevSidKey) ?? "";
               await game.nakama.joinWorldMatch({
                 x: String(p.position.x), z: String(p.position.z), ry: String(p.rotation.y),
                 tx: game.playerTextureUrl, dn: game.nakama.selfDisplayName ?? "",
                 lt: new Date().toISOString(),
                 cc: String(game.playerCharCol), cr: String(game.playerCharRow),
                 nc: game.nakama.selfNameColor,
-                did: game.nakama.selfDeviceId ?? "",
-                ml: multilogin,
+                prevSid,
             }); }
+            // joinMatch 成功後に sessionId を保存（次回リロード時の prevSid 用）
+            { const tid = sessionStorage.getItem("tabId") ?? "";
+              if (game.nakama.selfSessionId && tid) {
+                localStorage.setItem(`prevSessionId_${tid}`, game.nakama.selfSessionId);
+            } }
             // 自分自身をプレイヤーリストに確実に登録
             {
                 const sid = game.nakama.selfSessionId;
@@ -1527,15 +1535,14 @@ export function setupHtmlUI(game: GameScene): void {
             // 再接続時にメタデータを提供
             game.nakama.getReconnectMeta = () => {
                 const p = game.playerBox;
-                const multilogin = new URLSearchParams(location.search).has("multilogin") ? "1" : "";
+                const tid = sessionStorage.getItem("tabId") ?? "";
                 return {
                     x: String(p.position.x), z: String(p.position.z), ry: String(p.rotation.y),
                     tx: game.playerTextureUrl, dn: game.nakama.selfDisplayName ?? "",
                     lt: new Date().toISOString(),
                     cc: String(game.playerCharCol), cr: String(game.playerCharRow),
                     nc: game.nakama.selfNameColor,
-                    did: game.nakama.selfDeviceId ?? "",
-                    ml: multilogin,
+                    prevSid: tid ? (localStorage.getItem(`prevSessionId_${tid}`) ?? "") : "",
                 };
             };
             game.nakama.onMatchReconnect = () => {

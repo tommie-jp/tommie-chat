@@ -699,8 +699,7 @@ type matchState struct {
 	Positions        map[string]*playerPos               // sessionID -> 位置
 	PendingAOIEnter  map[string][]map[string]interface{} // recipientSID -> 未送信 AOI_ENTER エントリ
 	PendingInit      map[string]*playerPos               // sessionID -> joinMatch metadata から取得した初期位置
-	DeviceIDs        map[string]string                   // sessionID -> デバイスID（ゴーストキック判定用）
-	MultiLogin       map[string]bool                     // sessionID -> multilogin フラグ
+	PrevSIDs         map[string]string                   // sessionID -> 前回セッションID（ゴーストキック用）
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -714,8 +713,7 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		Positions:       make(map[string]*playerPos),
 		PendingAOIEnter: make(map[string][]map[string]interface{}),
 		PendingInit:     make(map[string]*playerPos),
-		DeviceIDs:       make(map[string]string),
-		MultiLogin:      make(map[string]bool),
+		PrevSIDs:        make(map[string]string),
 	}, 10, "world"
 }
 
@@ -751,13 +749,10 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 			CharRow:     cr,
 			NameColor:   metadata["nc"],
 		}
-		logger.Info("PendingInit stored for sid=%s x=%.1f z=%.1f did=%s ml=%s", shortSID(newSID), x, z, metadata["did"], metadata["ml"])
-		// デバイスID と multilogin フラグを保存
-		if did := metadata["did"]; did != "" {
-			ms.DeviceIDs[newSID] = did
-		}
-		if metadata["ml"] == "1" {
-			ms.MultiLogin[newSID] = true
+		logger.Info("PendingInit stored for sid=%s x=%.1f z=%.1f prevSid=%s", shortSID(newSID), x, z, metadata["prevSid"])
+		// 前回セッションIDを保存（MatchJoin でゴーストキック用）
+		if prevSid := metadata["prevSid"]; prevSid != "" {
+			ms.PrevSIDs[newSID] = prevSid
 		}
 	}
 
@@ -772,58 +767,51 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 		sid := p.GetSessionId()
 		uid := p.GetUserId()
 
-		// 同一デバイスIDの古いセッションをマッチからキック（ゴーストアバター防止）
-		// multilogin フラグ付きセッションはキックしない（開発用 ?multilogin=1）
-		newDID := ms.DeviceIDs[sid]
-		newML := ms.MultiLogin[sid]
-		if newDID != "" && !newML {
-			for oldSID, oldP := range ms.Presences {
-				if oldSID == sid { continue }
-				oldDID := ms.DeviceIDs[oldSID]
-				if oldDID == newDID {
-					logger.Info("MatchKick same-device duplicate: did=%s old=%s new=%s", newDID[:8], shortSID(oldSID), shortSID(sid))
-					dispatcher.MatchKick([]runtime.Presence{oldP})
+		// 前回セッションIDが指定されていれば、そのセッションをキック（ゴーストアバター防止）
+		if prevSid, ok := ms.PrevSIDs[sid]; ok && prevSid != "" {
+			if oldP, exists := ms.Presences[prevSid]; exists {
+				logger.Info("MatchKick prevSid: old=%s new=%s", shortSID(prevSid), shortSID(sid))
+				dispatcher.MatchKick([]runtime.Presence{oldP})
 
-					// MatchLoop が MatchJoin より先に実行されるため、キック対象の
-					// AOI_ENTER が既にフラッシュ済みの場合がある。
-					// 明示的に AOI_LEAVE を全員に送信して打ち消す。
-					leaveData, _ := json.Marshal(map[string]interface{}{"sessionId": oldSID})
-					var leaveTargets []runtime.Presence
-					for otherSID2, otherP2 := range ms.Presences {
-						if otherSID2 != oldSID && otherSID2 != sid {
-							leaveTargets = append(leaveTargets, otherP2)
-						}
+				// MatchLoop が MatchJoin より先に実行されるため、キック対象の
+				// AOI_ENTER が既にフラッシュ済みの場合がある。
+				// 明示的に AOI_LEAVE を全員に送信して打ち消す。
+				leaveData, _ := json.Marshal(map[string]interface{}{"sessionId": prevSid})
+				var leaveTargets []runtime.Presence
+				for otherSID2, otherP2 := range ms.Presences {
+					if otherSID2 != prevSid && otherSID2 != sid {
+						leaveTargets = append(leaveTargets, otherP2)
 					}
-					if len(leaveTargets) > 0 {
-						dispatcher.BroadcastMessage(opAOILeave, leaveData, leaveTargets, nil, true)
-					}
-
-					// ステートから即座に除去
-					delete(ms.Presences, oldSID)
-					delete(ms.Positions, oldSID)
-					delete(ms.AOIs, oldSID)
-					delete(ms.DeviceIDs, oldSID)
-					delete(ms.MultiLogin, oldSID)
-					delete(ms.PendingInit, oldSID)
-					delete(ms.PendingAOIEnter, oldSID)
-					for recipSID, entries := range ms.PendingAOIEnter {
-						filtered := entries[:0]
-						for _, e := range entries {
-							if e["sessionId"] != oldSID {
-								filtered = append(filtered, e)
-							}
-						}
-						if len(filtered) > 0 {
-							ms.PendingAOIEnter[recipSID] = filtered
-						} else {
-							delete(ms.PendingAOIEnter, recipSID)
-						}
-					}
-					worldPlayersMu.Lock()
-					delete(worldPlayersCache, oldSID)
-					worldPlayersMu.Unlock()
 				}
+				if len(leaveTargets) > 0 {
+					dispatcher.BroadcastMessage(opAOILeave, leaveData, leaveTargets, nil, true)
+				}
+
+				// ステートから即座に除去
+				delete(ms.Presences, prevSid)
+				delete(ms.Positions, prevSid)
+				delete(ms.AOIs, prevSid)
+				delete(ms.PendingInit, prevSid)
+				delete(ms.PendingAOIEnter, prevSid)
+				delete(ms.PrevSIDs, prevSid)
+				for recipSID, entries := range ms.PendingAOIEnter {
+					filtered := entries[:0]
+					for _, e := range entries {
+						if e["sessionId"] != prevSid {
+							filtered = append(filtered, e)
+						}
+					}
+					if len(filtered) > 0 {
+						ms.PendingAOIEnter[recipSID] = filtered
+					} else {
+						delete(ms.PendingAOIEnter, recipSID)
+					}
+				}
+				worldPlayersMu.Lock()
+				delete(worldPlayersCache, prevSid)
+				worldPlayersMu.Unlock()
 			}
+			delete(ms.PrevSIDs, sid)
 		}
 
 		ms.AOIs[sid] = &playerAOI{-1, -1, -1, -1}
@@ -919,8 +907,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		delete(ms.Presences, sid)
 		delete(ms.Positions, sid)
 		delete(ms.PendingInit, sid)
-		delete(ms.DeviceIDs, sid)
-		delete(ms.MultiLogin, sid)
+		delete(ms.PrevSIDs, sid)
 		// PendingAOIEnter からも除去（退出セッション宛の通知 + 退出セッションに関する通知）
 		delete(ms.PendingAOIEnter, sid)
 		for recipSID, entries := range ms.PendingAOIEnter {
