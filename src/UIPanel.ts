@@ -1,5 +1,5 @@
 import type { GameScene } from "./GameScene";
-import { Color3, Mesh, StandardMaterial } from "@babylonjs/core";
+import { Mesh } from "@babylonjs/core";
 import { fnv1a64, CHUNK_SIZE } from "./WorldConstants";
 import { prof } from "./Profiler";
 import { t, getLang, setLang, applyI18n } from "./i18n";
@@ -834,9 +834,8 @@ export function setupHtmlUI(game: GameScene): void {
         if (thCh)    thCh.dataset.sort    = ulSortKey === "channel"        ? arrow : "";
         const myId = game.nakama.selfSessionId ?? "";
         const myMatchId  = game.nakama.selfMatchId  ?? "";
-        const myChatId   = game.nakama.selfChannelId ?? "";
         const matchShort = myMatchId  ? myMatchId.slice(0, 8)  : "-";
-        const chatShort  = myChatId   ? myChatId.slice(0, 8)   : "-";
+        const chatShort  = "-";
         // DocumentFragment でまとめて構築し一度だけ DOM に挿入
         const frag = document.createDocumentFragment();
         for (const { username, displayName, uuid, sessionId, loginTimestamp, loginTime, channel } of entries) {
@@ -845,7 +844,7 @@ export function setupHtmlUI(game: GameScene): void {
             const rel = relativeTime(loginTimestamp);
             const lbl = resolveDisplayLabel(displayName, username, sessionId);
             const fullName = lbl.suffix ? lbl.text + lbl.suffix : lbl.text;
-            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${fullName}">${fullName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td class="uuid-cell" data-copy="${myChatId}" title="${myChatId}&#10;クリックでコピー">${chatShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
+            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${fullName}">${fullName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td>${chatShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
             frag.appendChild(tr);
         }
         userListBody.innerHTML = "";
@@ -1219,44 +1218,6 @@ export function setupHtmlUI(game: GameScene): void {
     const MAX_POOL_SIZE = 32;
 
     /** 遅延生成 + プール再利用でリモートアバターを確保する */
-    const ensureRemoteAvatar = (sessionId: string, username: string): import("@babylonjs/core").Mesh | null => {
-        const _end = prof("UIPanel.ensureRemoteAvatar");
-        if (sessionId === game.nakama.selfSessionId) { _end(); return null; }
-        if (game.remoteAvatars.has(sessionId)) { _end(); return game.remoteAvatars.get(sessionId)!; }
-
-        // プールから再利用
-        const pooled = avatarPool.pop();
-        if (pooled) {
-            const av = pooled.av;
-            game.remoteAvatars.set(sessionId, av);
-            game.remoteNameUpdaters.set(sessionId, pooled.nameUpdate);
-            game.remoteSpeeches.set(sessionId, pooled.speechUpdate);
-            pooled.nameUpdate(username);
-            pooled.speechUpdate("");
-            av.setEnabled(false);
-            _end();
-            return av;
-        }
-
-        // 新規作成
-        const avName = "remote_" + sessionId;
-        const av = game.avatarSystem.createAvatar(avName, "/textures/pic1.ktx2", 0, 0, game.avatarDepth);
-        const standBase = av.getChildMeshes().find(m => m.name === avName + "_standBase");
-        if (standBase && standBase.material) {
-            (standBase.material as StandardMaterial).diffuseColor = new Color3(0.4, 0.7, 1.0);
-        }
-        const nameTag = game.avatarSystem.createNameTag(av, username);
-        game.remoteNameUpdaters.set(sessionId, nameTag.update);
-        try {
-            const updater = game.avatarSystem.createSpeechBubble(nameTag.plane, "");
-            game.remoteSpeeches.set(sessionId, updater);
-        } catch { /* ignore */ }
-        game.remoteAvatars.set(sessionId, av);
-        av.setEnabled(false);
-        _end();
-        return av;
-    };
-
     const removeRemoteAvatar = (sessionId: string) => {
         cc("removeRemoteAvatar");
         const _end = prof("UIPanel.removeRemoteAvatar");
@@ -1284,15 +1245,6 @@ export function setupHtmlUI(game: GameScene): void {
     // （同一ユーザが複数ブラウザでログインするケースをサポート）
 
     // チャンネル情報を付与してuserMapに追加/更新
-    const addChannelFlag = (sessionId: string, flag: "chat" | "match") => {
-        const existing = userMap.get(sessionId);
-        if (!existing) return;
-        if (existing.channel === "chat+match") return;
-        if (existing.channel !== flag) {
-            userMap.set(sessionId, { ...existing, channel: "chat+match" });
-        }
-    };
-
     /** 同一UUIDのセッション数が変わったら自分の表示名サフィックスを更新 */
     const refreshSelfSuffix = () => {
         const selfSid = game.nakama.selfSessionId;
@@ -1306,53 +1258,14 @@ export function setupHtmlUI(game: GameScene): void {
     };
     game.refreshSelfNameTag = refreshSelfSuffix;
 
-    game.nakama.onPresenceJoin = (sessionId, userId, username) => {
-        cc("onPresenceJoin");
-        const existing = userMap.get(sessionId);
-        const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
-        userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
-        scheduleRenderUserList();
-        ensureRemoteAvatar(sessionId, username);
-        refreshSelfSuffix();
-    };
-    game.nakama.onPresenceNewJoin = (sessionId, userId, username) => {
-        cc("onPresenceNewJoin");
-        const existing = userMap.get(sessionId);
-        const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
-        userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
-        scheduleRenderUserList();
-        const joinColor = existing?.nameColor;
-        const joinColorStyle = joinColor ? ` style="color:${joinColor}"` : "";
-        addChatHistory("[system]", t("system.user_joined").replace("{username}", `<span class="chat-ol-name"${joinColorStyle}>${username}</span>`), undefined, userId);
-        { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
-    };
-    game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
-        cc("onPresenceLeave");
-        const existing = userMap.get(sessionId);
-        if (existing) {
-            if (existing.channel === "chat+match") {
-                // chatだけ外す → matchのみに
-                userMap.set(sessionId, { ...existing, channel: "match" });
-            } else {
-                userMap.delete(sessionId);
-                const leaveColor = existing.nameColor;
-                const leaveColorStyle = leaveColor ? ` style="color:${leaveColor}"` : "";
-                addChatHistory("[system]", t("system.user_left").replace("{username}", `<span class="chat-ol-name"${leaveColorStyle}>${uname}</span>`), undefined, existing.uuid);
-            }
-        }
-        scheduleRenderUserList();
-        removeRemoteAvatar(sessionId);
-        refreshSelfSuffix();
-    };
+    // マッチプレゼンス: ユーザー管理の唯一のソース（joinChat 廃止済み）
     game.nakama.onMatchPresenceJoin = (sessionId, userId, username) => {
         cc("onMatchPresenceJoin");
         const existing = userMap.get(sessionId);
-        if (existing) {
-            addChannelFlag(sessionId, "match");
-        } else {
+        if (!existing) {
             userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: 0, loginTime: "…", channel: "match" });
         }
-        // アバターが既に存在する場合、名前タグを更新（AOI_ENTER時にusername未取得だった場合のリカバリ）
+        // アバターが既に存在する場合、名前タグを更新
         if (sessionId !== game.nakama.selfSessionId && game.spriteAvatarSystem.has(sessionId)) {
             const dn = userMap.get(sessionId)?.displayName ?? "";
             const lbl = resolveDisplayLabel(dn, username, sessionId);
@@ -1360,25 +1273,28 @@ export function setupHtmlUI(game: GameScene): void {
             if (updater) updater(lbl.text, lbl.color, lbl.suffix);
         }
         scheduleRenderUserList();
-        // 相手がマッチ参加した時点で自分のInitPosを送る（チャットチャンネル参加時はまだマッチ未参加で届かないため）
-        if (sessionId !== game.nakama.selfSessionId) {
-            const p = game.playerBox;
-            game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {});
-        }
+        refreshSelfSuffix();
     };
     game.nakama.onMatchPresenceLeave = (sessionId, _userId, _uname) => {
         cc("onMatchPresenceLeave");
-        const existing = userMap.get(sessionId);
-        if (existing) {
-            if (existing.channel === "chat+match") {
-                // matchだけ外す → chatのみに
-                userMap.set(sessionId, { ...existing, channel: "chat" });
-            } else if (existing.channel === "match") {
-                userMap.delete(sessionId);
-            }
-        }
+        userMap.delete(sessionId);
         removeRemoteAvatar(sessionId);
         scheduleRenderUserList();
+        refreshSelfSuffix();
+    };
+    // システムメッセージ: サーバーからのログイン/ログアウト通知
+    game.nakama.onSystemMessage = (type, username, userId) => {
+        if (type === "join") {
+            const existing = [...userMap.values()].find(e => e.uuid === userId);
+            const joinColor = existing?.nameColor;
+            const joinColorStyle = joinColor ? ` style="color:${joinColor}"` : "";
+            addChatHistory("[system]", t("system.user_joined").replace("{username}", `<span class="chat-ol-name"${joinColorStyle}>${username}</span>`), undefined, userId);
+        } else if (type === "leave") {
+            const existing = [...userMap.values()].find(e => e.uuid === userId);
+            const leaveColor = existing?.nameColor;
+            const leaveColorStyle = leaveColor ? ` style="color:${leaveColor}"` : "";
+            addChatHistory("[system]", t("system.user_left").replace("{username}", `<span class="chat-ol-name"${leaveColorStyle}>${username}</span>`), undefined, userId);
+        }
     };
 
     /** ログインUI行の表示/非表示 */
@@ -1433,6 +1349,7 @@ export function setupHtmlUI(game: GameScene): void {
     };
     // ===========================
     const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
+    const LOGIN_COOLDOWN_MS = 5000;
     const doLogin = async () => {
         const _end = prof("UIPanel.doLogin");
         const name = loginNameInput?.value.trim();
@@ -1455,6 +1372,19 @@ export function setupHtmlUI(game: GameScene): void {
         if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : t("login.connecting"); }
         if (loginBtn)    loginBtn.disabled = true;
         try {
+            // 短時間リロードによるゴーストアバター防止: 前回ログインから5秒未満なら待機
+            const lastTs = parseInt(getCookie("lastLoginTs") ?? "0");
+            const elapsed = Date.now() - lastTs;
+            console.log(`login cooldown check: elapsed=${elapsed}ms threshold=${LOGIN_COOLDOWN_MS}ms`);
+            if (lastTs > 0 && elapsed < LOGIN_COOLDOWN_MS) {
+                const waitMs = LOGIN_COOLDOWN_MS - elapsed;
+                console.log(`login cooldown: waiting ${waitMs}ms`);
+                const pd = document.getElementById("ping-display");
+                if (pd) { pd.innerHTML = `<span style="background:#b8860b;color:#fff;padding:2px 6px;border-radius:3px;">CONNECTING</span>`; }
+                await new Promise(r => setTimeout(r, waitMs));
+            }
+            setCookie("lastLoginTs", String(Date.now()));
+
             await game.nakama.login(name);
             game.currentUserId = game.nakama.getSession()?.user_id ?? null;
             // 自分のdisplay_nameでアバター名を更新（joinWorldMatch前にawaitしてselfDisplayNameを確定）
@@ -1482,21 +1412,23 @@ export function setupHtmlUI(game: GameScene): void {
                 } catch (_) {}
             }
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
-            await game.nakama.joinWorldMatch();
-            // 自分自身をプレイヤーリストに確実に登録（onPresenceJoinのタイミングで漏れる場合のフォールバック）
+            // joinMatch 1回で全て完結（メタデータに初期位置を含める）
+            { const p = game.playerBox; await game.nakama.joinWorldMatch({
+                x: String(p.position.x), z: String(p.position.z), ry: String(p.rotation.y),
+                tx: game.playerTextureUrl, dn: game.nakama.selfDisplayName ?? "",
+                lt: new Date().toISOString(),
+                cc: String(game.playerCharCol), cr: String(game.playerCharRow),
+                nc: game.nakama.selfNameColor,
+            }); }
+            // 自分自身をプレイヤーリストに確実に登録
             {
                 const sid = game.nakama.selfSessionId;
                 const uid = game.currentUserId;
                 if (sid && uid && !userMap.has(sid)) {
-                    userMap.set(sid, { username: name, displayName: game.nakama.selfDisplayName ?? "", uuid: uid, sessionId: sid, loginTimestamp: Date.now(), loginTime: "…", channel: "chat+match" });
-                } else if (sid && userMap.has(sid)) {
-                    const existing = userMap.get(sid)!;
-                    userMap.set(sid, { ...existing, channel: "chat+match" });
+                    userMap.set(sid, { username: name, displayName: game.nakama.selfDisplayName ?? "", uuid: uid, sessionId: sid, loginTimestamp: Date.now(), loginTime: "…", channel: "match" });
                 }
                 scheduleRenderUserList();
             }
-            // matchId確定後にinitPosを送信（joinWorldMatch前のpresenceイベントではmatchId未設定のため送信されない）
-            { const p = game.playerBox; await game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow); }
             // 自分のプロフィールをサーバから取得（loginTime等）
             {
                 const sid = game.nakama.selfSessionId;
@@ -1578,15 +1510,22 @@ export function setupHtmlUI(game: GameScene): void {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
                 addServerLog(t("log.match_disconnect"), t("log.match_disconnect.detail"));
             };
+            // 再接続時にメタデータを提供
+            game.nakama.getReconnectMeta = () => {
+                const p = game.playerBox;
+                return {
+                    x: String(p.position.x), z: String(p.position.z), ry: String(p.rotation.y),
+                    tx: game.playerTextureUrl, dn: game.nakama.selfDisplayName ?? "",
+                    lt: new Date().toISOString(),
+                    cc: String(game.playerCharCol), cr: String(game.playerCharRow),
+                    nc: game.nakama.selfNameColor,
+                };
+            };
             game.nakama.onMatchReconnect = () => {
                 console.log("UIPanel match reconnected");
                 addServerLog(t("log.match_reconnect"), t("log.match_reconnect.detail"));
-                // 再接続後にInitPos・AOI・アバターを再送信
-                const p = game.playerBox;
-                game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {});
                 game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
                 game.aoiManager.updateAOI();
-                // CCUグラフを再初期化（切断中の無効データをクリア）
                 restartCcu();
             };
             startPing();
