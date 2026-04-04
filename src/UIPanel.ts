@@ -591,7 +591,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
     };
 
-    const addChatOverlay = (avatarName: string, text: string, timeStr: string) => {
+    const addChatOverlay = (avatarName: string, text: string, timeStr: string, nameColor?: string, senderId?: string) => {
         if (!chatOverlay || !text || chatOverlayMax === 0) return;
         const isSystem = avatarName === "[system]";
         const line = document.createElement("div");
@@ -601,10 +601,12 @@ export function setupHtmlUI(game: GameScene): void {
                 `<span class="chat-ol-time">${timeStr}</span>` +
                 `${text}`;
         } else {
+            const colorStyle = nameColor ? ` style="color:${nameColor}"` : "";
             line.innerHTML =
                 `<span class="chat-ol-time">${timeStr}</span>` +
-                `<span class="chat-ol-name">${avatarName}:</span> ${text}`;
+                `<span class="chat-ol-name"${colorStyle}>${avatarName}:</span> ${text}`;
         }
+        if (senderId) line.dataset.sender = senderId;
         chatOverlay.appendChild(line);
         // 上限を超えた古い行を削除
         while (chatOverlay.children.length > chatOverlayMax) {
@@ -612,7 +614,17 @@ export function setupHtmlUI(game: GameScene): void {
         }
     };
 
-    const addChatHistory = (avatarName: string, text: string) => {
+    /** 指定ユーザーの既存オーバーレイメッセージの名前色を一括更新 */
+    const updateOverlayNameColor = (userId: string, newColor: string) => {
+        if (!chatOverlay) return;
+        for (const line of chatOverlay.children) {
+            if ((line as HTMLElement).dataset.sender !== userId) continue;
+            const nameEl = line.querySelector(".chat-ol-name") as HTMLElement | null;
+            if (nameEl) nameEl.style.color = newColor;
+        }
+    };
+
+    const addChatHistory = (avatarName: string, text: string, nameColor?: string, senderId?: string) => {
         const _end = prof("UIPanel.addChatHistory");
         if (!text) { _end(); return; }
         const list = document.getElementById("chat-history-list");
@@ -634,7 +646,7 @@ export function setupHtmlUI(game: GameScene): void {
         entry.scrollIntoView({ block: "end", behavior: "instant" });
 
         // チャットオーバーレイにも追加
-        addChatOverlay(avatarName, text, timeStr);
+        addChatOverlay(avatarName, text, timeStr, nameColor, senderId);
 
         _end();
     };
@@ -700,7 +712,7 @@ export function setupHtmlUI(game: GameScene): void {
         });
     };
 
-    const userMap = new Map<string, { username: string; displayName: string; uuid: string; sessionId: string; loginTimestamp: number; loginTime: string; channel: "chat" | "match" | "chat+match" }>();
+    const userMap = new Map<string, { username: string; displayName: string; uuid: string; sessionId: string; loginTimestamp: number; loginTime: string; channel: "chat" | "match" | "chat+match"; nameColor?: string }>();
     type UlSortKey = "username" | "displayName" | "uuid" | "sessionId" | "loginTime" | "loginTimestamp" | "channel";
     let ulSortKey: UlSortKey = "username";
     let ulSortAsc = true;
@@ -903,13 +915,15 @@ export function setupHtmlUI(game: GameScene): void {
     game.nakama.onChatMessage = (username, text, userId) => {
         // 表示名を優先（なければ @ユーザID）
         let chatName = username;
+        let chatNameColor: string | undefined;
         for (const user of userMap.values()) {
             if (user.uuid === userId) {
                 chatName = user.displayName || ("@" + user.username);
+                chatNameColor = user.nameColor;
                 break;
             }
         }
-        addChatHistory(chatName, text);
+        addChatHistory(chatName, text, chatNameColor, userId);
         for (const [sessionId, user] of userMap) {
             if (user.uuid !== userId) continue;
             if (sessionId === game.nakama.selfSessionId) {
@@ -927,7 +941,7 @@ export function setupHtmlUI(game: GameScene): void {
     // OP_INIT_POS受信後、サーバーAOI追跡が追いつくまでAOI_LEAVEを無視するガード
     const initPosGuard = new Map<string, number>(); // sessionId → timestamp
 
-    game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, _ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number) => {
+    game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, _ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => {
         console.log(`rcv onAvatarInitPos sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} hasAvatar=${game.remoteAvatars.has(sessionId)}`);
         initPosGuard.set(sessionId, performance.now());
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
@@ -960,10 +974,13 @@ export function setupHtmlUI(game: GameScene): void {
                 updates.loginTimestamp = loginDate.getTime();
             }
             updates.displayName = displayName;
+            if (nameColor) updates.nameColor = nameColor;
             if (Object.keys(updates).length) {
                 userMap.set(sessionId, { ...existing, ...updates });
                 scheduleRenderUserList();
             }
+            // 既存オーバーレイメッセージの名前色を更新
+            if (nameColor && existing.uuid) updateOverlayNameColor(existing.uuid, nameColor);
         }
         // アバターのnameTagを表示名で更新
         {
@@ -1024,6 +1041,7 @@ export function setupHtmlUI(game: GameScene): void {
             if (existing) {
                 const updates: Record<string, unknown> = {};
                 updates.displayName = prof.displayName ?? "";
+                if (prof.nameColor) updates.nameColor = prof.nameColor;
                 if (prof.loginTime) {
                     const d = new Date(prof.loginTime);
                     updates.loginTime = formatTimestamp(d);
@@ -1032,6 +1050,8 @@ export function setupHtmlUI(game: GameScene): void {
                 if (Object.keys(updates).length > 0) {
                     userMap.set(sid, { ...existing, ...updates } as typeof existing);
                 }
+                // 既存オーバーレイメッセージの名前色を更新
+                if (prof.nameColor && existing.uuid) updateOverlayNameColor(existing.uuid, prof.nameColor);
             }
             // アバター更新（自分以外）
             if (sid !== game.nakama.selfSessionId) {
@@ -1107,20 +1127,24 @@ export function setupHtmlUI(game: GameScene): void {
             scheduleProfileFetch();
         }
     };
-    game.nakama.onDisplayName = (sessionId: string, displayName: string) => {
-        console.log(`rcv onDisplayName sid=${sessionId.slice(0, 8)} displayName=${displayName}`);
+    game.nakama.onDisplayName = (sessionId: string, displayName: string, nameColor?: string) => {
+        console.log(`rcv onDisplayName sid=${sessionId.slice(0, 8)} displayName=${displayName} nc=${nameColor}`);
         // アバターのnameTag更新
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const lbl = resolveDisplayLabel(displayName, username, sessionId);
         const updater = game.remoteNameUpdaters.get(sessionId);
         if (updater) updater(lbl.text, lbl.color, lbl.suffix);
-        // ユーザリストの表示名更新
+        // ユーザリストの表示名・名前色更新
+        let userId: string | undefined;
         for (const [sid, entry] of userMap) {
             if (entry.sessionId === sessionId) {
-                userMap.set(sid, { ...entry, displayName });
+                userMap.set(sid, { ...entry, displayName, nameColor: nameColor || entry.nameColor });
+                userId = entry.uuid;
                 break;
             }
         }
+        // 既存オーバーレイメッセージの名前色を一括更新
+        if (nameColor && userId) updateOverlayNameColor(userId, nameColor);
         scheduleRenderUserList();
     };
     game.nakama.onAOILeave = (sessionId: string) => {
@@ -1239,7 +1263,9 @@ export function setupHtmlUI(game: GameScene): void {
         const ch = existing ? (existing.channel === "match" ? "chat+match" : existing.channel) : "chat";
         userMap.set(sessionId, { username, displayName: existing?.displayName ?? "", uuid: userId, sessionId, loginTimestamp: existing?.loginTimestamp ?? 0, loginTime: existing?.loginTime ?? "…", channel: ch as "chat" | "match" | "chat+match" });
         scheduleRenderUserList();
-        addChatHistory("[system]", t("system.user_joined").replace("{username}", `<span class="chat-ol-name">${username}</span>`));
+        const joinColor = existing?.nameColor;
+        const joinColorStyle = joinColor ? ` style="color:${joinColor}"` : "";
+        addChatHistory("[system]", t("system.user_joined").replace("{username}", `<span class="chat-ol-name"${joinColorStyle}>${username}</span>`), undefined, userId);
         { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
     };
     game.nakama.onPresenceLeave = (sessionId, _userId, uname) => {
@@ -1251,7 +1277,9 @@ export function setupHtmlUI(game: GameScene): void {
                 userMap.set(sessionId, { ...existing, channel: "match" });
             } else {
                 userMap.delete(sessionId);
-                addChatHistory("[system]", t("system.user_left").replace("{username}", `<span class="chat-ol-name">${uname}</span>`));
+                const leaveColor = existing.nameColor;
+                const leaveColorStyle = leaveColor ? ` style="color:${leaveColor}"` : "";
+                addChatHistory("[system]", t("system.user_left").replace("{username}", `<span class="chat-ol-name"${leaveColorStyle}>${uname}</span>`), undefined, existing.uuid);
             }
         }
         scheduleRenderUserList();

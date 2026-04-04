@@ -808,7 +808,23 @@ export function setupDebugOverlay(game: GameScene): void {
     };
 
     if (chatOlTimeColor) { const v = olCk("chatOlTimeColor"); if (v) chatOlTimeColor.value = v; }
-    if (chatOlNameColor) { const v = olCk("chatOlNameColor"); if (v) chatOlNameColor.value = v; }
+    // 名前色: Cookie未設定なら見やすいランダム色を選択
+    if (chatOlNameColor) {
+        const v = olCk("chatOlNameColor");
+        if (v) {
+            chatOlNameColor.value = v;
+        } else {
+            const palette = [
+                "#2a7a2a", "#c03030", "#2060c0", "#b05800",
+                "#7030a0", "#008080", "#c06090", "#505050",
+                "#1a6a4a", "#a04080", "#3070a0", "#906020",
+            ];
+            chatOlNameColor.value = palette[Math.floor(Math.random() * palette.length)];
+            olSCk("chatOlNameColor", chatOlNameColor.value);
+        }
+    }
+    // selfNameColor を設定
+    if (chatOlNameColor) game.nakama.selfNameColor = chatOlNameColor.value;
     applyOlPartColors();
     if (chatOlTimeColor) markNonDefault(chatOlTimeColor, "#999999", chatOlTimeColor.value, () => {
         chatOlTimeColor!.value = "#999999"; applyOlPartColors(); olSCk("chatOlTimeColor", "#999999"); markNonDefault(chatOlTimeColor!, "#999999", "#999999");
@@ -818,7 +834,18 @@ export function setupDebugOverlay(game: GameScene): void {
     });
 
     chatOlTimeColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlTimeColor", chatOlTimeColor!.value); markNonDefault(chatOlTimeColor!, "#999999", chatOlTimeColor!.value); });
-    chatOlNameColor?.addEventListener("input", () => { applyOlPartColors(); olSCk("chatOlNameColor", chatOlNameColor!.value); markNonDefault(chatOlNameColor!, "#2a7a2a", chatOlNameColor!.value); });
+    let nameColorDebounce: ReturnType<typeof setTimeout> | null = null;
+    chatOlNameColor?.addEventListener("input", () => {
+        applyOlPartColors();
+        olSCk("chatOlNameColor", chatOlNameColor!.value);
+        markNonDefault(chatOlNameColor!, "#2a7a2a", chatOlNameColor!.value);
+        game.nakama.selfNameColor = chatOlNameColor!.value;
+        // デバウンス: 300ms 操作が止まってからサーバーへ通知
+        if (nameColorDebounce) clearTimeout(nameColorDebounce);
+        nameColorDebounce = setTimeout(() => {
+            game.nakama.sendNameColor(chatOlNameColor!.value);
+        }, 300);
+    });
 
     // --- チャットオーバーレイ 折り返し ---
     const chatOlWrapBtn = document.getElementById("chatOlWrapBtn") as HTMLButtonElement | null;

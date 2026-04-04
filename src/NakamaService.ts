@@ -37,15 +37,15 @@ export class NakamaService {
     onPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
-    onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number) => void;
+    onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => void;
     onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
     onAvatarChange?:     (sessionId: string, textureUrl: string, charCol: number, charRow: number) => void;
     onBlockUpdate?:      (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => void;
     onAOIEnter?:         (sessionId: string, x: number, z: number, ry: number) => void;
     onAOILeave?:         (sessionId: string) => void;
-    onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string }[]) => void;
+    onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string }[]) => void;
     onPlayersAOIResponse?: (players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void;
-    onDisplayName?:      (sessionId: string, displayName: string) => void;
+    onDisplayName?:      (sessionId: string, displayName: string, nameColor?: string) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
 
@@ -53,6 +53,7 @@ export class NakamaService {
     private loginName: string | null = null;
     private loginTimeISO: string = "";
     selfDisplayName: string = "";
+    selfNameColor: string = "";
     private readonly _decoder = new TextDecoder();
 
     // onmatchdata プロファイル（呼び出し回数とコスト）
@@ -265,7 +266,7 @@ export class NakamaService {
                     const e = payload as { sessionId: string };
                     this.onAOILeave?.(e.sessionId);
                 } else if (md.op_code === OP_PROFILE_RESPONSE) {
-                    const resp = payload as { profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string }[] };
+                    const resp = payload as { profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string }[] };
                     this.onProfileResponse?.(resp.profiles ?? []);
                 } else if (md.op_code === OP_PLAYERS_AOI_RESP) {
                     const resp = payload as { players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[] };
@@ -273,13 +274,13 @@ export class NakamaService {
                     if (this._aoiResolve) { this._aoiResolve(players); this._aoiResolve = null; }
                     this.onPlayersAOIResponse?.(players);
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
-                    const dn = payload as { displayName: string };
-                    this.onDisplayName?.(sid, dn.displayName);
+                    const dn = payload as { displayName: string; nc?: string };
+                    this.onDisplayName?.(sid, dn.displayName, dn.nc);
                 } else if (!sid) {
                     return;
                 } else if (md.op_code === OP_INIT_POS) {
-                    const pos = payload as { x: number; z: number; ry?: number; lt?: string; dn?: string; tx?: string; cc?: number; cr?: number };
-                    this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0, pos.lt ?? "", pos.dn ?? "", pos.tx ?? "", pos.cc ?? 0, pos.cr ?? 0);
+                    const pos = payload as { x: number; z: number; ry?: number; lt?: string; dn?: string; tx?: string; cc?: number; cr?: number; nc?: string };
+                    this.onAvatarInitPos?.(sid, pos.x, pos.z, pos.ry ?? 0, pos.lt ?? "", pos.dn ?? "", pos.tx ?? "", pos.cc ?? 0, pos.cr ?? 0, pos.nc);
                 } else if (md.op_code === OP_MOVE_TARGET) {
                     const pos = payload as { x: number; z: number };
                     this.onAvatarMoveTarget?.(sid, pos.x, pos.z);
@@ -322,7 +323,7 @@ export class NakamaService {
         console.log(`snd initPos x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tx=${textureUrl} cc=${charCol} cr=${charRow}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl, cc: charCol, cr: charRow })));
+            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl, cc: charCol, cr: charRow, nc: this.selfNameColor })));
         } catch { /* ignore */ }
         } finally { _end(); }
     }
@@ -344,9 +345,17 @@ export class NakamaService {
         console.log(`snd sendDisplayName displayName=${displayName}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName })));
+            await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName, nc: this.selfNameColor })));
         } catch { /* ignore */ }
         } finally { _end(); }
+    }
+
+    async sendNameColor(nameColor: string): Promise<void> {
+        if (!this.socket || !this.matchId) return;
+        this.selfNameColor = nameColor;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName: this.selfDisplayName, nc: nameColor })));
+        } catch { /* ignore */ }
     }
 
     async sendMoveTarget(x: number, z: number): Promise<void> {

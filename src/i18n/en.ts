@@ -139,7 +139,7 @@ export const en: Record<keyof typeof ja, string> = {
     "dbg.02d": "2.BG",
     "dbg.02e": "3.Font",
     "dbg.02e2": "4.Time",
-    "dbg.02e3": "5.Name",
+    "dbg.02e3": "5.My Name Color",
     "dbg.02f": "6.Wrap",
     "dbg.28e": "28e.AOI Vis",
     "dbg.aw.start": "Start",
