@@ -780,9 +780,20 @@ export class GameScene {
                     let ry = this.playerBox.rotation.y % (Math.PI * 2);
                     if (ry < 0) ry += Math.PI * 2;
                     const idx = Math.round(ry / (Math.PI / 4)) % 8;
-                    const x3 = String(Math.round(p.x)).padStart(3, "\u2007");
-                    const z3 = String(Math.round(p.z)).padStart(3, "\u2007");
-                    cd.innerHTML = `(${x3}, ${z3}) <span style="font-size:14px;font-weight:bold">${arrows[idx]}</span>`;
+                    const x3 = String(Math.round(p.x) + 512).padStart(4, "\u2007");
+                    const z3 = String(Math.round(p.z) + 512).padStart(4, "\u2007");
+                    // DOM要素は初回のみ構築、以降はテキスト更新のみ（ホバー点滅防止）
+                    let posEl = document.getElementById("cd-pos");
+                    let dirEl = document.getElementById("cd-dir");
+                    if (!posEl || !dirEl) {
+                        cd.innerHTML = `<span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (512, 512)\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(1023, 1023)\nワールドの大きさ: 1024 × 1024" style="font-size:14px;font-weight:bold"></span> <span id="cd-dir" title="方向\nプレイヤーの向いている方向を示します。\nN=北, S=南, E=東, W=西" style="font-size:14px;font-weight:bold"></span>`;
+                        posEl = document.getElementById("cd-pos");
+                        dirEl = document.getElementById("cd-dir");
+                    }
+                    const posText = `(${x3}, ${z3})`;
+                    const dirText = arrows[idx];
+                    if (posEl && posEl.textContent !== posText) posEl.textContent = posText;
+                    if (dirEl && dirEl.textContent !== dirText) dirEl.textContent = dirText;
                     const fv = document.getElementById("app-footer-version");
                     const ci = document.getElementById("chatInput");
                     if (fv && ci) {

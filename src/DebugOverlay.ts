@@ -512,10 +512,10 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-about",          "about-panel",           "menu.about",         "showAbout");
         makeToggle("menu-login",          "displayname-panel",     "menu.displayname",   "showDisplayName");
 
-        // 右上クリック: ユーザID → プレイヤーリスト、ping/FPS → Pingグラフ
+        // 右上クリック: バッジ→サーバーログ、ユーザID→表示名変更、ping→Pingグラフ、FPS→デバッグツール
         const pdEl = document.getElementById("ping-display");
         if (pdEl) {
-            let pdAction: "userlist" | "ping" | "serverlog" | null = null;
+            let pdAction: "userlist" | "ping" | "fps" | "serverlog" | null = null;
             pdEl.addEventListener("pointerdown", (e) => {
                 const target = e.target as HTMLElement;
                 if (target.id === "pd-uid") {
@@ -524,6 +524,8 @@ export function setupDebugOverlay(game: GameScene): void {
                     pdAction = "serverlog";
                 } else if (target.id === "pd-ping" || !!target.closest?.("#pd-ping")) {
                     pdAction = "ping";
+                } else if (target.id === "pd-fps" || !!target.closest?.("#pd-fps")) {
+                    pdAction = "fps";
                 } else {
                     pdAction = null;
                     return;
@@ -537,6 +539,7 @@ export function setupDebugOverlay(game: GameScene): void {
                 e.preventDefault();
                 if (pdAction === "userlist") document.getElementById("menu-login")?.click();
                 else if (pdAction === "ping") document.getElementById("menu-ping")?.click();
+                else if (pdAction === "fps") document.getElementById("menu-debug")?.click();
                 else if (pdAction === "serverlog") document.getElementById("menu-serverlog")?.click();
                 pdAction = null;
             }, true);
@@ -1700,6 +1703,7 @@ export function setupDebugOverlay(game: GameScene): void {
         frameCount++;
 
         // ping-display はデバッグパネルとは独立して常時更新
+        // DOM要素は状態変化時のみ再構築し、値はテキスト更新のみ（ホバー点滅防止）
         if (frameCount % 30 === 0) {
             const fpsNum = Math.min(99, Math.floor(game.engine.getFps()));
             const fps = String(fpsNum).padStart(2, "0");
@@ -1708,22 +1712,43 @@ export function setupDebugOverlay(game: GameScene): void {
             if (pd) {
                 const uid = game.selfNameLabel || ("@" + (game.nakama.getSession()?.username ?? ""));
                 const fpsStr = String(fps).padStart(2, "\u2007");
-                const mono = 'style="font-variant-numeric:tabular-nums;"';
-                const pingCursor = 'style="cursor:pointer;"';
-                const badgeCursor = 'cursor:pointer;';
-                const pingLabel = "";
-                const fpsLabel = "FPS";
-                if (game.latestPingAvg !== null && game.latestPingAvg < 0) {
-                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> 回線切断中 <span id="pd-ping" ${pingCursor}><span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
-                    pd.style.color = "#ff4444";
-                } else if (game.latestPingAvg !== null) {
-                    const pingStr = String(game.latestPingAvg).padStart(3, "\u2007");
-                    pd.innerHTML = `<span id="pd-badge" style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">ON</span> <span id="pd-uid" style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${pingCursor}>${pingLabel}<span ${mono}>${pingStr}</span>ms <span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
-                    pd.style.color = "";
-                } else {
-                    pd.innerHTML = `<span id="pd-badge" style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;${badgeCursor}">● 未接続</span> <span id="pd-ping" ${pingCursor}>${pingLabel}<span ${mono}>\u2007--</span>ms <span ${mono}>${fpsStr}</span>${fpsLabel}</span>`;
-                    pd.style.color = "";
+                // 状態判定: "connected" | "disconnected" | "pending"
+                type PdState = "connected" | "disconnected" | "pending";
+                let state: PdState;
+                if (game.latestPingAvg !== null && game.latestPingAvg < 0) state = "disconnected";
+                else if (game.latestPingAvg !== null) state = "connected";
+                else state = "pending";
+
+                // 状態またはuidが変わったときだけDOMを再構築
+                const stateKey = state + "|" + uid;
+                if ((pd as any).__pdState !== stateKey) {
+                    (pd as any).__pdState = stateKey;
+                    const mono = 'style="font-variant-numeric:tabular-nums;"';
+                    const tipBadge = 'title="ログイン状態を示します。\nON: サーバーに接続中\nOFF: サーバーとの接続が切れています\n\nクリックするとサーバーログパネルを開きます。"';
+                    const tipUid   = 'title="表示名を示します。\n@はログインIDで、表示名が未設定の場合に表示されます。\nアバターの頭上にも同じ名前が表示され、\n@付きの場合は青色で表示されます。\n\nクリックすると表示名の変更パネルを開きます。"';
+                    const tipPing  = 'title="Ping（応答時間）\nサーバへの応答時間をリアルタイムで表示します。\n\n【目安】\n  〜50ms: 快適（LAN内・近距離サーバ）\n 50〜100ms: 良好（一般的なMMOの標準範囲）\n100〜200ms: やや遅い（操作に若干の遅延を感じる）\n200ms〜: 厳しい（アクション操作に支障が出る）\n\n【仕組み】\nWebSocketプロトコルのping/pongではなく、\nアプリ独自の実装です。\nNakamaサーバのRPC関数「ping」を呼び出し、\n送信から応答までの往復時間（ミリ秒）を計測しています。\nそのためサーバ側の処理時間も含まれます。\n\nクリックするとPingグラフパネルを開きます。"';
+                    const tipFps   = 'title="FPS（フレームレート）\nFrames Per Second — 1秒あたりの描画回数。\n値が大きいほど映像が滑らかになります。\n\n典型的なMMO: 30〜60fps（60fps目標）\n\nクリックするとデバッグツールパネルを開きます。"';
+                    if (state === "disconnected") {
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">OFF</span> 回線切断中 <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.style.color = "#ff4444";
+                    } else if (state === "connected") {
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">ON</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.style.color = "";
+                    } else {
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">OFF</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.style.color = "";
+                    }
                 }
+                // 値だけテキスト更新（DOM再構築なし）
+                const pingValEl = document.getElementById("pd-ping-val");
+                const fpsValEl  = document.getElementById("pd-fps-val");
+                if (pingValEl) {
+                    const pingStr = (state === "connected")
+                        ? String(game.latestPingAvg).padStart(3, "\u2007")
+                        : "\u2007--";
+                    if (pingValEl.textContent !== pingStr) pingValEl.textContent = pingStr;
+                }
+                if (fpsValEl && fpsValEl.textContent !== fpsStr) fpsValEl.textContent = fpsStr;
             }
         }
 

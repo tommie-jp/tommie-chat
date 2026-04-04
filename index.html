@@ -119,6 +119,8 @@
             align-items: baseline !important;
             white-space: nowrap !important;
             overflow: hidden !important;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         /* ===== チャットオーバーレイ（アバター画面上に常時表示） ===== */
@@ -1083,6 +1085,48 @@
             display: none;
         }
 
+        /* --- フッター基本色 --- */
+        #app-footer-text .ft-label { color: #000; }
+
+        /* --- ホバー共通（ポップ1） --- */
+        #app-footer-version #app-footer-text:hover,
+        #coord-display #cd-pos:hover,
+        #coord-display #cd-dir:hover,
+        #ping-display #pd-badge:hover,
+        #ping-display #pd-uid:hover,
+        #ping-display #pd-ping:hover,
+        #ping-display #pd-fps:hover {
+            background: rgba(30, 100, 220, 0.35);
+            color: #cc0000;
+            border-radius: 3px;
+        }
+        #app-footer-version #app-footer-text:hover .ft-label {
+            color: #cc0000;
+        }
+        /* --- ホバー共通（背景黒） --- */
+        body.theme-dark #app-footer-version #app-footer-text:hover,
+        body.theme-dark #coord-display #cd-pos:hover,
+        body.theme-dark #coord-display #cd-dir:hover,
+        body.theme-dark #ping-display #pd-badge:hover,
+        body.theme-dark #ping-display #pd-uid:hover,
+        body.theme-dark #ping-display #pd-ping:hover,
+        body.theme-dark #ping-display #pd-fps:hover {
+            background: rgba(60, 130, 255, 0.4);
+            color: #ff4444;
+        }
+        body.theme-dark #app-footer-version #app-footer-text:hover .ft-label {
+            color: #ff4444;
+        }
+        /* --- 座標・方向の pointer-events 有効化 --- */
+        #coord-display #cd-pos,
+        #coord-display #cd-dir {
+            pointer-events: auto;
+            cursor: default;
+        }
+        #coord-display #cd-dir {
+            user-select: none;
+        }
+
         /* スマホ（タッチ＋高DPI）向けサイズ拡大 */
         @media (pointer: coarse) and (min-resolution: 2dppx) {
             /* iOS Safari バウンス防止 */
@@ -1886,9 +1930,19 @@
                 var isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
                 var ftEl = document.getElementById("app-footer-text");
                 if (ftEl) {
+                    var ftTip = "tommieChat\n"
+                        + "バージョン " + APP_VERSION + "\n"
+                        + "更新日 " + APP_DATE + "\n"
+                        + "\n"
+                        + "操作方法\n"
+                        + (isMobile
+                            ? "  移動: 地面をタップ\n  カメラ回転: 1本指ドラッグ\n  ズーム: ピンチイン/アウト\n  発言: セリフ入力 → 送信ボタン\n  改行: Shift+Enter"
+                            : "  移動: 地面をクリック\n  カメラ回転: 右ドラッグ\n  カメラ平行移動: 中ボタンドラッグ\n  ズーム: ホイール\n  発言: セリフ入力 → Enter\n  改行: Shift+Enter")
+                        + "\n\n© 2026 tommie.jp\n\nクリックすると「tommieChatについて」パネルを開きます。";
+                    ftEl.setAttribute("title", ftTip);
                     ftEl.innerHTML = isMobile
-                        ? '<span style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + devTag + '</span>'
-                        : '<span style="color:#000;">tommieChat ' + APP_VERSION + ' ' + dateDot + devTag + '</span>';
+                        ? '<span class="ft-label" style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + devTag + '</span>'
+                        : '<span class="ft-label">tommieChat ' + APP_VERSION + ' ' + dateDot + devTag + '</span>';
                 }
             }
 
@@ -2147,7 +2201,7 @@
         <table>
             <tr><td id="label-ver" class="label">01.Ver</td><td class="value" id="val-ver"></td></tr>
             <tr><td id="label-update" class="label">02.Update</td><td class="value" id="val-update"></td></tr>
-            <tr><td class="label" title="02b.Theme&#10;スマホ向けパネルの配色テーマを切り替えます。&#10;PCでは影響しません。&#10;・背景黒: ダークテーマ（暗い背景に白文字）&#10;・ポップ１: 明るく華やかな配色（紫グラデーション）">02b.Theme</td><td class="value">
+            <tr><td class="label" title="02b.Theme&#10;パネルの配色テーマを切り替えます。&#10;・ポップ１: 明るく華やかな配色（紫グラデーション）&#10;・背景黒: ダークテーマ（暗い背景に白文字）">02b.Theme</td><td class="value">
                 <select id="themeSelect" class="debug-select">
                     <option value="pop1" data-i18n="dbg.theme.pop1">ポップ１</option>
                     <option value="dark" data-i18n="dbg.theme.dark">背景黒</option>
@@ -2660,7 +2714,7 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:2px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="pointer-events:none;margin-right:2em;"></span><span id="app-footer-text"></span></div>
+    <div id="app-footer-version" style="position:fixed;bottom:2px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="margin-right:2em;"></span><span id="app-footer-text"></span></div>
 
     <script type="module" src="/src/main.ts"></script>
     <script>
