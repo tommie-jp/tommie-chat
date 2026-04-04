@@ -137,6 +137,7 @@
             z-index: 50;
             font-family: sans-serif;
             font-size: 13px;
+            overflow: hidden;
         }
         .chat-ol-line {
             color: var(--ol-color, #5c5c5c);
@@ -2687,7 +2688,7 @@
         </div>
         <div id="chat-settings-body">
         <table>
-            <tr><td class="label" title="1.行数&#10;チャットオーバーレイの最大表示行数を設定します。&#10;アバター画面の左下に表示されるリアルタイムチャットログの行数です。&#10;0にするとオーバーレイを非表示にします。" data-i18n="dbg.02c">1.行数</td><td class="value">
+            <tr><td class="label" title="1.表示行数&#10;チャットオーバーレイの表示領域の高さを行数で指定します。&#10;折返しで複数行になるメッセージがあっても、&#10;表示領域の高さは常にこの行数分に固定されます。&#10;0にするとオーバーレイを非表示にします。" data-i18n="dbg.02c">1.表示行数</td><td class="value">
                 <select id="chatOlMaxSelect" class="debug-select">
                     <option value="0" data-i18n="dbg.ol.0">0 (非表示)</option>
                     <option value="3" data-i18n="dbg.ol.3">3行</option>

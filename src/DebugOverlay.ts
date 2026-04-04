@@ -795,7 +795,11 @@ export function setupDebugOverlay(game: GameScene): void {
     chatOlBgColor?.addEventListener("input", () => { applyOlBg(); olSCk("chatOlBgColor", chatOlBgColor!.value); markNonDefault(chatOlBgColor!, "#dfeed4", chatOlBgColor!.value); });
     chatOlBgAlpha?.addEventListener("change", () => { applyOlBg(); olSCk("chatOlBgAlpha", chatOlBgAlpha!.value); markNonDefault(chatOlBgAlpha!, "0.45", chatOlBgAlpha!.value); });
     chatOlFontColor?.addEventListener("input", () => { applyOlFont(); olSCk("chatOlFontColor", chatOlFontColor!.value); markNonDefault(chatOlFontColor!, "#5c5c5c", chatOlFontColor!.value); });
-    chatOlFontSize?.addEventListener("change", () => { applyOlFont(); olSCk("chatOlFontSize", chatOlFontSize!.value); markNonDefault(chatOlFontSize!, "13", chatOlFontSize!.value); });
+    chatOlFontSize?.addEventListener("change", () => {
+        applyOlFont(); olSCk("chatOlFontSize", chatOlFontSize!.value); markNonDefault(chatOlFontSize!, "13", chatOlFontSize!.value);
+        // フォントサイズ変更時にmax-heightを再計算
+        (game as any).setChatOverlayMax?.((game as any).chatOverlayMax ?? 5);
+    });
 
     // --- チャットオーバーレイ 時刻色・名前色 ---
     const chatOlTimeColor = document.getElementById("chatOlTimeColor") as HTMLInputElement | null;
