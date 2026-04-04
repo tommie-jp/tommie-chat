@@ -686,6 +686,7 @@ type playerPos struct {
 	CharRow     int     // スプライトシート キャラ行
 	DisplayName string  // 表示名
 	LoginTime   string  // ログイン時刻(ISO8601)
+	NameColor   string  // 名前色（#RRGGBB）
 }
 
 // matchState はマッチの状態（プレイヤーごとのAOI管理）
@@ -887,6 +888,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				LoginTime   string  `json:"lt"`
 				CharCol     int     `json:"cc"`
 				CharRow     int     `json:"cr"`
+				NameColor   string  `json:"nc"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &pos); err == nil {
 				initUID := ""
@@ -907,8 +909,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					p.CharCol = pos.CharCol; p.CharRow = pos.CharRow
 					if pos.DisplayName != "" { p.DisplayName = pos.DisplayName }
 					if pos.LoginTime != "" { p.LoginTime = pos.LoginTime }
+					if pos.NameColor != "" { p.NameColor = pos.NameColor }
 				} else {
-					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, CharCol: pos.CharCol, CharRow: pos.CharRow, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime}
+					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, CharCol: pos.CharCol, CharRow: pos.CharRow, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime, NameColor: pos.NameColor}
 				}
 				logf("rcv DBG INIT_POS sid=%s oldCX=%d newCX=%d oldCZ=%d newCZ=%d\n", shortSID(sid), oldCX, cx, oldCZ, cz)
 				// チャンクが変わった場合、他プレイヤーのAOIへの入退場を通知（opMoveTargetと同様）
@@ -1141,6 +1144,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					CharCol     int    `json:"cc"`
 					CharRow     int    `json:"cr"`
 					LoginTime   string `json:"loginTime"`
+					NameColor   string `json:"nameColor,omitempty"`
 				}
 				profiles := make([]profileEntry, 0, len(req.SessionIds))
 				for _, reqSid := range req.SessionIds {
@@ -1155,6 +1159,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 						CharCol:     pos.CharCol,
 						CharRow:     pos.CharRow,
 						LoginTime:   pos.LoginTime,
+						NameColor:   pos.NameColor,
 					})
 				}
 				respData, _ := json.Marshal(map[string]interface{}{"profiles": profiles})
@@ -1167,13 +1172,15 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 
 		if op == opDisplayName {
-			// 表示名変更: {"displayName":...}
+			// 表示名変更: {"displayName":..., "nc":...}
 			var dn struct {
 				DisplayName string `json:"displayName"`
+				NameColor   string `json:"nc"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &dn); err == nil {
 				if p, ok := ms.Positions[sid]; ok {
 					p.DisplayName = dn.DisplayName
+					if dn.NameColor != "" { p.NameColor = dn.NameColor }
 				}
 			}
 			// 表示名はユーザリスト全体に影響するため全員にブロードキャスト（AOIフィルタなし）
