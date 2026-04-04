@@ -27,6 +27,7 @@ export class NakamaService {
     private host = location.hostname;
     private port = location.port || (location.protocol === "https:" ? "443" : "80");
     selfSessionId: string | null = null;
+    selfDeviceId: string | null = null;
     get selfMatchId(): string | null { return this.matchId; }
 
     onChatMessage?: (username: string, text: string, userId: string) => void;
@@ -123,6 +124,7 @@ export class NakamaService {
         console.log(`snd Connect ${useSSL ? "https" : "http"}://${this.host}:${this.port} (SSL=${useSSL})`);
         this.client = new Client(key, this.host, this.port, useSSL);
         const deviceId = this.getOrCreateDeviceId(loginName);
+        this.selfDeviceId = deviceId;
         this.session = await this.client.authenticateDevice(deviceId, true);
         // デバイス認証後にusernameを設定し、セッションを再取得（JWTにusernameを反映）
         if (this.session.username !== loginName) {

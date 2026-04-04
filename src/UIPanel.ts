@@ -1000,6 +1000,11 @@ export function setupHtmlUI(game: GameScene): void {
 
     game.nakama.onAvatarInitPos = (sessionId: string, x: number, z: number, _ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => {
         console.log(`rcv onAvatarInitPos sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} hasAvatar=${game.remoteAvatars.has(sessionId)}`);
+        // userMap に存在しないセッション = 既にキック/退出済み → 無視（ゴースト防止）
+        if (sessionId !== game.nakama.selfSessionId && !userMap.has(sessionId)) {
+            console.log(`rcv onAvatarInitPos SKIP sid=${sessionId.slice(0, 8)} (not in userMap)`);
+            return;
+        }
         initPosGuard.set(sessionId, performance.now());
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
@@ -1142,6 +1147,11 @@ export function setupHtmlUI(game: GameScene): void {
     game.nakama.onAOIEnter = (sessionId: string, x: number, z: number, ry: number) => {
         console.log(`rcv AOI_ENTER sid=${sessionId.slice(0, 8)} x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(2)}`);
         if (sessionId === game.nakama.selfSessionId) return;
+        // userMap に存在しないセッション = 既にキック/退出済み → 無視（ゴースト防止）
+        if (!userMap.has(sessionId)) {
+            console.log(`rcv AOI_ENTER SKIP sid=${sessionId.slice(0, 8)} (not in userMap)`);
+            return;
+        }
         const cached = profileCache.get(sessionId);
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const displayName = cached?.displayName ?? "";
@@ -1413,12 +1423,16 @@ export function setupHtmlUI(game: GameScene): void {
             }
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             // joinMatch 1回で全て完結（メタデータに初期位置を含める）
-            { const p = game.playerBox; await game.nakama.joinWorldMatch({
+            { const p = game.playerBox;
+              const multilogin = new URLSearchParams(location.search).has("multilogin") ? "1" : "";
+              await game.nakama.joinWorldMatch({
                 x: String(p.position.x), z: String(p.position.z), ry: String(p.rotation.y),
                 tx: game.playerTextureUrl, dn: game.nakama.selfDisplayName ?? "",
                 lt: new Date().toISOString(),
                 cc: String(game.playerCharCol), cr: String(game.playerCharRow),
                 nc: game.nakama.selfNameColor,
+                did: game.nakama.selfDeviceId ?? "",
+                ml: multilogin,
             }); }
             // 自分自身をプレイヤーリストに確実に登録
             {
@@ -1513,12 +1527,15 @@ export function setupHtmlUI(game: GameScene): void {
             // 再接続時にメタデータを提供
             game.nakama.getReconnectMeta = () => {
                 const p = game.playerBox;
+                const multilogin = new URLSearchParams(location.search).has("multilogin") ? "1" : "";
                 return {
                     x: String(p.position.x), z: String(p.position.z), ry: String(p.rotation.y),
                     tx: game.playerTextureUrl, dn: game.nakama.selfDisplayName ?? "",
                     lt: new Date().toISOString(),
                     cc: String(game.playerCharCol), cr: String(game.playerCharRow),
                     nc: game.nakama.selfNameColor,
+                    did: game.nakama.selfDeviceId ?? "",
+                    ml: multilogin,
                 };
             };
             game.nakama.onMatchReconnect = () => {
