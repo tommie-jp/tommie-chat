@@ -133,7 +133,7 @@ export const ja = {
     "buildmode.indicator.click": "🔨 ビルドモード（B/ESC/クリックで解除）",
 
     // --- デバッグツール ラベル ---
-    "dbg.02c": "1.行数",
+    "dbg.02c": "1.表示行数",
     "dbg.02d": "2.背景",
     "dbg.02e": "3.文字",
     "dbg.02e2": "4.時刻色",

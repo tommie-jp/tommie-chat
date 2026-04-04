@@ -135,7 +135,7 @@ export const en: Record<keyof typeof ja, string> = {
     "buildmode.indicator.click": "🔨 Build Mode (B/ESC/click to exit)",
 
     // --- Debug Tool Labels ---
-    "dbg.02c": "1.Lines",
+    "dbg.02c": "1.Display Lines",
     "dbg.02d": "2.BG",
     "dbg.02e": "3.Font",
     "dbg.02e2": "4.Time",

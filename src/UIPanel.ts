@@ -582,14 +582,69 @@ export function setupHtmlUI(game: GameScene): void {
     const chatOverlay = document.getElementById("chat-overlay");
     // GameScene 経由で外部からアクセスできるようにする
     (game as any).chatOverlayMax = chatOverlayMax;
+    /** テキスト1行の高さ（px） */
+    const getOlTextLineH = (): number => {
+        if (!chatOverlay) return 19.5;
+        const fs = parseFloat(getComputedStyle(chatOverlay).fontSize) || 13;
+        return fs * 1.5; // line-height: 1.5
+    };
+    /** メッセージが占めるテキスト行数を計算（折り返し含む） */
+    const getOlMsgLines = (el: HTMLElement): number => {
+        const textLineH = getOlTextLineH();
+        const cs = getComputedStyle(el);
+        const contentH = el.offsetHeight - parseFloat(cs.paddingTop || "0") - parseFloat(cs.paddingBottom || "0");
+        return Math.max(1, Math.ceil(contentH / textLineH - 0.1));
+    };
+    /** 全メッセージをDOMに保持し、テキスト行数の合計がchatOverlayMaxに収まる分だけ表示
+     *  枠を超えるメッセージは下の行だけ部分表示する */
+    const trimOlVisibility = () => {
+        if (!chatOverlay) return;
+        if (chatOverlayMax === 0) { chatOverlay.style.display = "none"; return; }
+        chatOverlay.style.display = "";
+        const children = Array.from(chatOverlay.children) as HTMLElement[];
+        // まず全てリセット
+        for (const el of children) {
+            el.style.display = "";
+            el.style.maxHeight = "";
+            el.style.overflow = "";
+            el.style.marginTop = "";
+        }
+        // 末尾（最新）からテキスト行数を積み上げ
+        let totalLines = 0;
+        for (let i = children.length - 1; i >= 0; i--) {
+            const lines = getOlMsgLines(children[i]);
+            if (totalLines + lines <= chatOverlayMax) {
+                totalLines += lines;
+            } else {
+                // 残り行数分だけ部分表示
+                const remainLines = chatOverlayMax - totalLines;
+                if (remainLines > 0) {
+                    const el = children[i];
+                    const msgLines = getOlMsgLines(el);
+                    const hideLines = msgLines - remainLines;
+                    if (hideLines > 0) {
+                        const cs = getComputedStyle(el);
+                        const pt = parseFloat(cs.paddingTop || "0");
+                        // 上部の行を隠す: paddingTop + 隠す行数分を負のmargin-topで押し上げ
+                        el.style.marginTop = "-" + (hideLines * getOlTextLineH() + pt) + "px";
+                        el.style.overflow = "hidden";
+                    }
+                } else {
+                    children[i].style.display = "none";
+                }
+                // それ以前を全て非表示
+                for (let j = i - 1; j >= 0; j--) children[j].style.display = "none";
+                break;
+            }
+        }
+    };
     (game as any).setChatOverlayMax = (n: number) => {
         chatOverlayMax = n;
         (game as any).chatOverlayMax = n;
-        if (chatOverlay) {
-            chatOverlay.style.display = n === 0 ? "none" : "";
-            while (chatOverlay.children.length > n) chatOverlay.removeChild(chatOverlay.firstChild!);
-        }
+        trimOlVisibility();
     };
+
+    trimOlVisibility();
 
     const addChatOverlay = (avatarName: string, text: string, timeStr: string, nameColor?: string, senderId?: string) => {
         if (!chatOverlay || !text || chatOverlayMax === 0) return;
@@ -608,8 +663,10 @@ export function setupHtmlUI(game: GameScene): void {
         }
         if (senderId) line.dataset.sender = senderId;
         chatOverlay.appendChild(line);
-        // 上限を超えた古い行を削除
-        while (chatOverlay.children.length > chatOverlayMax) {
+        trimOlVisibility();
+        // メモリ節約: 非表示要素が多すぎたら古い行を削除
+        const keepMax = Math.max(chatOverlayMax * 3, 20);
+        while (chatOverlay.children.length > keepMax) {
             chatOverlay.removeChild(chatOverlay.firstChild!);
         }
     };
@@ -617,8 +674,9 @@ export function setupHtmlUI(game: GameScene): void {
     /** 指定ユーザーの既存オーバーレイメッセージの名前色を一括更新 */
     const updateOverlayNameColor = (userId: string, newColor: string) => {
         if (!chatOverlay) return;
-        for (const line of chatOverlay.children) {
-            if ((line as HTMLElement).dataset.sender !== userId) continue;
+        for (const el of chatOverlay.children) {
+            const line = el as HTMLElement;
+            if (line.dataset.sender !== userId) continue;
             const nameEl = line.querySelector(".chat-ol-name") as HTMLElement | null;
             if (nameEl) nameEl.style.color = newColor;
         }
