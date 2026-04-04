@@ -1,8 +1,6 @@
-import { Client, Session, Socket, Channel, ChannelMessage, ChannelPresenceEvent, MatchData, MatchPresenceEvent } from "@heroiclabs/nakama-js";
+import { Client, Session, Socket, MatchData, MatchPresenceEvent } from "@heroiclabs/nakama-js";
 import { prof } from "./Profiler";
 
-const CHAT_ROOM = "world";
-const CHAT_TYPE = 1; // 1=Room, 2=DM, 3=Group
 // matchデータ opコード（WebSocket sendMatchState 経由の双方向メッセージ）
 // MatchLoop のメッセージキューで処理。同一接続内で送信順が保証される。
 // RPC と異なり非同期応答（別opコード）で結果を返す。
@@ -18,23 +16,21 @@ const OP_PROFILE_REQUEST   = 9;  // C→S     プロフィール要求（session
 const OP_PROFILE_RESPONSE  = 10; // S→C     プロフィール応答（要求者のみ）
 const OP_PLAYERS_AOI_REQ   = 11; // C→S     全プレイヤーAOI情報要求
 const OP_PLAYERS_AOI_RESP  = 12; // S→C     全プレイヤーAOI情報応答（要求者のみ）
+const OP_CHAT              = 13; // C→S→C   チャットメッセージ（全員ブロードキャスト）
+const OP_SYSTEM_MSG        = 14; // S→C     システムメッセージ（ログイン/ログアウト通知）
 
 export class NakamaService {
     private client: Client;
     private session: Session | null = null;
     private socket: Socket | null = null;
-    private channelId: string | null = null;
     private matchId: string | null = null;
     private host = location.hostname;
     private port = location.port || (location.protocol === "https:" ? "443" : "80");
     selfSessionId: string | null = null;
     get selfMatchId(): string | null { return this.matchId; }
-    get selfChannelId(): string | null { return this.channelId; }
 
     onChatMessage?: (username: string, text: string, userId: string) => void;
-    onPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
-    onPresenceNewJoin?: (sessionId: string, userId: string, username: string) => void;
-    onPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
+    onSystemMessage?: (type: string, username: string, userId: string) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => void;
@@ -48,6 +44,8 @@ export class NakamaService {
     onDisplayName?:      (sessionId: string, displayName: string, nameColor?: string) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
+    /** 再接続時に joinMatch に渡すメタデータを取得するコールバック */
+    getReconnectMeta?: () => Record<string, string>;
 
     private reconnecting = false;
     private loginName: string | null = null;
@@ -151,29 +149,8 @@ export class NakamaService {
 
         this.setupSocketHandlers();
 
-        const ch: Channel = await this.socket.joinChat(CHAT_ROOM, CHAT_TYPE, true, false);
-        this.channelId = ch.id;
-
-        // ch.self.session_id は他ユーザのプレゼンスに見える session_id と一致する
-        const selfSessionId = ch.self?.session_id ?? "";
-        this.selfSessionId = selfSessionId;
+        this.selfSessionId = this.session.user_id ? (this.session as unknown as { session_id?: string }).session_id ?? "" : "";
         this.loginTimeISO = new Date().toISOString();
-
-        // 自分自身を先に追加（ch.presences には自分が含まれない）
-        if (ch.self) {
-            this.onPresenceJoin?.(selfSessionId, ch.self.user_id, ch.self.username);
-        }
-        for (const p of ch.presences ?? []) {
-            this.onPresenceJoin?.(p.session_id ?? "", p.user_id, p.username);
-        }
-
-        this.socket.onchannelpresence = (event: ChannelPresenceEvent) => {
-            for (const p of event.joins ?? []) {
-                this.onPresenceJoin?.(p.session_id ?? "", p.user_id, p.username);
-                this.onPresenceNewJoin?.(p.session_id ?? "", p.user_id, p.username);
-            }
-            for (const p of event.leaves ?? []) this.onPresenceLeave?.(p.session_id ?? "", p.user_id, p.username);
-        };
 
         return this.session;
         } finally { _end(); }
@@ -182,10 +159,6 @@ export class NakamaService {
     private setupSocketHandlers(): void {
         const _end = prof("NakamaService.setupSocketHandlers");
         if (!this.socket) { _end(); return; }
-        this.socket.onchannelmessage = (msg: ChannelMessage) => {
-            const content = msg.content as { text?: string };
-            if (content?.text) this.onChatMessage?.(msg.username ?? "", content.text, msg.sender_id ?? "");
-        };
         this.socket.ondisconnect = () => {
             console.warn("NakamaService WebSocket disconnected");
             this.onMatchDisconnect?.();
@@ -209,19 +182,9 @@ export class NakamaService {
                 this.socket.setHeartbeatTimeoutMs(60000);
                 await this.socket.connect(this.session, true);
                 this.setupSocketHandlers();
-                // チャットチャンネル再参加
-                const ch = await this.socket.joinChat(CHAT_ROOM, CHAT_TYPE, true, false);
-                this.channelId = ch.id;
-                if (ch.self?.session_id) this.selfSessionId = ch.self.session_id;
-                this.socket.onchannelpresence = (event: ChannelPresenceEvent) => {
-                    for (const p of event.joins ?? []) {
-                        this.onPresenceJoin?.(p.session_id ?? "", p.user_id, p.username);
-                        this.onPresenceNewJoin?.(p.session_id ?? "", p.user_id, p.username);
-                    }
-                    for (const p of event.leaves ?? []) this.onPresenceLeave?.(p.session_id ?? "", p.user_id, p.username);
-                };
-                // マッチ再参加
-                await this.joinWorldMatch();
+                // マッチ再参加（チャットもマッチ経由、メタデータ付き）
+                const meta = this.getReconnectMeta?.() ?? {};
+                await this.joinWorldMatch(meta);
                 console.log("NakamaService reconnected successfully");
                 this.onMatchReconnect?.();
                 this.reconnecting = false;
@@ -235,7 +198,7 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    async joinWorldMatch(): Promise<void> {
+    async joinWorldMatch(initMeta?: Record<string, string>): Promise<void> {
         const _end = prof("NakamaService.joinWorldMatch");
         try {
         console.log("snd getWorldMatch");
@@ -273,6 +236,12 @@ export class NakamaService {
                     const players = resp.players ?? [];
                     if (this._aoiResolve) { this._aoiResolve(players); this._aoiResolve = null; }
                     this.onPlayersAOIResponse?.(players);
+                } else if (md.op_code === OP_CHAT) {
+                    const chat = payload as { text: string; username: string; userId: string };
+                    this.onChatMessage?.(chat.username ?? "", chat.text ?? "", chat.userId ?? "");
+                } else if (md.op_code === OP_SYSTEM_MSG) {
+                    const sys = payload as { type: string; username: string; userId: string };
+                    this.onSystemMessage?.(sys.type, sys.username, sys.userId);
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
                     const dn = payload as { displayName: string; nc?: string };
                     this.onDisplayName?.(sid, dn.displayName, dn.nc);
@@ -302,18 +271,20 @@ export class NakamaService {
                 acc.lastReset = _mt1;
             }
         };
-        const match = await this.socket.joinMatch(this.matchId);
-        // マッチ初期プレゼンス通知
-        if (match.self) {
-            this.onMatchPresenceJoin?.(this.selfSessionId ?? match.self.session_id, match.self.user_id, match.self.username);
-        }
-        for (const p of match.presences ?? []) {
-            this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
-        }
+        // onmatchpresence を joinMatch より前に登録（MatchLeave の取りこぼし防止）
         this.socket.onmatchpresence = (event: MatchPresenceEvent) => {
             for (const p of event.joins ?? []) this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
             for (const p of event.leaves ?? []) this.onMatchPresenceLeave?.(p.session_id, p.user_id, p.username);
         };
+        const match = await this.socket.joinMatch(this.matchId, undefined, initMeta ?? {});
+        // selfSessionId を確定
+        if (match.self) {
+            this.selfSessionId = match.self.session_id;
+            this.onMatchPresenceJoin?.(match.self.session_id, match.self.user_id, match.self.username);
+        }
+        for (const p of match.presences ?? []) {
+            this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
+        }
         } finally { _end(); }
     }
 
@@ -393,9 +364,23 @@ export class NakamaService {
         const _end = prof("NakamaService.sendChatMessage");
         try {
         console.log(`snd sendChatMessage text=${text}`);
-        if (!this.socket || !this.channelId) return;
-        await this.socket.writeChatMessage(this.channelId, { text });
+        if (!this.socket || !this.matchId) return;
+        await this.socket.sendMatchState(this.matchId, OP_CHAT, JSON.stringify({ text }));
         } finally { _end(); }
+    }
+
+    private _unloadCleaned = false;
+    /** ページ離脱時にマッチから即退出（ゴーストアバター防止）
+     *  disconnect は呼ばない — leaveMatch のフレームが送出される前にソケットが
+     *  閉じるのを防ぐため、ブラウザの自然切断に任せる */
+    cleanupBeforeUnload(): void {
+        if (this._unloadCleaned) return;
+        this._unloadCleaned = true;
+        if (this.socket && this.matchId) {
+            try {
+                this.socket.leaveMatch(this.matchId);
+            } catch { /* ignore */ }
+        }
     }
 
     logout(): void {
@@ -406,9 +391,9 @@ export class NakamaService {
             this.socket = null;
         }
         this.session       = null;
-        this.channelId     = null;
         this.matchId       = null;
         this.selfSessionId = null;
+        this._unloadCleaned = false;  // 再ログイン時に cleanup を再有効化
         _end();
     }
 

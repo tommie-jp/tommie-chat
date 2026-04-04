@@ -22,6 +22,15 @@ if (canvas) {
     const game = new GameScene(canvas);
     setupMinimap(game);
 
+    // ページ離脱時にマッチから即退出（ゴーストアバター防止）
+    const cleanup = () => game.nakama.cleanupBeforeUnload();
+    window.addEventListener("beforeunload", cleanup);
+    window.addEventListener("pagehide", cleanup);
+    // bfcache から復帰した場合はページをリロード（状態が壊れるため）
+    window.addEventListener("pageshow", (e) => {
+        if ((e as PageTransitionEvent).persisted) location.reload();
+    });
+
     // ブラウザコンソールからプロファイル操作:
     //   profileStart()  — 計測開始（DevTools Timings に mark/measure 出力）
     //   profileStop()   — 計測停止

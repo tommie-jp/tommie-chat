@@ -44,10 +44,13 @@ export function setupMinimap(game: GameScene): void {
     const savedVisible = ckGet("mmVisible");
     let mmVisible = savedVisible !== "0";
 
+    let onVisibilityChanged: (() => void) | null = null; // 描画初期化後にセット
     const updateVisibility = () => {
         container.style.display = mmVisible ? "" : "none";
+        container.style.pointerEvents = mmVisible ? "auto" : "none";
         if (menuBtn) menuBtn.textContent = (mmVisible ? "✓" : "　") + " ミニマップ";
         ckSet("mmVisible", mmVisible ? "1" : "0");
+        if (mmVisible) onVisibilityChanged?.();
     };
     updateVisibility();
 
@@ -66,13 +69,19 @@ export function setupMinimap(game: GameScene): void {
     const savedSize = ckGet("mmSize");
 
     if (savedLeft !== null && savedTop !== null) {
-        container.style.left = savedLeft + "px";
-        container.style.top = savedTop + "px";
-        container.style.right = "auto";
+        const l = parseInt(savedLeft), t = parseInt(savedTop);
+        if (isFinite(l) && isFinite(t) && l >= 0 && t >= 0 && l < window.innerWidth && t < window.innerHeight) {
+            container.style.left = l + "px";
+            container.style.top = t + "px";
+            container.style.right = "auto";
+        }
     }
     if (savedSize !== null) {
-        container.style.width = savedSize + "px";
-        container.style.height = savedSize + "px";
+        const s = parseInt(savedSize);
+        if (isFinite(s) && s >= 64 && s <= 400) {
+            container.style.width = s + "px";
+            container.style.height = s + "px";
+        }
     }
 
     // --- ズーム状態 ---
@@ -346,6 +355,7 @@ export function setupMinimap(game: GameScene): void {
 
     // チャンクデータのキャッシュ画像（ブロック＋方角）
     let chunkCacheValid = false;
+    onVisibilityChanged = () => { chunkCacheValid = false; };
     const chunkCache = document.createElement("canvas");
     const chunkCacheCtx = chunkCache.getContext("2d")!;
 
@@ -406,6 +416,7 @@ export function setupMinimap(game: GameScene): void {
     // 定期更新
     let frameCount = 0;
     game.scene.onAfterRenderObservable.add(() => {
+        if (!mmVisible) return; // 非表示中は描画スキップ
         frameCount++;
         // チャンク + 方角: 120フレームごと（約2秒）
         if (!chunkCacheValid || frameCount % 120 === 0) {

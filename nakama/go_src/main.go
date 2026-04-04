@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"hash/fnv"
 	"net/http"
 	_ "net/http/pprof"
@@ -192,6 +193,8 @@ const (
 	opProfileResponse  int64 = 10 // S→C     プロフィール応答（要求者のみ）
 	opPlayersAOIReq    int64 = 11 // C→S     全プレイヤーAOI情報要求
 	opPlayersAOIResp   int64 = 12 // S→C     全プレイヤーAOI情報応答（要求者のみ）
+	opChat             int64 = 13 // C→S→C   チャットメッセージ（全員ブロードキャスト）
+	opSystemMsg        int64 = 14 // S→C     システムメッセージ（ログイン/ログアウト通知）
 )
 
 // 地面セル: blockID (uint16) + RGBA 各1バイト
@@ -695,6 +698,7 @@ type matchState struct {
 	Presences        map[string]runtime.Presence          // sessionID -> Presence
 	Positions        map[string]*playerPos               // sessionID -> 位置
 	PendingAOIEnter  map[string][]map[string]interface{} // recipientSID -> 未送信 AOI_ENTER エントリ
+	PendingInit      map[string]*playerPos               // sessionID -> joinMatch metadata から取得した初期位置
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -707,6 +711,7 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		Presences:       make(map[string]runtime.Presence),
 		Positions:       make(map[string]*playerPos),
 		PendingAOIEnter: make(map[string][]map[string]interface{}),
+		PendingInit:     make(map[string]*playerPos),
 	}, 10, "world"
 }
 
@@ -723,18 +728,79 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 	if !loginRateLimiter.Allow() {
 		return state, false, "too many logins, try again later"
 	}
+	ms := state.(*matchState)
+	newSID := presence.GetSessionId()
+
+	// metadata から初期位置を保存（joinMatch 1回で全て完結するため）
+	if metadata != nil {
+		x, _ := strconv.ParseFloat(metadata["x"], 64)
+		z, _ := strconv.ParseFloat(metadata["z"], 64)
+		ry, _ := strconv.ParseFloat(metadata["ry"], 64)
+		cc, _ := strconv.Atoi(metadata["cc"])
+		cr, _ := strconv.Atoi(metadata["cr"])
+		ms.PendingInit[newSID] = &playerPos{
+			X: x, Z: z, RY: ry,
+			TextureUrl:  metadata["tx"],
+			DisplayName: metadata["dn"],
+			LoginTime:   metadata["lt"],
+			CharCol:     cc,
+			CharRow:     cr,
+			NameColor:   metadata["nc"],
+		}
+		logger.Info("PendingInit stored for sid=%s x=%.1f z=%.1f", shortSID(newSID), x, z)
+	}
+
 	return state, true, ""
 }
 
 func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
 	defer prof("MatchJoin")()
 	ms := state.(*matchState)
+	half := float64(worldSize / 2)
 	for _, p := range presences {
 		sid := p.GetSessionId()
-		// 初期AOIを空にする: 最初のAOI_UPDATEでAOI内プレイヤーにAOI_ENTERが送られる
+		uid := p.GetUserId()
+
 		ms.AOIs[sid] = &playerAOI{-1, -1, -1, -1}
 		ms.Presences[sid] = p
-		ms.Positions[sid] = &playerPos{CX: -1, CZ: -1, X: 0, Z: 0, RY: 0, TextureUrl: ""} // CX=-1はopInitPos未受信のセンチネル
+
+		// PendingInit があれば初期位置を即座に登録（joinMatch 1回で完結）
+		if init, ok := ms.PendingInit[sid]; ok {
+			cx := int((init.X + half) / chunkSize)
+			cz := int((init.Z + half) / chunkSize)
+			if cx < 0 { cx = 0 }
+			if cz < 0 { cz = 0 }
+			if cx >= chunkCount { cx = chunkCount - 1 }
+			if cz >= chunkCount { cz = chunkCount - 1 }
+			init.CX = cx
+			init.CZ = cz
+			ms.Positions[sid] = init
+			delete(ms.PendingInit, sid)
+			logger.Info("MatchJoin with init pos: uid=%s sid=%s x=%.1f z=%.1f", uid, shortSID(sid), init.X, init.Z)
+
+			// displayNameCache 更新
+			if init.DisplayName != "" {
+				displayNameCache.Store(uid, init.DisplayName)
+			}
+			// グローバルキャッシュ更新
+			if init.TextureUrl != "" {
+				worldPlayersMu.Lock()
+				if worldPlayersCache == nil { worldPlayersCache = make(map[string]*worldPlayerEntry) }
+				worldPlayersCache[sid] = &worldPlayerEntry{SessionID: sid, X: init.X, Z: init.Z, RY: init.RY, TextureUrl: init.TextureUrl, DisplayName: init.DisplayName}
+				worldPlayersMu.Unlock()
+			}
+		} else {
+			ms.Positions[sid] = &playerPos{CX: -1, CZ: -1, X: 0, Z: 0, RY: 0, TextureUrl: ""}
+		}
+
+		// システムメッセージ: ログイン通知を全員に送信
+		uname := p.GetUsername()
+		sysMsg, _ := json.Marshal(map[string]interface{}{
+			"type":     "join",
+			"username": uname,
+			"userId":   uid,
+		})
+		dispatcher.BroadcastMessage(opSystemMsg, sysMsg, nil, p, true)
 	}
 	return ms
 }
@@ -767,9 +833,27 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 				}
 			}
 		}
+		// システムメッセージ: ログアウト通知を全員に送信
+		uname := p.GetUsername()
+		uid := p.GetUserId()
+		sysMsg, _ := json.Marshal(map[string]interface{}{
+			"type":     "leave",
+			"username": uname,
+			"userId":   uid,
+		})
+		// 残っている全プレゼンスに送信（退出者自身は除外済み）
+		var targets []runtime.Presence
+		for otherSID, otherP := range ms.Presences {
+			if otherSID != sid { targets = append(targets, otherP) }
+		}
+		if len(targets) > 0 {
+			dispatcher.BroadcastMessage(opSystemMsg, sysMsg, targets, nil, true)
+		}
+
 		delete(ms.AOIs, sid)
 		delete(ms.Presences, sid)
 		delete(ms.Positions, sid)
+		delete(ms.PendingInit, sid)
 		worldPlayersMu.Lock()
 		delete(worldPlayersCache, sid)
 		worldPlayersMu.Unlock()
@@ -1185,6 +1269,21 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			}
 			// 表示名はユーザリスト全体に影響するため全員にブロードキャスト（AOIフィルタなし）
 			dispatcher.BroadcastMessage(op, msg.GetData(), nil, msg, true)
+			continue
+		}
+
+		if op == opChat {
+			// チャットメッセージ: 全員にブロードキャスト（AOIフィルタなし）
+			// クライアントは {"text":"..."} を送信。サーバーは username/userId を付与して転送
+			var chatMsg map[string]interface{}
+			if err := json.Unmarshal(msg.GetData(), &chatMsg); err == nil {
+				if p, ok := ms.Presences[sid]; ok {
+					chatMsg["username"] = p.GetUsername()
+					chatMsg["userId"] = p.GetUserId()
+					enriched, _ := json.Marshal(chatMsg)
+					dispatcher.BroadcastMessage(opChat, enriched, nil, nil, true)
+				}
+			}
 			continue
 		}
 
