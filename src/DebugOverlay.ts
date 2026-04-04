@@ -55,6 +55,31 @@ function dbgSetCookie(name: string, value: string): void {
     document.cookie = `${name}=${encodeURIComponent(value)};path=/;max-age=${60*60*24*365}`;
 }
 
+/** 開発者モードの有効/無効を切り替える */
+function setDevMode(on: boolean): void {
+    if (on) {
+        document.body.classList.add("dev-mode");
+    } else {
+        document.body.classList.remove("dev-mode");
+    }
+    dbgSetCookie("devMode", on ? "1" : "0");
+    const btn = document.getElementById("devModeBtn");
+    if (btn) btn.textContent = on ? "On" : "Off";
+}
+
+function isDevMode(): boolean {
+    return document.body.classList.contains("dev-mode");
+}
+
+// 起動時の開発者モード判定（URLパラメータまたはCookie）
+(function initDevMode() {
+    const urlDev = new URLSearchParams(location.search).has("dev");
+    const cookieDev = dbgGetCookie("devMode") === "1";
+    if (urlDev || cookieDev) {
+        document.body.classList.add("dev-mode");
+    }
+})();
+
 export function setupDebugOverlay(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
     const scaleSelect = document.getElementById("scaleSelect") as HTMLSelectElement;
@@ -200,10 +225,38 @@ export function setupDebugOverlay(game: GameScene): void {
         resizeObserver.observe(debugOverlay);
     }
 
+    // --- 00.DevMode ボタン ---
+    const devModeBtn = document.getElementById("devModeBtn") as HTMLButtonElement;
+    if (devModeBtn) {
+        devModeBtn.textContent = isDevMode() ? "On" : "Off";
+        devModeBtn.addEventListener("click", () => {
+            setDevMode(!isDevMode());
+            // ping-display のDOM再構築を強制
+            const pd = document.getElementById("ping-display");
+            if (pd) (pd as any).__pdState = null;
+        });
+    }
+
     {
         const menuBtn    = document.getElementById("menu-btn")!;
         const menuPopup  = document.getElementById("menu-popup")!;
         const cookieReset = document.getElementById("menu-cookie-reset")!;
+
+        // --- ハンバーガーメニュー3回タップで開発者モード切り替え ---
+        let menuTapCount = 0;
+        let menuTapTimer: ReturnType<typeof setTimeout> | null = null;
+        menuBtn.addEventListener("dblclick", (e) => e.preventDefault());
+        menuBtn.addEventListener("pointerdown", () => {
+            menuTapCount++;
+            if (menuTapTimer) clearTimeout(menuTapTimer);
+            menuTapTimer = setTimeout(() => { menuTapCount = 0; }, 800);
+            if (menuTapCount >= 3) {
+                menuTapCount = 0;
+                setDevMode(!isDevMode());
+                const pd = document.getElementById("ping-display");
+                if (pd) (pd as any).__pdState = null;
+            }
+        });
 
         /** メニューを閉じる（選択項目のフラッシュ＋フェードアウト） */
         const closeMenu = (selectedBtn?: HTMLElement) => {
