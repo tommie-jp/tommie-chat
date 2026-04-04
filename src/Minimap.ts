@@ -22,6 +22,13 @@ export function setupMinimap(game: GameScene): void {
     const container = document.getElementById("minimap-container");
     if (!container) return;
 
+    const isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+
+    // PC のみツールチップ
+    if (!isMobile) {
+        canvas.title = "ミニマップ\nワールド全体の俯瞰図\n緑: 地面\n色付き: ブロック\n白▲: 自分\n緑▲: 他プレイヤー\n\nドラッグ: 移動\n右下ドラッグ: リサイズ\nホイール: ズーム";
+    }
+
     // --- Cookie ヘルパー ---
     const ckGet = (name: string): string | null => {
         const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
@@ -30,6 +37,27 @@ export function setupMinimap(game: GameScene): void {
     const ckSet = (name: string, value: string) => {
         document.cookie = `${name}=${encodeURIComponent(value)};path=/;max-age=${60*60*24*365}`;
     };
+
+    // --- メニュートグル（表示/非表示） ---
+    // --- 表示/非表示トグル ---
+    const menuBtn = document.getElementById("menu-minimap");
+    const savedVisible = ckGet("mmVisible");
+    let mmVisible = savedVisible !== "0";
+
+    const updateVisibility = () => {
+        container.style.display = mmVisible ? "" : "none";
+        if (menuBtn) menuBtn.textContent = (mmVisible ? "✓" : "　") + " ミニマップ";
+        ckSet("mmVisible", mmVisible ? "1" : "0");
+    };
+    updateVisibility();
+
+    if (menuBtn) {
+        menuBtn.addEventListener("click", () => {
+            mmVisible = !mmVisible;
+            updateVisibility();
+            (game as any).closeMenu?.(menuBtn);
+        });
+    }
 
     // --- Cookie から復元 ---
     const savedZoom = ckGet("mmZoom");
@@ -51,26 +79,35 @@ export function setupMinimap(game: GameScene): void {
     let zoomIndex = savedZoom !== null ? Math.max(0, Math.min(ZOOM_LEVELS.length - 1, parseInt(savedZoom))) : 0;
     let zoom = ZOOM_LEVELS[zoomIndex];
 
-    // --- UI: +/- ボタン + 倍率表示 ---
-    const controls = document.createElement("div");
-    controls.style.cssText = "position:absolute;top:2px;right:2px;display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:auto;";
-    const isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+    // --- UI: Xボタン（左上） + +/-ボタン（右上） + 倍率表示 ---
     const btnSize = isMobile ? "28px" : "20px";
     const btnFont = isMobile ? "16px" : "14px";
     const btnStyle = `width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:1px solid rgba(0,0,0,0.3);border-radius:3px;background:rgba(255,255,255,0.4);cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#333;`;
 
+    // Xボタン（右上）
+    const btnClose = document.createElement("button");
+    btnClose.textContent = "✕";
+    btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:none;border-radius:3px;background:rgba(200,0,0,0.6);cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#fff;pointer-events:auto;`;
+    if (!isMobile) btnClose.title = "ミニマップを非表示（メニューから再表示）";
+    btnClose.addEventListener("click", (e) => { e.stopPropagation(); mmVisible = false; updateVisibility(); });
+    container.appendChild(btnClose);
+
+    // +/-ボタン（左下）
+    const controls = document.createElement("div");
+    controls.style.cssText = "position:absolute;top:2px;left:2px;display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:auto;";
+
     const btnPlus = document.createElement("button");
     btnPlus.textContent = "+";
     btnPlus.style.cssText = btnStyle;
-    btnPlus.title = "ズームイン";
+    if (!isMobile) btnPlus.title = "ズームイン";
 
     const btnMinus = document.createElement("button");
     btnMinus.textContent = "−";
     btnMinus.style.cssText = btnStyle;
-    btnMinus.title = "ズームアウト";
+    if (!isMobile) btnMinus.title = "ズームアウト";
 
     const zoomLabel = document.createElement("div");
-    zoomLabel.style.cssText = "font-size:9px;font-family:monospace;color:#fff;text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;white-space:nowrap;";
+    zoomLabel.style.cssText = "font-size:12px;font-family:monospace;color:#fff;text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;white-space:nowrap;";
 
     const updateZoomLabel = () => { zoomLabel.textContent = `×${zoom}`; };
     updateZoomLabel();
@@ -180,9 +217,8 @@ export function setupMinimap(game: GameScene): void {
 
     container.addEventListener("touchstart", (e) => {
         e.stopPropagation();
-        e.preventDefault();
         if (e.touches.length >= 2) {
-            // ピンチ開始
+            e.preventDefault();
             onEnd();
             pinching = true;
             lastPinchDist = getTouchDist(e);
@@ -191,7 +227,8 @@ export function setupMinimap(game: GameScene): void {
         pinching = false;
         const t = e.touches[0];
         const target = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement;
-        if (target?.tagName === "BUTTON") return;
+        if (target?.tagName === "BUTTON") return; // ボタンはブラウザのclick処理に委任
+        e.preventDefault();
         onStart(t.clientX, t.clientY, target);
     }, { passive: false });
     container.addEventListener("touchmove", (e) => {
@@ -280,8 +317,7 @@ export function setupMinimap(game: GameScene): void {
     /** プレイヤーの三角形を描画（自分を最前面） */
     const drawPlayers = () => {
         const scale = mapSize / 128;
-        const dotSize = Math.max(2 * scale, Math.ceil(zoom * 1.5 + scale));
-        const arrowSize = (dotSize + 3 * scale) * 0.65;
+        const arrowSize = 5 * scale;
 
         // 他プレイヤー（黄色）— 先に描画
         for (const [sid, av] of game.remoteAvatars) {
