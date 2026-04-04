@@ -140,7 +140,7 @@
         }
         .chat-ol-line {
             color: var(--ol-color, #5c5c5c);
-            text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+            text-shadow: var(--ol-shadow, 0 0 3px #fff, 0 0 6px #fff);
             background: var(--ol-bg, rgba(223,238,212,0.45));
             line-height: 1.5;
             padding: 2px 6px;
@@ -938,6 +938,8 @@
         #chat-settings-close:hover { opacity: 1; }
         #chat-settings-body {
             padding: 6px 8px;
+            overflow-y: auto;
+            flex: 1;
         }
         #chat-settings-body table {
             width: 100%;
@@ -2731,6 +2733,12 @@
             </td></tr>
             <tr><td class="label" title="6.折返&#10;チャットオーバーレイの文字列を折り返すかどうかを設定します。&#10;On: 長い文字列を折り返して全文表示&#10;Off: 1行で省略（…）表示" data-i18n="dbg.02f">6.折返</td><td class="value">
                 <button id="chatOlWrapBtn" class="debug-btn">On</button>
+            </td></tr>
+            <tr><td class="label" title="7.影&#10;チャットオーバーレイの文字に光彩（影）を付けます。&#10;On: 指定色で光彩表示&#10;Off: 影なし">7.影</td><td class="value">
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+                    <input id="chatOlShadowColor" class="debug-color" type="color" value="#ffffff" style="min-width:32px;width:32px;height:24px;padding:0;border:1px solid #888;flex-shrink:0;">
+                    <button id="chatOlShadowBtn" class="debug-btn" style="min-width:40px;">On</button>
+                </div>
             </td></tr>
         </table>
         </div>
