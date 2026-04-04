@@ -1,4 +1,5 @@
 import { GameScene } from "./GameScene";
+import { setupMinimap } from "./Minimap";
 import { profSetEnabled, profReset, profDump } from "./Profiler";
 
 declare const APP_VERSION: string;
@@ -19,6 +20,7 @@ console.log(`tommieChat v${APP_VERSION} (${APP_DATE})`);
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 if (canvas) {
     const game = new GameScene(canvas);
+    setupMinimap(game);
 
     // ブラウザコンソールからプロファイル操作:
     //   profileStart()  — 計測開始（DevTools Timings に mark/measure 出力）
