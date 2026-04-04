@@ -297,7 +297,7 @@ export function setupDebugOverlay(game: GameScene): void {
 
         cookieReset.addEventListener("click", () => {
             ["server-settings-panel", "server-log-panel", "user-list-panel",
-             "chat-history-panel", "ping-panel", "debug-overlay"].forEach(id => {
+             "chat-history-panel", "chat-settings-panel", "ping-panel", "debug-overlay"].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.style.display = "none";
             });
@@ -499,6 +499,7 @@ export function setupDebugOverlay(game: GameScene): void {
                         "debug-overlay":         { w: 310, h: 0,   top: 45,  left: window.innerWidth - 310 - pad },
                         "user-list-panel":       { w: 420, h: 280, top: pad, left: window.innerWidth - 420 - 300 },
                         "chat-history-panel":    { w: 360, h: 400, top: pad, left: pad },
+                        "chat-settings-panel":   { w: 240, h: 0,   top: 80,  left: window.innerWidth - 240 - 320 },
                         "server-log-panel":      { w: 380, h: 240, top: 120, left: window.innerWidth - 380 - pad },
                         "server-settings-panel": { w: 210, h: 0,   top: pad, left: window.innerWidth - 210 - 460 },
                         "ping-panel":            { w: 300, h: 160, top: pad, left: window.innerWidth - 300 - 300 },
@@ -559,6 +560,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-serverlog",      "server-log-panel",      "menu.serverlog",     "showSrvLog");
         makeToggle("menu-userlist",       "user-list-panel",       "menu.userlist",      "showUserList");
         makeToggle("menu-chathistory",    "chat-history-panel",    "menu.chathistory",   "showChatHist");
+        makeToggle("menu-chatsettings",  "chat-settings-panel",   "menu.chatsettings",  "showChatSettings");
         makeToggle("menu-ping",           "ping-panel",            "menu.ping",          "showPing");
         makeToggle("menu-ccu",            "ccu-panel",             "menu.ccu",           "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "menu.debug",         "showDebug");
