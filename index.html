@@ -172,6 +172,23 @@
             font-style: italic;
         }
 
+        /* ===== ミニマップ ===== */
+        #minimap-container {
+            position: fixed;
+            top: 24px;
+            right: 8px;
+            z-index: 60;
+            pointer-events: none;
+            opacity: 0.85;
+        }
+        #minimap {
+            display: block;
+            border: 1px solid rgba(0,0,0,0.3);
+            border-radius: 4px;
+            background: #4a7a3a;
+            image-rendering: pixelated;
+        }
+
         /* ===== ユーザーリスト ===== */
         #displayname-panel {
             position: fixed;
@@ -1259,6 +1276,15 @@
             /* --- 右上表示 --- */
             #ping-display {
                 font-size: 16px !important;
+            }
+            /* --- ミニマップ --- */
+            #minimap-container {
+                top: 24px !important;
+                right: 4px !important;
+            }
+            #minimap {
+                width: 80px !important;
+                height: 80px !important;
             }
 
             /* --- ツールチップ --- */
@@ -2763,6 +2789,7 @@
         </div>
     </div>
 
+    <div id="minimap-container"><canvas id="minimap" width="128" height="128" title="ミニマップ&#10;ワールド全体の俯瞰図&#10;緑: 地面&#10;色付き: ブロック&#10;白: 自分&#10;黄: 他プレイヤー"></canvas></div>
     <div id="chat-overlay"></div>
     <div id="landscape-divider"><div id="landscape-divider-knob">⋮</div></div>
     <div id="portrait-divider"><div id="portrait-divider-knob">⋯</div></div>
