@@ -978,9 +978,11 @@
             position: fixed;
             top: 40px;
             left: 15px;
-            background: rgba(30, 30, 30, 0.95);
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             z-index: 10000;
             overflow: hidden;
             display: none;
@@ -997,7 +999,7 @@
             padding: 5px 14px;
             background: none;
             border: none;
-            color: #fff;
+            color: #222;
             font-size: 12px;
             text-align: left;
             cursor: pointer;
@@ -1007,7 +1009,7 @@
             -webkit-user-select: none;
         }
         .menu-item:hover {
-            background: rgba(255, 255, 255, 0.15);
+            background: rgba(120, 100, 220, 0.12);
         }
         .menu-item.menu-flash {
             animation: menuFlash 0.4s ease-out;
@@ -1714,118 +1716,121 @@
         }
 
         /* ========== テーマ: 背景黒（スマホ共通） ========== */
+        /* ===== ダークテーマ（PC・モバイル共通） ===== */
+        body.theme-dark #user-list-panel,
+        body.theme-dark #chat-history-panel,
+        body.theme-dark #server-settings-panel,
+        body.theme-dark #server-log-panel,
+        body.theme-dark #ping-panel,
+        body.theme-dark #ccu-panel,
+        body.theme-dark #debug-overlay,
+        body.theme-dark #about-panel,
+        body.theme-dark #displayname-panel {
+            background: #2c2c2e !important;
+            color: #eee !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        body.theme-dark #user-list-header,
+        body.theme-dark #chat-history-header,
+        body.theme-dark #server-settings-header,
+        body.theme-dark #server-log-header,
+        body.theme-dark #ping-header,
+        body.theme-dark #ccu-header,
+        body.theme-dark #debug-title-bar,
+        body.theme-dark #about-panel-header,
+        body.theme-dark #displayname-header {
+            background: #3a3a3c !important;
+            border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+        }
+        body.theme-dark #chat-container {
+            background: transparent !important;
+        }
+        body.theme-dark #server-log-list .server-log-entry,
+        body.theme-dark #chat-history-list,
+        body.theme-dark .server-settings-row,
+        body.theme-dark .server-settings-row input {
+            color: #eee !important;
+        }
+        body.theme-dark .server-settings-row input {
+            background: #3a3a3c !important;
+            border-color: rgba(255,255,255,0.2) !important;
+        }
+        body.theme-dark .srv-row label { color: #eee !important; }
+        body.theme-dark .srv-row input {
+            color: #eee !important;
+            background: #3a3a3c !important;
+            border-color: rgba(255,255,255,0.2) !important;
+        }
+        body.theme-dark .srv-desc { color: #eee !important; }
+        body.theme-dark #srvPingResult {
+            color: #eee !important;
+            background: #3a3a3c !important;
+            border-color: rgba(255,255,255,0.2) !important;
+        }
+        body.theme-dark #serverKeyDisplay { color: #aaa !important; }
+        body.theme-dark .srv-row:has(#serverKeyDisplay) { color: #aaa !important; }
+        body.theme-dark .chat-history-entry {
+            color: #eee !important;
+            border-bottom-color: rgba(255,255,255,0.15) !important;
+        }
+        body.theme-dark .chat-history-time { color: #aaa !important; }
+        body.theme-dark .chat-history-name { color: #6cb4ff !important; }
+        body.theme-dark .chat-history-system { color: #bbb !important; }
+        body.theme-dark .chat-history-text { color: #eee !important; }
+        body.theme-dark #user-list thead th {
+            background: #3a3a3c !important;
+            color: #eee !important;
+            border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+        }
+        body.theme-dark #user-list thead th:hover { background: #48484a !important; }
+        body.theme-dark #user-list tbody td { color: #eee !important; }
+        body.theme-dark #user-list tbody tr:nth-child(odd) td {
+            background-color: rgba(80, 150, 220, 0.25) !important;
+        }
+        body.theme-dark #debug-title-bar { border-bottom-color: rgba(255,255,255,0.2) !important; }
+        body.theme-dark #debug-overlay td.label { color: #ccc !important; }
+        body.theme-dark #debug-overlay td.value { color: #eee !important; }
+        body.theme-dark #debug-overlay tr:nth-child(odd) > td.label,
+        body.theme-dark #debug-overlay tr:nth-child(odd) > td.value {
+            background-color: rgba(80, 150, 220, 0.25) !important;
+        }
+        body.theme-dark #debug-overlay td.label:hover {
+            background-color: rgba(255,255,255,0.1) !important;
+            color: #6cb4ff !important;
+        }
+        body.theme-dark #debug-overlay td[colspan] div > div {
+            color: #fff !important;
+            border-bottom-color: rgba(255,255,255,0.3) !important;
+        }
+        body.theme-dark #debug-overlay td[colspan] > div { background: #3a3a3c !important; }
+        body.theme-dark #menu-popup {
+            background: rgba(30, 30, 30, 0.95) !important;
+            border: 1px solid rgba(255,255,255,0.18) !important;
+        }
+        body.theme-dark .menu-item {
+            color: #fff !important;
+        }
+        body.theme-dark .menu-item:hover {
+            background: rgba(255, 255, 255, 0.15) !important;
+        }
+        body.theme-dark #logout-panel {
+            background: #2c2c2e !important;
+            color: #eee !important;
+        }
+        body.theme-dark #logout-panel-header {
+            background: #3a3a3c !important;
+            color: #fff !important;
+            border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+        }
+        body.theme-dark #logout-panel-body p { color: #eee !important; }
+        body.theme-dark #about-panel-body p { color: #eee !important; }
+        body.theme-dark #about-panel-body a { color: #6cb4ff !important; }
+
+        /* ダークテーマ: モバイル固有 */
         @media (pointer: coarse) and (min-resolution: 2dppx) {
             body.theme-dark.sp-panel-visible::before { background: #2c2c2e !important; }
             body.theme-dark::after { background: #111 !important; }
-
-            body.theme-dark #user-list-panel,
-            body.theme-dark #chat-history-panel,
-            body.theme-dark #server-settings-panel,
-            body.theme-dark #server-log-panel,
-            body.theme-dark #ping-panel,
-            body.theme-dark #ccu-panel,
-            body.theme-dark #debug-overlay,
-            body.theme-dark #about-panel,
-            body.theme-dark #displayname-panel {
-                background: #2c2c2e !important;
-                color: #eee !important;
-                backdrop-filter: none !important;
-                -webkit-backdrop-filter: none !important;
-            }
-            body.theme-dark #user-list-header,
-            body.theme-dark #chat-history-header,
-            body.theme-dark #server-settings-header,
-            body.theme-dark #server-log-header,
-            body.theme-dark #ping-header,
-            body.theme-dark #ccu-header,
-            body.theme-dark #debug-title-bar,
-            body.theme-dark #about-panel-header,
-            body.theme-dark #displayname-header {
-                background: #3a3a3c !important;
-                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
-            }
-            body.theme-dark #chat-container {
-                background: transparent !important;
-            }
-            body.theme-dark #server-log-list .server-log-entry,
-            body.theme-dark #chat-history-list,
-            body.theme-dark .server-settings-row,
-            body.theme-dark .server-settings-row input {
-                color: #eee !important;
-            }
-            body.theme-dark .server-settings-row input {
-                background: #3a3a3c !important;
-                border-color: rgba(255,255,255,0.2) !important;
-            }
-            body.theme-dark .srv-row label { color: #eee !important; }
-            body.theme-dark .srv-row input {
-                color: #eee !important;
-                background: #3a3a3c !important;
-                border-color: rgba(255,255,255,0.2) !important;
-            }
-            body.theme-dark .srv-desc { color: #eee !important; }
-            body.theme-dark #srvPingResult {
-                color: #eee !important;
-                background: #3a3a3c !important;
-                border-color: rgba(255,255,255,0.2) !important;
-            }
-            body.theme-dark #serverKeyDisplay { color: #aaa !important; }
-            body.theme-dark .srv-row:has(#serverKeyDisplay) { color: #aaa !important; }
-            body.theme-dark .chat-history-entry {
-                color: #eee !important;
-                border-bottom-color: rgba(255,255,255,0.15) !important;
-            }
-            body.theme-dark .chat-history-time { color: #aaa !important; }
-            body.theme-dark .chat-history-name { color: #6cb4ff !important; }
-            body.theme-dark .chat-history-system { color: #bbb !important; }
-            body.theme-dark .chat-history-text { color: #eee !important; }
-            body.theme-dark #user-list thead th {
-                background: #3a3a3c !important;
-                color: #eee !important;
-                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
-            }
-            body.theme-dark #user-list thead th:hover { background: #48484a !important; }
-            body.theme-dark #user-list tbody td { color: #eee !important; }
-            body.theme-dark #user-list tbody tr:nth-child(odd) td {
-                background-color: rgba(80, 150, 220, 0.25) !important;
-            }
-            body.theme-dark #debug-title-bar { border-bottom-color: rgba(255,255,255,0.2) !important; }
-            body.theme-dark #debug-overlay td.label { color: #ccc !important; }
-            body.theme-dark #debug-overlay td.value { color: #eee !important; }
-            body.theme-dark #debug-overlay tr:nth-child(odd) > td.label,
-            body.theme-dark #debug-overlay tr:nth-child(odd) > td.value {
-                background-color: rgba(80, 150, 220, 0.25) !important;
-            }
-            body.theme-dark #debug-overlay td.label:hover {
-                background-color: rgba(255,255,255,0.1) !important;
-                color: #6cb4ff !important;
-            }
-            body.theme-dark #debug-overlay td[colspan] div > div {
-                color: #fff !important;
-                border-bottom-color: rgba(255,255,255,0.3) !important;
-            }
-            body.theme-dark #debug-overlay td[colspan] > div { background: #3a3a3c !important; }
-            body.theme-dark #menu-popup {
-                background: rgba(80, 80, 84, 0.95) !important;
-                border: 1px solid rgba(255,255,255,0.18) !important;
-            }
-            body.theme-dark .menu-item {
-                color: #fff !important;
-                border-bottom: 1px solid rgba(255,255,255,0.08) !important;
-            }
-            body.theme-dark .menu-item:active { background: rgba(255,255,255,0.15) !important; }
-            body.theme-dark #logout-panel {
-                background: #2c2c2e !important;
-                color: #eee !important;
-            }
-            body.theme-dark #logout-panel-header {
-                background: #3a3a3c !important;
-                color: #fff !important;
-                border-bottom: 1px solid rgba(255,255,255,0.15) !important;
-            }
-            body.theme-dark #logout-panel-body p { color: #eee !important; }
-            body.theme-dark #about-panel-body p { color: #eee !important; }
-            body.theme-dark #about-panel-body a { color: #6cb4ff !important; }
         }
         /* ===== カスタムツールチップ（画面外に出ない） ===== */
         [data-tip] {
