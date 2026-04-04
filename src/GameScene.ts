@@ -601,7 +601,7 @@ export class GameScene {
         });
 
         // レンダーループ
-        let coordCounter = 0;
+        let coordCounter = 29; // 初回フレームで即座にフッター位置を調整
         this.scene.onBeforeRenderObservable.add(() => {
             const _t0 = performance.now();
             const deltaTime = this.engine.getDeltaTime() / 1000;
@@ -794,13 +794,16 @@ export class GameScene {
                     const dirText = arrows[idx];
                     if (posEl && posEl.textContent !== posText) posEl.textContent = posText;
                     if (dirEl && dirEl.textContent !== dirText) dirEl.textContent = dirText;
-                    const fv = document.getElementById("app-footer-version");
-                    const ci = document.getElementById("chatInput");
-                    if (fv && ci) {
-                        const r = ci.getBoundingClientRect();
-                        fv.style.left = r.left + "px";
-                        fv.style.right = (window.innerWidth - r.right) + "px";
-                    }
+                }
+                // フッター位置を送信ボタンの右端に合わせる（座標非表示でも実行）
+                const fv = document.getElementById("app-footer-version");
+                const ci = document.getElementById("chatInput");
+                const sb = document.getElementById("sendBtn");
+                if (fv && ci && sb) {
+                    const r = ci.getBoundingClientRect();
+                    const sr = sb.getBoundingClientRect();
+                    fv.style.left = r.left + "px";
+                    fv.style.right = (window.innerWidth - sr.right) + "px";
                 }
             }
 
