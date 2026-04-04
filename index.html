@@ -980,9 +980,7 @@
             position: fixed;
             top: 40px;
             left: 15px;
-            background: rgba(255, 255, 255, 0.92);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.95);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             z-index: 10000;
@@ -1083,6 +1081,24 @@
         }
         #portrait-divider {
             display: none;
+        }
+
+        /* --- 開発者モード: 通常時は非表示 --- */
+        #pd-uid, #pd-ping, #pd-fps,
+        #coord-display,
+        .dev-only {
+            display: none !important;
+        }
+        body.dev-mode #pd-uid,
+        body.dev-mode #pd-ping,
+        body.dev-mode #pd-fps {
+            display: inline !important;
+        }
+        body.dev-mode #coord-display {
+            display: inline !important;
+        }
+        body.dev-mode .dev-only {
+            display: block !important;
         }
 
         /* --- フッター基本色 --- */
@@ -1263,8 +1279,6 @@
                 resize: none !important;
                 background: rgba(255, 255, 255, 0.96) !important;
                 color: #222 !important;
-                backdrop-filter: blur(12px) !important;
-                -webkit-backdrop-filter: blur(12px) !important;
                 touch-action: pan-y !important;
                 overscroll-behavior: contain !important;
                 z-index: 350 !important;
@@ -1467,9 +1481,7 @@
             }
             #menu-popup {
                 font-size: 16px !important;
-                background: rgba(255, 255, 255, 0.92) !important;
-                backdrop-filter: blur(20px) !important;
-                -webkit-backdrop-filter: blur(20px) !important;
+                background: rgba(255, 255, 255, 0.95) !important;
                 border: 1px solid rgba(100,100,200,0.2) !important;
                 border-radius: 14px !important;
             }
@@ -2199,6 +2211,7 @@
         </div>
         <div id="debug-body">
         <table>
+            <tr><td class="label" title="00.DevMode&#10;開発者モードの ON/OFF を切り替えます。&#10;ON: 座標表示・Pingグラフ・同接グラフ等の&#10;　　開発者向け情報を表示します。&#10;OFF: 一般ユーザー向けのシンプルな表示になります。&#10;&#10;有効化方法:&#10;・このボタンで切り替え&#10;・URLに ?dev=1 を付ける&#10;・ハンバーガーメニューを3回タップ">00.DevMode</td><td class="value"><button id="devModeBtn" class="debug-btn" style="min-width:40px;">Off</button></td></tr>
             <tr><td id="label-ver" class="label">01.Ver</td><td class="value" id="val-ver"></td></tr>
             <tr><td id="label-update" class="label">02.Update</td><td class="value" id="val-update"></td></tr>
             <tr><td class="label" title="02b.Theme&#10;パネルの配色テーマを切り替えます。&#10;・ポップ１: 明るく華やかな配色（紫グラデーション）&#10;・背景黒: ダークテーマ（暗い背景に白文字）">02b.Theme</td><td class="value">
@@ -2599,16 +2612,16 @@
         <span></span><span></span><span></span>
     </button>
     <div id="menu-popup">
-        <button class="menu-item" id="menu-serversettings" data-i18n-prefix="menu.serversettings">✓ サーバ設定</button>
-        <button class="menu-item" id="menu-serverlog" data-i18n-prefix="menu.serverlog">✓ サーバ接続ログ</button>
+        <button class="menu-item dev-only" id="menu-serversettings" data-i18n-prefix="menu.serversettings">✓ サーバ設定</button>
+        <button class="menu-item dev-only" id="menu-serverlog" data-i18n-prefix="menu.serverlog">✓ サーバ接続ログ</button>
         <button class="menu-item" id="menu-userlist" data-i18n-prefix="menu.userlist">✓ プレイヤーリスト</button>
         <button class="menu-item" id="menu-chathistory" data-i18n-prefix="menu.chathistory">✓ チャット履歴</button>
-        <button class="menu-item" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
-        <button class="menu-item" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
+        <button class="menu-item dev-only" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
+        <button class="menu-item dev-only" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
         <button class="menu-item" id="menu-about" data-i18n-prefix="menu.about">　 tommieChatについて</button>
         <button class="menu-item" id="menu-debug" data-i18n-prefix="menu.debug">✓ デバッグツール</button>
-        <button class="menu-item" id="menu-cookie-reset" data-i18n="menu.cookie_reset">全パネル非表示（クッキー初期化）</button>
+        <button class="menu-item dev-only" id="menu-cookie-reset" data-i18n="menu.cookie_reset">全パネル非表示（クッキー初期化）</button>
         <button class="menu-item" id="menu-login" style="display:none;" data-i18n-prefix="menu.displayname">　 表示名設定</button>
         <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;" data-i18n="logout">ログアウト</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
