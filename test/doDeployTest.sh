@@ -59,7 +59,7 @@ if [ -d "tommie-chat" ]; then
         if [ -n "$REMAINING" ]; then
             echo "$REMAINING" | xargs -r docker rm -f
         fi
-        rm -rf tommie-chat
+        sudo rm -rf tommie-chat
         echo "削除しました"
     else
         echo "中止します"
