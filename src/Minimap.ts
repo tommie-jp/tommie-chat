@@ -46,12 +46,38 @@ export function setupMinimap(game: GameScene): void {
     let mmVisible = savedVisible !== "0";
 
     let onVisibilityChanged: (() => void) | null = null; // 描画初期化後にセット
+    /** 非表示直前の位置・サイズを記憶 */
+    let savedTop: number | null = null;
+    let savedLeft: number | null = null;
+    let savedWidth: number | null = null;
     const updateVisibility = () => {
+        if (!mmVisible) {
+            // 非表示にする前に位置・サイズを記憶
+            const rect = container.getBoundingClientRect();
+            savedTop = rect.top;
+            savedLeft = rect.left;
+            savedWidth = rect.width;
+        }
         container.style.display = mmVisible ? "" : "none";
         container.style.pointerEvents = mmVisible ? "auto" : "none";
         if (menuBtn) menuBtn.textContent = (mmVisible ? "✓" : "　") + " " + t("menu.minimap");
         ckSet("mmVisible", mmVisible ? "1" : "0");
-        if (mmVisible) onVisibilityChanged?.();
+        if (mmVisible) {
+            // 記憶した位置・サイズを復元してからクランプ
+            if (savedTop !== null && savedLeft !== null) {
+                container.style.top = savedTop + "px";
+                container.style.left = savedLeft + "px";
+                container.style.right = "auto";
+                container.style.bottom = "auto";
+            }
+            if (savedWidth !== null) {
+                container.style.width = savedWidth + "px";
+                container.style.height = savedWidth + "px"; // 正方形
+            }
+            onVisibilityChanged?.();
+            // 復元後にCanvas領域内にクランプ
+            requestAnimationFrame(() => clampToCanvas());
+        }
     };
     updateVisibility();
 
@@ -68,12 +94,12 @@ export function setupMinimap(game: GameScene): void {
 
     // --- Cookie から復元 ---
     const savedZoom = ckGet("mmZoom");
-    const savedLeft = ckGet("mmLeft");
-    const savedTop = ckGet("mmTop");
+    const ckLeft = ckGet("mmLeft");
+    const ckTop = ckGet("mmTop");
     const savedSize = ckGet("mmSize");
 
-    if (savedLeft !== null && savedTop !== null) {
-        const l = parseInt(savedLeft), t = parseInt(savedTop);
+    if (ckLeft !== null && ckTop !== null) {
+        const l = parseInt(ckLeft), t = parseInt(ckTop);
         if (isFinite(l) && isFinite(t) && l >= 0 && t >= 0 && l < window.innerWidth && t < window.innerHeight) {
             container.style.left = l + "px";
             container.style.top = t + "px";
@@ -87,6 +113,9 @@ export function setupMinimap(game: GameScene): void {
             container.style.height = s + "px";
         }
     }
+
+    // Cookie復元後の右端距離を保存
+    requestAnimationFrame(() => saveMarginFromRight());
 
     // --- ズーム状態 ---
     let zoomIndex = savedZoom !== null ? Math.max(0, Math.min(ZOOM_LEVELS.length - 1, parseInt(savedZoom))) : ZOOM_LEVELS.length - 1;
@@ -169,29 +198,69 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
-    /** Canvas領域の右端（ランドスケープではデバイダー位置） */
-    const getCanvasRight = (): number => {
+    /** Canvas領域の矩形を取得 */
+    const getCanvasRect = (): { left: number; top: number; right: number; bottom: number } => {
         const cvs = document.getElementById("renderCanvas");
-        return cvs ? cvs.getBoundingClientRect().right : window.innerWidth;
+        if (cvs) {
+            const r = cvs.getBoundingClientRect();
+            return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        }
+        return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
     };
 
-    /** ミニマップをCanvas領域内にクランプ */
-    const clampToCanvas = () => {
+    /** Canvas右端からミニマップ右端までの距離を保存 */
+    let marginFromRight = 4;
+
+    /** 現在のmarginFromRightを更新（ドラッグ終了時・リサイズ終了時に呼ぶ） */
+    const saveMarginFromRight = () => {
+        const cr = getCanvasRect();
         const rect = container.getBoundingClientRect();
-        const maxRight = getCanvasRight();
-        if (rect.right > maxRight) {
-            container.style.left = Math.max(0, maxRight - rect.width - 4) + "px";
+        marginFromRight = Math.max(4, cr.right - rect.right);
+    };
+
+    /** ミニマップをCanvas領域内にクランプ（位置・サイズ調整、右端距離を維持） */
+    const clampToCanvas = () => {
+        const cr = getCanvasRect();
+        const availW = cr.right - cr.left - 8;
+        const availH = cr.bottom - cr.top - 8;
+        // サイズがCanvas領域より大きければ縮小
+        let w = container.offsetWidth;
+        let h = container.offsetHeight;
+        if (w > availW || h > availH) {
+            const newSize = Math.max(64, Math.min(availW, availH));
+            container.style.width = newSize + "px";
+            container.style.height = newSize + "px";
+            w = h = newSize;
+            ckSet("mmSize", String(Math.round(newSize)));
+        }
+        // 右端距離を維持して位置を計算
+        const rect = container.getBoundingClientRect();
+        let newLeft = cr.right - w - marginFromRight;
+        let newTop = rect.top;
+        // Canvas領域内にクランプ
+        if (newLeft + w > cr.right - 4) newLeft = cr.right - w - 4;
+        if (newTop + h > cr.bottom - 4) newTop = cr.bottom - h - 4;
+        if (newLeft < cr.left) newLeft = cr.left + 4;
+        if (newTop < cr.top) newTop = cr.top + 4;
+        if (newLeft !== rect.left || newTop !== rect.top) {
+            container.style.left = Math.max(0, newLeft) + "px";
+            container.style.top = Math.max(0, newTop) + "px";
             container.style.right = "auto";
+            container.style.bottom = "auto";
+            ckSet("mmLeft", String(Math.round(newLeft)));
+            ckSet("mmTop", String(Math.round(newTop)));
         }
     };
 
     const onMove = (cx: number, cy: number) => {
         if (dragging) {
-            const maxRight = getCanvasRight();
-            const w = container.getBoundingClientRect().width;
-            const newLeft = Math.max(0, Math.min(cx - dragOffX, maxRight - w - 4));
+            const cr = getCanvasRect();
+            const w = container.offsetWidth;
+            const h = container.offsetHeight;
+            const newLeft = Math.max(cr.left, Math.min(cx - dragOffX, cr.right - w - 4));
+            const newTop = Math.max(cr.top, Math.min(cy - dragOffY, cr.bottom - h - 4));
             container.style.left = newLeft + "px";
-            container.style.top = Math.max(0, cy - dragOffY) + "px";
+            container.style.top = newTop + "px";
             container.style.right = "auto";
             container.style.bottom = "auto";
         } else if (resizing) {
@@ -209,10 +278,12 @@ export function setupMinimap(game: GameScene): void {
             const rect = container.getBoundingClientRect();
             ckSet("mmLeft", String(Math.round(rect.left)));
             ckSet("mmTop", String(Math.round(rect.top)));
+            saveMarginFromRight();
         }
         if (resizing) {
             const rect = container.getBoundingClientRect();
             ckSet("mmSize", String(Math.round(rect.width)));
+            saveMarginFromRight();
         }
         dragging = false;
         resizing = false;
