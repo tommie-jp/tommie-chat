@@ -8,7 +8,7 @@
 #   - VPS 上で実行する
 #
 # 構成:
-#   ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8080/HTTP) → Nakama
+#   ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8081/HTTP) → Nakama
 #   Docker nginx は HTTP のまま変更しない。HTTPS はホスト nginx が終端する。
 
 case "${1:-}" in
@@ -17,7 +17,7 @@ case "${1:-}" in
         echo "  Let's Encrypt で HTTPS を設定します"
         echo ""
         echo "構成:"
-        echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8080/HTTP) → Nakama"
+        echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8081/HTTP) → Nakama"
         echo "  Docker nginx.conf は変更しません"
         echo ""
         echo "例: $0 mmo.tommie.jp"
@@ -54,10 +54,10 @@ if ! docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --status
     fail "Docker nginx (web) が起動していません。先に doDeploy.sh を実行してください"
 fi
 
-# Docker nginx (8080) に接続できるか
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ --connect-timeout 3 --max-time 5 2>/dev/null)
+# Docker nginx (8081) に接続できるか
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/ --connect-timeout 3 --max-time 5 2>/dev/null)
 if [ "$HTTP_CODE" != "200" ]; then
-    fail "Docker nginx (8080) に接続できません (HTTP $HTTP_CODE)"
+    fail "Docker nginx (8081) に接続できません (HTTP $HTTP_CODE)"
 fi
 
 # ── 1. ホスト nginx インストール ──
@@ -119,7 +119,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8081;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -173,7 +173,7 @@ echo ""
 echo "  URL: https://$DOMAIN"
 echo ""
 echo "構成:"
-echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8080/HTTP) → Nakama"
+echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8081/HTTP) → Nakama"
 echo ""
 echo "確認:"
 echo "  curl -I https://$DOMAIN"
