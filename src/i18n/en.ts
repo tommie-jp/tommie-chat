@@ -41,6 +41,7 @@ export const en: Record<keyof typeof ja, string> = {
     "menu.chatsettings": "Chat Settings",
     "menu.ping": "Ping Graph",
     "menu.ccu": "CCU Graph",
+    "menu.minimap": "Minimap",
     "menu.about": "About tommieChat",
     "menu.debug": "Debug Tools",
     "menu.cookie_reset": "Hide all panels (reset cookies)",

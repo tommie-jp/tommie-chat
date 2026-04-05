@@ -39,6 +39,7 @@ export const ja = {
     "menu.chatsettings": "チャット設定",
     "menu.ping": "Ping グラフ",
     "menu.ccu": "同接グラフ",
+    "menu.minimap": "ミニマップ",
     "menu.about": "tommieChatについて",
     "menu.debug": "デバッグツール",
     "menu.cookie_reset": "全パネル非表示（クッキー初期化）",
