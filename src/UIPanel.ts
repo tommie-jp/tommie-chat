@@ -1359,7 +1359,6 @@ export function setupHtmlUI(game: GameScene): void {
     };
     // ===========================
     const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
-    const LOGIN_COOLDOWN_MS = 5000;
     const doLogin = async () => {
         const _end = prof("UIPanel.doLogin");
         const name = loginNameInput?.value.trim();
@@ -1382,19 +1381,6 @@ export function setupHtmlUI(game: GameScene): void {
         if (loginStatus) { loginStatus.style.color = ""; loginStatus.textContent = isMobile ? "…" : t("login.connecting"); }
         if (loginBtn)    loginBtn.disabled = true;
         try {
-            // 短時間リロードによるゴーストアバター防止: 前回ログインから5秒未満なら待機
-            const lastTs = parseInt(getCookie("lastLoginTs") ?? "0");
-            const elapsed = Date.now() - lastTs;
-            console.log(`login cooldown check: elapsed=${elapsed}ms threshold=${LOGIN_COOLDOWN_MS}ms`);
-            if (lastTs > 0 && elapsed < LOGIN_COOLDOWN_MS) {
-                const waitMs = LOGIN_COOLDOWN_MS - elapsed;
-                console.log(`login cooldown: waiting ${waitMs}ms`);
-                const pd = document.getElementById("ping-display");
-                if (pd) { pd.innerHTML = `<span style="background:#b8860b;color:#fff;padding:2px 6px;border-radius:3px;">CONNECTING</span>`; }
-                await new Promise(r => setTimeout(r, waitMs));
-            }
-            setCookie("lastLoginTs", String(Date.now()));
-
             await game.nakama.login(name);
             game.currentUserId = game.nakama.getSession()?.user_id ?? null;
             // 自分のdisplay_nameでアバター名を更新（joinWorldMatch前にawaitしてselfDisplayNameを確定）
