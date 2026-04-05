@@ -97,7 +97,7 @@ else
         if [ "$PORT" = "443" ]; then
             WEB_PORTS=(443)
         else
-            WEB_PORTS=(80 8080)
+            WEB_PORTS=(80 8081)
         fi
     fi
     DETECTED_WEB_PORT=""
@@ -230,7 +230,7 @@ if [ "$IS_LOCAL" = true ]; then
     if [ -n "$OPT_WEB_PORT" ]; then
         WEB_PORTS=("$OPT_WEB_PORT")
     else
-        WEB_PORTS=(80 8080)
+        WEB_PORTS=(80 8081)
     fi
     WEB_PORT=""
     for attempt in $(seq 1 15); do

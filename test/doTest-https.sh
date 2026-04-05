@@ -16,7 +16,7 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ -z "$1" ]; then
     echo "HTTPS デプロイの各段階を確認します:"
     echo "  1. ホスト nginx 起動確認"
     echo "  2. SSL 証明書の存在確認"
-    echo "  3. Docker nginx (8080) 応答確認"
+    echo "  3. Docker nginx (8081) 応答確認"
     echo "  4. Content-Type 確認（text/html）"
     echo "  5. HTTP → HTTPS リダイレクト確認"
     echo "  6. HTTPS 応答確認"
@@ -81,15 +81,15 @@ if [ "$CERT_EXISTS" = "0" ]; then
     fi
 fi
 
-# 3. Docker nginx (8080) 応答確認
-echo "[3/11] Docker nginx (8080) ..."
-DOCKER_HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ --connect-timeout 3 --max-time 5 2>/dev/null)
+# 3. Docker nginx (8081) 応答確認
+echo "[3/11] Docker nginx (8081) ..."
+DOCKER_HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/ --connect-timeout 3 --max-time 5 2>/dev/null)
 check "Docker nginx 応答 (HTTP ${DOCKER_HTTP})" "$([ "$DOCKER_HTTP" = "200" ] && echo 0 || echo 1)" \
     "Docker コンテナが起動していない可能性があります。docker compose ps で確認してください"
 
 # 4. Content-Type 確認
 echo "[4/11] Content-Type ..."
-CONTENT_TYPE=$(curl -s -I http://127.0.0.1:8080/ --connect-timeout 3 --max-time 5 2>/dev/null | grep -i "content-type" | tr -d '\r' | awk '{print $2}')
+CONTENT_TYPE=$(curl -s -I http://127.0.0.1:8081/ --connect-timeout 3 --max-time 5 2>/dev/null | grep -i "content-type" | tr -d '\r' | awk '{print $2}')
 check "Content-Type: text/html（実際: ${CONTENT_TYPE:-なし}）" "$(echo "$CONTENT_TYPE" | grep -q 'text/html' && echo 0 || echo 1)" \
     "nginx.conf に include /etc/nginx/mime.types; を追加してください"
 

@@ -75,7 +75,7 @@ services:
   web:
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8081:80"
     logging:
       driver: json-file
       options:
