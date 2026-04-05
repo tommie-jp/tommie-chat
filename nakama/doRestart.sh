@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# prod コンテナが動いていればポート競合を避けるため停止
+PROD_COMPOSE="docker compose -p tommchat-prod -f docker-compose.yml -f docker-compose.prod.yml"
+if docker ps --format '{{.Names}}' | grep -q 'tommchat-prod'; then
+    echo "prod コンテナを停止中..."
+    $PROD_COMPOSE down || true
+fi
+
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
 $COMPOSE down
 $COMPOSE up -d --scale prometheus=0
