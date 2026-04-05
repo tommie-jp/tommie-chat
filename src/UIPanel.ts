@@ -835,7 +835,6 @@ export function setupHtmlUI(game: GameScene): void {
         const myId = game.nakama.selfSessionId ?? "";
         const myMatchId  = game.nakama.selfMatchId  ?? "";
         const matchShort = myMatchId  ? myMatchId.slice(0, 8)  : "-";
-        const chatShort  = "-";
         // DocumentFragment でまとめて構築し一度だけ DOM に挿入
         const frag = document.createDocumentFragment();
         for (const { username, displayName, uuid, sessionId, loginTimestamp, loginTime, channel } of entries) {
@@ -844,7 +843,7 @@ export function setupHtmlUI(game: GameScene): void {
             const rel = relativeTime(loginTimestamp);
             const lbl = resolveDisplayLabel(displayName, username, sessionId);
             const fullName = lbl.suffix ? lbl.text + lbl.suffix : lbl.text;
-            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${fullName}">${fullName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td>${chatShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
+            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${fullName}">${fullName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
             frag.appendChild(tr);
         }
         userListBody.innerHTML = "";
@@ -905,14 +904,18 @@ export function setupHtmlUI(game: GameScene): void {
 
     // カラムリサイズハンドル
     {
+        const table = document.getElementById("user-list") as HTMLTableElement;
         const ths = document.querySelectorAll<HTMLTableCellElement>("#user-list thead th");
         ths.forEach(th => {
             const handle = document.createElement("div");
             handle.className = "ul-resize";
             th.appendChild(handle);
-            let startX = 0, startW = 0;
+            let startX = 0, startW = 0, startTableW = 0;
             const onMove = (e: PointerEvent) => {
-                th.style.width = Math.max(30, startW + e.clientX - startX) + "px";
+                const delta = e.clientX - startX;
+                const newW = Math.max(30, startW + delta);
+                th.style.width = newW + "px";
+                table.style.width = (startTableW + newW - startW) + "px";
             };
             const onUp = () => {
                 document.removeEventListener("pointermove", onMove);
@@ -923,6 +926,7 @@ export function setupHtmlUI(game: GameScene): void {
                 e.preventDefault();
                 startX = e.clientX;
                 startW = th.offsetWidth;
+                startTableW = table.offsetWidth;
                 document.addEventListener("pointermove", onMove);
                 document.addEventListener("pointerup", onUp);
             });
