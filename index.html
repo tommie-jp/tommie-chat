@@ -1758,6 +1758,11 @@
             #renderCanvas {
                 width: var(--ls-divider, 60%) !important;
             }
+            /* ランドスケープ: ミニマップ初期位置はCanvas右端（JSドラッグで上書き可能） */
+            #minimap-container:not([style*="left"]) {
+                right: calc(100% - var(--ls-divider, 60%) + 8px);
+                left: auto;
+            }
             #landscape-divider {
                 display: block;
                 position: fixed;
@@ -1854,13 +1859,6 @@
                 height: auto !important;
                 width: auto !important;
                 max-width: none !important;
-            }
-            /* ランドスケープ: 表示名パネルは内容に合わせた最小サイズ */
-            #displayname-panel {
-                top: auto !important;
-                height: auto !important;
-                bottom: var(--ls-panel-bottom, 60px) !important;
-                max-height: none !important;
             }
             /* ランドスケープ: ヘッダーはドラッグ不要（touch-action/cursorは共通で既にauto/default） */
             /* タイトルspanをヘッダー全幅に広げてタッチしやすくする */
