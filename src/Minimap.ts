@@ -1,9 +1,10 @@
 import type { GameScene } from "./GameScene";
 import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
+import { t } from "./i18n";
 
 const HALF = WORLD_SIZE / 2;
 const BG_COLOR = "#4a7a3a"; // 地面の緑
-const ZOOM_LEVELS = [1, 2, 4, 8];
+const ZOOM_LEVELS = [1, 2, 4, 8, 16];
 
 /**
  * ミニマップ — ワールドを 128×128 の 2D Canvas に描画
@@ -48,7 +49,7 @@ export function setupMinimap(game: GameScene): void {
     const updateVisibility = () => {
         container.style.display = mmVisible ? "" : "none";
         container.style.pointerEvents = mmVisible ? "auto" : "none";
-        if (menuBtn) menuBtn.textContent = (mmVisible ? "✓" : "　") + " ミニマップ";
+        if (menuBtn) menuBtn.textContent = (mmVisible ? "✓" : "　") + " " + t("menu.minimap");
         ckSet("mmVisible", mmVisible ? "1" : "0");
         if (mmVisible) onVisibilityChanged?.();
     };
@@ -85,7 +86,7 @@ export function setupMinimap(game: GameScene): void {
     }
 
     // --- ズーム状態 ---
-    let zoomIndex = savedZoom !== null ? Math.max(0, Math.min(ZOOM_LEVELS.length - 1, parseInt(savedZoom))) : 0;
+    let zoomIndex = savedZoom !== null ? Math.max(0, Math.min(ZOOM_LEVELS.length - 1, parseInt(savedZoom))) : ZOOM_LEVELS.length - 1;
     let zoom = ZOOM_LEVELS[zoomIndex];
 
     // --- UI: Xボタン（左上） + +/-ボタン（右上） + 倍率表示 ---
