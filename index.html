@@ -1378,18 +1378,7 @@
                 user-select: none;
                 -webkit-user-select: none;
             }
-            /* デバイダー下側の背景（パネル表示時のみ） */
-            body.sp-panel-visible::before {
-                content: "";
-                position: fixed;
-                left: 0;
-                right: 0;
-                top: calc(var(--pt-divider, 60vh) - 1px);
-                bottom: 0;
-                background: #f0e6ff;
-                z-index: 0;
-                pointer-events: none;
-            }
+            /* デバイダー下側の背景 — ポートレートでは非表示 */
 
             /* --- パネル共通 --- */
             #user-list-panel,
@@ -1407,7 +1396,7 @@
                 right: 0 !important;
                 width: auto !important;
                 max-width: 100vw !important;
-                top: calc(var(--pt-divider, 60vh) + 12px) !important;
+                top: calc(var(--pt-divider, 60vh)) !important;
                 bottom: 0 !important;
                 height: auto !important;
                 max-height: none !important;
@@ -1703,6 +1692,17 @@
             #displayname-panel {
                 bottom: var(--pt-panel-bottom, 90px) !important;
             }
+            /* ポートレート: 表示名パネルは内容に合わせた最小サイズ */
+            #displayname-panel {
+                top: auto !important;
+                height: auto !important;
+                bottom: var(--pt-panel-bottom, 90px) !important;
+                max-height: none !important;
+            }
+            /* ポートレート: パネル表示中はデバイダーを隠す */
+            body.sp-panel-visible #portrait-divider {
+                display: none !important;
+            }
             /* ポートレート: セリフ入力は常に全幅 */
             #chatInput {
                 flex-grow: 1 !important;
@@ -1854,6 +1854,13 @@
                 height: auto !important;
                 width: auto !important;
                 max-width: none !important;
+            }
+            /* ランドスケープ: 表示名パネルは内容に合わせた最小サイズ */
+            #displayname-panel {
+                top: auto !important;
+                height: auto !important;
+                bottom: var(--ls-panel-bottom, 60px) !important;
+                max-height: none !important;
             }
             /* ランドスケープ: ヘッダーはドラッグ不要（touch-action/cursorは共通で既にauto/default） */
             /* タイトルspanをヘッダー全幅に広げてタッチしやすくする */

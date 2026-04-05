@@ -428,7 +428,7 @@ export function setupDebugOverlay(game: GameScene): void {
                 const cvs = document.getElementById("renderCanvas");
                 if (anyVisible) {
                     savedPtDivider = gCk("ptDivider") || savedPtDivider;
-                    if (ptDiv) ptDiv.style.display = "";
+                    if (ptDiv) ptDiv.style.display = "none";
                     document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
                     document.body.classList.add("sp-panel-visible");
                     if (cvs) cvs.style.height = "";
@@ -1314,8 +1314,10 @@ export function setupDebugOverlay(game: GameScene): void {
             { text: "(Hindi)नमस्ते!" }, { text: "(Hindi)इस दुनिया में आपका स्वागत है!" },
             { text: "(Hindi)आज का मौसम बहुत अच्छा है\nचलो साहसिक यात्रा पर चलते हैं!" },
         ];
-        let autoChatTimer: ReturnType<typeof setTimeout> | null = null;
         let isAutoChatOn = false;
+        let autoChatNextTick = 0;
+        const AUTO_CHAT_MIN_TICKS = 30;  // 約0.5秒 (60fps)
+        const AUTO_CHAT_MAX_TICKS = 120; // 約2秒 (60fps)
 
         const setAAMode = (on: boolean) => {
             const btn = document.getElementById("aaModeBtn") as HTMLButtonElement | null;
@@ -1324,26 +1326,31 @@ export function setupDebugOverlay(game: GameScene): void {
             if (current !== on) btn.click();
         };
 
-        const sendAutoMsg = async (entry: { text: string; aa?: boolean }) => {
+        const sendAutoMsg = (entry: { text: string; aa?: boolean }) => {
             if (entry.aa) setAAMode(true);
-            try { await game.nakama.sendChatMessage(entry.text); } catch { /* ignore */ }
+            game.nakama.sendChatMessage(entry.text).catch(() => {});
             if (entry.aa) setAAMode(false);
         };
 
-        const scheduleNext = () => {
-            const delay = 1500 + Math.random() * 2500;
-            autoChatTimer = setTimeout(async () => {
-                if (!isAutoChatOn) return;
+        const randomInterval = () => AUTO_CHAT_MIN_TICKS + Math.floor(Math.random() * (AUTO_CHAT_MAX_TICKS - AUTO_CHAT_MIN_TICKS));
+
+        // レンダーループで tick カウント
+        let autoChatTick = 0;
+        game.scene.onAfterRenderObservable.add(() => {
+            if (!isAutoChatOn) return;
+            autoChatTick++;
+            if (autoChatTick >= autoChatNextTick) {
                 const entry = npcMessages[Math.floor(Math.random() * npcMessages.length)];
-                await sendAutoMsg(entry);
-                scheduleNext();
-            }, delay);
-        };
+                sendAutoMsg(entry);
+                autoChatTick = 0;
+                autoChatNextTick = randomInterval();
+            }
+        });
+
         const stopAutoChat = () => {
             isAutoChatOn = false;
             autoChatBtn.textContent = "Off";
             autoChatBtn.classList.add("off");
-            if (autoChatTimer !== null) { clearTimeout(autoChatTimer); autoChatTimer = null; }
             markNonDefault(autoChatBtn, "Off", "Off");
         };
         markNonDefault(autoChatBtn, "Off", autoChatBtn.textContent!, stopAutoChat);
@@ -1352,13 +1359,13 @@ export function setupDebugOverlay(game: GameScene): void {
             autoChatBtn.textContent = isAutoChatOn ? "On" : "Off";
             if (isAutoChatOn) {
                 autoChatBtn.classList.remove("off");
-                // 即座に1つ送信してから次をスケジュール
+                // 即座に1つ送信
                 const entry = npcMessages[Math.floor(Math.random() * npcMessages.length)];
                 sendAutoMsg(entry);
-                scheduleNext();
+                autoChatTick = 0;
+                autoChatNextTick = randomInterval();
             } else {
                 autoChatBtn.classList.add("off");
-                if (autoChatTimer !== null) { clearTimeout(autoChatTimer); autoChatTimer = null; }
             }
             markNonDefault(autoChatBtn, "Off", autoChatBtn.textContent!);
         });
