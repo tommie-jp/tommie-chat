@@ -1349,6 +1349,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				if p, ok := ms.Presences[sid]; ok {
 					chatMsg["username"] = p.GetUsername()
 					chatMsg["userId"] = p.GetUserId()
+					chatMsg["sessionId"] = sid
 					enriched, _ := json.Marshal(chatMsg)
 					dispatcher.BroadcastMessage(opChat, enriched, nil, nil, true)
 				}
