@@ -99,6 +99,8 @@ export class GameScene {
     cloudSystem!: CloudSystem;
     npcSystem!: NPCSystem;
     aoiManager!: AOIManager;
+    /** デバイダー移動時のコールバック */
+    onDividerMove: (() => void)[] = [];
 
     constructor(canvas: HTMLCanvasElement) {
         this.engine = new Engine(canvas, false, { stencil: true });

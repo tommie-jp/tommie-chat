@@ -121,6 +121,7 @@ export function setupHtmlUI(game: GameScene): void {
                 const pct = Math.max(20, Math.min(80, (e.clientX / window.innerWidth) * 100));
                 document.documentElement.style.setProperty("--ls-divider", pct + "%");
                 game.engine.resize();
+                for (const cb of game.onDividerMove) cb();
             });
             document.addEventListener("pointerup", () => {
                 if (dragging) {

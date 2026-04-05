@@ -63,6 +63,9 @@ export function setupMinimap(game: GameScene): void {
         });
     }
 
+    // デバイダー移動時にCanvas領域内にクランプ
+    game.onDividerMove.push(() => clampToCanvas());
+
     // --- Cookie から復元 ---
     const savedZoom = ckGet("mmZoom");
     const savedLeft = ckGet("mmLeft");
@@ -166,9 +169,28 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
+    /** Canvas領域の右端（ランドスケープではデバイダー位置） */
+    const getCanvasRight = (): number => {
+        const cvs = document.getElementById("renderCanvas");
+        return cvs ? cvs.getBoundingClientRect().right : window.innerWidth;
+    };
+
+    /** ミニマップをCanvas領域内にクランプ */
+    const clampToCanvas = () => {
+        const rect = container.getBoundingClientRect();
+        const maxRight = getCanvasRight();
+        if (rect.right > maxRight) {
+            container.style.left = Math.max(0, maxRight - rect.width - 4) + "px";
+            container.style.right = "auto";
+        }
+    };
+
     const onMove = (cx: number, cy: number) => {
         if (dragging) {
-            container.style.left = Math.max(0, cx - dragOffX) + "px";
+            const maxRight = getCanvasRight();
+            const w = container.getBoundingClientRect().width;
+            const newLeft = Math.max(0, Math.min(cx - dragOffX, maxRight - w - 4));
+            container.style.left = newLeft + "px";
             container.style.top = Math.max(0, cy - dragOffY) + "px";
             container.style.right = "auto";
             container.style.bottom = "auto";
