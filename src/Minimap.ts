@@ -436,22 +436,34 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
-    // 定期更新
-    let frameCount = 0;
+    // 変更検知ベースの描画更新
+    let prevPlayerX = NaN, prevPlayerZ = NaN, prevPlayerRot = NaN;
+    let prevRemoteCount = -1;
+    let playerDirty = true;
+
     game.scene.onAfterRenderObservable.add(() => {
-        if (!mmVisible) return; // 非表示中は描画スキップ
-        frameCount++;
-        // チャンク + 方角: 120フレームごと（約2秒）
-        if (!chunkCacheValid || frameCount % 120 === 0) {
+        if (!mmVisible) return;
+
+        // プレイヤー位置・向き・リモート数の変化を検知
+        const p = game.playerBox.position;
+        const rot = game.playerBox.rotation.y;
+        const rc = game.remoteAvatars.size;
+        if (p.x !== prevPlayerX || p.z !== prevPlayerZ || rot !== prevPlayerRot || rc !== prevRemoteCount) {
+            prevPlayerX = p.x; prevPlayerZ = p.z; prevPlayerRot = rot; prevRemoteCount = rc;
+            playerDirty = true;
+        }
+
+        // チャンク + 方角: チャンクキャッシュが無効なとき（ズーム変更、表示復帰、プレイヤー移動）
+        if (!chunkCacheValid || playerDirty) {
             redrawChunkCache();
         }
-        // プレイヤー: 10フレームごと（約0.17秒）
-        if (frameCount % 10 === 0) {
+
+        // プレイヤー: 位置変化時のみ再描画
+        if (playerDirty) {
             syncCanvasSize();
-            // キャッシュからチャンク＋方角を転写
             ctx.drawImage(chunkCache, 0, 0);
-            // プレイヤーを上に描画
             drawPlayers();
+            playerDirty = false;
         }
     });
 }
