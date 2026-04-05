@@ -969,29 +969,23 @@ export function setupHtmlUI(game: GameScene): void {
         }
     });
 
-    game.nakama.onChatMessage = (username, text, userId) => {
-        // 表示名を優先（なければ @ユーザID）
-        let chatName = username;
-        let chatNameColor: string | undefined;
-        for (const user of userMap.values()) {
-            if (user.uuid === userId) {
-                chatName = user.displayName || ("@" + user.username);
-                chatNameColor = user.nameColor;
-                break;
-            }
-        }
+    game.nakama.onChatMessage = (username, text, userId, senderSid) => {
+        // 表示名を優先（なければ @ユーザID）— sessionId でサフィックス解決
+        const entry = senderSid ? userMap.get(senderSid) : undefined;
+        const chatName = entry
+            ? resolveDisplayLabel(entry.displayName, entry.username, senderSid).text + resolveDisplayLabel(entry.displayName, entry.username, senderSid).suffix
+            : username;
+        const chatNameColor = entry?.nameColor;
         addChatHistory(chatName, text, chatNameColor, userId);
-        for (const [sessionId, user] of userMap) {
-            if (user.uuid !== userId) continue;
-            if (sessionId === game.nakama.selfSessionId) {
-                doUpdateSpeech(text);
-                scheduleSpeechClear("__self__", () => doUpdateSpeech(""));
-            } else {
-                game.remoteSpeeches.get(sessionId)?.(text);
-                const remoteSpeech = game.remoteSpeeches.get(sessionId);
-                if (remoteSpeech) {
-                    scheduleSpeechClear(sessionId, () => remoteSpeech(""));
-                }
+        // 吹き出しは送信元セッションのアバターのみに表示
+        if (senderSid === game.nakama.selfSessionId) {
+            doUpdateSpeech(text);
+            scheduleSpeechClear("__self__", () => doUpdateSpeech(""));
+        } else if (senderSid) {
+            game.remoteSpeeches.get(senderSid)?.(text);
+            const remoteSpeech = game.remoteSpeeches.get(senderSid);
+            if (remoteSpeech) {
+                scheduleSpeechClear(senderSid, () => remoteSpeech(""));
             }
         }
     };
