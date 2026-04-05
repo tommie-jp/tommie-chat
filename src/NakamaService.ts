@@ -370,20 +370,6 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    private _unloadCleaned = false;
-    /** ページ離脱時にマッチから即退出（ゴーストアバター防止）
-     *  disconnect は呼ばない — leaveMatch のフレームが送出される前にソケットが
-     *  閉じるのを防ぐため、ブラウザの自然切断に任せる */
-    cleanupBeforeUnload(): void {
-        if (this._unloadCleaned) return;
-        this._unloadCleaned = true;
-        if (this.socket && this.matchId) {
-            try {
-                this.socket.leaveMatch(this.matchId);
-            } catch { /* ignore */ }
-        }
-    }
-
     logout(): void {
         const _end = prof("NakamaService.logout");
         console.log("snd logout");
@@ -394,7 +380,6 @@ export class NakamaService {
         this.session       = null;
         this.matchId       = null;
         this.selfSessionId = null;
-        this._unloadCleaned = false;  // 再ログイン時に cleanup を再有効化
         _end();
     }
 
