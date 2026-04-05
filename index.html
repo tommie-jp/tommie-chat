@@ -263,9 +263,9 @@
             position: fixed;
             top: 15px;
             right: 300px;
-            width: 420px;
+            width: 600px;
             height: 280px;
-            min-width: 200px;
+            min-width: 300px;
             min-height: 100px;
             background: rgba(255, 255, 255, 0.88);
             border-radius: 8px;
@@ -306,16 +306,19 @@
         #user-list-close:hover { opacity: 1; }
         #user-list-panel.minimized #user-list-wrap { display: none; }
         #user-list-wrap {
-            overflow-x: hidden;
-            overflow-y: auto;
+            overflow: auto;
             flex: 1;
             min-height: 0;
         }
+        #user-list-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+        #user-list-wrap::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+        #user-list-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+        #user-list-wrap::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
         #user-list {
-            width: 100%;
             border-collapse: collapse;
             font-size: 13px;
             table-layout: fixed;
+            width: 840px;
         }
         #user-list thead th {
             position: sticky;
@@ -340,17 +343,27 @@
         #user-list tbody td.uuid-cell {
             font-size: 11px;
             color: #000;
-            max-width: 80px;
+            white-space: nowrap;
             cursor: pointer;
         }
         #user-list tbody td.uuid-cell:hover {
             background: rgba(100,149,237,0.15);
         }
+        #user-list tbody td {
+            white-space: nowrap;
+            padding: 2px 6px;
+        }
         #user-list tbody td.ul-self {
             font-weight: bold;
         }
-        #ul-th-user { width: 95px; }
-        #ul-th-dname { width: 10em; }
+        #ul-th-user { width: 110px; }
+        #ul-th-dname { width: 180px; }
+        #ul-th-uuid { width: 80px; }
+        #ul-th-sid { width: 80px; }
+        #ul-th-ch { width: 70px; }
+        #ul-th-matchid { width: 80px; }
+        #ul-th-rel { width: 90px; }
+        #ul-th-time { width: 150px; }
         #user-list thead th {
             position: relative;
         }
@@ -2671,7 +2684,6 @@
                         <th id="ul-th-sid" title="接続ごとに発行されるセッションID&#10;ログインするたびに変わる&#10;先頭8文字のみ表示（クリックでコピー）">SessionID</th>
                         <th id="ul-th-ch" data-i18n="userlist.th.channel" title="接続チャンネル&#10;chat=チャット, match=マッチ, chat+match=両方">チャンネル</th>
                         <th id="ul-th-matchid" title="参加中のマッチID（先頭8文字）">MatchID</th>
-                        <th id="ul-th-chatid" title="チャットチャンネルID（先頭8文字）">ChatID</th>
                         <th id="ul-th-rel" data-i18n="userlist.th.login_elapsed" title="ログインしてからの経過時間">ログイン時間</th>
                         <th id="ul-th-time" data-i18n="userlist.th.login_time" title="ログインした日時（ISO 8601形式）">ログイン時刻</th>
                     </tr>
