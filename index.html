@@ -295,6 +295,7 @@
             align-items: center;
             user-select: none;
             touch-action: none;
+            overflow: visible;
         }
         #user-list-close {
             cursor: pointer;
@@ -1323,6 +1324,9 @@
             #ping-display {
                 font-size: 16px !important;
             }
+            /* スマホ: カスタムスクロールバーを無効化（ネイティブに戻す） */
+            #user-list-wrap::-webkit-scrollbar { display: none; }
+            #user-list-wrap { -webkit-overflow-scrolling: touch; }
             /* --- ミニマップ --- */
             #minimap-container {
                 width: 120px;
@@ -1404,7 +1408,7 @@
                 resize: none !important;
                 background: rgba(255, 255, 255, 0.96) !important;
                 color: #222 !important;
-                touch-action: pan-y !important;
+                touch-action: pan-x pan-y !important;
                 overscroll-behavior: contain !important;
                 z-index: 350 !important;
             }
@@ -1443,6 +1447,7 @@
                 font-size: 15px;
                 padding: 6px 8px;
                 color: #fff !important;
+                flex-shrink: 0 !important;
             }
             #server-log-list .server-log-entry,
             #chat-history-list,
@@ -1858,6 +1863,7 @@
                 bottom: var(--ls-panel-bottom, 60px) !important;
                 height: auto !important;
                 width: auto !important;
+                min-width: 0 !important;
                 max-width: none !important;
             }
             /* ランドスケープ: ヘッダーはドラッグ不要（touch-action/cursorは共通で既にauto/default） */

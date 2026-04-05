@@ -449,8 +449,11 @@ export function setupDebugOverlay(game: GameScene): void {
                     chatContainer.style.background = anyVisible ? "" : "transparent";
                 }
             }
-            // CSS変数の反映を待ってからリサイズ
-            requestAnimationFrame(() => game.engine.resize());
+            // CSS変数の反映を待ってからリサイズ + ミニマップクランプ
+            requestAnimationFrame(() => {
+                game.engine.resize();
+                for (const cb of game.onDividerMove) cb();
+            });
         };
 
         type MK = Parameters<typeof t>[0];
