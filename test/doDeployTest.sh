@@ -43,28 +43,23 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 if [ -d "tommie-chat" ]; then
-    read -p "tommie-chat ディレクトリが既に存在します。削除しますか？ (y/N): " ans
-    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-        # 既存コンテナを停止・削除（Bind mount のデータは保持される）
-        echo "既存のコンテナを停止・削除します..."
-        cd tommie-chat/nakama 2>/dev/null && {
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
-            docker compose down 2>/dev/null || true
-            cd "$SCRIPT_DIR"
-        } || true
-        # 残留コンテナがあれば強制削除
-        REMAINING=$(docker ps -aq --filter "name=nakama" 2>/dev/null; docker ps -aq --filter "name=tommchat-prod" 2>/dev/null)
-        REMAINING=$(echo "$REMAINING" | sort -u | grep -v '^$' || true)
-        if [ -n "$REMAINING" ]; then
-            echo "$REMAINING" | xargs -r docker rm -f
-        fi
-        sudo rm -rf tommie-chat
-        echo "削除しました"
-    else
-        echo "中止します"
-        exit 1
+    BACKUP="tommie-chat.$(date '+%Y%m%d-%H%M%S')"
+    echo "既存の tommie-chat を ${BACKUP} にリネームします..."
+    # 既存コンテナを停止
+    cd tommie-chat/nakama 2>/dev/null && {
+        docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
+        docker compose down 2>/dev/null || true
+        cd "$SCRIPT_DIR"
+    } || true
+    # 残留コンテナがあれば強制削除
+    REMAINING=$(docker ps -aq --filter "name=nakama" 2>/dev/null; docker ps -aq --filter "name=tommchat-prod" 2>/dev/null)
+    REMAINING=$(echo "$REMAINING" | sort -u | grep -v '^$' || true)
+    if [ -n "$REMAINING" ]; then
+        echo "$REMAINING" | xargs -r docker rm -f
     fi
+    mv tommie-chat "$BACKUP"
+    echo "リネームしました: ${BACKUP}（手動で削除してください）"
 fi
 
 git clone https://github.com/open-tommie/tommie-chat.git
