@@ -433,7 +433,7 @@ export class NakamaService {
                     parts.push(`players=${data.playerCount}`);
                 if (parts.length) return parts.join(" ");
             }
-        } catch { /* RPC 未登録時はフォールバック */ }
+        } catch (e) { console.warn("NakamaService.getServerInfo RPC fallback:", e); }
         // ② /v2/serverinfo (Nakama 3.x+) — 同一オリジン経由
         const base = location.origin;
         try {
@@ -468,7 +468,7 @@ export class NakamaService {
             if (!result?.payload) return null;
             const data = JSON.parse(result.payload) as { table?: number[] };
             return data.table ?? null;
-        } catch { return null; }
+        } catch (e) { console.warn("NakamaService.getGroundTable:", e); return null; }
     }
 
     async syncChunks(minCX: number, minCZ: number, maxCX: number, maxCZ: number, hashes: Record<string, string>): Promise<{ cx: number; cz: number; hash: string; table: number[] }[]> {
@@ -481,7 +481,7 @@ export class NakamaService {
             if (!result?.payload) return [];
             const data = JSON.parse(result.payload) as { chunks?: { cx: number; cz: number; hash: string; table: number[] }[] };
             return data.chunks ?? [];
-        } catch { return []; }
+        } catch (e) { console.warn("NakamaService.syncChunks:", e); return []; }
         } finally { _end(); }
     }
 
@@ -494,7 +494,7 @@ export class NakamaService {
             const result = await this.socket.rpc("getGroundChunk", JSON.stringify({ cx, cz }));
             if (!result?.payload) return null;
             return JSON.parse(result.payload) as { cx: number; cz: number; table: number[] };
-        } catch { return null; }
+        } catch (e) { console.warn("NakamaService.getGroundChunk:", e); return null; }
         } finally { _end(); }
     }
 
@@ -507,7 +507,8 @@ export class NakamaService {
             const t0 = performance.now();
             await this.socket.rpc("ping");
             return Math.round(performance.now() - t0);
-        } catch {
+        } catch (e) {
+            console.warn("NakamaService.measurePing:", e);
             return null;
         }
         } finally { _end(); }
@@ -525,7 +526,8 @@ export class NakamaService {
             if (!result?.payload) return null;
             const data = JSON.parse(result.payload) as { count?: number; history?: number[] };
             return { count: data.count ?? 0, history: data.history ?? [] };
-        } catch {
+        } catch (e) {
+            console.warn("NakamaService.getPlayerCount:", e);
             return null;
         }
         } finally { _end(); }

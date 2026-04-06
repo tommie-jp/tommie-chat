@@ -1404,7 +1404,7 @@ export function setupHtmlUI(game: GameScene): void {
                             }
                         }
                     }
-                } catch (_) {}
+                } catch (e) { console.warn("UIPanel.getDisplayNames:", e); }
             }
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
             // joinMatch 1回で全て完結（メタデータに初期位置を含める）
