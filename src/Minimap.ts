@@ -121,22 +121,39 @@ export function setupMinimap(game: GameScene): void {
     let zoomIndex = savedZoom !== null ? Math.max(0, Math.min(ZOOM_LEVELS.length - 1, parseInt(savedZoom))) : ZOOM_LEVELS.length - 1;
     let zoom = ZOOM_LEVELS[zoomIndex];
 
+    // --- 回転モード ---
+    const savedMmRotate = ckGet("mmRotate");
+    game.minimapRotate = savedMmRotate !== null ? savedMmRotate === "1" : true; // デフォルト: 回転
+
     // --- UI: Xボタン（左上） + +/-ボタン（右上） + 倍率表示 ---
     const btnSize = isMobile ? "28px" : "20px";
     const btnFont = isMobile ? "16px" : "14px";
     const btnStyle = `width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:1px solid rgba(0,0,0,0.3);border-radius:3px;background:rgba(255,255,255,0.4);cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#333;`;
 
-    // Xボタン（右上）
+    // 回転用の内側ラッパー（canvas + コンパスラベルだけ回転）
+    const innerRotate = document.createElement("div");
+    innerRotate.style.cssText = "position:absolute;inset:0;border-radius:50%;overflow:hidden;pointer-events:none;";
+    container.appendChild(innerRotate);
+    // canvasを innerRotate に移動
+    canvas.remove();
+    innerRotate.appendChild(canvas);
+
+    // Xボタン（右上）— container直下（回転しない）
     const btnClose = document.createElement("button");
     btnClose.textContent = "✕";
-    btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:none;border-radius:3px;background:transparent;cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#cc0000;pointer-events:auto;`;
+    btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:none;border-radius:3px;background:transparent;cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#cc0000;pointer-events:auto;z-index:2;`;
     if (!isMobile) btnClose.title = "ミニマップを非表示（メニューから再表示）";
     btnClose.addEventListener("click", (e) => { e.stopPropagation(); mmVisible = false; updateVisibility(); });
     container.appendChild(btnClose);
 
+    // 自分マーカー（回転モード用 — 非回転レイヤーに固定表示）
+    const selfMarker = document.createElement("div");
+    selfMarker.style.cssText = "position:absolute;top:50%;left:50%;width:0;height:0;transform:translate(-50%,-70%);border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #ffffff;pointer-events:none;z-index:1;display:none;filter:drop-shadow(0 0 2px rgba(0,0,0,0.8));";
+    container.appendChild(selfMarker);
+
     // +/-ボタン（左下）
     const controls = document.createElement("div");
-    controls.style.cssText = "position:absolute;top:2px;left:2px;display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:auto;";
+    controls.style.cssText = "position:absolute;top:2px;left:2px;display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:auto;z-index:2;";
 
     const btnPlus = document.createElement("button");
     btnPlus.textContent = "+";
@@ -401,15 +418,15 @@ export function setupMinimap(game: GameScene): void {
 
     /** 三角形（向き付きアイコン）を描画 */
     const drawArrow = (cx: number, cy: number, rotation: number, color: string, size: number) => {
-        const ca = rotation - Math.PI;
+        const ca = -rotation;
         const tipX = cx + Math.sin(ca) * size;
-        const tipY = cy - Math.cos(ca) * size;
+        const tipY = cy + Math.cos(ca) * size;
         const baseL = size * 0.675;
         const backAngle = Math.PI * 0.75;
         const lx = cx + Math.sin(ca + backAngle) * baseL;
-        const ly = cy - Math.cos(ca + backAngle) * baseL;
+        const ly = cy + Math.cos(ca + backAngle) * baseL;
         const rx = cx + Math.sin(ca - backAngle) * baseL;
-        const ry2 = cy - Math.cos(ca - backAngle) * baseL;
+        const ry2 = cy + Math.cos(ca - backAngle) * baseL;
         ctx.beginPath();
         ctx.moveTo(tipX, tipY);
         ctx.lineTo(lx, ly);
@@ -424,20 +441,32 @@ export function setupMinimap(game: GameScene): void {
         const scale = mapSize / 128;
         const arrowSize = 5 * scale;
 
-        // 他プレイヤー（黄色）— 先に描画
+        // 回転モード時: container が -playerRot で回転しているため、
+        // canvas 内の角度は相対角度にする（自分は常に上向き）
+        const selfRot = game.playerBox.rotation.y;
+
+        // 他プレイヤー（緑）— 先に描画
         for (const [sid, av] of game.remoteAvatars) {
             const tgt = game.remoteTargets.get(sid);
             const x = tgt ? tgt.x : av.position.x;
             const z = tgt ? tgt.z : av.position.z;
             const [mx, my] = toMap(x, z);
             if (!inBounds(mx, my)) continue;
-            drawArrow(mx, my, av.rotation.y, "#00cc44", arrowSize * 0.85);
+            const angle = av.rotation.y;
+            drawArrow(mx, my, angle, "#00cc44", arrowSize * 0.85);
         }
 
-        // 自分（赤）— 最後に描画（常に最前面）
-        const p = game.playerBox.position;
-        const [sx, sy] = toMap(p.x, p.z);
-        drawArrow(sx, sy, game.playerBox.rotation.y, "#ffffff", arrowSize);
+        // 自分（白）— 最後に描画（常に最前面）
+        if (game.minimapRotate) {
+            // 回転モード: 非回転レイヤーの HTML マーカーを表示（常に中央・上向き）
+            selfMarker.style.display = "";
+        } else {
+            // 北固定モード: canvas に描画
+            selfMarker.style.display = "none";
+            const p = game.playerBox.position;
+            const [sx, sy] = toMap(p.x, p.z);
+            drawArrow(sx, sy, selfRot, "#ffffff", arrowSize);
+        }
     };
 
     const redraw = () => {
@@ -489,18 +518,37 @@ export function setupMinimap(game: GameScene): void {
     };
 
     // 方角ラベル（HTML要素、キャンバスのズーム・リサイズに影響されない固定サイズ）
+    // 回転モード時はラベルを逆回転させて常に正しい向きを維持
     const compassStyle = "position:absolute;font:bold 10px sans-serif;color:rgba(255,255,255,0.8);text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;";
-    for (const [text, css] of [
-        ["N", "top:2px;left:50%;transform:translateX(-50%);"],
-        ["S", "bottom:2px;left:50%;transform:translateX(-50%);"],
-        ["W", "left:4px;top:50%;transform:translateY(-50%);"],
-        ["E", "right:4px;top:50%;transform:translateY(-50%);"],
-    ]) {
+    const compassLabels: HTMLElement[] = [];
+    // 基準位置（translate で中央寄せ）— transform は回転時に上書きするため別管理
+    const compassBase = [
+        { text: "N", top: "2px",    left: "50%",  bottom: "",    right: "" },
+        { text: "S", top: "",       left: "50%",  bottom: "2px", right: "" },
+        { text: "W", top: "50%",    left: "4px",  bottom: "",    right: "" },
+        { text: "E", top: "50%",    left: "",     bottom: "",    right: "4px" },
+    ];
+    for (const b of compassBase) {
         const el = document.createElement("div");
-        el.textContent = text;
-        el.style.cssText = compassStyle + css;
-        container.appendChild(el);
+        el.textContent = b.text;
+        el.style.cssText = compassStyle;
+        if (b.top) el.style.top = b.top;
+        if (b.bottom) el.style.bottom = b.bottom;
+        if (b.left) el.style.left = b.left;
+        if (b.right) el.style.right = b.right;
+        innerRotate.appendChild(el);
+        compassLabels.push(el);
     }
+    /** NEWS ラベルの transform を更新（回転モード時は逆回転） */
+    const updateCompassTransform = (angleDeg: number) => {
+        for (let i = 0; i < compassLabels.length; i++) {
+            const b = compassBase[i];
+            // 基準の translate + 逆回転（ラベル文字が常に正しい向きになるよう）
+            const tx = (b.left === "50%") ? "translateX(-50%)" : (b.top === "50%") ? "translateY(-50%)" : "";
+            compassLabels[i].style.transform = angleDeg === 0 ? tx : `${tx} rotate(${angleDeg}deg)`;
+        }
+    };
+    updateCompassTransform(0);
 
     // 変更検知ベースの描画更新
     let prevPlayerX = NaN, prevPlayerZ = NaN, prevPlayerRot = NaN;
@@ -530,6 +578,16 @@ export function setupMinimap(game: GameScene): void {
             ctx.drawImage(chunkCache, 0, 0);
             drawPlayers();
             playerDirty = false;
+
+            // 回転モード: innerRotate を回転、NEWS ラベルを逆回転
+            if (game.minimapRotate) {
+                const angleDeg = (rot + Math.PI) * 180 / Math.PI;
+                innerRotate.style.transform = `rotate(${-angleDeg}deg)`;
+                updateCompassTransform(angleDeg);
+            } else {
+                innerRotate.style.transform = "";
+                updateCompassTransform(0);
+            }
         }
     });
 }

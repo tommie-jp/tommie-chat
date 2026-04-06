@@ -184,8 +184,6 @@
         }
         #minimap {
             display: block;
-            border: 1px solid rgba(0,0,0,0.3);
-            border-radius: 4px;
             background: #4a7a3a;
             width: 100%;
             height: 100%;
@@ -193,7 +191,6 @@
         #minimap-container {
             width: 128px;
             height: 128px;
-            overflow: hidden;
             min-width: 64px;
             min-height: 64px;
             max-width: 400px;
@@ -2434,6 +2431,12 @@
                 <select id="themeSelect" class="debug-select">
                     <option value="pop1" data-i18n="dbg.theme.pop1">ポップ１</option>
                     <option value="dark" data-i18n="dbg.theme.dark">背景黒</option>
+                </select>
+            </td></tr>
+            <tr><td class="label" title="02c.Minimap Rotate&#10;ミニマップの回転モードを切り替えます。&#10;・回転: プレイヤーの向きに追従して回転&#10;・北固定: 常に北が上">02c.Minimap Rotate</td><td class="value">
+                <select id="mmRotateSelect" class="debug-select">
+                    <option value="rotate">回転</option>
+                    <option value="north">北固定</option>
                 </select>
             </td></tr>
             <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale</td><td class="value">
