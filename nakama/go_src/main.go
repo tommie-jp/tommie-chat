@@ -690,6 +690,48 @@ type playerPos struct {
 	NameColor   string  // 名前色（#RRGGBB）
 }
 
+// セッション単位のレートリミッター（1秒ごとにリセット）
+type sessionRate struct {
+	chatCount  int
+	blockCount int
+	moveCount  int
+	// ドロップ統計（1秒分の累積、リセットされる）
+	chatDrop  int
+	blockDrop int
+	moveDrop  int
+	// ドロップ累計（セッション全体、リセットされない）
+	totalChatDrop  int
+	totalBlockDrop int
+	totalMoveDrop  int
+}
+
+// バリデーション設定（環境変数で上書き可能、initValidationConfig で初期化）
+var (
+	rateLimitChat  = 5   // チャット: N回/秒 (RATE_LIMIT_CHAT)
+	rateLimitBlock = 20  // ブロック設置: N回/秒 (RATE_LIMIT_BLOCK)
+	rateLimitMove  = 30  // 移動: N回/秒 (RATE_LIMIT_MOVE)
+	maxBlockID     = 255 // 有効ブロックID上限 (MAX_BLOCK_ID)
+	maxChatLen     = 200 // チャット文字数上限 (MAX_CHAT_LEN)
+)
+
+func initValidationConfig() {
+	readInt := func(key string, dst *int) {
+		if v := os.Getenv(key); v != "" {
+			var n int
+			if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+				*dst = n
+			}
+		}
+	}
+	readInt("MAX_CHAT_LEN", &maxChatLen)
+	readInt("RATE_LIMIT_CHAT", &rateLimitChat)
+	readInt("RATE_LIMIT_BLOCK", &rateLimitBlock)
+	readInt("RATE_LIMIT_MOVE", &rateLimitMove)
+	readInt("MAX_BLOCK_ID", &maxBlockID)
+	logf("validationConfig: MAX_CHAT_LEN=%d RATE_LIMIT_CHAT=%d RATE_LIMIT_BLOCK=%d RATE_LIMIT_MOVE=%d MAX_BLOCK_ID=%d\n",
+		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID)
+}
+
 // matchState はマッチの状態（プレイヤーごとのAOI管理）
 type matchState struct {
 	AOIs             map[string]*playerAOI               // sessionID -> AOI
@@ -698,6 +740,7 @@ type matchState struct {
 	PendingAOIEnter  map[string][]map[string]interface{} // recipientSID -> 未送信 AOI_ENTER エントリ
 	PendingInit      map[string]*playerPos               // sessionID -> joinMatch metadata から取得した初期位置
 	PrevSIDs         map[string]string                   // sessionID -> 前回セッションID（ゴーストキック用）
+	Rates            map[string]*sessionRate              // sessionID -> レートリミッター
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -712,6 +755,7 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		PendingAOIEnter: make(map[string][]map[string]interface{}),
 		PendingInit:     make(map[string]*playerPos),
 		PrevSIDs:        make(map[string]string),
+		Rates:           make(map[string]*sessionRate),
 	}, 10, "world"
 }
 
@@ -904,6 +948,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		delete(ms.AOIs, sid)
 		delete(ms.Presences, sid)
 		delete(ms.Positions, sid)
+		delete(ms.Rates, sid)
 		delete(ms.PendingInit, sid)
 		delete(ms.PrevSIDs, sid)
 		// PendingAOIEnter からも除去（退出セッション宛の通知 + 退出セッションに関する通知）
@@ -952,6 +997,21 @@ func (ms *matchState) collectAOITargets(senderSID string, cx, cz int) []runtime.
 func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, messages []runtime.MatchData) interface{} {
 	defer prof("MatchLoop")()
 	ms := state.(*matchState)
+	// レートリミッター: 1秒ごとにドロップ統計ログ出力＋カウンタリセット（10Hz × 10tick = 1秒）
+	if tick%10 == 0 {
+		for sid, r := range ms.Rates {
+			if r.chatDrop > 0 || r.blockDrop > 0 || r.moveDrop > 0 {
+				r.totalChatDrop += r.chatDrop
+				r.totalBlockDrop += r.blockDrop
+				r.totalMoveDrop += r.moveDrop
+				logf("RATE_DROP sid=%s chat=%d block=%d move=%d (total chat=%d block=%d move=%d)\n",
+					shortSID(sid), r.chatDrop, r.blockDrop, r.moveDrop,
+					r.totalChatDrop, r.totalBlockDrop, r.totalMoveDrop)
+			}
+			r.chatCount = 0; r.blockCount = 0; r.moveCount = 0
+			r.chatDrop = 0; r.blockDrop = 0; r.moveDrop = 0
+		}
+	}
 	for _, msg := range messages {
 		sid := msg.GetSessionId()
 		op := msg.GetOpCode()
@@ -972,6 +1032,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if aoi.MinCZ < 0 { aoi.MinCZ = 0 }
 			if aoi.MaxCX >= chunkCount { aoi.MaxCX = chunkCount - 1 }
 			if aoi.MaxCZ >= chunkCount { aoi.MaxCZ = chunkCount - 1 }
+			// min > max は不正
+			if aoi.MinCX > aoi.MaxCX || aoi.MinCZ > aoi.MaxCZ {
+				logf("WARN invalid AOI sid=%s min(%d,%d) > max(%d,%d)\n", shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ)
+				continue
+			}
 
 			oldAOI := ms.AOIs[sid]
 			newAOI := &playerAOI{aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ}
@@ -1046,6 +1111,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				if p, ok := ms.Presences[sid]; ok { initUID = p.GetUserId() }
 				logf("rcv initPos uid=%s%s sid=%s x=%.1f z=%.1f\n", initUID, dn(initUID), shortSID(sid), pos.X, pos.Z)
 				half := float64(worldSize) / 2
+				// 座標範囲チェック
+				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
+					logf("WARN invalid initPos coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
+					continue
+				}
 				cx := int((pos.X + half) / chunkSize)
 				cz := int((pos.Z + half) / chunkSize)
 				if cx < 0 { cx = 0 }
@@ -1117,6 +1187,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 
 		if op == opMoveTarget {
+			// レート制限
+			rate := ms.Rates[sid]
+			if rate == nil { rate = &sessionRate{}; ms.Rates[sid] = rate }
+			rate.moveCount++
+			if rate.moveCount > rateLimitMove { rate.moveDrop++; continue }
 			// 移動目標: {"x":..., "z":...}
 			var pos struct {
 				X float64 `json:"x"`
@@ -1127,6 +1202,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				if p, ok := ms.Presences[sid]; ok { moveUID = p.GetUserId() }
 				logf("rcv moveTarget uid=%s%s sid=%s x=%.1f z=%.1f\n", moveUID, dn(moveUID), shortSID(sid), pos.X, pos.Z)
 				half := float64(worldSize) / 2
+				// 座標範囲チェック
+				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
+					logf("WARN invalid moveTarget coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
+					continue
+				}
 				oldCX, oldCZ := -1, -1
 				if p, ok := ms.Positions[sid]; ok {
 					oldCX, oldCZ = p.CX, p.CZ
@@ -1214,6 +1294,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 
 		if op == opBlockUpdate {
+			// レート制限
+			rate := ms.Rates[sid]
+			if rate == nil { rate = &sessionRate{}; ms.Rates[sid] = rate }
+			rate.blockCount++
+			if rate.blockCount > rateLimitBlock { rate.blockDrop++; continue }
 			// ブロック設置/削除: {"gx":...,"gz":...,"blockId":...,"r":...,"g":...,"b":...,"a":...}
 			var req blockReq
 			if err := json.Unmarshal(msg.GetData(), &req); err != nil {
@@ -1221,6 +1306,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			}
 			logf("rcv setBlock(match) sid=%s gx=%d gz=%d blockId=%d\n", shortSID(sid), req.GX, req.GZ, req.BlockID)
 			if req.GX < 0 || req.GX >= worldSize || req.GZ < 0 || req.GZ >= worldSize {
+				continue
+			}
+			// BlockID の有効性チェック（0=削除 は許可）
+			if int(req.BlockID) > maxBlockID {
+				logf("WARN invalid blockId sid=%s blockId=%d\n", shortSID(sid), req.BlockID)
 				continue
 			}
 			a := req.A
@@ -1340,6 +1430,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 
 		if op == opChat {
+			// レート制限
+			rate := ms.Rates[sid]
+			if rate == nil { rate = &sessionRate{}; ms.Rates[sid] = rate }
+			rate.chatCount++
+			if rate.chatCount > rateLimitChat { rate.chatDrop++; continue }
 			// チャットメッセージ: 全員にブロードキャスト（AOIフィルタなし）
 			// クライアントは {"text":"..."} を送信。サーバーは username/userId を付与して転送
 			raw := msg.GetData()
@@ -1347,6 +1442,15 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if err := json.Unmarshal(raw, &chatMsg); err != nil {
 				logger.Warn("opChat json.Unmarshal error: %v, raw=%s", err, string(raw))
 				continue
+			}
+			// テキストのバリデーション: 長さ制限 → 制御文字除去（長さ制限を先にして処理量を抑える）
+			if text, ok := chatMsg["text"].(string); ok {
+				runes := []rune(text)
+				if len(runes) > maxChatLen { runes = runes[:maxChatLen] }
+				chatMsg["text"] = strings.Map(func(r rune) rune {
+					if unicode.IsControl(r) && r != '\n' { return -1 }
+					return r
+				}, string(runes))
 			}
 			if p, ok := ms.Presences[sid]; ok {
 				chatMsg["username"] = p.GetUsername()
@@ -1556,6 +1660,10 @@ func rpcSyncChunks(ctx context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.N
 	if req.MinCZ < 0 { req.MinCZ = 0 }
 	if req.MaxCX >= chunkCount { req.MaxCX = chunkCount - 1 }
 	if req.MaxCZ >= chunkCount { req.MaxCZ = chunkCount - 1 }
+	// min > max は不正
+	if req.MinCX > req.MaxCX || req.MinCZ > req.MaxCZ {
+		return "", fmt.Errorf("syncChunks: invalid range min(%d,%d) > max(%d,%d)", req.MinCX, req.MinCZ, req.MaxCX, req.MaxCZ)
+	}
 	if req.Hashes == nil { req.Hashes = make(map[string]string) }
 
 	type chunkResp struct {
@@ -1679,6 +1787,9 @@ func rpcDeleteUsers(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
+	// バリデーション設定の読み込み（環境変数から）
+	initValidationConfig()
+
 	// pprof サーバ (ポート6060)
 	go func() {
 		logger.Info("pprof server starting on :6060")
