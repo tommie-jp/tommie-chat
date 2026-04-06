@@ -212,11 +212,12 @@ server {
 
     # Nakama HTTP API（Origin 制限: ブラウザからのリクエストのみ許可）
     location /v2/ {
-        set $allowed 0;
-        if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $allowed 1; }
-        if ($http_origin ~* "^https?://$host$") { set $allowed 1; }
-        if ($http_referer ~* "^https?://$host/") { set $allowed 1; }
-        if ($allowed = 0) { return 403; }
+        # Origin or Referer が自サイト or localhost なら許可
+        set $origin_ok "N";
+        if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $origin_ok "Y"; }
+        if ($http_origin ~* "^https?://mmo\.tommie\.jp(:[0-9]+)?$") { set $origin_ok "Y"; }
+        if ($http_referer ~* "^https?://mmo\.tommie\.jp/") { set $origin_ok "Y"; }
+        if ($origin_ok = "N") { return 403; }
 
         proxy_pass http://nakama:7350;
         proxy_http_version 1.1;
@@ -227,10 +228,10 @@ server {
 
     # Nakama WebSocket（Origin 制限）
     location /ws {
-        set $allowed 0;
-        if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $allowed 1; }
-        if ($http_origin ~* "^https?://$host$") { set $allowed 1; }
-        if ($allowed = 0) { return 403; }
+        set $origin_ok "N";
+        if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $origin_ok "Y"; }
+        if ($http_origin ~* "^https?://mmo\.tommie\.jp(:[0-9]+)?$") { set $origin_ok "Y"; }
+        if ($origin_ok = "N") { return 403; }
 
         proxy_pass http://nakama:7350;
         proxy_http_version 1.1;
