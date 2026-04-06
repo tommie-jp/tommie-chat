@@ -1344,14 +1344,20 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		if op == opChat {
 			// チャットメッセージ: 全員にブロードキャスト（AOIフィルタなし）
 			// クライアントは {"text":"..."} を送信。サーバーは username/userId を付与して転送
+			raw := msg.GetData()
 			var chatMsg map[string]interface{}
-			if err := json.Unmarshal(msg.GetData(), &chatMsg); err == nil {
-				if p, ok := ms.Presences[sid]; ok {
-					chatMsg["username"] = p.GetUsername()
-					chatMsg["userId"] = p.GetUserId()
-					chatMsg["sessionId"] = sid
-					enriched, _ := json.Marshal(chatMsg)
-					dispatcher.BroadcastMessage(opChat, enriched, nil, nil, true)
+			if err := json.Unmarshal(raw, &chatMsg); err != nil {
+				logger.Warn("opChat json.Unmarshal error: %v, raw=%s", err, string(raw))
+				continue
+			}
+			if p, ok := ms.Presences[sid]; ok {
+				chatMsg["username"] = p.GetUsername()
+				chatMsg["userId"] = p.GetUserId()
+				chatMsg["sessionId"] = sid
+				enriched, _ := json.Marshal(chatMsg)
+				logger.Info("opChat broadcast sid=%s len=%d text=%v", sid, len(enriched), chatMsg["text"])
+				if err := dispatcher.BroadcastMessage(opChat, enriched, nil, nil, true); err != nil {
+					logger.Warn("opChat BroadcastMessage error: %v", err)
 				}
 			}
 			continue

@@ -258,7 +258,9 @@ export class NakamaService {
                     const av = payload as { textureUrl: string; cc?: number; cr?: number };
                     this.onAvatarChange?.(sid, av.textureUrl, av.cc ?? 0, av.cr ?? 0);
                 }
-            } catch { /* ignore */ }
+            } catch (e) {
+                console.warn(`rcv matchdata parse error op=${md.op_code}`, e);
+            }
             // プロファイル集計（1秒ごとにリセット）
             const _mt1 = performance.now();
             const elapsed = _mt1 - _mt0;
@@ -366,7 +368,7 @@ export class NakamaService {
         try {
         console.log(`snd sendChatMessage text=${text}`);
         if (!this.socket || !this.matchId) return;
-        await this.socket.sendMatchState(this.matchId, OP_CHAT, JSON.stringify({ text }));
+        await this.socket.sendMatchState(this.matchId, OP_CHAT, new TextEncoder().encode(JSON.stringify({ text })));
         } finally { _end(); }
     }
 
