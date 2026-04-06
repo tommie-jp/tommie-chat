@@ -199,7 +199,7 @@ export function setupMinimap(game: GameScene): void {
 
     // 自分マーカー（回転モード用 — 非回転レイヤーに固定表示）
     const selfMarker = document.createElement("div");
-    selfMarker.style.cssText = "position:absolute;top:50%;left:50%;width:0;height:0;transform:translate(-50%,-70%);border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #ffffff;pointer-events:none;z-index:1;display:none;filter:drop-shadow(0 0 2px rgba(0,0,0,0.8));";
+    selfMarker.style.cssText = "position:absolute;top:50%;left:50%;width:0;height:0;transform:translate(-50%,-70%);border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:7px solid #ffffff;pointer-events:none;z-index:1;display:none;filter:drop-shadow(0 0 2px rgba(0,0,0,0.8));";
     container.appendChild(selfMarker);
 
     // +/-ボタン（左上）
@@ -501,7 +501,7 @@ export function setupMinimap(game: GameScene): void {
             const [mx, my] = toMap(x, z);
             if (!inBounds(mx, my)) continue;
             const angle = av.rotation.y;
-            drawArrow(mx, my, angle, "#00cc44", arrowSize * 0.85);
+            drawArrow(mx, my, angle, "#00ff55", arrowSize * 0.85);
         }
 
         if (game.minimapRotate) {
