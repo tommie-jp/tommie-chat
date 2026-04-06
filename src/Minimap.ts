@@ -224,9 +224,12 @@ export function setupMinimap(game: GameScene): void {
 
     controls.appendChild(btnPlus);
     controls.appendChild(btnMinus);
-    controls.appendChild(zoomLabel);
     container.style.position = "fixed";
     container.appendChild(controls);
+
+    // 倍率ラベル（常時表示 — controls とは独立）
+    zoomLabel.style.cssText += "position:absolute;bottom:2px;left:4px;z-index:1;";
+    container.appendChild(zoomLabel);
 
     const setZoom = (idx: number) => {
         zoomIndex = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, idx));
@@ -565,8 +568,13 @@ export function setupMinimap(game: GameScene): void {
     ];
     for (const d of compassDirs) {
         const el = document.createElement("div");
-        el.textContent = d.text;
-        el.style.cssText = compassStyle;
+        if (d.text === "N") {
+            el.textContent = "N";
+            el.style.cssText = compassStyle + "color:#ff9900;width:14px;height:14px;line-height:14px;text-align:center;border:1.5px solid #ff9900;border-radius:50%;";
+        } else {
+            el.textContent = d.text;
+            el.style.cssText = compassStyle;
+        }
         container.appendChild(el);
         compassLabels.push(el);
     }
