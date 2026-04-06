@@ -77,6 +77,8 @@ export class GameScene {
     private blockMatCache = new Map<string, StandardMaterial>();
     buildMode = false;
     latestPingAvg: number | null = null;
+    /** 右上バッジの接続状態: "connected" | "retry" | "disconnected" */
+    connectionState: "connected" | "retry" | "disconnected" = "disconnected";
     playerTextureUrl = localStorage.getItem("spriteAvatarUrl") || "/s3/avatars/pipo-nekonin008.png";
     playerCharCol = parseInt(localStorage.getItem("spriteAvatarCol") ?? "0", 10) || 0;
     playerCharRow = parseInt(localStorage.getItem("spriteAvatarRow") ?? "0", 10) || 0;
