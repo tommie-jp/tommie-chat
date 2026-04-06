@@ -179,8 +179,6 @@ func rpcProfileDump(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.Na
 }
 
 const (
-	streamModeChannel uint8 = 2
-	chatRoomLabel           = "world"
 	chunkSize               = 16 // 1チャンク = 16x16セル
 	chunkCount              = 64 // 64x64チャンク
 	worldSize               = chunkSize * chunkCount // 1024x1024セル
@@ -569,12 +567,6 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	sid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
 	cacheDN(ctx, nk, uid)
 	logf("rcv getServerInfo uid=%s%s sid=%s\n", uid, dn(uid), shortSID(sid))
-	playerCount, err := nk.StreamCount(streamModeChannel, "", "", chatRoomLabel)
-	if err != nil {
-		logger.Warn("StreamCount error: %v", err)
-		playerCount = 0
-	}
-
 	env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
 	node, _ := ctx.Value(runtime.RUNTIME_CTX_NODE).(string)
 
@@ -588,8 +580,6 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		"version":      version,
 		"pluginDate":   buildDate,
 		"pluginCommit": buildCommit,
-		// serverUpTime は運用情報のためクライアントには非公開
-		"playerCount":  playerCount,
 		"worldSize":    worldSize,
 		"chunkSize":    chunkSize,
 		"chunkCount":   chunkCount,
