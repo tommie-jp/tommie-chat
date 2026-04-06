@@ -55,6 +55,10 @@ fi
 # modules/ に直接出力（mv 不要・権限問題を回避）
 BUILDER_IMG="registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:${NAKAMA_VERSION}"
 
+# ビルド日時とgitハッシュをホスト側で取得（スペースはldflagsに渡せないのでアンダースコアに変換）
+BUILD_DATE=$(date '+%Y/%m/%d_%H:%M:%S')
+BUILD_COMMIT=$(cd "$SCRIPT_DIR/../.." && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
 docker run --rm \
   --entrypoint sh \
   --dns 8.8.8.8 \
@@ -65,6 +69,6 @@ docker run --rm \
   -e GOCACHE=/tmp/go-build \
   -w /go_src \
   "$BUILDER_IMG" \
-  -c "rm -f go.sum && GONOSUMDB='*' go build -mod=mod -buildmode=plugin -trimpath -ldflags='-s -w' -o /output/world.so . && chown $(id -u):$(id -g) /output/world.so"
+  -c "rm -f go.sum && GONOSUMDB='*' go build -mod=mod -buildmode=plugin -trimpath -ldflags='-s -w -X main.buildDate=${BUILD_DATE} -X main.buildCommit=${BUILD_COMMIT}' -o /output/world.so . && chown $(id -u):$(id -g) /output/world.so"
 
 echo "Built: $OUT_DIR/world.so"

@@ -424,10 +424,15 @@ export class NakamaService {
         try {
             const result = await this.socket.rpc("getServerInfo");
             if (result?.payload) {
-                const data = JSON.parse(result.payload) as { name?: string; version?: string; playerCount?: number };
+                const data = JSON.parse(result.payload) as { name?: string; version?: string; pluginDate?: string; pluginCommit?: string; playerCount?: number };
                 const parts: string[] = [];
                 if (data.name || data.version)
                     parts.push(`NakamaServerName="${[data.name, data.version ? `v${data.version}` : ""].filter(Boolean).join(" ")}"`);
+                if (data.pluginDate || data.pluginCommit) {
+                    const date = data.pluginDate?.replace(/_/g, " ") ?? "";
+                    const commit = data.pluginCommit ?? "";
+                    parts.push(`world.so ${[date, commit].filter(Boolean).join(" ")}`);
+                }
                 // serverUpTime は運用情報のためクライアントには非表示
                 if (data.playerCount !== undefined)
                     parts.push(`players=${data.playerCount}`);
