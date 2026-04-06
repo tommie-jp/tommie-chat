@@ -1519,8 +1519,18 @@ export function setupHtmlUI(game: GameScene): void {
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
                 game.connectionState = "retry";
+                stopPing();
+                // プレイヤーリストをクリア
                 userMap.clear();
                 scheduleRenderUserList();
+                // リモートアバターを全破棄（再接続後 AOI_ENTER で再作成される）
+                for (const sid of [...game.remoteAvatars.keys()]) removeRemoteAvatar(sid);
+                // 吹き出しタイマーをクリア
+                for (const t of speechTimers.values()) clearTimeout(t);
+                speechTimers.clear();
+                speechFading.clear();
+                // initPosGuard をクリア
+                initPosGuard.clear();
                 addServerLog(t("log.match_disconnect"), t("log.match_disconnect.detail"));
             };
             // 再接続時にメタデータを提供
@@ -1564,6 +1574,9 @@ export function setupHtmlUI(game: GameScene): void {
                 { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch((e) => console.warn("UIPanel:", e)); }
                 game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
                 game.aoiManager.updateAOI();
+                // 切断中のブロック変更をハッシュ比較で同期
+                game.syncAOIChunks().catch((e) => console.warn("UIPanel:", e));
+                startPing();
                 restartCcu();
             };
             startPing();

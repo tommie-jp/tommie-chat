@@ -161,6 +161,8 @@ export class NakamaService {
         const _end = prof("NakamaService.setupSocketHandlers");
         if (!this.socket) { _end(); return; }
         this.socket.ondisconnect = () => {
+            // Nakama SDK は disconnect() 呼び出しと WebSocket onClose で二重発火するためガード
+            if (this.reconnecting) return;
             console.warn("NakamaService WebSocket disconnected");
             this.onMatchDisconnect?.();
             this.tryReconnect();

@@ -27,6 +27,7 @@ if (canvas) {
     //   profileStop()   — 計測停止
     //   profileDump()   — 収集済みデータのサマリをコンソール出力
     const w = window as unknown as Record<string, unknown>;
+    w.game = game; // デバッグ用: コンソールから game.nakama.socket.disconnect() 等
     w.profileStart = () => {
         game.profiling = true;
         game['_profileHistory'].length = 0;
