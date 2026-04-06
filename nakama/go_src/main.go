@@ -20,6 +20,12 @@ import (
 	"github.com/heroiclabs/nakama-common/runtime"
 )
 
+// ビルド時に -ldflags で埋め込まれる値
+var (
+	buildDate   = "unknown" // ビルド日時 (例: 2026/04/06_14:20:39)
+	buildCommit = "unknown" // gitコミットハッシュ (短縮)
+)
+
 
 
 // loginRateLimiter はログイン試行を秒あたりの最大数で制限する
@@ -580,6 +586,8 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	info := map[string]interface{}{
 		"name":         node,
 		"version":      version,
+		"pluginDate":   buildDate,
+		"pluginCommit": buildCommit,
 		// serverUpTime は運用情報のためクライアントには非公開
 		"playerCount":  playerCount,
 		"worldSize":    worldSize,
