@@ -183,14 +183,16 @@ export function setupMinimap(game: GameScene): void {
     game.minimapRotate = savedMmRotate !== null ? savedMmRotate === "1" : true;
 
     // --- UI: ボタン類 ---
-    const btnSize = isMobile ? "28px" : "20px";
-    const btnFont = isMobile ? "16px" : "14px";
+    const btnSize = isMobile ? "32px" : "24px";
+    const btnFont = isMobile ? "18px" : "16px";
+    const closeBtnSize = isMobile ? "36px" : "28px";
+    const closeBtnFont = isMobile ? "22px" : "20px";
     const btnStyle = `width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:1px solid rgba(0,0,0,0.3);border-radius:3px;background:rgba(255,255,255,0.4);cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#333;`;
 
     // Xボタン（右上）
     const btnClose = document.createElement("button");
     btnClose.textContent = "✕";
-    btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:none;border-radius:3px;background:transparent;cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#cc0000;pointer-events:auto;z-index:2;`;
+    btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${closeBtnSize};height:${closeBtnSize};font-size:${closeBtnFont};line-height:1;border:none;border-radius:3px;background:rgba(255,255,255,0.3);cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#cc0000;pointer-events:auto;z-index:2;`;
     if (!isMobile) btnClose.title = "ミニマップを非表示（メニューから再表示）";
     btnClose.addEventListener("click", (e) => { e.stopPropagation(); mmVisible = false; updateVisibility(); });
     container.appendChild(btnClose);
@@ -236,6 +238,22 @@ export function setupMinimap(game: GameScene): void {
 
     btnPlus.addEventListener("click", (e) => { e.stopPropagation(); setZoom(zoomIndex + 1); });
     btnMinus.addEventListener("click", (e) => { e.stopPropagation(); setZoom(zoomIndex - 1); });
+
+    // --- ボタン表示トグル（タップで表示/非表示） ---
+    const resizeHandle = document.getElementById("minimap-resize-handle");
+    const uiElements = [btnClose, controls, resizeHandle].filter(Boolean) as HTMLElement[];
+    let uiShown = true;
+    const setUiVisible = (show: boolean) => {
+        uiShown = show;
+        for (const el of uiElements) el.style.display = show ? "" : "none";
+    };
+    setUiVisible(false); // 初期は非表示
+
+    let tapStartX = 0, tapStartY = 0;
+    const TAP_THRESHOLD = 10; // px 以内ならタップ判定
+    container.addEventListener("pointerdown", (e) => {
+        tapStartX = e.clientX; tapStartY = e.clientY;
+    }, true);
 
     for (const ev of ["click", "contextmenu"] as const) {
         container.addEventListener(ev, (e) => e.stopPropagation());
@@ -365,7 +383,18 @@ export function setupMinimap(game: GameScene): void {
         e.preventDefault();
         onMove(e.clientX, e.clientY);
     });
-    container.addEventListener("pointerup", (e) => { e.stopPropagation(); onEnd(); activePointerId = -1; });
+    container.addEventListener("pointerup", (e) => {
+        e.stopPropagation();
+        onEnd();
+        activePointerId = -1;
+        // タップ判定（ボタン上でなく、移動距離が小さい場合のみトグル）
+        const t = e.target as HTMLElement;
+        if (t.tagName === "BUTTON" || t.closest("button")) return;
+        const dx = e.clientX - tapStartX, dy = e.clientY - tapStartY;
+        if (dx * dx + dy * dy < TAP_THRESHOLD * TAP_THRESHOLD) {
+            setUiVisible(!uiShown);
+        }
+    });
 
     let pinching = false;
     let lastPinchDist = 0;
