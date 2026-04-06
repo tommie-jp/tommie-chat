@@ -589,7 +589,6 @@ export function setupMinimap(game: GameScene): void {
     let prevPlayerX = NaN, prevPlayerZ = NaN, prevPlayerRot = NaN;
     let prevRemoteCount = -1;
     let playerDirty = true;
-    let prevAngleDeg = NaN;
     const MM_INTERVAL = 100; // ≈ 10 FPS
     let lastMmUpdate = 0;
 
@@ -652,8 +651,7 @@ export function setupMinimap(game: GameScene): void {
             // コンパスラベル位置更新（リサイズ時もサイズ変化で再計算が必要）
             if (game.minimapRotate) {
                 updateCompassPositions(rot + Math.PI);
-            } else if (prevAngleDeg !== 0) {
-                prevAngleDeg = 0;
+            } else {
                 updateCompassPositions(0);
             }
         }
