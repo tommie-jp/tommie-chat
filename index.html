@@ -2725,7 +2725,7 @@
         </div>
         <div id="server-settings-body">
             <div class="srv-desc" data-i18n="server.info" title="サーバ情報&#10;──────────&#10;接続先サーバのURL・ポート番号・Server Keyを表示します。&#10;Server KeyはNakama公式の仕様上、安全に公開可能な値です。">サーバ情報</div>
-            <div class="srv-row" style="font-size:10px;color:#666;word-break:break-all;" title="Server Key（Nakamaサーバ）&#10;──────────&#10;クライアントがNakamaサーバに接続する際に使用する識別キーです。&#10;サーバの nakama/config.yml の socket.server_key で設定します。&#10;デフォルト値: defaultkey&#10;&#10;【重要】&#10;Server Keyはパスワードではありません。&#10;Nakama公式: &quot;The server key is not a security mechanism&#10;and can be safely exposed.&quot;&#10;（Server Keyはセキュリティ機構ではなく安全に公開できます）&#10;&#10;認証はデバイスID等の認証APIで行われるため、&#10;Server Keyが公開されても不正アクセスにはなりません。">
+            <div class="srv-row" style="font-size:10px;color:#666;word-break:break-all;" title="Server Key（Nakamaサーバ）&#10;──────────&#10;クライアントがNakamaサーバに接続する際に使用する識別キーです。&#10;サーバの nakama/config.yml の socket.server_key で設定します。&#10;&#10;デフォルト値:&#10;  開発環境: defaultkey&#10;  本番環境: tommie-chat（nakama/.env で設定）&#10;&#10;【重要】&#10;Server Keyはパスワードではありません。&#10;Nakama公式: &quot;The server key is not a security mechanism&#10;and can be safely exposed.&quot;&#10;（Server Keyはセキュリティ機構ではなく安全に公開できます）&#10;&#10;認証はデバイスID等の認証APIで行われるため、&#10;Server Keyが公開されても不正アクセスにはなりません。">
                 <span style="flex-shrink:0;">Server Key:</span>
                 <span id="serverKeyDisplay" style="flex:1;min-width:0;"></span>
             </div>
