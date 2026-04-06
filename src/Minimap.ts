@@ -1,3 +1,4 @@
+import { DynamicTexture, MeshBuilder, StandardMaterial } from "@babylonjs/core";
 import type { GameScene } from "./GameScene";
 import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
 import { t } from "./i18n";
@@ -7,28 +8,90 @@ const BG_COLOR = "#4a7a3a"; // 地面の緑
 const ZOOM_LEVELS = [1, 2, 4, 8, 16];
 
 /**
- * ミニマップ — ワールドを 128×128 の 2D Canvas に描画
- *  - 地面: 緑背景
- *  - ブロック: 実際の色
- *  - 自分: 白い点
- *  - 他プレイヤー: 黄色い点
- *  - ズーム: +/- ボタン、ホイール、倍率表示
+ * ミニマップ — ワールドを 2D Canvas に描画し DynamicTexture 経由で WebGL 内に表示
+ *  - DynamicTexture: ブラウザ合成コスト回避（HTML canvas overlay の代わり）
+ *  - HTML container: ボタン・ラベル・ドラッグ操作は従来通り
  */
 export function setupMinimap(game: GameScene): void {
-    const canvas = document.getElementById("minimap") as HTMLCanvasElement | null;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const htmlCanvas = document.getElementById("minimap") as HTMLCanvasElement | null;
+    if (!htmlCanvas) return;
 
     const container = document.getElementById("minimap-container");
     if (!container) return;
 
     const isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
 
+    // HTML canvas は非表示（DynamicTexture 経由で WebGL 内に描画）
+    htmlCanvas.style.display = "none";
+
+    // オフスクリーン canvas（2D 描画用）
+    const MAP_RES = 256;
+    const offCanvas = document.createElement("canvas");
+    offCanvas.width = MAP_RES;
+    offCanvas.height = MAP_RES;
+    const ctx = offCanvas.getContext("2d")!;
+    let mapSize = MAP_RES;
+
+    // DynamicTexture（WebGL テクスチャとして描画）
+    const dt = new DynamicTexture("minimapDT", MAP_RES, game.scene, false);
+    dt.hasAlpha = true;
+
+    // 平面メッシュ（カメラに parent して HUD 表示）
+    const mmPlane = MeshBuilder.CreatePlane("minimapPlane", { size: 1 }, game.scene);
+    const mmMat = new StandardMaterial("minimapMat", game.scene);
+    mmMat.emissiveTexture = dt;
+    mmMat.opacityTexture = dt;
+    mmMat.disableLighting = true;
+    mmMat.backFaceCulling = false;
+    mmPlane.material = mmMat;
+    mmPlane.renderingGroupId = 3;
+    mmPlane.isPickable = false;
+    mmPlane.parent = game.camera;
+    mmPlane.alphaIndex = 100;
+
     // PC のみツールチップ
     if (!isMobile) {
-        canvas.title = "ミニマップ\nワールド全体の俯瞰図\n緑: 地面\n色付き: ブロック\n白▲: 自分\n緑▲: 他プレイヤー\n\nドラッグ: 移動\n右下ドラッグ: リサイズ\nホイール: ズーム";
+        container.title = "ミニマップ\nワールド全体の俯瞰図\n緑: 地面\n色付き: ブロック\n白▲: 自分\n緑▲: 他プレイヤー\n\nドラッグ: 移動\n右下ドラッグ: リサイズ\nホイール: ズーム";
     }
+
+    /** 平面メッシュの位置・サイズを HTML container に同期 */
+    const syncPlaneToContainer = () => {
+        if (!mmVisible) {
+            mmPlane.setEnabled(false);
+            return;
+        }
+        mmPlane.setEnabled(true);
+        const rect = container.getBoundingClientRect();
+        // CSS ピクセルで統一（getBoundingClientRect と同じ座標系）
+        const renderCanvas = game.engine.getRenderingCanvas();
+        if (!renderCanvas) return;
+        const sw = renderCanvas.clientWidth;
+        const sh = renderCanvas.clientHeight;
+        if (sw === 0 || sh === 0) return;
+
+        // renderCanvas の画面上のオフセットも考慮
+        const canvasRect = renderCanvas.getBoundingClientRect();
+
+        // カメラ情報
+        const cam = game.camera;
+        const fov = cam.fov;
+        const dist = cam.minZ + 0.5;
+        const halfH = dist * Math.tan(fov / 2);
+        const halfW = halfH * (sw / sh);
+
+        // HTML container の中心を renderCanvas 内の正規化座標に変換
+        const cx = (rect.left + rect.width / 2 - canvasRect.left) / sw;
+        const cy = (rect.top + rect.height / 2 - canvasRect.top) / sh;
+        mmPlane.position.x = (cx * 2 - 1) * halfW;
+        mmPlane.position.y = (1 - cy * 2) * halfH;
+        mmPlane.position.z = dist;
+
+        // サイズ（CSS pixel → カメラローカルスケール）
+        const sizeW = (rect.width / sw) * halfW * 2;
+        const sizeH = (rect.height / sh) * halfH * 2;
+        mmPlane.scaling.x = sizeW;
+        mmPlane.scaling.y = sizeH;
+    };
 
     // --- Cookie ヘルパー ---
     const ckGet = (name: string): string | null => {
@@ -40,19 +103,16 @@ export function setupMinimap(game: GameScene): void {
     };
 
     // --- メニュートグル（表示/非表示） ---
-    // --- 表示/非表示トグル ---
     const menuBtn = document.getElementById("menu-minimap");
     const savedVisible = ckGet("mmVisible");
     let mmVisible = savedVisible !== "0";
 
-    let onVisibilityChanged: (() => void) | null = null; // 描画初期化後にセット
-    /** 非表示直前の位置・サイズを記憶 */
+    let onVisibilityChanged: (() => void) | null = null;
     let savedTop: number | null = null;
     let savedLeft: number | null = null;
     let savedWidth: number | null = null;
     const updateVisibility = () => {
         if (!mmVisible) {
-            // 非表示にする前に位置・サイズを記憶
             const rect = container.getBoundingClientRect();
             savedTop = rect.top;
             savedLeft = rect.left;
@@ -60,10 +120,10 @@ export function setupMinimap(game: GameScene): void {
         }
         container.style.display = mmVisible ? "" : "none";
         container.style.pointerEvents = mmVisible ? "auto" : "none";
+        mmPlane.setEnabled(mmVisible);
         if (menuBtn) menuBtn.textContent = (mmVisible ? "✓" : "　") + " " + t("menu.minimap");
         ckSet("mmVisible", mmVisible ? "1" : "0");
         if (mmVisible) {
-            // 記憶した位置・サイズを復元してからクランプ
             if (savedTop !== null && savedLeft !== null) {
                 container.style.top = savedTop + "px";
                 container.style.left = savedLeft + "px";
@@ -72,10 +132,9 @@ export function setupMinimap(game: GameScene): void {
             }
             if (savedWidth !== null) {
                 container.style.width = savedWidth + "px";
-                container.style.height = savedWidth + "px"; // 正方形
+                container.style.height = savedWidth + "px";
             }
             onVisibilityChanged?.();
-            // 復元後にCanvas領域内にクランプ
             requestAnimationFrame(() => clampToCanvas());
         }
     };
@@ -89,7 +148,6 @@ export function setupMinimap(game: GameScene): void {
         });
     }
 
-    // デバイダー移動時にCanvas領域内にクランプ
     game.onDividerMove.push(() => clampToCanvas());
 
     // --- Cookie から復元 ---
@@ -114,7 +172,6 @@ export function setupMinimap(game: GameScene): void {
         }
     }
 
-    // Cookie復元後の右端距離を保存
     requestAnimationFrame(() => saveMarginFromRight());
 
     // --- ズーム状態 ---
@@ -123,22 +180,14 @@ export function setupMinimap(game: GameScene): void {
 
     // --- 回転モード ---
     const savedMmRotate = ckGet("mmRotate");
-    game.minimapRotate = savedMmRotate !== null ? savedMmRotate === "1" : true; // デフォルト: 回転
+    game.minimapRotate = savedMmRotate !== null ? savedMmRotate === "1" : true;
 
-    // --- UI: Xボタン（左上） + +/-ボタン（右上） + 倍率表示 ---
+    // --- UI: ボタン類 ---
     const btnSize = isMobile ? "28px" : "20px";
     const btnFont = isMobile ? "16px" : "14px";
     const btnStyle = `width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:1px solid rgba(0,0,0,0.3);border-radius:3px;background:rgba(255,255,255,0.4);cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#333;`;
 
-    // 回転用の内側ラッパー（canvas + コンパスラベルだけ回転）
-    const innerRotate = document.createElement("div");
-    innerRotate.style.cssText = "position:absolute;inset:0;pointer-events:none;";
-    container.appendChild(innerRotate);
-    // canvasを innerRotate に移動
-    canvas.remove();
-    innerRotate.appendChild(canvas);
-
-    // Xボタン（右上）— container直下（回転しない）
+    // Xボタン（右上）
     const btnClose = document.createElement("button");
     btnClose.textContent = "✕";
     btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:none;border-radius:3px;background:transparent;cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#cc0000;pointer-events:auto;z-index:2;`;
@@ -151,7 +200,7 @@ export function setupMinimap(game: GameScene): void {
     selfMarker.style.cssText = "position:absolute;top:50%;left:50%;width:0;height:0;transform:translate(-50%,-70%);border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #ffffff;pointer-events:none;z-index:1;display:none;filter:drop-shadow(0 0 2px rgba(0,0,0,0.8));";
     container.appendChild(selfMarker);
 
-    // +/-ボタン（左下）
+    // +/-ボタン（左上）
     const controls = document.createElement("div");
     controls.style.cssText = "position:absolute;top:2px;left:2px;display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:auto;z-index:2;";
 
@@ -174,7 +223,7 @@ export function setupMinimap(game: GameScene): void {
     controls.appendChild(btnPlus);
     controls.appendChild(btnMinus);
     controls.appendChild(zoomLabel);
-    container.style.position = "fixed"; // 既に fixed だが念のため
+    container.style.position = "fixed";
     container.appendChild(controls);
 
     const setZoom = (idx: number) => {
@@ -188,12 +237,11 @@ export function setupMinimap(game: GameScene): void {
     btnPlus.addEventListener("click", (e) => { e.stopPropagation(); setZoom(zoomIndex + 1); });
     btnMinus.addEventListener("click", (e) => { e.stopPropagation(); setZoom(zoomIndex - 1); });
 
-    // 3Dシーンへのイベント伝播を防止
     for (const ev of ["click", "contextmenu"] as const) {
         container.addEventListener(ev, (e) => e.stopPropagation());
     }
 
-    // --- ドラッグ移動 & リサイズ（タッチイベント直接制御 — iOS Safari対応） ---
+    // --- ドラッグ移動 & リサイズ ---
     let dragging = false;
     let resizing = false;
     let dragOffX = 0, dragOffY = 0;
@@ -215,7 +263,6 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
-    /** Canvas領域の矩形を取得 */
     const getCanvasRect = (): { left: number; top: number; right: number; bottom: number } => {
         const cvs = document.getElementById("renderCanvas");
         if (cvs) {
@@ -225,22 +272,17 @@ export function setupMinimap(game: GameScene): void {
         return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
     };
 
-    /** Canvas右端からミニマップ右端までの距離を保存 */
     let marginFromRight = 4;
-
-    /** 現在のmarginFromRightを更新（ドラッグ終了時・リサイズ終了時に呼ぶ） */
     const saveMarginFromRight = () => {
         const cr = getCanvasRect();
         const rect = container.getBoundingClientRect();
         marginFromRight = Math.max(4, cr.right - rect.right);
     };
 
-    /** ミニマップをCanvas領域内にクランプ（位置・サイズ調整、右端距離を維持） */
     const clampToCanvas = () => {
         const cr = getCanvasRect();
         const availW = cr.right - cr.left - 8;
         const availH = cr.bottom - cr.top - 8;
-        // サイズがCanvas領域より大きければ縮小
         let w = container.offsetWidth;
         let h = container.offsetHeight;
         if (w > availW || h > availH) {
@@ -250,11 +292,9 @@ export function setupMinimap(game: GameScene): void {
             w = h = newSize;
             ckSet("mmSize", String(Math.round(newSize)));
         }
-        // 右端距離を維持して位置を計算
         const rect = container.getBoundingClientRect();
         let newLeft = cr.right - w - marginFromRight;
         let newTop = rect.top;
-        // Canvas領域内にクランプ
         if (newLeft + w > cr.right - 4) newLeft = cr.right - w - 4;
         if (newTop + h > cr.bottom - 4) newTop = cr.bottom - h - 4;
         if (newLeft < cr.left) newLeft = cr.left + 4;
@@ -287,6 +327,7 @@ export function setupMinimap(game: GameScene): void {
             const newSize = Math.max(64, Math.min(400, resizeStartSize + delta));
             container.style.width = newSize + "px";
             container.style.height = newSize + "px";
+            playerDirty = true;
         }
     };
 
@@ -301,19 +342,18 @@ export function setupMinimap(game: GameScene): void {
             const rect = container.getBoundingClientRect();
             ckSet("mmSize", String(Math.round(rect.width)));
             saveMarginFromRight();
+            playerDirty = true;
         }
         dragging = false;
         resizing = false;
     };
 
-    // ポインターイベント（PC）
     let activePointerId = -1;
     container.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         const t = e.target as HTMLElement;
-        if (t.tagName === "BUTTON") return; // ボタンはclick処理に委任
+        if (t.tagName === "BUTTON") return;
         e.preventDefault();
-        // 2本目の指が来たらドラッグ中断
         if (activePointerId >= 0 && e.pointerId !== activePointerId) { onEnd(); activePointerId = -1; return; }
         activePointerId = e.pointerId;
         onStart(e.clientX, e.clientY, t);
@@ -327,10 +367,8 @@ export function setupMinimap(game: GameScene): void {
     });
     container.addEventListener("pointerup", (e) => { e.stopPropagation(); onEnd(); activePointerId = -1; });
 
-    // タッチイベント（iOS Safari — pointerイベントより確実）
     let pinching = false;
     let lastPinchDist = 0;
-
     const getTouchDist = (e: TouchEvent): number => {
         const t0 = e.touches[0], t1 = e.touches[1];
         const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
@@ -349,7 +387,7 @@ export function setupMinimap(game: GameScene): void {
         pinching = false;
         const t = e.touches[0];
         const target = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement;
-        if (target?.tagName === "BUTTON") return; // ボタンはブラウザのclick処理に委任
+        if (target?.tagName === "BUTTON") return;
         e.preventDefault();
         onStart(t.clientX, t.clientY, target);
     }, { passive: false });
@@ -357,7 +395,6 @@ export function setupMinimap(game: GameScene): void {
         e.stopPropagation();
         e.preventDefault();
         if (e.touches.length >= 2 && pinching) {
-            // ピンチズーム
             const dist = getTouchDist(e);
             const delta = dist - lastPinchDist;
             if (Math.abs(delta) > 20) {
@@ -375,7 +412,6 @@ export function setupMinimap(game: GameScene): void {
         if (e.touches.length === 0) { pinching = false; onEnd(); }
     });
 
-    // PC: ホイールズーム
     container.addEventListener("wheel", (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -385,37 +421,20 @@ export function setupMinimap(game: GameScene): void {
 
     // --- 描画 ---
 
-    /** Canvas 内部解像度（dpr対応、ただし上限256pxでGPU負荷を制限） */
-    const MAP_MAX = 256;
-    let mapSize = 128;
-    const syncCanvasSize = () => {
-        const dpr = window.devicePixelRatio || 1;
-        const displayW = container.clientWidth;
-        const sz = Math.min(MAP_MAX, Math.round(displayW * dpr));
-        if (canvas.width !== sz || canvas.height !== sz) {
-            canvas.width = sz;
-            canvas.height = sz;
-            mapSize = sz;
-        }
-    };
-
-    /** ワールド座標 → ミニマップ座標（ズーム・プレイヤー中心対応） */
+    /** ワールド座標 → ミニマップ座標 */
     const toMap = (wx: number, wz: number): [number, number] => {
         const p = game.playerBox.position;
         const viewSize = WORLD_SIZE / zoom;
         const viewLeft = p.x + HALF - viewSize / 2;
         const viewBottom = p.z + HALF - viewSize / 2;
-
         const scale = mapSize / viewSize;
         const mx = Math.floor((wx + HALF - viewLeft) * scale);
         const my = mapSize - 1 - Math.floor((wz + HALF - viewBottom) * scale);
         return [mx, my];
     };
 
-    /** 座標がミニマップ内にあるか */
     const inBounds = (mx: number, my: number): boolean =>
         mx >= 0 && mx < mapSize && my >= 0 && my < mapSize;
-
 
     /** 三角形（向き付きアイコン）を描画 */
     const drawArrow = (cx: number, cy: number, rotation: number, color: string, size: number) => {
@@ -437,16 +456,12 @@ export function setupMinimap(game: GameScene): void {
         ctx.fill();
     };
 
-    /** プレイヤーの三角形を描画（自分を最前面） */
+    /** プレイヤーの三角形を描画 */
     const drawPlayers = () => {
         const scale = mapSize / 128;
         const arrowSize = 5 * scale;
-
-        // 回転モード時: container が -playerRot で回転しているため、
-        // canvas 内の角度は相対角度にする（自分は常に上向き）
         const selfRot = game.playerBox.rotation.y;
 
-        // 他プレイヤー（緑）— 先に描画
         for (const [sid, av] of game.remoteAvatars) {
             const tgt = game.remoteTargets.get(sid);
             const x = tgt ? tgt.x : av.position.x;
@@ -457,12 +472,9 @@ export function setupMinimap(game: GameScene): void {
             drawArrow(mx, my, angle, "#00cc44", arrowSize * 0.85);
         }
 
-        // 自分（白）— 最後に描画（常に最前面）
         if (game.minimapRotate) {
-            // 回転モード: 非回転レイヤーの HTML マーカーを表示（常に中央・上向き）
             selfMarker.style.display = "";
         } else {
-            // 北固定モード: canvas に描画
             selfMarker.style.display = "none";
             const p = game.playerBox.position;
             const [sx, sy] = toMap(p.x, p.z);
@@ -470,28 +482,23 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
-    const redraw = () => {
-        chunkCacheValid = false;
-    };
+    const redraw = () => { chunkCacheValid = false; };
 
-    // 初回描画
-    syncCanvasSize();
-
-    // チャンクデータのキャッシュ画像（ブロック＋方角）
+    // チャンクキャッシュ
     let chunkCacheValid = false;
     onVisibilityChanged = () => { chunkCacheValid = false; };
     const chunkCache = document.createElement("canvas");
+    chunkCache.width = MAP_RES;
+    chunkCache.height = MAP_RES;
     const chunkCacheCtx = chunkCache.getContext("2d")!;
 
     const redrawChunkCache = () => {
-        syncCanvasSize();
         chunkCache.width = mapSize;
         chunkCache.height = mapSize;
         drawChunksTo(chunkCacheCtx);
         chunkCacheValid = true;
     };
 
-    /** チャンクを指定コンテキストに描画 */
     const drawChunksTo = (c: CanvasRenderingContext2D) => {
         c.fillStyle = BG_COLOR;
         c.fillRect(0, 0, mapSize, mapSize);
@@ -518,10 +525,9 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
-    // 方角ラベル（HTML要素、キャンバスのズーム・リサイズに影響されない固定サイズ）
+    // 方角ラベル（HTML — container 直下）
     const compassStyle = "position:absolute;font:bold 10px sans-serif;color:rgba(255,255,255,0.8);text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;z-index:1;";
     const compassLabels: HTMLElement[] = [];
-    // 各方角の基準角度（北=0, 東=π/2, 南=π, 西=3π/2）
     const compassDirs = [
         { text: "N", angle: 0 },
         { text: "S", angle: Math.PI },
@@ -535,15 +541,12 @@ export function setupMinimap(game: GameScene): void {
         container.appendChild(el);
         compassLabels.push(el);
     }
-    /** NEWS ラベル位置を更新 */
     const updateCompassPositions = (rotAngle: number) => {
-        // rotAngle: 回転モード時の自分の向き補正、北固定時は0
         const r = container.clientWidth / 2;
-        const margin = 2; // 端からのオフセット
+        const margin = 2;
         for (let i = 0; i < compassDirs.length; i++) {
             const a = compassDirs[i].angle - rotAngle;
             const el = compassLabels[i];
-            // 円周上の位置（上が-Y）
             const x = r + Math.sin(a) * (r - margin);
             const y = r - Math.cos(a) * (r - margin);
             el.style.left = x + "px";
@@ -553,16 +556,19 @@ export function setupMinimap(game: GameScene): void {
     };
     updateCompassPositions(0);
 
-    // 変更検知ベースの描画更新
+    // --- 描画ループ ---
     let prevPlayerX = NaN, prevPlayerZ = NaN, prevPlayerRot = NaN;
     let prevRemoteCount = -1;
     let playerDirty = true;
     let prevAngleDeg = NaN;
-    const MM_INTERVAL = 100; // ミニマップ更新間隔 (ms) ≈ 10 FPS
+    const MM_INTERVAL = 100; // ≈ 10 FPS
     let lastMmUpdate = 0;
 
     game.scene.onAfterRenderObservable.add(() => {
         if (!mmVisible) return;
+
+        // 平面メッシュを HTML container の位置に同期（毎フレーム、軽い処理）
+        syncPlaneToContainer();
 
         const now = performance.now();
         const rot = game.playerBox.rotation.y;
@@ -571,51 +577,52 @@ export function setupMinimap(game: GameScene): void {
         if (now - lastMmUpdate < MM_INTERVAL) return;
         lastMmUpdate = now;
 
-        // プレイヤー位置・向き・リモート数の変化を検知
         const p = game.playerBox.position;
         const rc = game.remoteAvatars.size;
-        if (p.x !== prevPlayerX || p.z !== prevPlayerZ || rot !== prevPlayerRot || rc !== prevRemoteCount) {
+        if (p.x !== prevPlayerX || p.z !== prevPlayerZ || rot !== prevPlayerRot || rc !== prevRemoteCount || rc > 0) {
             prevPlayerX = p.x; prevPlayerZ = p.z; prevPlayerRot = rot; prevRemoteCount = rc;
             playerDirty = true;
         }
 
-        // チャンク + 方角: チャンクキャッシュが無効なとき
         if (!chunkCacheValid || playerDirty) {
             redrawChunkCache();
         }
 
-        // プレイヤー: 位置変化時のみ再描画
         if (playerDirty) {
-            syncCanvasSize();
             const half = mapSize / 2;
             ctx.clearRect(0, 0, mapSize, mapSize);
-            // 円形クリップ + 半透明（CSS opacity の代わり）
+            // 円形クリップ + 半透明
             ctx.save();
             ctx.globalAlpha = 0.85;
             ctx.beginPath();
             ctx.arc(half, half, half, 0, Math.PI * 2);
             ctx.clip();
             if (game.minimapRotate) {
-                // 回転モード: canvas 内で回転描画
                 const angle = -(rot + Math.PI);
                 ctx.translate(half, half);
                 ctx.rotate(angle);
                 ctx.drawImage(chunkCache, -half, -half);
-                ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform（clip は維持）
+                // プレイヤーも同じ回転で描画（translate back して絶対座標→回転座標に変換）
+                ctx.translate(-half, -half);
+                drawPlayers();
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
             } else {
                 ctx.drawImage(chunkCache, 0, 0);
+                drawPlayers();
             }
-            drawPlayers();
             ctx.restore();
+
+            // オフスクリーン canvas → DynamicTexture にコピー
+            const dtCtx = dt.getContext();
+            dtCtx.clearRect(0, 0, MAP_RES, MAP_RES);
+            dtCtx.drawImage(offCanvas, 0, 0);
+            dt.update();
+
             playerDirty = false;
 
-            // コンパスラベル位置更新
+            // コンパスラベル位置更新（リサイズ時もサイズ変化で再計算が必要）
             if (game.minimapRotate) {
-                const angleRound = Math.round((rot + Math.PI) * 180 / Math.PI) % 360;
-                if (angleRound !== prevAngleDeg) {
-                    prevAngleDeg = angleRound;
-                    updateCompassPositions(rot + Math.PI);
-                }
+                updateCompassPositions(rot + Math.PI);
             } else if (prevAngleDeg !== 0) {
                 prevAngleDeg = 0;
                 updateCompassPositions(0);
