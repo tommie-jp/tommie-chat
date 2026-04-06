@@ -804,6 +804,8 @@ export function setupHtmlUI(game: GameScene): void {
 
     const scheduleRenderUserList = () => {
         cc("scheduleRenderUserList");
+        // 同接数は右上バッジで常時表示するため、パネル非表示でも即時更新
+        game.userListProfile.userCount = userMap.size;
         if (_renderTimer !== null) return;
         _renderTimer = setTimeout(() => { _renderTimer = null; renderUserList(); }, 1000);
     };
@@ -1272,7 +1274,7 @@ export function setupHtmlUI(game: GameScene): void {
         cc("onMatchPresenceJoin");
         const existing = userMap.get(sessionId);
         if (!existing) {
-            userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: 0, loginTime: "…", channel: "match" });
+            userMap.set(sessionId, { username, displayName: "", uuid: userId, sessionId, loginTimestamp: Date.now(), loginTime: "…", channel: "match" });
         }
         // アバターが既に存在する場合、名前タグを更新
         if (sessionId !== game.nakama.selfSessionId && game.spriteAvatarSystem.has(sessionId)) {
@@ -1487,6 +1489,7 @@ export function setupHtmlUI(game: GameScene): void {
             { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch((e) => console.warn("UIPanel:", e)); }
             game.aoiManager.updateAOI();
             const srvInfo = await game.nakama.getServerInfo();
+            game.connectionState = "connected";
             addServerLog(t("log.login_success"), srvInfo);
             if (loginStatus) {
                 loginStatus.style.color = "#00dd55";
@@ -1515,6 +1518,9 @@ export function setupHtmlUI(game: GameScene): void {
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
                 console.warn("UIPanel match disconnected, auto-reconnect in progress");
+                game.connectionState = "retry";
+                userMap.clear();
+                scheduleRenderUserList();
                 addServerLog(t("log.match_disconnect"), t("log.match_disconnect.detail"));
             };
             // 再接続時にメタデータを提供
@@ -1532,7 +1538,30 @@ export function setupHtmlUI(game: GameScene): void {
             };
             game.nakama.onMatchReconnect = () => {
                 console.log("UIPanel match reconnected");
+                game.connectionState = "connected";
                 addServerLog(t("log.match_reconnect"), t("log.match_reconnect.detail"));
+                // 自分自身をプレイヤーリストに displayName 付きで再登録
+                {
+                    const sid = game.nakama.selfSessionId;
+                    const uid = game.currentUserId;
+                    if (sid && uid) {
+                        const existing = userMap.get(sid);
+                        if (existing) {
+                            userMap.set(sid, { ...existing, displayName: game.nakama.selfDisplayName ?? "" });
+                        }
+                    }
+                    scheduleRenderUserList();
+                }
+                // 自分のプロフィール（loginTime等）をサーバから再取得
+                {
+                    const sid = game.nakama.selfSessionId;
+                    if (sid) {
+                        pendingProfileSids.add(sid);
+                        scheduleProfileFetch();
+                    }
+                }
+                // 自分の位置・テクスチャを再送信（他プレイヤーに表示名・ログイン時刻を通知）
+                { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch((e) => console.warn("UIPanel:", e)); }
                 game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
                 game.aoiManager.updateAOI();
                 restartCcu();
@@ -1855,6 +1884,7 @@ export function setupHtmlUI(game: GameScene): void {
                 pingFailCount = 0;
                 if (pingDisconnected) {
                     pingDisconnected = false;
+                    game.connectionState = "connected";
                     addServerLog(t("log.network_restored"));
                     hideDisconnectBanner();
                     if (loginStatus) {
@@ -1876,6 +1906,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (pingFailCount >= PING_FAIL_THRESHOLD && !pingDisconnected) {
                     pingDisconnected = true;
                     game.latestPingAvg = -1;
+                    game.connectionState = "disconnected";
                     addServerLog(t("log.network_disconnect"), t("log.network_disconnect.detail"));
                     showDisconnectBanner();
                     if (loginStatus) {

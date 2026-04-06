@@ -1776,19 +1776,14 @@ export function setupDebugOverlay(game: GameScene): void {
             if (pd) {
                 const uid = game.selfNameLabel || ("@" + (game.nakama.getSession()?.username ?? ""));
                 const fpsStr = String(fps).padStart(2, "\u2007");
-                // 状態判定: "connected" | "disconnected" | "pending"
-                type PdState = "connected" | "disconnected" | "pending";
-                let state: PdState;
-                if (game.latestPingAvg !== null && game.latestPingAvg < 0) state = "disconnected";
-                else if (game.latestPingAvg !== null) state = "connected";
-                else state = "pending";
+                const state = game.connectionState;
 
                 // 状態またはuidが変わったときだけDOMを再構築
                 const stateKey = state + "|" + uid;
                 if ((pd as any).__pdState !== stateKey) {
                     (pd as any).__pdState = stateKey;
                     const mono = 'style="font-variant-numeric:tabular-nums;"';
-                    const tipBadge = 'title="ログイン状態を示します。\nON: サーバーに接続中\nOFF: サーバーとの接続が切れています\n\nクリックするとサーバーログパネルを開きます。"';
+                    const tipBadge = 'title="接続状態を示します。\nON: サーバーに接続中\nRETRY: 再接続中（WebSocket復旧待ち）\nOFF: サーバーとの接続が切れています\n\nクリックするとサーバーログパネルを開きます。"';
                     const tipUid   = 'title="表示名を示します。\n@はログインIDで、表示名が未設定の場合に表示されます。\nアバターの頭上にも同じ名前が表示され、\n@付きの場合は青色で表示されます。\n\nクリックすると表示名の変更パネルを開きます。"';
                     const tipCcu   = 'title="同接数（CCU）\n現在サーバーに接続中のプレイヤー数です。\n自分を含みます。\n\nクリックするとプレイヤーリストパネルを開きます。"';
                     const tipPing  = 'title="Ping（応答時間）\nサーバへの応答時間をリアルタイムで表示します。\n\n【目安】\n  〜50ms: 快適（LAN内・近距離サーバ）\n 50〜100ms: 良好（一般的なMMOの標準範囲）\n100〜200ms: やや遅い（操作に若干の遅延を感じる）\n200ms〜: 厳しい（アクション操作に支障が出る）\n\n【仕組み】\nWebSocketプロトコルのping/pongではなく、\nアプリ独自の実装です。\nNakamaサーバのRPC関数「ping」を呼び出し、\n送信から応答までの往復時間（ミリ秒）を計測しています。\nそのためサーバ側の処理時間も含まれます。\n\nクリックするとPingグラフパネルを開きます。"';
@@ -1796,11 +1791,11 @@ export function setupDebugOverlay(game: GameScene): void {
                     if (state === "disconnected") {
                         pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">OFF</span> 回線切断中 <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
                         pd.style.color = "#ff4444";
-                    } else if (state === "connected") {
-                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">ON</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ccu" ${tipCcu} style="cursor:pointer;"><span id="pd-ccu-val" ${mono}></span>人</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
-                        pd.style.color = "";
+                    } else if (state === "retry") {
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#b8860b;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">RETRY</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.style.color = "#b8860b";
                     } else {
-                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">OFF</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">ON</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ccu" ${tipCcu} style="cursor:pointer;"><span id="pd-ccu-val" ${mono}></span>人</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
                         pd.style.color = "";
                     }
                 }
