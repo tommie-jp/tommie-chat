@@ -179,14 +179,15 @@
             right: 8px;
             z-index: 50;
             pointer-events: auto;
-            opacity: 0.85;
+            /* opacity は canvas 内で globalAlpha として適用（GPU合成コスト削減） */
             /* ボタンの absolute 基準 */
         }
         #minimap {
             display: block;
-            background: #4a7a3a;
+            background: transparent;
             width: 100%;
             height: 100%;
+            image-rendering: auto;
         }
         #minimap-container {
             width: 128px;

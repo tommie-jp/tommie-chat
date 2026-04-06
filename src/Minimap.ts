@@ -132,7 +132,7 @@ export function setupMinimap(game: GameScene): void {
 
     // 回転用の内側ラッパー（canvas + コンパスラベルだけ回転）
     const innerRotate = document.createElement("div");
-    innerRotate.style.cssText = "position:absolute;inset:0;border-radius:50%;overflow:hidden;pointer-events:none;";
+    innerRotate.style.cssText = "position:absolute;inset:0;pointer-events:none;";
     container.appendChild(innerRotate);
     // canvasを innerRotate に移動
     canvas.remove();
@@ -385,12 +385,13 @@ export function setupMinimap(game: GameScene): void {
 
     // --- 描画 ---
 
-    /** Canvas 内部解像度を表示サイズに合わせる */
+    /** Canvas 内部解像度（dpr対応、ただし上限256pxでGPU負荷を制限） */
+    const MAP_MAX = 256;
     let mapSize = 128;
     const syncCanvasSize = () => {
         const dpr = window.devicePixelRatio || 1;
         const displayW = container.clientWidth;
-        const sz = Math.round(displayW * dpr);
+        const sz = Math.min(MAP_MAX, Math.round(displayW * dpr));
         if (canvas.width !== sz || canvas.height !== sz) {
             canvas.width = sz;
             canvas.height = sz;
@@ -518,56 +519,67 @@ export function setupMinimap(game: GameScene): void {
     };
 
     // 方角ラベル（HTML要素、キャンバスのズーム・リサイズに影響されない固定サイズ）
-    // 回転モード時はラベルを逆回転させて常に正しい向きを維持
-    const compassStyle = "position:absolute;font:bold 10px sans-serif;color:rgba(255,255,255,0.8);text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;";
+    const compassStyle = "position:absolute;font:bold 10px sans-serif;color:rgba(255,255,255,0.8);text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;z-index:1;";
     const compassLabels: HTMLElement[] = [];
-    // 基準位置（translate で中央寄せ）— transform は回転時に上書きするため別管理
-    const compassBase = [
-        { text: "N", top: "2px",    left: "50%",  bottom: "",    right: "" },
-        { text: "S", top: "",       left: "50%",  bottom: "2px", right: "" },
-        { text: "W", top: "50%",    left: "4px",  bottom: "",    right: "" },
-        { text: "E", top: "50%",    left: "",     bottom: "",    right: "4px" },
+    // 各方角の基準角度（北=0, 東=π/2, 南=π, 西=3π/2）
+    const compassDirs = [
+        { text: "N", angle: 0 },
+        { text: "S", angle: Math.PI },
+        { text: "W", angle: -Math.PI / 2 },
+        { text: "E", angle: Math.PI / 2 },
     ];
-    for (const b of compassBase) {
+    for (const d of compassDirs) {
         const el = document.createElement("div");
-        el.textContent = b.text;
+        el.textContent = d.text;
         el.style.cssText = compassStyle;
-        if (b.top) el.style.top = b.top;
-        if (b.bottom) el.style.bottom = b.bottom;
-        if (b.left) el.style.left = b.left;
-        if (b.right) el.style.right = b.right;
-        innerRotate.appendChild(el);
+        container.appendChild(el);
         compassLabels.push(el);
     }
-    /** NEWS ラベルの transform を更新（回転モード時は逆回転） */
-    const updateCompassTransform = (angleDeg: number) => {
-        for (let i = 0; i < compassLabels.length; i++) {
-            const b = compassBase[i];
-            // 基準の translate + 逆回転（ラベル文字が常に正しい向きになるよう）
-            const tx = (b.left === "50%") ? "translateX(-50%)" : (b.top === "50%") ? "translateY(-50%)" : "";
-            compassLabels[i].style.transform = angleDeg === 0 ? tx : `${tx} rotate(${angleDeg}deg)`;
+    /** NEWS ラベル位置を更新 */
+    const updateCompassPositions = (rotAngle: number) => {
+        // rotAngle: 回転モード時の自分の向き補正、北固定時は0
+        const r = container.clientWidth / 2;
+        const margin = 2; // 端からのオフセット
+        for (let i = 0; i < compassDirs.length; i++) {
+            const a = compassDirs[i].angle - rotAngle;
+            const el = compassLabels[i];
+            // 円周上の位置（上が-Y）
+            const x = r + Math.sin(a) * (r - margin);
+            const y = r - Math.cos(a) * (r - margin);
+            el.style.left = x + "px";
+            el.style.top = y + "px";
+            el.style.transform = "translate(-50%,-50%)";
         }
     };
-    updateCompassTransform(0);
+    updateCompassPositions(0);
 
     // 変更検知ベースの描画更新
     let prevPlayerX = NaN, prevPlayerZ = NaN, prevPlayerRot = NaN;
     let prevRemoteCount = -1;
     let playerDirty = true;
+    let prevAngleDeg = NaN;
+    const MM_INTERVAL = 100; // ミニマップ更新間隔 (ms) ≈ 10 FPS
+    let lastMmUpdate = 0;
 
     game.scene.onAfterRenderObservable.add(() => {
         if (!mmVisible) return;
 
+        const now = performance.now();
+        const rot = game.playerBox.rotation.y;
+
+        // Canvas 再描画は間引き（≈10 FPS）
+        if (now - lastMmUpdate < MM_INTERVAL) return;
+        lastMmUpdate = now;
+
         // プレイヤー位置・向き・リモート数の変化を検知
         const p = game.playerBox.position;
-        const rot = game.playerBox.rotation.y;
         const rc = game.remoteAvatars.size;
         if (p.x !== prevPlayerX || p.z !== prevPlayerZ || rot !== prevPlayerRot || rc !== prevRemoteCount) {
             prevPlayerX = p.x; prevPlayerZ = p.z; prevPlayerRot = rot; prevRemoteCount = rc;
             playerDirty = true;
         }
 
-        // チャンク + 方角: チャンクキャッシュが無効なとき（ズーム変更、表示復帰、プレイヤー移動）
+        // チャンク + 方角: チャンクキャッシュが無効なとき
         if (!chunkCacheValid || playerDirty) {
             redrawChunkCache();
         }
@@ -575,18 +587,38 @@ export function setupMinimap(game: GameScene): void {
         // プレイヤー: 位置変化時のみ再描画
         if (playerDirty) {
             syncCanvasSize();
-            ctx.drawImage(chunkCache, 0, 0);
+            const half = mapSize / 2;
+            ctx.clearRect(0, 0, mapSize, mapSize);
+            // 円形クリップ + 半透明（CSS opacity の代わり）
+            ctx.save();
+            ctx.globalAlpha = 0.85;
+            ctx.beginPath();
+            ctx.arc(half, half, half, 0, Math.PI * 2);
+            ctx.clip();
+            if (game.minimapRotate) {
+                // 回転モード: canvas 内で回転描画
+                const angle = -(rot + Math.PI);
+                ctx.translate(half, half);
+                ctx.rotate(angle);
+                ctx.drawImage(chunkCache, -half, -half);
+                ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform（clip は維持）
+            } else {
+                ctx.drawImage(chunkCache, 0, 0);
+            }
             drawPlayers();
+            ctx.restore();
             playerDirty = false;
 
-            // 回転モード: innerRotate を回転、NEWS ラベルを逆回転
+            // コンパスラベル位置更新
             if (game.minimapRotate) {
-                const angleDeg = (rot + Math.PI) * 180 / Math.PI;
-                innerRotate.style.transform = `rotate(${-angleDeg}deg)`;
-                updateCompassTransform(angleDeg);
-            } else {
-                innerRotate.style.transform = "";
-                updateCompassTransform(0);
+                const angleRound = Math.round((rot + Math.PI) * 180 / Math.PI) % 360;
+                if (angleRound !== prevAngleDeg) {
+                    prevAngleDeg = angleRound;
+                    updateCompassPositions(rot + Math.PI);
+                }
+            } else if (prevAngleDeg !== 0) {
+                prevAngleDeg = 0;
+                updateCompassPositions(0);
             }
         }
     });
