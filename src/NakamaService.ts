@@ -424,7 +424,7 @@ export class NakamaService {
         try {
             const result = await this.socket.rpc("getServerInfo");
             if (result?.payload) {
-                const data = JSON.parse(result.payload) as { name?: string; version?: string; pluginDate?: string; pluginCommit?: string; playerCount?: number };
+                const data = JSON.parse(result.payload) as { name?: string; version?: string; pluginDate?: string; pluginCommit?: string };
                 const parts: string[] = [];
                 if (data.name || data.version)
                     parts.push(`NakamaServerName="${[data.name, data.version ? `v${data.version}` : ""].filter(Boolean).join(" ")}"`);
@@ -433,9 +433,6 @@ export class NakamaService {
                     const commit = data.pluginCommit ?? "";
                     parts.push(`world.so ${[date, commit].filter(Boolean).join(" ")}`);
                 }
-                // serverUpTime は運用情報のためクライアントには非表示
-                if (data.playerCount !== undefined)
-                    parts.push(`players=${data.playerCount}`);
                 if (parts.length) return parts.join(" ");
             }
         } catch (e) { console.warn("NakamaService.getServerInfo RPC fallback:", e); }

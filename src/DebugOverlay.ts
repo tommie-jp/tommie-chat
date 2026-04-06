@@ -581,6 +581,8 @@ export function setupDebugOverlay(game: GameScene): void {
                     pdAction = "userlist";
                 } else if (target.id === "pd-badge") {
                     pdAction = "serverlog";
+                } else if (target.id === "pd-ccu" || !!target.closest?.("#pd-ccu")) {
+                    pdAction = "userlist";
                 } else if (target.id === "pd-ping" || !!target.closest?.("#pd-ping")) {
                     pdAction = "ping";
                 } else if (target.id === "pd-fps" || !!target.closest?.("#pd-fps")) {
@@ -1788,13 +1790,14 @@ export function setupDebugOverlay(game: GameScene): void {
                     const mono = 'style="font-variant-numeric:tabular-nums;"';
                     const tipBadge = 'title="ログイン状態を示します。\nON: サーバーに接続中\nOFF: サーバーとの接続が切れています\n\nクリックするとサーバーログパネルを開きます。"';
                     const tipUid   = 'title="表示名を示します。\n@はログインIDで、表示名が未設定の場合に表示されます。\nアバターの頭上にも同じ名前が表示され、\n@付きの場合は青色で表示されます。\n\nクリックすると表示名の変更パネルを開きます。"';
+                    const tipCcu   = 'title="同接数（CCU）\n現在サーバーに接続中のプレイヤー数です。\n自分を含みます。\n\nクリックするとプレイヤーリストパネルを開きます。"';
                     const tipPing  = 'title="Ping（応答時間）\nサーバへの応答時間をリアルタイムで表示します。\n\n【目安】\n  〜50ms: 快適（LAN内・近距離サーバ）\n 50〜100ms: 良好（一般的なMMOの標準範囲）\n100〜200ms: やや遅い（操作に若干の遅延を感じる）\n200ms〜: 厳しい（アクション操作に支障が出る）\n\n【仕組み】\nWebSocketプロトコルのping/pongではなく、\nアプリ独自の実装です。\nNakamaサーバのRPC関数「ping」を呼び出し、\n送信から応答までの往復時間（ミリ秒）を計測しています。\nそのためサーバ側の処理時間も含まれます。\n\nクリックするとPingグラフパネルを開きます。"';
                     const tipFps   = 'title="FPS（フレームレート）\nFrames Per Second — 1秒あたりの描画回数。\n値が大きいほど映像が滑らかになります。\n\n典型的なMMO: 30〜60fps（60fps目標）\n\nクリックするとデバッグツールパネルを開きます。"';
                     if (state === "disconnected") {
                         pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">OFF</span> 回線切断中 <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
                         pd.style.color = "#ff4444";
                     } else if (state === "connected") {
-                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">ON</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">ON</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ccu" ${tipCcu} style="cursor:pointer;"><span id="pd-ccu-val" ${mono}></span>人</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
                         pd.style.color = "";
                     } else {
                         pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">OFF</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
@@ -1802,6 +1805,11 @@ export function setupDebugOverlay(game: GameScene): void {
                     }
                 }
                 // 値だけテキスト更新（DOM再構築なし）
+                const ccuValEl  = document.getElementById("pd-ccu-val");
+                if (ccuValEl) {
+                    const ccuStr = String(game.userListProfile.userCount);
+                    if (ccuValEl.textContent !== ccuStr) ccuValEl.textContent = ccuStr;
+                }
                 const pingValEl = document.getElementById("pd-ping-val");
                 const fpsValEl  = document.getElementById("pd-fps-val");
                 if (pingValEl) {
