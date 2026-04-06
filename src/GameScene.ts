@@ -106,6 +106,14 @@ export class GameScene {
     /** デバイダー移動時のコールバック */
     onDividerMove: (() => void)[] = [];
 
+    // ─── 部屋システム ───
+    /** 現在いる部屋ID（null=ワールド中心） */
+    currentRoomId: string | null = null;
+    /** 部屋移動スタック（戻り先: 部屋ID + 座標） */
+    private roomStack: { roomId: string | null; x: number; z: number; ry: number }[] = [];
+    /** 部屋切替イベント（UIPanel等が購読） */
+    onRoomChange: ((roomId: string | null) => void)[] = [];
+
     constructor(canvas: HTMLCanvasElement) {
         this.engine = new Engine(canvas, false, { stencil: true });
 
@@ -991,5 +999,61 @@ export class GameScene {
         if (r.right  > vw) el.style.width  = Math.max(100, vw - r.left) + "px";
         if (r.bottom > vh) el.style.height = Math.max(60,  vh - r.top)  + "px";
         _end();
+    }
+
+    // ─── 部屋切替（同一 Match 内、テレポート） ───
+
+    /** 部屋の固定座標 */
+    static readonly ROOM_POSITIONS: Record<string, { x: number; z: number }> = {
+        world_center: { x: 0,    z: 0 },
+        room_park:    { x: -400, z: -400 },
+        room_beach:   { x: -400, z:  400 },
+        room_night:   { x:  400, z: -400 },
+    };
+
+    /** 部屋に移動（現在地をスタックに PUSH してテレポート） */
+    enterRoom(roomId: string): void {
+        if (this.currentRoomId === roomId) return;
+
+        // 現在地をスタックに PUSH
+        this.roomStack.push({
+            roomId: this.currentRoomId,
+            x: this.playerBox.position.x,
+            z: this.playerBox.position.z,
+            ry: this.playerBox.rotation.y,
+        });
+
+        this.currentRoomId = roomId;
+
+        const pos = GameScene.ROOM_POSITIONS[roomId] ?? { x: 0, z: 0 };
+        this.playerBox.position.x = pos.x;
+        this.playerBox.position.z = pos.z;
+        this.targetPosition = null;
+
+        this.aoiManager.updateAOI();
+        this.nakama.sendInitPos(pos.x, pos.z, this.playerBox.rotation.y, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+        for (const cb of this.onRoomChange) cb(roomId);
+    }
+
+    /** スタックから POP して前の部屋/座標に戻る */
+    goBack(): boolean {
+        const prev = this.roomStack.pop();
+        if (!prev) return false;
+
+        this.currentRoomId = prev.roomId;
+        this.playerBox.position.x = prev.x;
+        this.playerBox.position.z = prev.z;
+        this.playerBox.rotation.y = prev.ry;
+        this.targetPosition = null;
+
+        this.aoiManager.updateAOI();
+        this.nakama.sendInitPos(prev.x, prev.z, prev.ry, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+        for (const cb of this.onRoomChange) cb(prev.roomId);
+        return true;
+    }
+
+    /** スタックが空でないか（「もとに戻る」ボタン表示用） */
+    get canGoBack(): boolean {
+        return this.roomStack.length > 0;
     }
 }

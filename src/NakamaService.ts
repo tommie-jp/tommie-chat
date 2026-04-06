@@ -560,4 +560,5 @@ export class NakamaService {
         const res = await this.socket.rpc(method);
         return res?.payload ?? null;
     }
+
 }

@@ -1328,6 +1328,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
         { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
         { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = "none"; }
+        { const mr = document.getElementById("menu-rooms"); if (mr) mr.style.display = "none"; }
         { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = ""; }
         setLoginRowVisible(true);
     };
@@ -1504,6 +1505,7 @@ export function setupHtmlUI(game: GameScene): void {
             setLoginRowVisible(false);
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
+            { const mr = document.getElementById("menu-rooms"); if (mr) mr.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = t("displayname.placeholder.enabled"); } }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
@@ -2622,6 +2624,67 @@ export function setupHtmlUI(game: GameScene): void {
                         if (updater) updater(lbl.text, lbl.color, lbl.suffix);
                     }
                 }
+            });
+        }
+    }
+
+    // ─── 部屋一覧（テレポート先の選択） ───
+    {
+        const menuRooms = document.getElementById("menu-rooms");
+        // 部屋定義（クライアント側固定リスト — ワールドも「部屋」として扱う）
+        const roomDefs = [
+            { id: "world_center", name: "ワールド（中心）" },
+            { id: "room_park",    name: "公園" },
+            { id: "room_beach",   name: "ビーチ" },
+            { id: "room_night",   name: "夜の街" },
+        ];
+
+        const roomPanel = document.createElement("div");
+        roomPanel.id = "room-panel";
+        roomPanel.style.cssText = "display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;color:#fff;border-radius:8px;padding:16px;min-width:240px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:14px;";
+        roomPanel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b>部屋一覧</b><button id="room-panel-close" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;">✕</button></div><div id="room-list" style="display:flex;flex-direction:column;gap:6px;"></div>`;
+        document.body.appendChild(roomPanel);
+
+        const roomListEl = document.getElementById("room-list")!;
+        const roomClose = document.getElementById("room-panel-close")!;
+
+        const showRoomPanel = () => {
+            roomPanel.style.display = "";
+            roomListEl.innerHTML = "";
+
+            // 「もとに戻る」ボタン（スタックがあれば表示）
+            if (game.canGoBack) {
+                const backBtn = document.createElement("button");
+                backBtn.style.cssText = "background:#553;color:#ffa;border:1px solid #aa8;border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;";
+                backBtn.innerHTML = "<b>← もとに戻る</b>";
+                backBtn.addEventListener("click", () => {
+                    roomPanel.style.display = "none";
+                    game.goBack();
+                });
+                roomListEl.appendChild(backBtn);
+            }
+
+            for (const r of roomDefs) {
+                const isCurrent = game.currentRoomId === r.id;
+                const btn = document.createElement("button");
+                btn.style.cssText = `background:${isCurrent ? "#336" : "#444"};color:#fff;border:1px solid ${isCurrent ? "#66f" : "#666"};border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;`;
+                btn.innerHTML = `<b>${r.name}</b>${isCurrent ? ' <span style="color:#6f6;font-size:12px;">★ 現在地</span>' : ""}`;
+                btn.addEventListener("click", () => {
+                    roomPanel.style.display = "none";
+                    if (isCurrent) return;
+                    game.enterRoom(r.id!);
+                });
+                roomListEl.appendChild(btn);
+            }
+        };
+
+        roomClose.addEventListener("click", () => { roomPanel.style.display = "none"; });
+
+        if (menuRooms) {
+            menuRooms.addEventListener("click", () => {
+                const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
+                if (cl) cl(menuRooms); else document.getElementById("menu-popup")?.classList.remove("open");
+                showRoomPanel();
             });
         }
     }
