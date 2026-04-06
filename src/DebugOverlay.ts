@@ -1643,7 +1643,7 @@ export function setupDebugOverlay(game: GameScene): void {
             game.playerBox.position.set(0, 0, 0);
             game.playerBox.rotation.y = 0;
             game.targetPosition = null;
-            game.nakama.sendInitPos(0, 0).catch(() => {});
+            game.nakama.sendInitPos(0, 0).catch((e) => console.warn("DebugOverlay:", e));
 
             game.camera.alpha = Math.PI / 2;
             game.camera.beta = Math.PI / 4;
@@ -1662,7 +1662,7 @@ export function setupDebugOverlay(game: GameScene): void {
             game.playerBox.position.x = x;
             game.playerBox.position.z = z;
             game.targetPosition = null;
-            game.nakama.sendMoveTarget(x, z).catch(() => {});
+            game.nakama.sendMoveTarget(x, z).catch((e) => console.warn("DebugOverlay:", e));
             game.aoiManager.updateAOI();
         });
     }
@@ -1673,7 +1673,7 @@ export function setupDebugOverlay(game: GameScene): void {
         avatarSelect.addEventListener("change", () => {
             game.playerTextureUrl = avatarSelect.value;
             game.avatarSystem.changeAvatarTexture(game.playerBox, game.playerTextureUrl);
-            game.nakama.sendAvatarChange(game.playerTextureUrl).catch(() => {});
+            game.nakama.sendAvatarChange(game.playerTextureUrl).catch((e) => console.warn("DebugOverlay:", e));
         });
     }
 
@@ -1743,7 +1743,7 @@ export function setupDebugOverlay(game: GameScene): void {
                 // 表示名タグを再設定（セッションIDサフィックス含む）
                 game.refreshSelfNameTag?.();
             });
-            game.nakama.sendAvatarChange(url, cc, cr).catch(() => {});
+            game.nakama.sendAvatarChange(url, cc, cr).catch((e) => console.warn("DebugOverlay:", e));
         });
     }
 

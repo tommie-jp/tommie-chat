@@ -42,7 +42,7 @@ export class AOIManager {
             this.updateAOILines();
             if (this.nakama.selfMatchId) {
                 console.log(`snd AOI_UPDATE (${minCX},${minCZ})-(${maxCX},${maxCZ})`);
-                this.nakama.sendAOI(minCX, minCZ, maxCX, maxCZ).catch(() => {});
+                this.nakama.sendAOI(minCX, minCZ, maxCX, maxCZ).catch((e) => console.warn("AOIManager:", e));
                 if (this.syncThrottleTimer) clearTimeout(this.syncThrottleTimer);
                 this.syncThrottleTimer = setTimeout(() => this.onSyncChunks(), 300);
             }

@@ -298,7 +298,7 @@ export class NakamaService {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl, cc: charCol, cr: charRow, nc: this.selfNameColor })));
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
 
@@ -309,7 +309,7 @@ export class NakamaService {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, new TextEncoder().encode(JSON.stringify({ textureUrl, cc: charCol, cr: charRow })));
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
 
@@ -320,7 +320,7 @@ export class NakamaService {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName, nc: this.selfNameColor })));
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
 
@@ -329,7 +329,7 @@ export class NakamaService {
         this.selfNameColor = nameColor;
         try {
             await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName: this.selfDisplayName, nc: nameColor })));
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
     }
 
     async sendMoveTarget(x: number, z: number): Promise<void> {
@@ -338,7 +338,7 @@ export class NakamaService {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_MOVE_TARGET, JSON.stringify({ x, z }));
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
 
@@ -348,7 +348,7 @@ export class NakamaService {
         if (!this.socket || !this.matchId) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_AOI_UPDATE, JSON.stringify({ minCX, minCZ, maxCX, maxCZ }));
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
 
@@ -359,7 +359,7 @@ export class NakamaService {
         if (!this.socket || !this.matchId || sessionIds.length === 0) return;
         try {
             await this.socket.sendMatchState(this.matchId, OP_PROFILE_REQUEST, new TextEncoder().encode(JSON.stringify({ sessionIds })));
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
 
@@ -446,7 +446,7 @@ export class NakamaService {
                 const parts = [data.name, data.version].filter(Boolean);
                 if (parts.length) return parts.join(" ");
             }
-        } catch { /* ignore */ }
+        } catch (e) { console.warn("NakamaService:", e); }
         return "不明";
         } finally { _end(); }
     }

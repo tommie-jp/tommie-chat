@@ -1087,7 +1087,7 @@ export function setupHtmlUI(game: GameScene): void {
             if (pendingProfileSids.size === 0) return;
             const sids = [...pendingProfileSids];
             pendingProfileSids.clear();
-            game.nakama.sendProfileRequest(sids).catch(() => {});
+            game.nakama.sendProfileRequest(sids).catch((e) => console.warn("UIPanel:", e));
         }, PROFILE_DEBOUNCE_MS);
     }
     // サーバからのプロフィール応答を処理
@@ -1481,10 +1481,10 @@ export function setupHtmlUI(game: GameScene): void {
                         }
                     }
                 }
-                game.syncAOIChunks().catch(() => {});
+                game.syncAOIChunks().catch((e) => console.warn("UIPanel:", e));
             }
 
-            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch(() => {}); }
+            { const p = game.playerBox; game.nakama.sendInitPos(p.position.x, p.position.z, p.rotation.y, game.playerTextureUrl, game.playerCharCol, game.playerCharRow).catch((e) => console.warn("UIPanel:", e)); }
             game.aoiManager.updateAOI();
             const srvInfo = await game.nakama.getServerInfo();
             addServerLog(t("log.login_success"), srvInfo);
@@ -1626,7 +1626,7 @@ export function setupHtmlUI(game: GameScene): void {
             try {
                 await game.nakama.updateDisplayName(name);
                 game.nakama.selfDisplayName = name;
-                game.nakama.sendDisplayName(name).catch(() => {});
+                game.nakama.sendDisplayName(name).catch((e) => console.warn("UIPanel:", e));
                 const selfUsername = loginNameInput?.value ?? "";
                 const lbl = resolveDisplayLabel(name, selfUsername, game.nakama.selfSessionId ?? undefined);
                 game.updatePlayerNameTag(lbl.text, lbl.color, lbl.suffix);

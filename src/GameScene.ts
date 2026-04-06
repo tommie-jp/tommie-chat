@@ -441,7 +441,7 @@ export class GameScene {
         this.aoiManager = new AOIManager(
             this.scene, this.nakama,
             () => ({ x: this.playerBox.position.x, z: this.playerBox.position.z }),
-            () => { this.refreshBlocksForAOI(); this.syncAOIChunks().catch(() => {}); }
+            () => { this.refreshBlocksForAOI(); this.syncAOIChunks().catch((e) => console.warn("GameScene:", e)); }
         );
 
         // ネームタグ & 吹き出し
@@ -553,7 +553,7 @@ export class GameScene {
                         const opacityInput = document.getElementById("blockOpacityInput") as HTMLInputElement | null;
                         const opacity = Math.min(1, Math.max(0, parseFloat(opacityInput?.value ?? "0.5")));
                         const a = Math.round(opacity * 255);
-                        this.nakama.setBlock(gx, gz, blockId, r, g, b, a).catch(() => {});
+                        this.nakama.setBlock(gx, gz, blockId, r, g, b, a).catch((e) => console.warn("GameScene:", e));
                     }
                 }
             });
@@ -596,7 +596,7 @@ export class GameScene {
                     this.clickMarker.isVisible = true;
                     // 現在位置を送信
                     const cp = this.playerBox.position;
-                    this.nakama.sendMoveTarget(cp.x, cp.z).catch(() => {});
+                    this.nakama.sendMoveTarget(cp.x, cp.z).catch((e) => console.warn("GameScene:", e));
                     this.aoiManager.updateAOI();
                 }
             }
@@ -643,7 +643,7 @@ export class GameScene {
                 if (now - this.lastKeyboardSendTime >= 100) {
                     this.lastKeyboardSendTime = now;
                     const p = this.playerBox.position;
-                    this.nakama.sendMoveTarget(p.x, p.z).catch(() => {});
+                    this.nakama.sendMoveTarget(p.x, p.z).catch((e) => console.warn("GameScene:", e));
                     this.aoiManager.updateAOI();
                 }
             }
@@ -681,7 +681,7 @@ export class GameScene {
                 if (now - this.lastKeyboardSendTime >= 100) {
                     this.lastKeyboardSendTime = now;
                     const p = this.playerBox.position;
-                    this.nakama.sendMoveTarget(p.x, p.z).catch(() => {});
+                    this.nakama.sendMoveTarget(p.x, p.z).catch((e) => console.warn("GameScene:", e));
                 }
                 this.aoiManager.updateAOI();
             }
