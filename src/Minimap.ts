@@ -129,7 +129,7 @@ export function setupMinimap(game: GameScene): void {
     // Xボタン（右上）
     const btnClose = document.createElement("button");
     btnClose.textContent = "✕";
-    btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:none;border-radius:3px;background:rgba(200,0,0,0.6);cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#fff;pointer-events:auto;`;
+    btnClose.style.cssText = `position:absolute;top:2px;right:2px;width:${btnSize};height:${btnSize};font-size:${btnFont};line-height:1;border:none;border-radius:3px;background:transparent;cursor:pointer;padding:0;text-align:center;font-weight:bold;color:#cc0000;pointer-events:auto;`;
     if (!isMobile) btnClose.title = "ミニマップを非表示（メニューから再表示）";
     btnClose.addEventListener("click", (e) => { e.stopPropagation(); mmVisible = false; updateVisibility(); });
     container.appendChild(btnClose);
@@ -458,7 +458,6 @@ export function setupMinimap(game: GameScene): void {
         chunkCache.width = mapSize;
         chunkCache.height = mapSize;
         drawChunksTo(chunkCacheCtx);
-        drawCompassTo(chunkCacheCtx);
         chunkCacheValid = true;
     };
 
@@ -489,23 +488,19 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
-    /** 方角を指定コンテキストに描画 */
-    const drawCompassTo = (c: CanvasRenderingContext2D) => {
-        const scale = mapSize / 128;
-        const fontSize = Math.round(10 * scale);
-        const pad = Math.round(8 * scale);
-        c.font = `bold ${fontSize}px sans-serif`;
-        c.textAlign = "center";
-        c.textBaseline = "middle";
-        c.fillStyle = "rgba(255,255,255,0.8)";
-        c.strokeStyle = "rgba(0,0,0,0.5)";
-        c.lineWidth = 2 * scale;
-        const m = mapSize / 2;
-        for (const [text, x, y] of [["N", m, pad], ["S", m, mapSize - pad], ["W", pad, m], ["E", mapSize - pad, m]] as [string, number, number][]) {
-            c.strokeText(text, x, y);
-            c.fillText(text, x, y);
-        }
-    };
+    // 方角ラベル（HTML要素、キャンバスのズーム・リサイズに影響されない固定サイズ）
+    const compassStyle = "position:absolute;font:bold 10px sans-serif;color:rgba(255,255,255,0.8);text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;";
+    for (const [text, css] of [
+        ["N", "top:2px;left:50%;transform:translateX(-50%);"],
+        ["S", "bottom:2px;left:50%;transform:translateX(-50%);"],
+        ["W", "left:4px;top:50%;transform:translateY(-50%);"],
+        ["E", "right:4px;top:50%;transform:translateY(-50%);"],
+    ]) {
+        const el = document.createElement("div");
+        el.textContent = text;
+        el.style.cssText = compassStyle + css;
+        container.appendChild(el);
+    }
 
     // 変更検知ベースの描画更新
     let prevPlayerX = NaN, prevPlayerZ = NaN, prevPlayerRot = NaN;
