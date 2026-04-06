@@ -713,6 +713,34 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
+    // --- ミニマップ回転モード ---
+    const mmRotateSelect = document.getElementById("mmRotateSelect") as HTMLSelectElement | null;
+    if (mmRotateSelect) {
+        const getMmRotateCookie = (): string | null => {
+            const m = document.cookie.match(/(?:^|; )mmRotate=([^;]*)/);
+            return m ? decodeURIComponent(m[1]) : null;
+        };
+        const setMmRotateCookie = (v: string) => {
+            document.cookie = `mmRotate=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+        };
+        const saved = getMmRotateCookie();
+        const isRotate = saved !== null ? saved === "1" : true;
+        mmRotateSelect.value = isRotate ? "rotate" : "north";
+        game.minimapRotate = isRotate;
+        markNonDefault(mmRotateSelect, "rotate", mmRotateSelect.value);
+        mmRotateSelect.addEventListener("change", () => {
+            const rotate = mmRotateSelect.value === "rotate";
+            game.minimapRotate = rotate;
+            setMmRotateCookie(rotate ? "1" : "0");
+            markNonDefault(mmRotateSelect, "rotate", mmRotateSelect.value);
+            // 北固定に切り替えた時に回転をリセット
+            if (!rotate) {
+                const mc = document.getElementById("minimap-container");
+                if (mc) mc.style.transform = "";
+            }
+        });
+    }
+
     // --- チャットオーバーレイ行数 ---
     const chatOlMaxSelect = document.getElementById("chatOlMaxSelect") as HTMLSelectElement | null;
     if (chatOlMaxSelect) {

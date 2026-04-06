@@ -79,6 +79,8 @@ export class GameScene {
     latestPingAvg: number | null = null;
     /** 右上バッジの接続状態: "connected" | "retry" | "disconnected" */
     connectionState: "connected" | "retry" | "disconnected" = "disconnected";
+    /** ミニマップ回転モード（true=プレイヤー向き追従、false=北固定） */
+    minimapRotate = true;
     playerTextureUrl = localStorage.getItem("spriteAvatarUrl") || "/s3/avatars/pipo-nekonin008.png";
     playerCharCol = parseInt(localStorage.getItem("spriteAvatarCol") ?? "0", 10) || 0;
     playerCharRow = parseInt(localStorage.getItem("spriteAvatarRow") ?? "0", 10) || 0;
