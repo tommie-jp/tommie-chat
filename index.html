@@ -981,43 +981,68 @@
             flex-direction: column;
         }
         #chat-settings-header {
-            padding: 4px 8px;
+            padding: 5px 8px 4px 8px;
             font-weight: bold;
             font-size: 13px;
-            border-bottom: 1px solid rgba(0,0,0,0.15);
-            background: rgba(255,255,255,0.4);
+            border-bottom: 1px solid #000000;
+            background: transparent;
             cursor: grab;
             display: flex;
             justify-content: space-between;
             align-items: center;
             user-select: none;
             touch-action: none;
+            flex-shrink: 0;
+            border-radius: 8px 8px 0 0;
         }
+        #chat-settings-header:active { cursor: grabbing; }
         #chat-settings-close {
             cursor: pointer;
-            font-size: 11px;
+            font-size: 14px;
             line-height: 1;
             opacity: 0.6;
             padding: 4px 6px;
         }
         #chat-settings-close:hover { opacity: 1; }
         #chat-settings-body {
-            padding: 6px 8px;
+            padding: 0;
             overflow-y: auto;
             flex: 1;
         }
         #chat-settings-body table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
+        }
+        #chat-settings-body td {
+            padding: 1px 4px;
+            vertical-align: middle;
+            white-space: nowrap;
+            height: 22px;
+            font-size: 13px;
+            line-height: 1.2;
         }
         #chat-settings-body .label {
-            font-size: 11px;
-            padding: 3px 4px;
-            white-space: nowrap;
+            text-align: left;
+            width: 55%;
+            font-weight: bold;
+            cursor: help;
+            transition: all 0.2s ease;
+            text-overflow: ellipsis;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #chat-settings-body .label:hover {
+            background-color: rgba(0, 0, 0, 0.08);
+            color: #0056b3;
         }
         #chat-settings-body .value {
             text-align: right;
-            padding: 3px 4px;
+            width: 45%;
+        }
+        #chat-settings-body tr:nth-child(odd) > td.label,
+        #chat-settings-body tr:nth-child(odd) > td.value {
+            background-color: rgba(180, 220, 255, 0.35);
         }
 
         /* ===== tommieChatについてパネル ===== */
@@ -1414,6 +1439,7 @@
             }
             #user-list-header,
             #chat-history-header,
+            #chat-settings-header,
             #server-settings-header,
             #server-log-header,
             #ping-header,
@@ -1438,6 +1464,7 @@
             }
             #user-list-close,
             #chat-history-close,
+            #chat-settings-close,
             #server-settings-close,
             #server-log-close,
             #ping-close,
@@ -1590,6 +1617,46 @@
             #debug-overlay td[colspan] div > div {
                 font-size: 14px !important;
             }
+            /* チャット設定パネル: デバッグツールと統一 */
+            #chat-settings-body td.label {
+                color: #333 !important;
+                font-size: 15px !important;
+                height: 32px !important;
+                padding: 2px 8px !important;
+                line-height: 1.2 !important;
+            }
+            #chat-settings-body td.value {
+                color: #222 !important;
+                font-size: 15px !important;
+                height: 32px !important;
+                padding: 2px 8px !important;
+                line-height: 1.2 !important;
+            }
+            #chat-settings-body tr:nth-child(odd) > td.label,
+            #chat-settings-body tr:nth-child(odd) > td.value {
+                background-color: rgba(120, 100, 220, 0.08) !important;
+            }
+            #chat-settings-body .label:hover {
+                background-color: rgba(120, 100, 220, 0.15) !important;
+                color: #5b6abf !important;
+            }
+            #chat-settings-body .debug-select,
+            #chat-settings-body .debug-btn,
+            #chat-settings-body .debug-input,
+            #chat-settings-body .debug-color {
+                font-size: 15px !important;
+            }
+
+            /* 表示名パネル: デバッグツールとフォント統一 */
+            #displayname-body {
+                padding: 8px 10px !important;
+            }
+            #displayname-body label,
+            #displayname-body span,
+            #displayname-body input,
+            #displayname-body button {
+                font-size: 15px !important;
+            }
 
             /* --- 画面下部コントロール背景 --- */
             #chat-container {
@@ -1699,10 +1766,8 @@
             }
             /* ポートレート: 表示名パネルは内容に合わせた最小サイズ */
             #displayname-panel {
-                top: auto !important;
                 height: auto !important;
-                bottom: var(--pt-panel-bottom, 90px) !important;
-                max-height: none !important;
+                bottom: auto !important;
             }
             /* ポートレート: パネル表示中はデバイダーを隠す */
             body.sp-panel-visible #portrait-divider {
@@ -2066,7 +2131,7 @@
     <script>
         // アプリバージョン・更新日の定数（ここだけ変更する）
         var APP_VERSION = "0.1.16";
-        var APP_DATE    = "2026/04/05";
+        var APP_DATE    = "2026/04/06";
 
         document.title = "tommieChat " + APP_VERSION;
 
@@ -2836,7 +2901,7 @@
         <div id="displayname-body" style="padding:10px;display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;align-items:center;gap:6px;">
                 <label style="font-size:12px;white-space:nowrap;cursor:help;" title="ユーザID（デバイス認証）&#10;──────────&#10;ログイン時に入力したIDです。サーバー上でアカウントを&#10;識別するための一意なIDとして使われます。&#10;&#10;【仕組み】&#10;初回ログイン時にデバイスIDが自動生成され、&#10;ユーザIDと紐付けてサーバーに登録されます。&#10;デバイスIDはブラウザのlocalStorageに保存されるため、&#10;同じブラウザからはパスワードなしで再ログインできます。&#10;&#10;【注意】&#10;・ブラウザのキャッシュをクリアするとデバイスIDが&#10;　消え、同じユーザIDではログインできなくなります。&#10;・PWA（ホーム画面アプリ）へはCookie経由で&#10;　デバイスIDが自動引き継ぎされます（1時間有効）。&#10;・変更はできません。別のIDを使うには再ログインが必要です。" data-i18n="displayname.label">ユーザID</label>
-                <span id="dn-panel-userid" style="font-size:12px;font-family:monospace;"></span>
+                <span id="dn-panel-userid" style="font-size:12px;font-family:monospace;font-weight:bold;"></span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
                 <input id="displayNameInput" type="text" placeholder="ログイン後に入力" data-i18n-placeholder="displayname.placeholder.disabled" disabled maxlength="20" style="flex:1;min-width:0;" title="アバターの表示名を設定します&#10;ログイン後に変更できます&#10;Enterまたは変更ボタンで設定&#10;0〜20文字（空欄で @ユーザID を青色表示、制御文字は使用不可）">
@@ -3051,7 +3116,7 @@
                     tipShown = false;
                     hiddenByTap = false;
                     blockClick = true;
-                    e.preventDefault();
+                    if (e.cancelable) e.preventDefault();
                     setTimeout(function() { blockClick = false; }, 400);
                 }
             });
