@@ -210,8 +210,14 @@ server {
         proxy_buffering off;
     }
 
-    # Nakama HTTP API
+    # Nakama HTTP API（Origin 制限: ブラウザからのリクエストのみ許可）
     location /v2/ {
+        set $allowed 0;
+        if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $allowed 1; }
+        if ($http_origin ~* "^https?://$host$") { set $allowed 1; }
+        if ($http_referer ~* "^https?://$host/") { set $allowed 1; }
+        if ($allowed = 0) { return 403; }
+
         proxy_pass http://nakama:7350;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -219,8 +225,13 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # Nakama WebSocket
+    # Nakama WebSocket（Origin 制限）
     location /ws {
+        set $allowed 0;
+        if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $allowed 1; }
+        if ($http_origin ~* "^https?://$host$") { set $allowed 1; }
+        if ($allowed = 0) { return 403; }
+
         proxy_pass http://nakama:7350;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
