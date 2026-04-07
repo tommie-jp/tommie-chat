@@ -1294,7 +1294,7 @@ export function setupHtmlUI(game: GameScene): void {
         refreshSelfSuffix();
     };
     // システムメッセージ: サーバーからのログイン/ログアウト通知
-    game.nakama.onSystemMessage = (type, username, userId, sessionId, uidCount) => {
+    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount) => {
         const existing = [...userMap.values()].find(e => e.uuid === userId);
         const displayName = existing?.displayName ?? "";
         const nameText = displayName || ("@" + username);
@@ -1307,6 +1307,10 @@ export function setupHtmlUI(game: GameScene): void {
         const nameHtml = `<span class="chat-ol-name"${colorStyle}>${nameText}${hashSuffix}</span>`;
         if (type === "join") {
             addChatHistory("[system]", t("system.user_joined").replace("{username}", nameHtml), undefined, userId);
+        } else if (type === "world_enter") {
+            // ワールド切替中の自分自身の enter は抑制
+            if (game.nakama.changingWorld) return;
+            addChatHistory("[system]", t("system.user_world_enter").replace("{username}", nameHtml), undefined, userId);
         } else if (type === "leave") {
             // ワールド切替中の自分自身の leave は抑制
             if (game.nakama.changingWorld) return;
