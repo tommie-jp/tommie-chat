@@ -199,6 +199,7 @@ const (
 	opChat             int64 = 13 // C→S→C   チャットメッセージ（全員ブロードキャスト）
 	opSystemMsg        int64 = 14 // S→C     システムメッセージ（ログイン/ログアウト通知）
 	opChangeWorld      int64 = 15 // C→S     ワールド切替（worldId）
+	opChangeWorldResp  int64 = 16 // S→C     ワールド切替応答（chunkCount等）
 )
 
 // 地面セル: blockID (uint16) + RGBA 各1バイト
@@ -217,7 +218,7 @@ type chunk struct {
 // dirtyChunks は更新されたチャンク座標のキュー（重複排除付き）
 var (
 	dirtyChunksMu  sync.Mutex
-	dirtyChunksSet = make(map[[2]int]struct{}) // 重複排除用
+	dirtyChunksSet = make(map[[3]int]struct{}) // [worldId, cx, cz] 重複排除用
 )
 
 // calcHash: チャンクのFNV-1a 64bitハッシュを計算してhashメンバに格納。呼び出し元がLock保持
@@ -275,11 +276,15 @@ type World struct {
 	ID          int
 	ChunkCountX int
 	ChunkCountZ int
-	mu          sync.RWMutex                // worlds map 自体の保護ではなく、Chunks map の追加保護
+	mu          sync.RWMutex                // Chunks map の保護
 	Chunks      map[[2]int]*chunk
+	loaded      map[[2]int]bool             // Storage からロード試行済みか（遅延ロード用）
 }
 
-// getChunk はチャンクを取得する。存在しなければ自動生成して返す。
+// グローバル NakamaModule 参照（遅延ロード用、InitModule で設定）
+var globalNK runtime.NakamaModule
+
+// getChunk はチャンクを取得する。メモリになければ Storage から遅延ロードし、なければ空チャンクを返す。
 func (w *World) getChunk(cx, cz int) *chunk {
 	key := [2]int{cx, cz}
 	w.mu.RLock()
@@ -293,6 +298,28 @@ func (w *World) getChunk(cx, cz int) *chunk {
 	// ダブルチェック
 	if ch, ok = w.Chunks[key]; ok {
 		return ch
+	}
+	// Storage から遅延ロード（未試行の場合のみ）
+	if !w.loaded[key] && globalNK != nil {
+		w.loaded[key] = true
+		if objs, err := globalNK.StorageRead(context.Background(), []*runtime.StorageRead{{
+			Collection: groundCollection,
+			Key:        chunkStorageKey(w.ID, cx, cz),
+			UserID:     systemUserID,
+		}}); err == nil && len(objs) > 0 {
+			var chunkData struct {
+				Table []int `json:"table"`
+			}
+			if err := json.Unmarshal([]byte(objs[0].Value), &chunkData); err == nil && len(chunkData.Table) == chunkSize*chunkSize*6 {
+				flat8 := make([]uint8, len(chunkData.Table))
+				for i, v := range chunkData.Table { flat8[i] = uint8(v) }
+				ch = &chunk{}
+				ch.fromFlat(flat8)
+				ch.calcHash()
+				w.Chunks[key] = ch
+				return ch
+			}
+		}
 	}
 	ch = &chunk{}
 	w.Chunks[key] = ch
@@ -336,6 +363,7 @@ func createWorld(id int, chunkCountX, chunkCountZ int) *World {
 		ChunkCountX: chunkCountX,
 		ChunkCountZ: chunkCountZ,
 		Chunks:      make(map[[2]int]*chunk),
+		loaded:      make(map[[2]int]bool),
 	}
 	worlds[id] = w
 	return w
@@ -558,8 +586,8 @@ func loadCcuHistory1m(ctx context.Context, nk runtime.NakamaModule, logger runti
 	logger.Info("loadCcuHistory1m: restored %d samples (filtered from %d, deduped)", len(ccuHistory1m), len(stored.Values))
 }
 
-func chunkStorageKey(cx, cz int) string {
-	return fmt.Sprintf("chunk_%d_%d", cx, cz)
+func chunkStorageKey(worldId, cx, cz int) string {
+	return fmt.Sprintf("w%d_chunk_%d_%d", worldId, cx, cz)
 }
 
 // flatToInts は []uint8 を JSON 数値配列として出力するための []int に変換する
@@ -573,8 +601,8 @@ func flatToInts(flat []uint8) []int {
 }
 
 // markChunkDirty は更新されたチャンク座標をキューに追加する（重複排除）
-func markChunkDirty(cx, cz int) {
-	key := [2]int{cx, cz}
+func markChunkDirty(worldId, cx, cz int) {
+	key := [3]int{worldId, cx, cz}
 	dirtyChunksMu.Lock()
 	dirtyChunksSet[key] = struct{}{}
 	dirtyChunksMu.Unlock()
@@ -588,18 +616,20 @@ func flushDirtyChunks(ctx context.Context, nk runtime.NakamaModule, logger runti
 		return
 	}
 	// キューをコピーしてクリア
-	keys := make([][2]int, 0, len(dirtyChunksSet))
+	keys := make([][3]int, 0, len(dirtyChunksSet))
 	for k := range dirtyChunksSet {
 		keys = append(keys, k)
 	}
-	dirtyChunksSet = make(map[[2]int]struct{})
+	dirtyChunksSet = make(map[[3]int]struct{})
 	dirtyChunksMu.Unlock()
 
 	// 全ダーティチャンクを1回の StorageWrite でバッチ保存
 	writes := make([]*runtime.StorageWrite, 0, len(keys))
 	for _, k := range keys {
-		cx, cz := k[0], k[1]
-		ch := defaultWorld.getChunk(cx, cz)
+		wid, cx, cz := k[0], k[1], k[2]
+		w := getWorld(wid)
+		if w == nil { continue }
+		ch := w.getChunk(cx, cz)
 		ch.mu.RLock()
 		flat := ch.toFlat()
 		ch.mu.RUnlock()
@@ -612,7 +642,7 @@ func flushDirtyChunks(ctx context.Context, nk runtime.NakamaModule, logger runti
 		}
 		writes = append(writes, &runtime.StorageWrite{
 			Collection:      groundCollection,
-			Key:             chunkStorageKey(cx, cz),
+			Key:             chunkStorageKey(wid, cx, cz),
 			UserID:          systemUserID,
 			Value:           string(data),
 			PermissionRead:  2,
@@ -1408,7 +1438,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			ch.cells[lx][lz] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
 			ch.calcHash()
 			ch.mu.Unlock()
-			markChunkDirty(cx, cz) // TODO: ワールドIDもdirtyに含める
+			markChunkDirty(curWorldID, cx, cz)
 			// AOI内のプレイヤーにブロードキャスト
 			var targets []runtime.Presence
 			for aoiSid, aoi := range ms.AOIs {
@@ -1485,7 +1515,16 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				p.WorldID = req.WorldID
 				p.CX = -1; p.CZ = -1 // 次のopInitPosで再計算
 			}
-			logf("rcv changeWorld uid=%s sid=%s worldId=%d\n", "", shortSID(sid), req.WorldID)
+			logf("rcv changeWorld uid=%s sid=%s worldId=%d chunkCountX=%d chunkCountZ=%d\n", "", shortSID(sid), req.WorldID, w.ChunkCountX, w.ChunkCountZ)
+			// 応答: ワールド情報を返す
+			if senderP, ok := ms.Presences[sid]; ok {
+				respData, _ := json.Marshal(map[string]interface{}{
+					"worldId":     req.WorldID,
+					"chunkCountX": w.ChunkCountX,
+					"chunkCountZ": w.ChunkCountZ,
+				})
+				dispatcher.BroadcastMessage(opChangeWorldResp, respData, []runtime.Presence{senderP}, nil, true)
+			}
 			continue
 		}
 
@@ -1997,40 +2036,21 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	// ワールド作成
 	defaultWorld = createWorld(defaultWorldID, defaultChunkCount, defaultChunkCount)
 	createWorld(1, 8, 8) // テスト用サブワールド（128x128セル）
+	// グローバル NakamaModule 参照を設定（World.getChunk の遅延ロード用）
+	globalNK = nk
+
+	// 旧フォーマットからのマイグレーション（ground_table キーが残っている場合、デフォルトワールドのみ）
 	w := defaultWorld
-
-	// ストレージから地面テーブルを復元（チャンク単位）
 	loadedChunks := 0
-	for cx := 0; cx < w.ChunkCountX; cx++ {
-		for cz := 0; cz < w.ChunkCountZ; cz++ {
-			objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
-				Collection: groundCollection,
-				Key:        chunkStorageKey(cx, cz),
-				UserID:     systemUserID,
-			}})
-			if err != nil || len(objs) == 0 {
-				continue
-			}
-			var chunkData struct {
-				Table []int `json:"table"`
-			}
-			if err := json.Unmarshal([]byte(objs[0].Value), &chunkData); err != nil || len(chunkData.Table) != chunkSize*chunkSize*6 {
-				continue
-			}
-			flat8 := make([]uint8, len(chunkData.Table))
-			for i, v := range chunkData.Table {
-				flat8[i] = uint8(v)
-			}
-			ch := w.getChunk(cx, cz)
-			ch.mu.Lock()
-			ch.fromFlat(flat8)
-			ch.calcHash()
-			ch.mu.Unlock()
-			loadedChunks++
-		}
+	{
+		// ワールド0のチャンクが1つでも新キーで存在するか確認
+		objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+			Collection: groundCollection,
+			Key:        chunkStorageKey(0, 0, 0),
+			UserID:     systemUserID,
+		}})
+		if err == nil && len(objs) > 0 { loadedChunks = 1 }
 	}
-
-	// 旧フォーマットからのマイグレーション（ground_table キーが残っている場合）
 	if loadedChunks == 0 {
 		objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
 			Collection: groundCollection,
@@ -2064,7 +2084,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 					for cz := 0; cz < w.ChunkCountZ; cz++ {
 						ch := w.getChunk(cx, cz)
 						ch.calcHash()
-						markChunkDirty(cx, cz)
+						markChunkDirty(w.ID, cx, cz)
 					}
 				}
 				flushDirtyChunks(ctx, nk, logger)
@@ -2089,7 +2109,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 						for cz := 0; cz < w.ChunkCountZ; cz++ {
 							ch := w.getChunk(cx, cz)
 							ch.calcHash()
-							markChunkDirty(cx, cz)
+							markChunkDirty(w.ID, cx, cz)
 						}
 					}
 					flushDirtyChunks(ctx, nk, logger)
