@@ -220,6 +220,9 @@ var worldMovingUsers sync.Map
 // ghostKickedSessions はゴーストキックされたセッション（sessionID → true）。MatchLeave でシステムメッセージを抑制。
 var ghostKickedSessions sync.Map
 
+// worldPlayerCounts はワールドごとのプレイヤー数。MatchJoin/MatchLeave で更新。
+var worldPlayerCounts sync.Map // worldID (int) → count (int32), atomic操作
+
 // dirtyChunks は更新されたチャンク座標のキュー（重複排除付き）
 var (
 	dirtyChunksMu  sync.Mutex
@@ -1124,6 +1127,13 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 			"ts":        time.Now().UnixMilli(),
 		})
 		dispatcher.BroadcastMessage(opSystemMsg, sysMsg, nil, p, true)
+
+		// ワールド人数カウンター更新
+		if v, ok := worldPlayerCounts.Load(ms.WorldID); ok {
+			worldPlayerCounts.Store(ms.WorldID, v.(int)+1)
+		} else {
+			worldPlayerCounts.Store(ms.WorldID, 1)
+		}
 	}
 	return ms
 }
@@ -1164,6 +1174,10 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 			delete(ms.Presences, sid)
 			delete(ms.Positions, sid)
 			delete(ms.Rates, sid)
+			if v, ok := worldPlayerCounts.Load(ms.WorldID); ok {
+				n := v.(int) - 1; if n < 0 { n = 0 }
+				worldPlayerCounts.Store(ms.WorldID, n)
+			}
 			continue
 		}
 		// システムメッセージ: ログアウト or ワールド移動通知を全員に送信
@@ -1209,6 +1223,11 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		delete(ms.Rates, sid)
 		delete(ms.PendingInit, sid)
 		delete(ms.PrevSIDs, sid)
+		// ワールド人数カウンター更新
+		if v, ok := worldPlayerCounts.Load(ms.WorldID); ok {
+			n := v.(int) - 1; if n < 0 { n = 0 }
+			worldPlayerCounts.Store(ms.WorldID, n)
+		}
 		// PendingAOIEnter からも除去（退出セッション宛の通知 + 退出セッションに関する通知）
 		delete(ms.PendingAOIEnter, sid)
 		for recipSID, entries := range ms.PendingAOIEnter {
@@ -2159,15 +2178,11 @@ func rpcGetWorldList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 		})
 	}
 	worldsMu.RUnlock()
-	// マッチの接続人数を取得
-	matches, _ := nk.MatchList(ctx, 100, true, "", nil, nil, "")
-	matchSizes := make(map[string]int)
-	for _, m := range matches {
-		matchSizes[m.GetLabel().GetValue()] = int(m.GetSize())
-	}
+	// グローバルカウンターから接続人数を取得
 	for i := range list {
-		label := fmt.Sprintf("world_%d", list[i].ID)
-		list[i].PlayerCount = matchSizes[label]
+		if v, ok := worldPlayerCounts.Load(list[i].ID); ok {
+			list[i].PlayerCount = v.(int)
+		}
 	}
 	b, _ := json.Marshal(map[string]interface{}{"worlds": list})
 	return string(b), nil

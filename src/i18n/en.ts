@@ -40,6 +40,7 @@ export const en: Record<keyof typeof ja, string> = {
     "menu.chathistory": "Chat History",
     "menu.chatsettings": "Chat Settings",
     "menu.bookmarks": "Bookmarks",
+    "menu.rooms": "Rooms",
     "menu.ping": "Ping Graph",
     "menu.ccu": "CCU Graph",
     "menu.minimap": "Minimap",
