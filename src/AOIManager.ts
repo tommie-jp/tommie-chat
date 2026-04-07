@@ -5,6 +5,7 @@ import { prof } from "./Profiler";
 
 export class AOIManager {
     aoiRadius = 48;
+    chunkCount = CHUNK_COUNT; // ワールド切替時に変更可能
     lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
     aoiVisEnabled = false;
     remoteAoiEnabled = false;
@@ -25,9 +26,9 @@ export class AOIManager {
 
     updateAOI(): void {
         const _end = prof("AOIManager.updateAOI");
-        const half = WORLD_SIZE / 2;
+        const CC = this.chunkCount;
+        const half = (CC * CHUNK_SIZE) / 2;
         const CS = CHUNK_SIZE;
-        const CC = CHUNK_COUNT;
         const pos = this.getPlayerPos();
         const px = pos.x + half;
         const pz = pos.z + half;

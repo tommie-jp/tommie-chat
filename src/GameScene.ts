@@ -109,8 +109,18 @@ export class GameScene {
     // ─── 部屋システム ───
     /** 現在いる部屋ID（null=ワールド中心） */
     currentBookmarkId: string | null = null;
-    /** ブックマーク移動スタック（戻り先: ブックマークID + 座標） */
-    private bookmarkStack: { bookmarkId: string | null; x: number; z: number; ry: number }[] = [];
+    /** 現在のワールドID */
+    currentWorldId = 0;
+    /** 現在のワールドのセル数 */
+    get currentWorldSize(): number {
+        return this.worldSizeOf(this.currentWorldId);
+    }
+    /** 指定ワールドのセル数 */
+    worldSizeOf(worldId: number): number {
+        return (GameScene.WORLD_CHUNK_COUNTS[worldId] ?? 64) * CHUNK_SIZE;
+    }
+    /** ブックマーク移動スタック（戻り先: ブックマークID + 座標 + ワールドID） */
+    private bookmarkStack: { bookmarkId: string | null; worldId: number; x: number; z: number; ry: number }[] = [];
     /** ブックマーク移動イベント（UIPanel等が購読） */
     onMoveBookmark: ((bookmarkId: string | null) => void)[] = [];
     /** チャンク同期完了イベント（ミニマップ等が購読） */
@@ -226,7 +236,7 @@ export class GameScene {
         const aoi = this.aoiManager.lastAOI;
         if (aoi.minCX < 0) { _end(); return; }
         const CS = CHUNK_SIZE;
-        const WS = WORLD_SIZE;
+        const WS = this.currentWorldSize;
 
         // AOI外のブロックメッシュを破棄
         for (const [key, mesh] of this.blockMeshes) {
@@ -278,7 +288,7 @@ export class GameScene {
                 hashes[key] = ch ? ch.hash.toString() : "0";
             }
         }
-        const diffs = await this.nakama.syncChunks(aoi.minCX, aoi.minCZ, aoi.maxCX, aoi.maxCZ, hashes);
+        const diffs = await this.nakama.syncChunks(aoi.minCX, aoi.minCZ, aoi.maxCX, aoi.maxCZ, hashes, this.currentWorldId);
         for (const d of diffs) {
             if (d.table.length !== CS * CS * 6) continue;
             const key = `${d.cx}_${d.cz}`;
@@ -387,17 +397,31 @@ export class GameScene {
 
     placeBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): void {
         const _end = prof("GameScene.placeBlock");
-        const key = gx * WORLD_SIZE + gz;
+        const ws = this.currentWorldSize;
+        const key = gx * ws + gz;
         const existing = this.blockMeshes.get(key);
         if (existing) { existing.dispose(); this.blockMeshes.delete(key); }
         if (blockId === 0) { _end(); return; }
-        const half = WORLD_SIZE / 2;
+        const half = ws / 2;
         const box = MeshBuilder.CreateBox(`block_${gx}_${gz}`, { size: 1 }, this.scene);
         box.position.set(gx - half + 0.5, 0.5, gz - half + 0.5);
         box.material = this.getOrCreateBlockMat(r, g, b, a);
         box.isPickable = false;
         this.blockMeshes.set(key, box);
         _end();
+    }
+
+    /** ワールド切替時に全ブロックメッシュ・チャンクキャッシュ・リモートアバターをクリア */
+    private clearAllBlocks(): void {
+        for (const mesh of this.blockMeshes.values()) mesh.dispose();
+        this.blockMeshes.clear();
+        this.chunks.clear();
+        // リモートアバターを非表示（サーバーからAOI_LEAVEが来る前にクリア）
+        for (const [sid, av] of this.remoteAvatars) {
+            av.setEnabled(false);
+            this.spriteAvatarSystem.setEnabled(sid, false);
+        }
+        this.remoteTargets.clear();
     }
 
     private createObjects(): void {
@@ -551,10 +575,11 @@ export class GameScene {
                 if (!this.buildMode) return;
                 const pick = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => mesh.name === "ground");
                 if (pick?.hit && pick.pickedPoint) {
-                    const half = WORLD_SIZE / 2;
+                    const ws = this.currentWorldSize;
+                    const half = ws / 2;
                     const gx = Math.floor(pick.pickedPoint.x + half);
                     const gz = Math.floor(pick.pickedPoint.z + half);
-                    if (gx >= 0 && gx < WORLD_SIZE && gz >= 0 && gz < WORLD_SIZE) {
+                    if (gx >= 0 && gx < ws && gz >= 0 && gz < ws) {
                         const CS = CHUNK_SIZE;
                         const ccx = Math.floor(gx / CS), ccz = Math.floor(gz / CS);
                         const clx = gx % CS, clz = gz % CS;
@@ -799,8 +824,9 @@ export class GameScene {
                     let ry = this.playerBox.rotation.y % (Math.PI * 2);
                     if (ry < 0) ry += Math.PI * 2;
                     const idx = Math.round(ry / (Math.PI / 4)) % 8;
-                    const x3 = String(Math.round(p.x) + 512).padStart(4, "\u2007");
-                    const z3 = String(Math.round(p.z) + 512).padStart(4, "\u2007");
+                    const coordHalf = this.currentWorldSize / 2;
+                    const x3 = String(Math.round(p.x) + coordHalf).padStart(4, "\u2007");
+                    const z3 = String(Math.round(p.z) + coordHalf).padStart(4, "\u2007");
                     // DOM要素は初回のみ構築、以降はテキスト更新のみ（ホバー点滅防止）
                     let posEl = document.getElementById("cd-pos");
                     let dirEl = document.getElementById("cd-dir");
@@ -1008,25 +1034,43 @@ export class GameScene {
 
     // ─── 部屋切替（同一 Match 内、テレポート） ───
 
+    /** ワールドごとのチャンク数 */
+    static readonly WORLD_CHUNK_COUNTS: Record<number, number> = {
+        0: 64,  // メインワールド 64x64
+        1: 8,   // サブワールド 8x8
+    };
+
     /** 部屋の固定座標 */
     static readonly BOOKMARK_POSITIONS: Record<string, { x: number; z: number }> = {
         world_center: { x: 0,    z: 0 },
         room_park:    { x: -400, z: -400 },
         room_beach:   { x: -400, z:  400 },
         room_night:   { x:  400, z: -400 },
+        sub_world:    { x: 0,    z: 0 },
     };
 
     /** ブックマークに移動（現在地をスタックに PUSH してテレポート） */
-    moveBookmark(bookmarkId: string, pos?: { x: number; z: number }): void {
+    moveBookmark(bookmarkId: string, pos?: { x: number; z: number }, worldId?: number): void {
         // 現在地をスタックに PUSH
         this.bookmarkStack.push({
             bookmarkId: this.currentBookmarkId,
+            worldId: this.currentWorldId,
             x: this.playerBox.position.x,
             z: this.playerBox.position.z,
             ry: this.playerBox.rotation.y,
         });
 
         this.currentBookmarkId = bookmarkId;
+
+        // ワールド切替
+        const newWorldId = worldId ?? this.currentWorldId;
+        if (newWorldId !== this.currentWorldId) {
+            this.currentWorldId = newWorldId;
+            this.clearAllBlocks();
+            this.aoiManager.chunkCount = GameScene.WORLD_CHUNK_COUNTS[newWorldId] ?? 64;
+            this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 }; // AOIリセット
+            this.nakama.sendChangeWorld(newWorldId);
+        }
 
         const p = pos ?? GameScene.BOOKMARK_POSITIONS[bookmarkId] ?? { x: 0, z: 0 };
         this.playerBox.position.x = p.x;
@@ -1044,6 +1088,16 @@ export class GameScene {
         if (!prev) return false;
 
         this.currentBookmarkId = prev.bookmarkId;
+
+        // ワールド切替
+        if (prev.worldId !== this.currentWorldId) {
+            this.currentWorldId = prev.worldId;
+            this.clearAllBlocks();
+            this.aoiManager.chunkCount = GameScene.WORLD_CHUNK_COUNTS[prev.worldId] ?? 64;
+            this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+            this.nakama.sendChangeWorld(prev.worldId);
+        }
+
         this.playerBox.position.x = prev.x;
         this.playerBox.position.z = prev.z;
         this.playerBox.rotation.y = prev.ry;

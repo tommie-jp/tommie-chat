@@ -1,9 +1,8 @@
 import { DynamicTexture, MeshBuilder, StandardMaterial } from "@babylonjs/core";
 import type { GameScene } from "./GameScene";
-import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
+import { CHUNK_SIZE } from "./WorldConstants";
 import { t } from "./i18n";
 
-const HALF = WORLD_SIZE / 2;
 const BG_COLOR = "#4a7a3a"; // 地面の緑
 const ZOOM_LEVELS = [1, 2, 4, 8, 16];
 
@@ -456,12 +455,13 @@ export function setupMinimap(game: GameScene): void {
     /** ワールド座標 → ミニマップ座標 */
     const toMap = (wx: number, wz: number): [number, number] => {
         const p = game.playerBox.position;
-        const viewSize = WORLD_SIZE / zoom;
-        const viewLeft = p.x + HALF - viewSize / 2;
-        const viewBottom = p.z + HALF - viewSize / 2;
+        const half = game.currentWorldSize / 2;
+        const viewSize = game.currentWorldSize / zoom;
+        const viewLeft = p.x + half - viewSize / 2;
+        const viewBottom = p.z + half - viewSize / 2;
         const scale = mapSize / viewSize;
-        const mx = Math.floor((wx + HALF - viewLeft) * scale);
-        const my = mapSize - 1 - Math.floor((wz + HALF - viewBottom) * scale);
+        const mx = Math.floor((wx + half - viewLeft) * scale);
+        const my = mapSize - 1 - Math.floor((wz + half - viewBottom) * scale);
         return [mx, my];
     };
 
@@ -539,7 +539,8 @@ export function setupMinimap(game: GameScene): void {
     const drawChunksTo = (c: CanvasRenderingContext2D) => {
         c.fillStyle = BG_COLOR;
         c.fillRect(0, 0, mapSize, mapSize);
-        const viewSize = WORLD_SIZE / zoom;
+        const half = game.currentWorldSize / 2;
+        const viewSize = game.currentWorldSize / zoom;
         const blockPx = Math.max(1, Math.ceil(mapSize / viewSize));
         for (const [key, chunk] of game.chunks) {
             const parts = key.split("_");
@@ -553,7 +554,7 @@ export function setupMinimap(game: GameScene): void {
                     if (blockId === 0) continue;
                     const r = cells[si + 2], g = cells[si + 3], b = cells[si + 4];
                     const gx = cx * CHUNK_SIZE + lx, gz = cz * CHUNK_SIZE + lz;
-                    const [mx, my] = toMap(gx - HALF, gz - HALF);
+                    const [mx, my] = toMap(gx - half, gz - half);
                     if (!inBounds(mx, my)) continue;
                     c.fillStyle = `rgb(${r},${g},${b})`;
                     c.fillRect(mx, my, blockPx, blockPx);

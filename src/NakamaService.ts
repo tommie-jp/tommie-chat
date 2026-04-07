@@ -18,6 +18,7 @@ const OP_PLAYERS_AOI_REQ   = 11; // C→S     全プレイヤーAOI情報要求
 const OP_PLAYERS_AOI_RESP  = 12; // S→C     全プレイヤーAOI情報応答（要求者のみ）
 const OP_CHAT              = 13; // C→S→C   チャットメッセージ（全員ブロードキャスト）
 const OP_SYSTEM_MSG        = 14; // S→C     システムメッセージ（ログイン/ログアウト通知）
+const OP_CHANGE_WORLD      = 15; // C→S     ワールド切替
 
 export class NakamaService {
     private client: Client;
@@ -304,6 +305,15 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    /** ワールド切替をサーバーに通知 */
+    async sendChangeWorld(worldId: number): Promise<void> {
+        console.log(`snd changeWorld worldId=${worldId}`);
+        if (!this.socket || !this.matchId) return;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_CHANGE_WORLD, new TextEncoder().encode(JSON.stringify({ worldId })));
+        } catch (e) { console.warn("NakamaService:", e); }
+    }
+
     async sendAvatarChange(textureUrl: string, charCol = 0, charRow = 0): Promise<void> {
         const _end = prof("NakamaService.sendAvatarChange");
         try {
@@ -417,18 +427,18 @@ export class NakamaService {
     }
 
     /** サーバーからブックマーク一覧を取得 */
-    async getBookmarks(): Promise<{ name: string; x: number; z: number; ry: number }[]> {
+    async getBookmarks(): Promise<{ name: string; x: number; z: number; ry: number; worldId: number }[]> {
         if (!this.socket) return [];
         const rpcResult = await this.socket.rpc("getBookmarks");
         if (rpcResult?.payload) {
-            const data = JSON.parse(rpcResult.payload) as { items?: { name: string; x: number; z: number; ry: number }[] };
+            const data = JSON.parse(rpcResult.payload) as { items?: { name: string; x: number; z: number; ry: number; worldId: number }[] };
             return data.items ?? [];
         }
         return [];
     }
 
     /** ブックマーク一覧をサーバーに保存 */
-    async saveBookmarks(items: { name: string; x: number; z: number; ry: number }[]): Promise<void> {
+    async saveBookmarks(items: { name: string; x: number; z: number; ry: number; worldId: number }[]): Promise<void> {
         if (!this.socket) return;
         await this.socket.rpc("saveBookmarks", JSON.stringify({ items }));
     }
@@ -491,13 +501,13 @@ export class NakamaService {
         } catch (e) { console.warn("NakamaService.getGroundTable:", e); return null; }
     }
 
-    async syncChunks(minCX: number, minCZ: number, maxCX: number, maxCZ: number, hashes: Record<string, string>): Promise<{ cx: number; cz: number; hash: string; table: number[] }[]> {
+    async syncChunks(minCX: number, minCZ: number, maxCX: number, maxCZ: number, hashes: Record<string, string>, worldId = 0): Promise<{ cx: number; cz: number; hash: string; table: number[] }[]> {
         const _end = prof("NakamaService.syncChunks");
         try {
         if (!this.socket) return [];
-        console.log(`snd syncChunks (${minCX},${minCZ})-(${maxCX},${maxCZ})`);
+        console.log(`snd syncChunks (${minCX},${minCZ})-(${maxCX},${maxCZ}) w=${worldId}`);
         try {
-            const result = await this.socket.rpc("syncChunks", JSON.stringify({ minCX, minCZ, maxCX, maxCZ, hashes }));
+            const result = await this.socket.rpc("syncChunks", JSON.stringify({ worldId, minCX, minCZ, maxCX, maxCZ, hashes }));
             if (!result?.payload) return [];
             const data = JSON.parse(result.payload) as { chunks?: { cx: number; cz: number; hash: string; table: number[] }[] };
             return data.chunks ?? [];
@@ -505,13 +515,13 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    async getGroundChunk(cx: number, cz: number): Promise<{ cx: number; cz: number; table: number[] } | null> {
+    async getGroundChunk(cx: number, cz: number, worldId = 0): Promise<{ cx: number; cz: number; table: number[] } | null> {
         const _end = prof("NakamaService.getGroundChunk");
         try {
-        console.log(`snd getGroundChunk cx=${cx} cz=${cz}`);
+        console.log(`snd getGroundChunk cx=${cx} cz=${cz} w=${worldId}`);
         if (!this.socket) return null;
         try {
-            const result = await this.socket.rpc("getGroundChunk", JSON.stringify({ cx, cz }));
+            const result = await this.socket.rpc("getGroundChunk", JSON.stringify({ worldId, cx, cz }));
             if (!result?.payload) return null;
             return JSON.parse(result.payload) as { cx: number; cz: number; table: number[] };
         } catch (e) { console.warn("NakamaService.getGroundChunk:", e); return null; }
