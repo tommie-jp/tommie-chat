@@ -857,12 +857,9 @@ export class GameScene {
                 }
                 // フッター位置を送信ボタンの右端に合わせる（座標非表示でも実行）
                 const fv = document.getElementById("app-footer-version");
-                const ci = document.getElementById("chatInput");
                 const sb = document.getElementById("sendBtn");
-                if (fv && ci && sb) {
-                    const r = ci.getBoundingClientRect();
+                if (fv && sb) {
                     const sr = sb.getBoundingClientRect();
-                    fv.style.left = r.left + "px";
                     fv.style.right = (window.innerWidth - sr.right) + "px";
                 }
             }

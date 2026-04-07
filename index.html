@@ -990,29 +990,44 @@
         #room-list-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
         #room-list-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
         #room-list-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+        #room-list-thead-table,
         #room-list-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 13px;
         }
-        #room-list-table thead th {
-            cursor: pointer;
+        #room-list-thead-table { padding: 0 8px; box-sizing: border-box; }
+        #room-list-thead-table thead th {
+            background: rgba(255,255,255,0.95);
+            border-bottom: 1px solid rgba(0,0,0,0.2);
+            padding: 2px 6px;
             text-align: left;
-            padding: 2px 4px;
-            border-bottom: 1px solid rgba(0,0,0,0.15);
-            font-size: 11px;
+            font-weight: bold;
+            white-space: nowrap;
+            cursor: pointer;
             user-select: none;
+            -webkit-user-select: none;
         }
-        #room-list-table thead th:nth-child(2),
-        #room-list-table thead th:nth-child(3) { text-align: center; }
-        #room-list-table thead th[data-sort]::after {
+        #room-list-thead-table thead th:hover { background: rgba(220,220,255,0.8); }
+        #room-list-thead-table thead th:nth-child(2),
+        #room-list-thead-table thead th:nth-child(3) { text-align: center; }
+        #room-list-thead-table thead th[data-sort]::after {
             content: " " attr(data-sort);
             font-size: 9px;
             opacity: 0.7;
         }
         #room-list-table tbody tr { cursor: pointer; }
+        #room-list-table tbody td {
+            padding: 2px 6px;
+            height: 22px;
+            line-height: 1.2;
+            border-bottom: 1px dotted rgba(0,0,0,0.1);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         #room-list-table tbody tr:nth-child(odd) td {
-            background-color: rgba(180, 220, 255, 0.25);
+            background-color: rgba(180, 220, 255, 0.35);
         }
         #room-list-table tbody tr:hover td {
             background-color: rgba(100, 180, 255, 0.3);
@@ -1777,6 +1792,27 @@
                 background-color: rgba(120, 100, 220, 0.1) !important;
             }
 
+            /* --- 部屋一覧 --- */
+            #room-list-thead-table thead th {
+                background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
+                color: #fff !important;
+                border-bottom: none !important;
+                font-size: 15px !important;
+            }
+            #room-list-thead-table thead th:hover {
+                background: linear-gradient(135deg, #6a4cc8, #4a7cde) !important;
+            }
+            #room-list-table tbody td {
+                color: #222 !important;
+                font-size: 15px !important;
+                height: 32px !important;
+                padding: 2px 8px !important;
+                line-height: 1.2 !important;
+            }
+            #room-list-table tbody tr:nth-child(odd) td {
+                background-color: rgba(120, 100, 220, 0.1) !important;
+            }
+
             /* --- デバッグオーバーレイ --- */
             #debug-title-bar {
                 border-bottom: none !important;
@@ -1976,10 +2012,9 @@
             #displayname-panel {
                 bottom: var(--pt-panel-bottom, 90px) !important;
             }
-            /* ポートレート: 表示名パネルは内容に合わせた最小サイズ */
+            /* ポートレート: 表示名パネルは内容に合わせた高さ、底部をセリフ上に */
             #displayname-panel {
-                height: auto !important;
-                bottom: auto !important;
+                top: auto !important;
             }
             /* ポートレート: パネル表示中はデバイダーを隠す */
             body.sp-panel-visible #portrait-divider {
@@ -2000,8 +2035,7 @@
             #bookmark-header,
             #room-list-header,
             #debug-title-bar,
-            #about-panel-header,
-            #displayname-header {
+            #about-panel-header {
                 touch-action: none !important;
                 cursor: row-resize !important;
             }
@@ -2284,6 +2318,16 @@
         body.theme-dark #user-list thead th:hover { background: #48484a !important; }
         body.theme-dark #user-list tbody td { color: #eee !important; }
         body.theme-dark #user-list tbody tr:nth-child(odd) td {
+            background-color: rgba(80, 150, 220, 0.25) !important;
+        }
+        body.theme-dark #room-list-thead-table thead th {
+            background: #3a3a3c !important;
+            color: #eee !important;
+            border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+        }
+        body.theme-dark #room-list-thead-table thead th:hover { background: #48484a !important; }
+        body.theme-dark #room-list-table tbody td { color: #eee !important; }
+        body.theme-dark #room-list-table tbody tr:nth-child(odd) td {
             background-color: rgba(80, 150, 220, 0.25) !important;
         }
         body.theme-dark #debug-title-bar { border-bottom-color: rgba(255,255,255,0.2) !important; }
@@ -3134,7 +3178,7 @@
             <span data-i18n="displayname.title" title="表示名設定&#10;──────────&#10;アバターの頭上に表示される名前を設定します。&#10;ユーザIDとは別に、自由に変更できます。&#10;空欄にすると @ユーザID が青色で表示されます。">表示名設定</span>
             <span id="displayname-close">❌️</span>
         </div>
-        <div id="displayname-body" style="padding:10px;display:flex;flex-direction:column;gap:8px;">
+        <div id="displayname-body" style="padding:10px 10px 20px;display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;align-items:center;gap:6px;">
                 <label style="font-size:12px;white-space:nowrap;cursor:help;" title="ユーザID（デバイス認証）&#10;──────────&#10;ログイン時に入力したIDです。サーバー上でアカウントを&#10;識別するための一意なIDとして使われます。&#10;&#10;【仕組み】&#10;初回ログイン時にデバイスIDが自動生成され、&#10;ユーザIDと紐付けてサーバーに登録されます。&#10;デバイスIDはブラウザのlocalStorageに保存されるため、&#10;同じブラウザからはパスワードなしで再ログインできます。&#10;&#10;【注意】&#10;・ブラウザのキャッシュをクリアするとデバイスIDが&#10;　消え、同じユーザIDではログインできなくなります。&#10;・PWA（ホーム画面アプリ）へはCookie経由で&#10;　デバイスIDが自動引き継ぎされます（1時間有効）。&#10;・変更はできません。別のIDを使うには再ログインが必要です。" data-i18n="displayname.label">ユーザID</label>
                 <span id="dn-panel-userid" style="font-size:12px;font-family:monospace;font-weight:bold;"></span>
@@ -3190,16 +3234,18 @@
             <span>部屋一覧</span>
             <span id="room-list-close">❌️</span>
         </div>
+        <table id="room-list-thead-table" style="width:100%;flex-shrink:0;">
+            <thead>
+                <tr>
+                    <th id="room-th-name">部屋名</th>
+                    <th id="room-th-size">サイズ</th>
+                    <th id="room-th-count">人数</th>
+                    <th style="width:24px;"></th>
+                </tr>
+            </thead>
+        </table>
         <div id="room-list-body">
             <table id="room-list-table">
-                <thead>
-                    <tr>
-                        <th id="room-th-name">部屋名</th>
-                        <th id="room-th-size">サイズ</th>
-                        <th id="room-th-count">人数</th>
-                        <th style="width:24px;"></th>
-                    </tr>
-                </thead>
                 <tbody id="room-list-tbody"></tbody>
             </table>
             <button id="room-create-btn" style="margin-top:4px;font-weight:bold;width:100%;">＋ 部屋を作成</button>
@@ -3223,7 +3269,7 @@
     </div>
 
     <div id="coord-display" style="position:fixed;bottom:2px;left:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;z-index:9997;line-height:1.5;"></div>
-    <div id="app-footer-version" style="position:fixed;bottom:2px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="app-footer-text"></span></div>
+    <div id="app-footer-version" style="position:fixed;bottom:2px;left:auto;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;text-align:right;"><span id="app-footer-text"></span></div>
 
     <script type="module" src="/src/main.ts"></script>
     <script>
