@@ -416,6 +416,22 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    /** サーバーからブックマーク一覧を取得 */
+    async getBookmarks(): Promise<{ name: string; x: number; z: number }[]> {
+        if (!this.socket) return [];
+        const rpcResult = await this.socket.rpc("getBookmarks");
+        if (rpcResult?.payload) {
+            const data = JSON.parse(rpcResult.payload) as { items?: { name: string; x: number; z: number }[] };
+            return data.items ?? [];
+        }
+        return [];
+    }
+
+    /** ブックマーク一覧をサーバーに保存 */
+    async saveBookmarks(items: { name: string; x: number; z: number }[]): Promise<void> {
+        if (!this.socket) return;
+        await this.socket.rpc("saveBookmarks", JSON.stringify({ items }));
+    }
 
     async getServerInfo(): Promise<string> {
         const _end = prof("NakamaService.getServerInfo");

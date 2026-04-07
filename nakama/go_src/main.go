@@ -1785,6 +1785,64 @@ func rpcDeleteUsers(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	return string(b), nil
 }
 
+// ─── ブックマーク（ユーザーごとの位置保存） ───
+
+const bookmarkCollection = "bookmarks"
+const bookmarkKey = "list"
+
+// rpcGetBookmarks はユーザーの保存済みブックマークを返す
+func rpcGetBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("authentication required", 16)
+	}
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: bookmarkCollection,
+		Key:        bookmarkKey,
+		UserID:     uid,
+	}})
+	if err != nil {
+		return "", err
+	}
+	if len(objs) == 0 {
+		return `{"items":[]}`, nil
+	}
+	return objs[0].Value, nil
+}
+
+// rpcSaveBookmarks はユーザーのブックマークを保存する
+func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("authentication required", 16)
+	}
+	// バリデーション: items 配列を持つ JSON か確認
+	var req struct {
+		Items []struct {
+			Name string  `json:"name"`
+			X    float64 `json:"x"`
+			Z    float64 `json:"z"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return "", runtime.NewError("invalid payload", 3)
+	}
+	if len(req.Items) > 50 {
+		return "", runtime.NewError("too many bookmarks (max 50)", 3)
+	}
+	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+		Collection:      bookmarkCollection,
+		Key:             bookmarkKey,
+		UserID:          uid,
+		Value:           payload,
+		PermissionRead:  1, // 本人のみ読み取り
+		PermissionWrite: 1, // 本人のみ書き込み
+	}}); err != nil {
+		return "", err
+	}
+	return `{}`, nil
+}
+
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// バリデーション設定の読み込み（環境変数から）
@@ -1939,6 +1997,12 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 	if err := initializer.RegisterRpc("getDisplayNames", rpcGetDisplayNames); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("getBookmarks", rpcGetBookmarks); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("saveBookmarks", rpcSaveBookmarks); err != nil {
 		return err
 	}
 
