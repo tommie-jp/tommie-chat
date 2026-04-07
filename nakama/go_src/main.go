@@ -217,6 +217,9 @@ type chunk struct {
 // worldMovingUsers はワールド移動中のユーザー（userID → true）。MatchLoop と MatchLeave で共有。
 var worldMovingUsers sync.Map
 
+// ghostKickedSessions はゴーストキックされたセッション（sessionID → true）。MatchLeave でシステムメッセージを抑制。
+var ghostKickedSessions sync.Map
+
 // dirtyChunks は更新されたチャンク座標のキュー（重複排除付き）
 var (
 	dirtyChunksMu  sync.Mutex
@@ -845,6 +848,13 @@ func initValidationConfig() {
 		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID)
 }
 
+// pendingLeaveMsg は遅延送信中の leave システムメッセージ
+type pendingLeaveMsg struct {
+	tick    int64
+	sysMsg  []byte
+	targets []runtime.Presence
+}
+
 // matchState はマッチの状態（プレイヤーごとのAOI管理）
 type matchState struct {
 	WorldID          int                                  // このマッチのワールドID
@@ -855,6 +865,8 @@ type matchState struct {
 	PendingInit      map[string]*playerPos               // sessionID -> joinMatch metadata から取得した初期位置
 	PrevSIDs         map[string]string                   // sessionID -> 前回セッションID（ゴーストキック用）
 	Rates            map[string]*sessionRate              // sessionID -> レートリミッター
+	WorldMoveJoin    map[string]bool                      // sessionID -> ワールド移動による入室か
+	PendingLeave     map[string]*pendingLeaveMsg          // userID -> 遅延送信中のleaveメッセージ
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -875,6 +887,8 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		PendingInit:     make(map[string]*playerPos),
 		PrevSIDs:        make(map[string]string),
 		Rates:           make(map[string]*sessionRate),
+		WorldMoveJoin:   make(map[string]bool),
+		PendingLeave:    make(map[string]*pendingLeaveMsg),
 	}, 10, label
 }
 
@@ -914,10 +928,17 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 		// 前回セッションIDを保存（MatchJoin でゴーストキック用）
 		if prevSid := metadata["prevSid"]; prevSid != "" {
 			ms.PrevSIDs[newSID] = prevSid
+			// 前セッションの PendingLeave をキャンセル（ブラウザリフレッシュによる再接続）
+			uid := presence.GetUserId()
+			if _, pending := ms.PendingLeave[uid]; pending {
+				logf("MatchJoinAttempt cancelled pending leave for uid=%s prevSid=%s\n", uid, shortSID(prevSid))
+				delete(ms.PendingLeave, uid)
+			}
 		}
-		// ワールド移動フラグ: 旧マッチの MatchLeave で参照
+		// ワールド移動フラグ
 		if metadata["worldMove"] == "1" {
-			worldMovingUsers.Store(presence.GetUserId(), true)
+			worldMovingUsers.Store(presence.GetUserId(), true) // 旧マッチの MatchLeave で参照
+			ms.WorldMoveJoin[newSID] = true                    // 新マッチの MatchJoin で参照
 		}
 	}
 
@@ -933,10 +954,17 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 		sid := p.GetSessionId()
 		uid := p.GetUserId()
 
+		// 同一UUIDの遅延 leave メッセージをキャンセル（ブラウザリフレッシュ時の再接続）
+		if _, pending := ms.PendingLeave[uid]; pending {
+			logf("MatchJoin cancelled pending leave for uid=%s\n", uid)
+			delete(ms.PendingLeave, uid)
+		}
+
 		// 前回セッションIDが指定されていれば、そのセッションをキック（ゴーストアバター防止）
 		if prevSid, ok := ms.PrevSIDs[sid]; ok && prevSid != "" {
 			if oldP, exists := ms.Presences[prevSid]; exists {
 				logger.Info("MatchKick prevSid: old=%s new=%s", shortSID(prevSid), shortSID(sid))
+				ghostKickedSessions.Store(prevSid, true)
 				dispatcher.MatchKick([]runtime.Presence{oldP})
 
 				// MatchLoop が MatchJoin より先に実行されるため、キック対象の
@@ -1012,13 +1040,18 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 			ms.Positions[sid] = &playerPos{CX: -1, CZ: -1, X: 0, Z: 0, RY: 0, TextureUrl: ""}
 		}
 
-		// システムメッセージ: ログイン通知を全員に送信
+		// システムメッセージ: ログイン or 入室通知を全員に送信
 		uname := p.GetUsername()
+		joinType := "join"
+		if ms.WorldMoveJoin[sid] {
+			joinType = "world_enter"
+			delete(ms.WorldMoveJoin, sid)
+		}
 		// 同一UUIDのセッション数をカウント
 		uidCount := 0
 		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
 		sysMsg, _ := json.Marshal(map[string]interface{}{
-			"type":      "join",
+			"type":      joinType,
 			"username":  uname,
 			"userId":    uid,
 			"sessionId": sid,
@@ -1058,6 +1091,15 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 				}
 			}
 		}
+		// ゴーストキックされたセッションはシステムメッセージを抑制
+		if _, ghosted := ghostKickedSessions.LoadAndDelete(sid); ghosted {
+			logf("MatchLeave ghost-kicked sid=%s (suppressed)\n", shortSID(sid))
+			delete(ms.AOIs, sid)
+			delete(ms.Presences, sid)
+			delete(ms.Positions, sid)
+			delete(ms.Rates, sid)
+			continue
+		}
 		// システムメッセージ: ログアウト or ワールド移動通知を全員に送信
 		uname := p.GetUsername()
 		uid := p.GetUserId()
@@ -1076,13 +1118,19 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 			"sessionId": sid,
 			"uidCount":  uidCount,
 		})
-		// 残っている全プレゼンスに送信（退出者自身は除外済み）
+		// 残っている全プレゼンスのスナップショット（退出者自身は除外）
 		var targets []runtime.Presence
 		for otherSID, otherP := range ms.Presences {
 			if otherSID != sid { targets = append(targets, otherP) }
 		}
-		if len(targets) > 0 {
-			dispatcher.BroadcastMessage(opSystemMsg, sysMsg, targets, nil, true)
+		if leaveType == "world_move" {
+			// ワールド移動は即送信
+			if len(targets) > 0 {
+				dispatcher.BroadcastMessage(opSystemMsg, sysMsg, targets, nil, true)
+			}
+		} else if len(targets) > 0 {
+			// 通常 leave は遅延送信（同一UUIDの再接続でキャンセル可能）
+			ms.PendingLeave[uid] = &pendingLeaveMsg{tick: tick, sysMsg: sysMsg, targets: targets}
 		}
 
 		delete(ms.AOIs, sid)
@@ -1137,6 +1185,13 @@ func (ms *matchState) collectAOITargets(senderSID string, cx, cz int) []runtime.
 func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, messages []runtime.MatchData) interface{} {
 	defer prof("MatchLoop")()
 	ms := state.(*matchState)
+	// 遅延 leave メッセージの送信（30tick = 3秒後）
+	for uid, pl := range ms.PendingLeave {
+		if tick-pl.tick >= 30 {
+			dispatcher.BroadcastMessage(opSystemMsg, pl.sysMsg, pl.targets, nil, true)
+			delete(ms.PendingLeave, uid)
+		}
+	}
 	// レートリミッター: 1秒ごとにドロップ統計ログ出力＋カウンタリセット（10Hz × 10tick = 1秒）
 	if tick%10 == 0 {
 		for sid, r := range ms.Rates {
