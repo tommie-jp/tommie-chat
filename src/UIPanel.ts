@@ -2702,7 +2702,14 @@ export function setupHtmlUI(game: GameScene): void {
 
                 const btn = document.createElement("button");
                 btn.style.cssText = btnStyle + "flex:1;";
-                btn.innerHTML = `<b>📌 ${bm.name}</b><br><span style="font-size:11px;color:#aaa;">x:${Math.round(bm.x)} z:${Math.round(bm.z)}</span>`;
+                const nameB = document.createElement("b");
+                nameB.textContent = `📌 ${bm.name}`;
+                const coordSpan = document.createElement("span");
+                coordSpan.style.cssText = "font-size:11px;color:#aaa;";
+                coordSpan.textContent = `(${Math.round(bm.x) + 512}, ${Math.round(bm.z) + 512})`;
+                btn.appendChild(nameB);
+                btn.appendChild(document.createElement("br"));
+                btn.appendChild(coordSpan);
                 btn.addEventListener("click", () => {
                     bookmarkPanel.style.display = "none";
                     game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z });
@@ -2729,9 +2736,11 @@ export function setupHtmlUI(game: GameScene): void {
             addBtn.innerHTML = "<b>＋ 現在地を保存</b>";
             addBtn.addEventListener("click", () => {
                 const p = game.playerBox.position;
-                const name = prompt("ブックマーク名を入力:");
-                if (!name || !name.trim()) return;
-                userBookmarks.push({ name: name.trim(), x: p.x, z: p.z, ry: game.playerBox.rotation.y });
+                const raw = prompt("ブックマーク名を入力（20文字以内）:");
+                if (!raw || !raw.trim()) return;
+                const name = raw.trim().slice(0, 20).replace(/[\x00-\x1f\x7f]/g, "");
+                if (!name) return;
+                userBookmarks.push({ name, x: p.x, z: p.z, ry: game.playerBox.rotation.y });
                 saveBookmarks();
                 renderBookmarkList();
             });

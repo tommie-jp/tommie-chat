@@ -1831,6 +1831,17 @@ func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	if len(req.Items) > 50 {
 		return "", runtime.NewError("too many bookmarks (max 50)", 3)
 	}
+	for _, item := range req.Items {
+		name := strings.TrimSpace(item.Name)
+		if name == "" || len([]rune(name)) > 20 {
+			return "", runtime.NewError("bookmark name must be 1-20 characters", 3)
+		}
+		for _, r := range name {
+			if unicode.IsControl(r) {
+				return "", runtime.NewError("bookmark name must not contain control characters", 3)
+			}
+		}
+	}
 	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
 		Collection:      bookmarkCollection,
 		Key:             bookmarkKey,
