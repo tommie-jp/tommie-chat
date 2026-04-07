@@ -281,6 +281,8 @@ type World struct {
 	ID          int
 	ChunkCountX int
 	ChunkCountZ int
+	Name        string // 表示用
+	OwnerUID    string // 作成者UID（空=システム）
 	mu          sync.RWMutex                // Chunks map の保護
 	Chunks      map[[2]int]*chunk
 	loaded      map[[2]int]bool             // Storage からロード試行済みか（遅延ロード用）
@@ -372,6 +374,65 @@ func createWorld(id int, chunkCountX, chunkCountZ int) *World {
 	}
 	worlds[id] = w
 	return w
+}
+
+// ─── ワールド定義の永続化 ───
+
+// worldDef はワールド定義（Storage に保存する構造）
+type worldDef struct {
+	ID          int    `json:"id"`
+	ChunkCountX int    `json:"chunkCountX"`
+	ChunkCountZ int    `json:"chunkCountZ"`
+	Name        string `json:"name"`
+	OwnerUID    string `json:"ownerUid"` // 作成者（空=システム）
+}
+
+// nextWorldID は次に割り当てるワールドID
+var nextWorldID int
+
+// saveWorldsMeta は全ワールド定義を Storage に保存する
+func saveWorldsMeta(ctx context.Context, nk runtime.NakamaModule) error {
+	worldsMu.RLock()
+	defs := make([]worldDef, 0, len(worlds))
+	for _, w := range worlds {
+		defs = append(defs, worldDef{
+			ID: w.ID, ChunkCountX: w.ChunkCountX, ChunkCountZ: w.ChunkCountZ,
+			Name: w.Name, OwnerUID: w.OwnerUID,
+		})
+	}
+	worldsMu.RUnlock()
+	data, err := json.Marshal(map[string]interface{}{"worlds": defs, "nextId": nextWorldID})
+	if err != nil { return err }
+	_, err = nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+		Collection: groundCollection, Key: worldsMetaKey, UserID: systemUserID,
+		Value: string(data), PermissionRead: 2, PermissionWrite: 0,
+	}})
+	return err
+}
+
+// loadWorldsMeta は Storage からワールド定義を読み込み、World を作成する
+func loadWorldsMeta(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger) {
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: groundCollection, Key: worldsMetaKey, UserID: systemUserID,
+	}})
+	if err != nil || len(objs) == 0 {
+		return
+	}
+	var meta struct {
+		Worlds []worldDef `json:"worlds"`
+		NextId int        `json:"nextId"`
+	}
+	if err := json.Unmarshal([]byte(objs[0].Value), &meta); err != nil {
+		logger.Warn("loadWorldsMeta unmarshal: %v", err)
+		return
+	}
+	for _, d := range meta.Worlds {
+		w := createWorld(d.ID, d.ChunkCountX, d.ChunkCountZ)
+		w.Name = d.Name
+		w.OwnerUID = d.OwnerUID
+	}
+	nextWorldID = meta.NextId
+	logger.Info("loadWorldsMeta: loaded %d worlds, nextId=%d", len(meta.Worlds), nextWorldID)
 }
 
 // 同接数履歴（2層）
@@ -497,10 +558,11 @@ func getLatestCcu() int {
 
 // ストレージキー
 const (
-	groundCollection = "world_data"
-	ccuCollection    = "ccu_data"
-	ccuStorageKey    = "history_1m"
-	systemUserID     = "00000000-0000-0000-0000-000000000000"
+	groundCollection    = "world_data"
+	worldsMetaKey       = "worlds_meta"
+	ccuCollection       = "ccu_data"
+	ccuStorageKey       = "history_1m"
+	systemUserID        = "00000000-0000-0000-0000-000000000000"
 )
 
 // marshalCcuHistory1m はccuHistory1mをJSON化して返す（ロック取得・解放込み）
@@ -2075,6 +2137,137 @@ func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	return `{}`, nil
 }
 
+// ─── 部屋管理 RPC ───
+
+// rpcGetWorldList はワールド一覧を返す
+func rpcGetWorldList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	worldsMu.RLock()
+	type entry struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		ChunkCountX int    `json:"chunkCountX"`
+		ChunkCountZ int    `json:"chunkCountZ"`
+		OwnerUID    string `json:"ownerUid"`
+		PlayerCount int    `json:"playerCount"`
+	}
+	list := make([]entry, 0, len(worlds))
+	for _, w := range worlds {
+		list = append(list, entry{
+			ID: w.ID, Name: w.Name,
+			ChunkCountX: w.ChunkCountX, ChunkCountZ: w.ChunkCountZ,
+			OwnerUID: w.OwnerUID,
+		})
+	}
+	worldsMu.RUnlock()
+	// マッチの接続人数を取得
+	matches, _ := nk.MatchList(ctx, 100, true, "", nil, nil, "")
+	matchSizes := make(map[string]int)
+	for _, m := range matches {
+		matchSizes[m.GetLabel().GetValue()] = int(m.GetSize())
+	}
+	for i := range list {
+		label := fmt.Sprintf("world_%d", list[i].ID)
+		list[i].PlayerCount = matchSizes[label]
+	}
+	b, _ := json.Marshal(map[string]interface{}{"worlds": list})
+	return string(b), nil
+}
+
+// rpcCreateRoom はワールドを動的に作成する
+func rpcCreateRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("authentication required", 16)
+	}
+	var req struct {
+		Name        string `json:"name"`
+		ChunkCountX int    `json:"chunkCountX"`
+		ChunkCountZ int    `json:"chunkCountZ"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return "", runtime.NewError("invalid payload", 3)
+	}
+	// バリデーション
+	name := strings.TrimSpace(req.Name)
+	if name == "" || len([]rune(name)) > 30 {
+		return "", runtime.NewError("name must be 1-30 characters", 3)
+	}
+	if req.ChunkCountX < 2 { req.ChunkCountX = 2 }
+	if req.ChunkCountZ < 2 { req.ChunkCountZ = 2 }
+	if req.ChunkCountX > 64 { req.ChunkCountX = 64 }
+	if req.ChunkCountZ > 64 { req.ChunkCountZ = 64 }
+
+	worldsMu.Lock()
+	id := nextWorldID
+	nextWorldID++
+	worldsMu.Unlock()
+
+	w := createWorld(id, req.ChunkCountX, req.ChunkCountZ)
+	w.Name = name
+	w.OwnerUID = uid
+
+	if err := saveWorldsMeta(ctx, nk); err != nil {
+		logger.Warn("createRoom saveWorldsMeta: %v", err)
+	}
+	logger.Info("createRoom id=%d name=%s size=%dx%d owner=%s", id, name, req.ChunkCountX, req.ChunkCountZ, uid)
+	b, _ := json.Marshal(map[string]interface{}{"worldId": id})
+	return string(b), nil
+}
+
+// rpcDeleteRoom はワールドを削除する
+func rpcDeleteRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("authentication required", 16)
+	}
+	var req struct {
+		WorldID int `json:"worldId"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return "", runtime.NewError("invalid payload", 3)
+	}
+	if req.WorldID == defaultWorldID {
+		return "", runtime.NewError("cannot delete default world", 3)
+	}
+	w := getWorld(req.WorldID)
+	if w == nil {
+		return "", runtime.NewError("world not found", 5)
+	}
+	// 権限チェック: 作成者のみ削除可
+	if w.OwnerUID != "" && w.OwnerUID != uid {
+		return "", runtime.NewError("permission denied", 7)
+	}
+
+	// ワールドを削除
+	worldsMu.Lock()
+	delete(worlds, req.WorldID)
+	worldsMu.Unlock()
+
+	// チャンクデータを Storage から削除
+	deletes := make([]*runtime.StorageDelete, 0)
+	for cx := 0; cx < w.ChunkCountX; cx++ {
+		for cz := 0; cz < w.ChunkCountZ; cz++ {
+			deletes = append(deletes, &runtime.StorageDelete{
+				Collection: groundCollection,
+				Key:        chunkStorageKey(req.WorldID, cx, cz),
+				UserID:     systemUserID,
+			})
+		}
+	}
+	if len(deletes) > 0 {
+		if err := nk.StorageDelete(ctx, deletes); err != nil {
+			logger.Warn("deleteRoom StorageDelete chunks: %v", err)
+		}
+	}
+
+	if err := saveWorldsMeta(ctx, nk); err != nil {
+		logger.Warn("deleteRoom saveWorldsMeta: %v", err)
+	}
+	logger.Info("deleteRoom id=%d name=%s by=%s", req.WorldID, w.Name, uid)
+	b, _ := json.Marshal(map[string]interface{}{"deleted": true})
+	return string(b), nil
+}
+
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// バリデーション設定の読み込み（環境変数から）
@@ -2088,11 +2281,20 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		}
 	}()
 
-	// ワールド作成
-	defaultWorld = createWorld(defaultWorldID, defaultChunkCount, defaultChunkCount)
-	createWorld(1, 8, 8) // テスト用サブワールド（128x128セル）
 	// グローバル NakamaModule 参照を設定（World.getChunk の遅延ロード用）
 	globalNK = nk
+
+	// ワールド定義を Storage から復元
+	loadWorldsMeta(ctx, nk, logger)
+
+	// デフォルトワールドが未作成なら作成
+	if getWorld(defaultWorldID) == nil {
+		w := createWorld(defaultWorldID, defaultChunkCount, defaultChunkCount)
+		w.Name = "メインワールド"
+		if nextWorldID <= defaultWorldID { nextWorldID = defaultWorldID + 1 }
+		saveWorldsMeta(ctx, nk)
+	}
+	defaultWorld = getWorld(defaultWorldID)
 
 	// 旧フォーマットからのマイグレーション（ground_table キーが残っている場合、デフォルトワールドのみ）
 	w := defaultWorld
@@ -2225,6 +2427,15 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 	if err := initializer.RegisterRpc("saveBookmarks", rpcSaveBookmarks); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("getWorldList", rpcGetWorldList); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("createRoom", rpcCreateRoom); err != nil {
+		return err
+	}
+	if err := initializer.RegisterRpc("deleteRoom", rpcDeleteRoom); err != nil {
 		return err
 	}
 

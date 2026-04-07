@@ -447,6 +447,39 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    /** ワールド一覧を取得 */
+    async getWorldList(): Promise<{ id: number; name: string; chunkCountX: number; chunkCountZ: number; ownerUid: string; playerCount: number }[]> {
+        if (!this.socket) return [];
+        const r = await this.socket.rpc("getWorldList");
+        if (r?.payload) {
+            const data = JSON.parse(r.payload) as { worlds?: { id: number; name: string; chunkCountX: number; chunkCountZ: number; ownerUid: string; playerCount: number }[] };
+            return data.worlds ?? [];
+        }
+        return [];
+    }
+
+    /** 部屋を作成 */
+    async createRoom(name: string, chunkCountX: number, chunkCountZ: number): Promise<number> {
+        if (!this.socket) throw new Error("no socket");
+        const r = await this.socket.rpc("createRoom", JSON.stringify({ name, chunkCountX, chunkCountZ }));
+        if (r?.payload) {
+            const data = JSON.parse(r.payload) as { worldId?: number };
+            return data.worldId ?? -1;
+        }
+        return -1;
+    }
+
+    /** 部屋を削除 */
+    async deleteRoom(worldId: number): Promise<boolean> {
+        if (!this.socket) return false;
+        const r = await this.socket.rpc("deleteRoom", JSON.stringify({ worldId }));
+        if (r?.payload) {
+            const data = JSON.parse(r.payload) as { deleted?: boolean };
+            return data.deleted ?? false;
+        }
+        return false;
+    }
+
     /** サーバーからブックマーク一覧を取得 */
     async getBookmarks(): Promise<{ name: string; x: number; z: number; ry: number; worldId: number }[]> {
         if (!this.socket) return [];
