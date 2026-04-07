@@ -31,8 +31,8 @@ export class NakamaService {
 
     get selfMatchId(): string | null { return this.matchId; }
 
-    onChatMessage?: (username: string, text: string, userId: string, sessionId: string) => void;
-    onSystemMessage?: (type: string, username: string, userId: string, sessionId: string, uidCount: number, nameColor: string) => void;
+    onChatMessage?: (username: string, text: string, userId: string, sessionId: string, ts: number) => void;
+    onSystemMessage?: (type: string, username: string, userId: string, sessionId: string, uidCount: number, nameColor: string, ts: number) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => void;
@@ -242,11 +242,11 @@ export class NakamaService {
                     if (this._aoiResolve) { this._aoiResolve(players); this._aoiResolve = null; }
                     this.onPlayersAOIResponse?.(players);
                 } else if (md.op_code === OP_CHAT) {
-                    const chat = payload as { text: string; username: string; userId: string; sessionId: string };
-                    this.onChatMessage?.(chat.username ?? "", chat.text ?? "", chat.userId ?? "", chat.sessionId ?? "");
+                    const chat = payload as { text: string; username: string; userId: string; sessionId: string; ts?: number };
+                    this.onChatMessage?.(chat.username ?? "", chat.text ?? "", chat.userId ?? "", chat.sessionId ?? "", chat.ts ?? 0);
                 } else if (md.op_code === OP_SYSTEM_MSG) {
-                    const sys = payload as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number; nameColor?: string };
-                    this.onSystemMessage?.(sys.type, sys.username, sys.userId, sys.sessionId ?? "", sys.uidCount ?? 1, sys.nameColor ?? "");
+                    const sys = payload as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number; nameColor?: string; ts?: number };
+                    this.onSystemMessage?.(sys.type, sys.username, sys.userId, sys.sessionId ?? "", sys.uidCount ?? 1, sys.nameColor ?? "", sys.ts ?? 0);
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
                     const dn = payload as { displayName: string; nc?: string };
                     this.onDisplayName?.(sid, dn.displayName, dn.nc);

@@ -1059,6 +1059,7 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 			"sessionId": sid,
 			"uidCount":  uidCount,
 			"nameColor": nc,
+			"ts":        time.Now().UnixMilli(),
 		})
 		dispatcher.BroadcastMessage(opSystemMsg, sysMsg, nil, p, true)
 	}
@@ -1123,6 +1124,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 			"sessionId": sid,
 			"uidCount":  uidCount,
 			"nameColor": nc,
+			"ts":        time.Now().UnixMilli(),
 		})
 		// 残っている全プレゼンスのスナップショット（退出者自身は除外）
 		var targets []runtime.Presence
@@ -1662,6 +1664,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				chatMsg["username"] = p.GetUsername()
 				chatMsg["userId"] = p.GetUserId()
 				chatMsg["sessionId"] = sid
+				chatMsg["ts"] = time.Now().UnixMilli()
 				enriched, _ := json.Marshal(chatMsg)
 				logger.Info("opChat broadcast sid=%s len=%d text=%v", sid, len(enriched), chatMsg["text"])
 				if err := dispatcher.BroadcastMessage(opChat, enriched, nil, nil, true); err != nil {

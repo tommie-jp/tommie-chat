@@ -683,13 +683,13 @@ export function setupHtmlUI(game: GameScene): void {
         }
     };
 
-    const addChatHistory = (avatarName: string, text: string, nameColor?: string, senderId?: string) => {
+    const addChatHistory = (avatarName: string, text: string, nameColor?: string, senderId?: string, serverTs = 0) => {
         const _end = prof("UIPanel.addChatHistory");
         if (!text) { _end(); return; }
         const list = document.getElementById("chat-history-list");
         if (!list) { _end(); return; }
 
-        const now = new Date();
+        const now = serverTs > 0 ? new Date(serverTs) : new Date();
         const hh = String(now.getHours()).padStart(2, "0");
         const mm = String(now.getMinutes()).padStart(2, "0");
         const timeStr = `${hh}:${mm}`;
@@ -976,14 +976,14 @@ export function setupHtmlUI(game: GameScene): void {
         }
     });
 
-    game.nakama.onChatMessage = (username, text, userId, senderSid) => {
+    game.nakama.onChatMessage = (username, text, userId, senderSid, ts) => {
         // 表示名を優先（なければ @ユーザID）— sessionId でサフィックス解決
         const entry = senderSid ? userMap.get(senderSid) : undefined;
         const chatName = entry
             ? resolveDisplayLabel(entry.displayName, entry.username, senderSid).text + resolveDisplayLabel(entry.displayName, entry.username, senderSid).suffix
             : username;
         const chatNameColor = entry?.nameColor;
-        addChatHistory(chatName, text, chatNameColor, userId);
+        addChatHistory(chatName, text, chatNameColor, userId, ts);
         // 吹き出しは送信元セッションのアバターのみに表示
         if (senderSid === game.nakama.selfSessionId) {
             doUpdateSpeech(text);
@@ -1294,7 +1294,7 @@ export function setupHtmlUI(game: GameScene): void {
         refreshSelfSuffix();
     };
     // システムメッセージ: サーバーからのログイン/ログアウト通知
-    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount, serverNameColor) => {
+    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount, serverNameColor, ts) => {
         const existing = [...userMap.values()].find(e => e.uuid === userId);
         const displayName = existing?.displayName ?? "";
         const nameText = displayName || ("@" + username);
@@ -1306,17 +1306,17 @@ export function setupHtmlUI(game: GameScene): void {
         const colorStyle = color ? ` style="color:${color}"` : "";
         const nameHtml = `<span class="chat-ol-name"${colorStyle}>${nameText}${hashSuffix}</span>`;
         if (type === "join") {
-            addChatHistory("[system]", t("system.user_joined").replace("{username}", nameHtml), undefined, userId);
+            addChatHistory("[system]", t("system.user_joined").replace("{username}", nameHtml), undefined, userId, ts);
         } else if (type === "world_enter") {
             // ワールド切替中の自分自身の enter は抑制
             if (game.nakama.changingWorld) return;
-            addChatHistory("[system]", t("system.user_world_enter").replace("{username}", nameHtml), undefined, userId);
+            addChatHistory("[system]", t("system.user_world_enter").replace("{username}", nameHtml), undefined, userId, ts);
         } else if (type === "leave") {
             // ワールド切替中の自分自身の leave は抑制
             if (game.nakama.changingWorld) return;
-            addChatHistory("[system]", t("system.user_left").replace("{username}", nameHtml), undefined, userId);
+            addChatHistory("[system]", t("system.user_left").replace("{username}", nameHtml), undefined, userId, ts);
         } else if (type === "world_move") {
-            addChatHistory("[system]", t("system.user_world_move").replace("{username}", nameHtml), undefined, userId);
+            addChatHistory("[system]", t("system.user_world_move").replace("{username}", nameHtml), undefined, userId, ts);
         }
     };
 
