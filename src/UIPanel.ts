@@ -2751,6 +2751,68 @@ export function setupHtmlUI(game: GameScene): void {
                     renderBookmarkList();
                 });
                 bookmarkListEl.appendChild(addBtn);
+
+                // ── 部屋一覧セクション ──
+                const divider = document.createElement("hr");
+                divider.style.cssText = "margin:8px 0;opacity:0.3;";
+                bookmarkListEl.appendChild(divider);
+
+                const roomTitle = document.createElement("div");
+                roomTitle.style.cssText = "font-weight:bold;font-size:11px;opacity:0.6;margin-bottom:4px;";
+                roomTitle.textContent = "部屋一覧";
+                bookmarkListEl.appendChild(roomTitle);
+
+                game.nakama.getWorldList().then(worldList => {
+                    for (const w of worldList) {
+                        const row = document.createElement("div");
+                        row.style.cssText = "display:flex;gap:3px;align-items:stretch;";
+
+                        const btn = document.createElement("button");
+                        btn.style.cssText = "flex:1;";
+                        const isCurrent = game.currentWorldId === w.id;
+                        if (isCurrent) btn.style.fontWeight = "bold";
+                        const sizeLabel = `${w.chunkCountX * 16}x${w.chunkCountZ * 16}`;
+                        btn.textContent = `${w.name || `World ${w.id}`} (${sizeLabel}) ${w.playerCount}人${isCurrent ? " ★" : ""}`;
+                        btn.addEventListener("click", () => {
+                            if (isCurrent) return;
+                            game.moveBookmark(`world_${w.id}`, { x: 0, z: 0 }, w.id);
+                            renderBookmarkList();
+                        });
+                        row.appendChild(btn);
+
+                        // 削除ボタン（デフォルトワールド以外、オーナーのみ）
+                        if (w.id !== 0) {
+                            const delBtn = document.createElement("button");
+                            delBtn.style.cssText = "padding:2px 6px;font-size:11px;opacity:0.5;";
+                            delBtn.textContent = "✕";
+                            delBtn.addEventListener("click", async () => {
+                                if (!confirm(`「${w.name || `World ${w.id}`}」を削除しますか？`)) return;
+                                try {
+                                    await game.nakama.deleteRoom(w.id);
+                                    renderBookmarkList();
+                                } catch (e) { console.warn("deleteRoom:", e); }
+                            });
+                            row.appendChild(delBtn);
+                        }
+                        bookmarkListEl.appendChild(row);
+                    }
+
+                    // 部屋作成ボタン
+                    const createBtn = document.createElement("button");
+                    createBtn.style.cssText = "margin-top:2px;font-weight:bold;";
+                    createBtn.textContent = "＋ 部屋を作成";
+                    createBtn.addEventListener("click", async () => {
+                        const name = prompt("部屋名を入力（30文字以内）:");
+                        if (!name || !name.trim()) return;
+                        const sizeStr = prompt("サイズ（チャンク数、2〜64）:", "8");
+                        const size = Math.max(2, Math.min(64, parseInt(sizeStr || "8") || 8));
+                        try {
+                            await game.nakama.createRoom(name.trim(), size, size);
+                            renderBookmarkList();
+                        } catch (e) { console.warn("createRoom:", e); }
+                    });
+                    bookmarkListEl.appendChild(createBtn);
+                }).catch(e => console.warn("getWorldList:", e));
             };
 
             // パネル表示時にブックマーク読み込み → リスト描画
