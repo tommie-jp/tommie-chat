@@ -114,6 +114,8 @@ export class GameScene {
     currentBookmarkId: string | null = null;
     /** 現在のワールドID */
     currentWorldId = 0;
+    /** 現在のワールド名（部屋名） */
+    currentWorldName = "メインワールド";
     /** 現在のワールドのセル数 */
     get currentWorldSize(): number {
         return this.worldSizeOf(this.currentWorldId);
@@ -846,11 +848,15 @@ export class GameScene {
                     if (!worldEl || !posEl) {
                         const ws = this.currentWorldSize;
                         const ch = ws / 2;
-                        cd.innerHTML = `<span id="cd-world" title="現在の部屋（ワールドID）" style="font-size:14px;font-weight:bold"></span> <span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (${ch}, ${ch})\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(${ws - 1}, ${ws - 1})\nワールドの大きさ: ${ws} × ${ws}" style="font-size:14px;font-weight:bold"></span>`;
+                        cd.innerHTML = `<span id="cd-world" title="現在の部屋\nタップで部屋一覧を表示" style="font-size:14px;font-weight:bold;cursor:pointer;"></span> <span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (${ch}, ${ch})\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(${ws - 1}, ${ws - 1})\nワールドの大きさ: ${ws} × ${ws}" style="font-size:14px;font-weight:bold"></span>`;
+                        document.getElementById("cd-world")?.addEventListener("click", () => {
+                            document.getElementById("menu-rooms")?.click();
+                        });
                         worldEl = document.getElementById("cd-world");
                         posEl = document.getElementById("cd-pos");
                     }
-                    const worldText = `w${this.currentWorldId}`;
+                    const name = this.currentWorldName;
+                    const worldText = name.length > 8 ? name.slice(0, 8) + "…" : name;
                     const posText = `(${x3}, ${z3})`;
                     if (worldEl && worldEl.textContent !== worldText) worldEl.textContent = worldText;
                     if (posEl && posEl.textContent !== posText) posEl.textContent = posText;
