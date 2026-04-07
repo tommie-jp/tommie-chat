@@ -2816,9 +2816,14 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             // パネル表示時にブックマーク読み込み → リスト描画
+            let lastDisplay = bookmarkPanel.style.display;
             new MutationObserver(() => {
-                if (bookmarkPanel.style.display !== "none") {
-                    loadBookmarks().then(() => renderBookmarkList());
+                const now = bookmarkPanel.style.display;
+                if (now !== lastDisplay) {
+                    lastDisplay = now;
+                    if (now !== "none") {
+                        loadBookmarks().then(() => renderBookmarkList());
+                    }
                 }
             }).observe(bookmarkPanel, { attributes: true, attributeFilter: ["style"] });
 
