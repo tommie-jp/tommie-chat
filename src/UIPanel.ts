@@ -1328,7 +1328,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
         { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
         { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = "none"; }
-        { const mr = document.getElementById("menu-rooms"); if (mr) mr.style.display = "none"; }
+        { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = "none"; }
         { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = ""; }
         setLoginRowVisible(true);
     };
@@ -1505,7 +1505,7 @@ export function setupHtmlUI(game: GameScene): void {
             setLoginRowVisible(false);
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
-            { const mr = document.getElementById("menu-rooms"); if (mr) mr.style.display = ""; }
+            { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = t("displayname.placeholder.enabled"); } }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
@@ -2630,61 +2630,126 @@ export function setupHtmlUI(game: GameScene): void {
 
     // ─── ブックマーク（テレポート先の選択） ───
     {
-        const menuRooms = document.getElementById("menu-rooms");
-        // 部屋定義（クライアント側固定リスト — ワールドも「部屋」として扱う）
-        const roomDefs = [
+        const menuBookmarks = document.getElementById("menu-bookmarks");
+        // 固定ブックマーク（クライアント側定義）
+        const builtinBookmarks = [
             { id: "world_center", name: "ワールド（中心）" },
             { id: "room_park",    name: "公園" },
             { id: "room_beach",   name: "ビーチ" },
             { id: "room_night",   name: "夜の街" },
         ];
+        // ユーザー定義ブックマーク（サーバーから読み込み）
+        let userBookmarks: { name: string; x: number; z: number }[] = [];
+        let bookmarksLoaded = false;
 
-        const roomPanel = document.createElement("div");
-        roomPanel.id = "room-panel";
-        roomPanel.style.cssText = "display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;color:#fff;border-radius:8px;padding:16px;min-width:240px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:14px;";
-        roomPanel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b>ブックマーク</b><button id="room-panel-close" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;">✕</button></div><div id="room-list" style="display:flex;flex-direction:column;gap:6px;"></div>`;
-        document.body.appendChild(roomPanel);
+        const loadBookmarks = async () => {
+            if (bookmarksLoaded) return;
+            try {
+                userBookmarks = await game.nakama.getBookmarks();
+                bookmarksLoaded = true;
+            } catch (e) { console.warn("getBookmarks failed:", e); }
+        };
+        const saveBookmarks = async () => {
+            try { await game.nakama.saveBookmarks(userBookmarks); }
+            catch (e) { console.warn("saveBookmarks failed:", e); }
+        };
 
-        const roomListEl = document.getElementById("room-list")!;
-        const roomClose = document.getElementById("room-panel-close")!;
+        const bookmarkPanel = document.createElement("div");
+        bookmarkPanel.id = "bookmark-panel";
+        bookmarkPanel.style.cssText = "display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;color:#fff;border-radius:8px;padding:16px;min-width:240px;max-height:80vh;overflow-y:auto;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:14px;";
+        bookmarkPanel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b>ブックマーク</b><button id="bookmark-panel-close" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;">✕</button></div><div id="bookmark-list" style="display:flex;flex-direction:column;gap:6px;"></div>`;
+        document.body.appendChild(bookmarkPanel);
 
-        const showRoomPanel = () => {
-            roomPanel.style.display = "";
-            roomListEl.innerHTML = "";
+        const bookmarkListEl = document.getElementById("bookmark-list")!;
+        const bookmarkClose = document.getElementById("bookmark-panel-close")!;
+
+        const btnStyle = "background:#444;color:#fff;border:1px solid #666;border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;";
+
+        const renderBookmarkList = () => {
+            bookmarkListEl.innerHTML = "";
 
             // 「もとに戻る」ボタン（スタックがあれば表示）
-            if (game.canGoBack) {
+            if (game.canUndoMoveBookmark) {
                 const backBtn = document.createElement("button");
                 backBtn.style.cssText = "background:#553;color:#ffa;border:1px solid #aa8;border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;";
                 backBtn.innerHTML = "<b>← もとに戻る</b>";
                 backBtn.addEventListener("click", () => {
-                    roomPanel.style.display = "none";
-                    game.goBack();
+                    bookmarkPanel.style.display = "none";
+                    game.undoMoveBookmark();
                 });
-                roomListEl.appendChild(backBtn);
+                bookmarkListEl.appendChild(backBtn);
             }
 
-            for (const r of roomDefs) {
-                const isCurrent = game.currentRoomId === r.id;
+            // 固定ブックマーク
+            for (const r of builtinBookmarks) {
+                const isCurrent = game.currentBookmarkId === r.id;
                 const btn = document.createElement("button");
                 btn.style.cssText = `background:${isCurrent ? "#336" : "#444"};color:#fff;border:1px solid ${isCurrent ? "#66f" : "#666"};border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;`;
                 btn.innerHTML = `<b>${r.name}</b>${isCurrent ? ' <span style="color:#6f6;font-size:12px;">★ 現在地</span>' : ""}`;
                 btn.addEventListener("click", () => {
-                    roomPanel.style.display = "none";
+                    bookmarkPanel.style.display = "none";
                     if (isCurrent) return;
-                    game.enterRoom(r.id!);
+                    game.moveBookmark(r.id);
                 });
-                roomListEl.appendChild(btn);
+                bookmarkListEl.appendChild(btn);
             }
+
+            // ユーザー定義ブックマーク
+            for (let i = 0; i < userBookmarks.length; i++) {
+                const bm = userBookmarks[i];
+                const row = document.createElement("div");
+                row.style.cssText = "display:flex;gap:4px;align-items:stretch;";
+
+                const btn = document.createElement("button");
+                btn.style.cssText = btnStyle + "flex:1;";
+                btn.innerHTML = `<b>📌 ${bm.name}</b><br><span style="font-size:11px;color:#aaa;">x:${Math.round(bm.x)} z:${Math.round(bm.z)}</span>`;
+                btn.addEventListener("click", () => {
+                    bookmarkPanel.style.display = "none";
+                    game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z });
+                });
+
+                const delBtn = document.createElement("button");
+                delBtn.style.cssText = "background:#633;color:#faa;border:1px solid #a66;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;";
+                delBtn.textContent = "✕";
+                delBtn.addEventListener("click", () => {
+                    userBookmarks.splice(i, 1);
+                    saveBookmarks();
+                    renderBookmarkList();
+                });
+
+                row.appendChild(btn);
+                row.appendChild(delBtn);
+                bookmarkListEl.appendChild(row);
+            }
+
+            // 「現在地を保存」ボタン
+            const addBtn = document.createElement("button");
+            addBtn.style.cssText = "background:#354;color:#afc;border:1px solid #6a8;border-radius:4px;padding:8px 12px;cursor:pointer;text-align:center;font-size:13px;margin-top:4px;";
+            addBtn.innerHTML = "<b>＋ 現在地を保存</b>";
+            addBtn.addEventListener("click", () => {
+                const p = game.playerBox.position;
+                const name = prompt("ブックマーク名を入力:");
+                if (!name || !name.trim()) return;
+                userBookmarks.push({ name: name.trim(), x: p.x, z: p.z });
+                saveBookmarks();
+                renderBookmarkList();
+            });
+            bookmarkListEl.appendChild(addBtn);
         };
 
-        roomClose.addEventListener("click", () => { roomPanel.style.display = "none"; });
+        const showBookmarkPanel = async () => {
+            bookmarkPanel.style.display = "";
+            await loadBookmarks();
+            renderBookmarkList();
+        };
 
-        if (menuRooms) {
-            menuRooms.addEventListener("click", () => {
+        bookmarkClose.addEventListener("click", () => { bookmarkPanel.style.display = "none"; });
+
+        if (menuBookmarks) {
+            menuBookmarks.addEventListener("click", () => {
                 const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
-                if (cl) cl(menuRooms); else document.getElementById("menu-popup")?.classList.remove("open");
-                showRoomPanel();
+                if (cl) cl(menuBookmarks); else document.getElementById("menu-popup")?.classList.remove("open");
+                showBookmarkPanel();
             });
         }
     }

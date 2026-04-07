@@ -108,11 +108,11 @@ export class GameScene {
 
     // ─── 部屋システム ───
     /** 現在いる部屋ID（null=ワールド中心） */
-    currentRoomId: string | null = null;
-    /** 部屋移動スタック（戻り先: 部屋ID + 座標） */
-    private roomStack: { roomId: string | null; x: number; z: number; ry: number }[] = [];
-    /** 部屋切替イベント（UIPanel等が購読） */
-    onRoomChange: ((roomId: string | null) => void)[] = [];
+    currentBookmarkId: string | null = null;
+    /** ブックマーク移動スタック（戻り先: ブックマークID + 座標） */
+    private bookmarkStack: { bookmarkId: string | null; x: number; z: number; ry: number }[] = [];
+    /** ブックマーク移動イベント（UIPanel等が購読） */
+    onMoveBookmark: ((bookmarkId: string | null) => void)[] = [];
     /** チャンク同期完了イベント（ミニマップ等が購読） */
     onChunkSync: (() => void)[] = [];
 
@@ -1009,43 +1009,41 @@ export class GameScene {
     // ─── 部屋切替（同一 Match 内、テレポート） ───
 
     /** 部屋の固定座標 */
-    static readonly ROOM_POSITIONS: Record<string, { x: number; z: number }> = {
+    static readonly BOOKMARK_POSITIONS: Record<string, { x: number; z: number }> = {
         world_center: { x: 0,    z: 0 },
         room_park:    { x: -400, z: -400 },
         room_beach:   { x: -400, z:  400 },
         room_night:   { x:  400, z: -400 },
     };
 
-    /** 部屋に移動（現在地をスタックに PUSH してテレポート） */
-    enterRoom(roomId: string): void {
-        if (this.currentRoomId === roomId) return;
-
+    /** ブックマークに移動（現在地をスタックに PUSH してテレポート） */
+    moveBookmark(bookmarkId: string, pos?: { x: number; z: number }): void {
         // 現在地をスタックに PUSH
-        this.roomStack.push({
-            roomId: this.currentRoomId,
+        this.bookmarkStack.push({
+            bookmarkId: this.currentBookmarkId,
             x: this.playerBox.position.x,
             z: this.playerBox.position.z,
             ry: this.playerBox.rotation.y,
         });
 
-        this.currentRoomId = roomId;
+        this.currentBookmarkId = bookmarkId;
 
-        const pos = GameScene.ROOM_POSITIONS[roomId] ?? { x: 0, z: 0 };
-        this.playerBox.position.x = pos.x;
-        this.playerBox.position.z = pos.z;
+        const p = pos ?? GameScene.BOOKMARK_POSITIONS[bookmarkId] ?? { x: 0, z: 0 };
+        this.playerBox.position.x = p.x;
+        this.playerBox.position.z = p.z;
         this.targetPosition = null;
 
         this.aoiManager.updateAOI();
-        this.nakama.sendInitPos(pos.x, pos.z, this.playerBox.rotation.y, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
-        for (const cb of this.onRoomChange) cb(roomId);
+        this.nakama.sendInitPos(p.x, p.z, this.playerBox.rotation.y, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+        for (const cb of this.onMoveBookmark) cb(bookmarkId);
     }
 
     /** スタックから POP して前の部屋/座標に戻る */
-    goBack(): boolean {
-        const prev = this.roomStack.pop();
+    undoMoveBookmark(): boolean {
+        const prev = this.bookmarkStack.pop();
         if (!prev) return false;
 
-        this.currentRoomId = prev.roomId;
+        this.currentBookmarkId = prev.bookmarkId;
         this.playerBox.position.x = prev.x;
         this.playerBox.position.z = prev.z;
         this.playerBox.rotation.y = prev.ry;
@@ -1053,12 +1051,12 @@ export class GameScene {
 
         this.aoiManager.updateAOI();
         this.nakama.sendInitPos(prev.x, prev.z, prev.ry, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
-        for (const cb of this.onRoomChange) cb(prev.roomId);
+        for (const cb of this.onMoveBookmark) cb(prev.bookmarkId);
         return true;
     }
 
     /** スタックが空でないか（「もとに戻る」ボタン表示用） */
-    get canGoBack(): boolean {
-        return this.roomStack.length > 0;
+    get canUndoMoveBookmark(): boolean {
+        return this.bookmarkStack.length > 0;
     }
 }
