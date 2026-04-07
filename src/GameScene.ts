@@ -837,27 +837,23 @@ export class GameScene {
                 const cd = document.getElementById("coord-display");
                 if (cd) {
                     const p = this.playerBox.position;
-                    const arrows = ["↓S","↙SW","←W","↖NW","↑N","↗NE","→E","↘SE"];
-                    let ry = this.playerBox.rotation.y % (Math.PI * 2);
-                    if (ry < 0) ry += Math.PI * 2;
-                    const idx = Math.round(ry / (Math.PI / 4)) % 8;
                     const coordHalf = this.currentWorldSize / 2;
                     const x3 = String(Math.round(p.x) + coordHalf).padStart(4, "\u2007");
                     const z3 = String(Math.round(p.z) + coordHalf).padStart(4, "\u2007");
                     // DOM要素は初回のみ構築、以降はテキスト更新のみ（ホバー点滅防止）
+                    let worldEl = document.getElementById("cd-world");
                     let posEl = document.getElementById("cd-pos");
-                    let dirEl = document.getElementById("cd-dir");
-                    if (!posEl || !dirEl) {
+                    if (!worldEl || !posEl) {
                         const ws = this.currentWorldSize;
                         const ch = ws / 2;
-                        cd.innerHTML = `<span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (${ch}, ${ch})\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(${ws - 1}, ${ws - 1})\nワールドの大きさ: ${ws} × ${ws}" style="font-size:14px;font-weight:bold"></span> <span id="cd-dir" title="方向\nプレイヤーの向いている方向を示します。\nN=北, S=南, E=東, W=西" style="font-size:14px;font-weight:bold"></span>`;
+                        cd.innerHTML = `<span id="cd-world" title="現在の部屋（ワールドID）" style="font-size:14px;font-weight:bold"></span> <span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (${ch}, ${ch})\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(${ws - 1}, ${ws - 1})\nワールドの大きさ: ${ws} × ${ws}" style="font-size:14px;font-weight:bold"></span>`;
+                        worldEl = document.getElementById("cd-world");
                         posEl = document.getElementById("cd-pos");
-                        dirEl = document.getElementById("cd-dir");
                     }
+                    const worldText = `w${this.currentWorldId}`;
                     const posText = `(${x3}, ${z3})`;
-                    const dirText = arrows[idx];
+                    if (worldEl && worldEl.textContent !== worldText) worldEl.textContent = worldText;
                     if (posEl && posEl.textContent !== posText) posEl.textContent = posText;
-                    if (dirEl && dirEl.textContent !== dirText) dirEl.textContent = dirText;
                 }
                 // フッター位置を送信ボタンの右端に合わせる（座標非表示でも実行）
                 const fv = document.getElementById("app-footer-version");
