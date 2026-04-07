@@ -1398,11 +1398,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				// マッチのワールドに基づいてチャンク計算
 				ipw := getWorld(ms.WorldID); if ipw == nil { continue }
 				half := float64(ipw.worldSize()) / 2
-				// 座標範囲チェック
-				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
-					logf("WARN invalid initPos coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
-					continue
-				}
+				// 座標範囲クランプ
+				if pos.X < -half { pos.X = -half }
+				if pos.X > half-1 { pos.X = half-1 }
+				if pos.Z < -half { pos.Z = -half }
+				if pos.Z > half-1 { pos.Z = half-1 }
 				cx := int((pos.X + half) / chunkSize)
 				cz := int((pos.Z + half) / chunkSize)
 				if cx < 0 { cx = 0 }
@@ -1490,11 +1490,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				logf("rcv moveTarget uid=%s%s sid=%s x=%.1f z=%.1f\n", moveUID, dn(moveUID), shortSID(sid), pos.X, pos.Z)
 				mpw := getWorld(ms.WorldID); if mpw == nil { continue }
 				half := float64(mpw.worldSize()) / 2
-				// 座標範囲チェック
-				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
-					logf("WARN invalid moveTarget coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
-					continue
-				}
+				// 座標範囲クランプ
+				if pos.X < -half { pos.X = -half }
+				if pos.X > half-1 { pos.X = half-1 }
+				if pos.Z < -half { pos.Z = -half }
+				if pos.Z > half-1 { pos.Z = half-1 }
 				oldCX, oldCZ := -1, -1
 				if p, ok := ms.Positions[sid]; ok {
 					oldCX, oldCZ = p.CX, p.CZ

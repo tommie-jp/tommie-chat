@@ -649,8 +649,9 @@ export class GameScene {
                 const pick = pointerInfo.pickInfo;
                 if (pick && pick.hit && pick.pickedMesh && pick.pickedMesh.name === "ground" && pick.pickedPoint) {
                     // 通常クリック → 移動
-                    const snappedX = Math.floor(pick.pickedPoint.x) + 0.5;
-                    const snappedZ = Math.floor(pick.pickedPoint.z) + 0.5;
+                    const hw = this.currentWorldSize / 2;
+                    const snappedX = Math.max(-hw + 0.5, Math.min(hw - 0.5, Math.floor(pick.pickedPoint.x) + 0.5));
+                    const snappedZ = Math.max(-hw + 0.5, Math.min(hw - 0.5, Math.floor(pick.pickedPoint.z) + 0.5));
                     this.targetPosition = new Vector3(snappedX, 0, snappedZ);
                     this.clickMarker.position.x = snappedX;
                     this.clickMarker.position.z = snappedZ;
@@ -746,6 +747,16 @@ export class GameScene {
                 }
                 this.aoiManager.updateAOI();
             }
+
+            // ワールド境界内にクランプ（セル中央 -half+0.5 〜 half-0.5）
+            const halfWorld = this.currentWorldSize / 2;
+            const p = this.playerBox.position;
+            const wMin = -halfWorld + 0.5;
+            const wMax = halfWorld - 0.5;
+            if (p.x < wMin) p.x = wMin;
+            else if (p.x > wMax) p.x = wMax;
+            if (p.z < wMin) p.z = wMin;
+            else if (p.z > wMax) p.z = wMax;
 
             const _t1 = performance.now();
             // リモートアバターを目標位置へ移動（視錐台カリング付き）
