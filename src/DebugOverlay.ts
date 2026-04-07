@@ -568,6 +568,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-chatsettings",  "chat-settings-panel",   "menu.chatsettings",  "showChatSettings");
         makeToggle("menu-ping",           "ping-panel",            "menu.ping",          "showPing");
         makeToggle("menu-bookmarks",      "bookmark-panel",        "menu.bookmarks",     "showBookmarks");
+        makeToggle("menu-rooms",           "room-list-panel",       "menu.rooms",         "showRooms");
         makeToggle("menu-ccu",            "ccu-panel",             "menu.ccu",           "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "menu.debug",         "showDebug");
         makeToggle("menu-about",          "about-panel",           "menu.about",         "showAbout");

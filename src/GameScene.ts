@@ -126,6 +126,8 @@ export class GameScene {
     private bookmarkStack: { bookmarkId: string | null; worldId: number; x: number; z: number; ry: number }[] = [];
     /** ブックマーク移動イベント（UIPanel等が購読） */
     onMoveBookmark: ((bookmarkId: string | null) => void)[] = [];
+    /** ワールド切替完了イベント（UIPanel等が購読） */
+    onWorldChanged: (() => void)[] = [];
     /** チャンク同期完了イベント（ミニマップ等が購読） */
     onChunkSync: (() => void)[] = [];
 
@@ -1096,6 +1098,7 @@ export class GameScene {
                 this.rebuildGround();
                 this.aoiManager.updateAOI();
                 this.nakama.sendInitPos(p.x, p.z, this.playerBox.rotation.y, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+                for (const cb of this.onWorldChanged) cb();
             });
         } else {
             this.aoiManager.updateAOI();
@@ -1127,6 +1130,7 @@ export class GameScene {
                 this.rebuildGround();
                 this.aoiManager.updateAOI();
                 this.nakama.sendInitPos(prev.x, prev.z, prev.ry, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+                for (const cb of this.onWorldChanged) cb();
             });
         } else {
             this.aoiManager.updateAOI();

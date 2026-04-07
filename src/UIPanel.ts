@@ -175,7 +175,7 @@ export function setupHtmlUI(game: GameScene): void {
             // スマホ: パネルヘッダーのドラッグでもデバイダーを移動（ポートレートのみ）
             if (isMobileDev) {
                 const headerIds = ["user-list-header", "chat-history-header", "chat-settings-header",
-                                   "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "debug-title-bar", "about-panel-header", "displayname-header"];
+                                   "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "room-list-header", "debug-title-bar", "about-panel-header", "displayname-header"];
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -903,7 +903,14 @@ export function setupHtmlUI(game: GameScene): void {
     if (thRel)   thRel.addEventListener("click",   () => setUlSort("loginTimestamp"));
     { const thCh = document.getElementById("ul-th-ch"); if (thCh) thCh.addEventListener("click", () => setUlSort("channel")); }
 
-    setInterval(scheduleRenderUserList, 10000);
+    // 約10秒おきにプレイヤーリストを更新（tick方式）
+    let ulTickCounter = 0;
+    game.scene.onAfterRenderObservable.add(() => {
+        if (++ulTickCounter >= 600) { // ≈10秒（60FPS想定）
+            ulTickCounter = 0;
+            scheduleRenderUserList();
+        }
+    });
 
     // カラムリサイズハンドル
     {
@@ -1341,6 +1348,7 @@ export function setupHtmlUI(game: GameScene): void {
         { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
         { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = "none"; }
         { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = "none"; }
+        { const mr2 = document.getElementById("menu-rooms"); if (mr2) mr2.style.display = "none"; }
         { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = ""; }
         setLoginRowVisible(true);
     };
@@ -1518,6 +1526,7 @@ export function setupHtmlUI(game: GameScene): void {
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
             { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = ""; }
+            { const mr2 = document.getElementById("menu-rooms"); if (mr2) mr2.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
             { const di = document.getElementById("displayNameInput") as HTMLInputElement | null; if (di) { di.disabled = false; di.placeholder = t("displayname.placeholder.enabled"); } }
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
@@ -2671,7 +2680,8 @@ export function setupHtmlUI(game: GameScene): void {
                 catch (e) { console.warn("saveBookmarks failed:", e); }
             };
 
-            const renderBookmarkList = () => {
+            // ── ブックマーク上部（ブックマーク + 現在地保存）を描画 ──
+            const renderBookmarkSection = () => {
                 bookmarkListEl.innerHTML = "";
 
                 // 「もとに戻る」ボタン（スタックがあれば表示）
@@ -2681,7 +2691,7 @@ export function setupHtmlUI(game: GameScene): void {
                     backBtn.textContent = "← もとに戻る";
                     backBtn.addEventListener("click", () => {
                         game.undoMoveBookmark();
-                        renderBookmarkList();
+                        renderBookmarkSection();
                     });
                     bookmarkListEl.appendChild(backBtn);
                 }
@@ -2695,7 +2705,7 @@ export function setupHtmlUI(game: GameScene): void {
                     btn.addEventListener("click", () => {
                         if (isCurrent) return;
                         game.moveBookmark(r.id, undefined, r.worldId);
-                        renderBookmarkList();
+                        renderBookmarkSection();
                     });
                     bookmarkListEl.appendChild(btn);
                 }
@@ -2719,7 +2729,7 @@ export function setupHtmlUI(game: GameScene): void {
                     btn.addEventListener("click", () => {
                         game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z }, bm.worldId);
                         game.playerBox.rotation.y = bm.ry;
-                        renderBookmarkList();
+                        renderBookmarkSection();
                     });
 
                     const delBtn = document.createElement("button");
@@ -2728,7 +2738,7 @@ export function setupHtmlUI(game: GameScene): void {
                     delBtn.addEventListener("click", () => {
                         userBookmarks.splice(i, 1);
                         persistBookmarks();
-                        renderBookmarkList();
+                        renderBookmarkSection();
                     });
 
                     row.appendChild(btn);
@@ -2748,72 +2758,13 @@ export function setupHtmlUI(game: GameScene): void {
                     if (!name) return;
                     userBookmarks.push({ name, x: p.x, z: p.z, ry: game.playerBox.rotation.y, worldId: game.currentWorldId });
                     persistBookmarks();
-                    renderBookmarkList();
+                    renderBookmarkSection();
                 });
                 bookmarkListEl.appendChild(addBtn);
-
-                // ── 部屋一覧セクション ──
-                const divider = document.createElement("hr");
-                divider.style.cssText = "margin:8px 0;opacity:0.3;";
-                bookmarkListEl.appendChild(divider);
-
-                const roomTitle = document.createElement("div");
-                roomTitle.style.cssText = "font-weight:bold;font-size:11px;opacity:0.6;margin-bottom:4px;";
-                roomTitle.textContent = "部屋一覧";
-                bookmarkListEl.appendChild(roomTitle);
-
-                game.nakama.getWorldList().then(worldList => {
-                    for (const w of worldList) {
-                        const row = document.createElement("div");
-                        row.style.cssText = "display:flex;gap:3px;align-items:stretch;";
-
-                        const btn = document.createElement("button");
-                        btn.style.cssText = "flex:1;";
-                        const isCurrent = game.currentWorldId === w.id;
-                        if (isCurrent) btn.style.fontWeight = "bold";
-                        const sizeLabel = `${w.chunkCountX * 16}x${w.chunkCountZ * 16}`;
-                        btn.textContent = `${w.name || `World ${w.id}`} (${sizeLabel}) ${w.playerCount}人${isCurrent ? " ★" : ""}`;
-                        btn.addEventListener("click", () => {
-                            if (isCurrent) return;
-                            game.moveBookmark(`world_${w.id}`, { x: 0, z: 0 }, w.id);
-                            renderBookmarkList();
-                        });
-                        row.appendChild(btn);
-
-                        // 削除ボタン（デフォルトワールド以外、オーナーのみ）
-                        if (w.id !== 0) {
-                            const delBtn = document.createElement("button");
-                            delBtn.style.cssText = "padding:2px 6px;font-size:11px;opacity:0.5;";
-                            delBtn.textContent = "✕";
-                            delBtn.addEventListener("click", async () => {
-                                if (!confirm(`「${w.name || `World ${w.id}`}」を削除しますか？`)) return;
-                                try {
-                                    await game.nakama.deleteRoom(w.id);
-                                    renderBookmarkList();
-                                } catch (e) { console.warn("deleteRoom:", e); }
-                            });
-                            row.appendChild(delBtn);
-                        }
-                        bookmarkListEl.appendChild(row);
-                    }
-
-                    // 部屋作成ボタン
-                    const createBtn = document.createElement("button");
-                    createBtn.style.cssText = "margin-top:2px;font-weight:bold;";
-                    createBtn.textContent = "＋ 部屋を作成";
-                    createBtn.addEventListener("click", async () => {
-                        const name = prompt("部屋名を入力（30文字以内）:");
-                        if (!name || !name.trim()) return;
-                        const sizeStr = prompt("サイズ（チャンク数、2〜64）:", "8");
-                        const size = Math.max(2, Math.min(64, parseInt(sizeStr || "8") || 8));
-                        try {
-                            await game.nakama.createRoom(name.trim(), size, size);
-                            renderBookmarkList();
-                        } catch (e) { console.warn("createRoom:", e); }
-                    });
-                    bookmarkListEl.appendChild(createBtn);
-                }).catch(e => console.warn("getWorldList:", e));
             };
+
+            // renderBookmarkList は互換性のため残す（ブックマーク全体を再描画）
+            const renderBookmarkList = () => { renderBookmarkSection(); };
 
             // パネル表示時にブックマーク読み込み → リスト描画
             let lastDisplay = bookmarkPanel.style.display;
@@ -2871,6 +2822,195 @@ export function setupHtmlUI(game: GameScene): void {
                     sCk("bookmark-panel_w", String(Math.round(r.width)));
                     sCk("bookmark-panel_h", String(Math.round(r.height)));
                 }).observe(bookmarkPanel);
+            }
+        }
+    }
+
+    // ─── 部屋一覧パネル ───
+    {
+        const roomPanel = document.getElementById("room-list-panel") as HTMLElement | null;
+        const roomTbody = document.getElementById("room-list-tbody") as HTMLElement | null;
+        const roomClose = document.getElementById("room-list-close") as HTMLElement | null;
+        const roomCreateBtn = document.getElementById("room-create-btn") as HTMLElement | null;
+
+        if (roomPanel && roomTbody) {
+            // ソート状態
+            type RoomSortKey = "name" | "size" | "count";
+            let roomSortKey: RoomSortKey = "name";
+            let roomSortAsc = true;
+            const setRoomSort = (key: RoomSortKey) => {
+                if (roomSortKey === key) roomSortAsc = !roomSortAsc;
+                else { roomSortKey = key; roomSortAsc = true; }
+                lastWorldListJson = "";
+                renderRoomList();
+            };
+
+            // ソートヘッダ
+            const thName = document.getElementById("room-th-name");
+            const thSize = document.getElementById("room-th-size");
+            const thCount = document.getElementById("room-th-count");
+            if (thName) thName.addEventListener("click", () => setRoomSort("name"));
+            if (thSize) thSize.addEventListener("click", () => setRoomSort("size"));
+            if (thCount) thCount.addEventListener("click", () => setRoomSort("count"));
+
+            // 部屋作成
+            if (roomCreateBtn) {
+                roomCreateBtn.addEventListener("click", async () => {
+                    const name = prompt("部屋名を入力（30文字以内）:");
+                    if (!name || !name.trim()) return;
+                    const sizeStr = prompt("サイズ（チャンク数、2〜64）:", "8");
+                    const size = Math.max(2, Math.min(64, parseInt(sizeStr || "8") || 8));
+                    try {
+                        await game.nakama.createRoom(name.trim(), size, size);
+                        lastWorldListJson = "";
+                        renderRoomList();
+                    } catch (e) { console.warn("createRoom:", e); }
+                });
+            }
+
+            // 差分更新
+            let lastWorldListJson = "";
+            const renderRoomList = () => {
+                game.nakama.getWorldList().then(worldList => {
+                    const json = JSON.stringify(worldList.map(w => `${w.id}:${w.name}:${w.playerCount}:${game.currentWorldId}`));
+                    if (json === lastWorldListJson) return;
+                    lastWorldListJson = json;
+
+                    worldList.sort((a, b) => {
+                        let cmp: number;
+                        if (roomSortKey === "count") cmp = a.playerCount - b.playerCount;
+                        else if (roomSortKey === "size") cmp = (a.chunkCountX * a.chunkCountZ) - (b.chunkCountX * b.chunkCountZ);
+                        else cmp = (a.name || "").localeCompare(b.name || "", "ja");
+                        return roomSortAsc ? cmp : -cmp;
+                    });
+
+                    const arrow = roomSortAsc ? "▲" : "▼";
+                    if (thName) thName.dataset.sort = roomSortKey === "name" ? arrow : "";
+                    if (thSize) thSize.dataset.sort = roomSortKey === "size" ? arrow : "";
+                    if (thCount) thCount.dataset.sort = roomSortKey === "count" ? arrow : "";
+
+                    const frag = document.createDocumentFragment();
+                    for (const w of worldList) {
+                        const tr = document.createElement("tr");
+                        const isCurrent = game.currentWorldId === w.id;
+
+                        const tdName = document.createElement("td");
+                        tdName.style.cssText = "padding:3px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;";
+                        if (isCurrent) tdName.style.fontWeight = "bold";
+                        tdName.textContent = (w.name || `World ${w.id}`) + (isCurrent ? " ★" : "");
+                        tr.appendChild(tdName);
+
+                        const tdSize = document.createElement("td");
+                        tdSize.style.cssText = "padding:3px 4px;text-align:center;white-space:nowrap;opacity:0.7;font-size:11px;";
+                        tdSize.textContent = `${w.chunkCountX * 16}x${w.chunkCountZ * 16}`;
+                        tr.appendChild(tdSize);
+
+                        const tdCount = document.createElement("td");
+                        tdCount.style.cssText = "padding:3px 4px;text-align:center;white-space:nowrap;";
+                        tdCount.textContent = `${w.playerCount}`;
+                        tr.appendChild(tdCount);
+
+                        const tdDel = document.createElement("td");
+                        tdDel.style.cssText = "padding:2px;text-align:center;width:24px;";
+                        if (w.id !== 0) {
+                            const delBtn = document.createElement("button");
+                            delBtn.style.cssText = "padding:0 4px;font-size:10px;opacity:0.4;line-height:1;";
+                            delBtn.textContent = "✕";
+                            delBtn.addEventListener("click", async (e) => {
+                                e.stopPropagation();
+                                if (!confirm(`「${w.name || `World ${w.id}`}」を削除しますか？`)) return;
+                                try {
+                                    await game.nakama.deleteRoom(w.id);
+                                    lastWorldListJson = "";
+                                    renderRoomList();
+                                } catch (e) { console.warn("deleteRoom:", e); }
+                            });
+                            tdDel.appendChild(delBtn);
+                        }
+                        tr.appendChild(tdDel);
+
+                        tr.addEventListener("click", () => {
+                            if (isCurrent) return;
+                            game.moveBookmark(`world_${w.id}`, { x: 0, z: 0 }, w.id);
+                            lastWorldListJson = "";
+                            renderRoomList();
+                        });
+                        frag.appendChild(tr);
+                    }
+                    roomTbody.innerHTML = "";
+                    roomTbody.appendChild(frag);
+                }).catch(e => console.warn("getWorldList:", e));
+            };
+
+            // tick方式ポーリング（約1秒おき、パネル表示中のみ）
+            let roomTickCounter = 0;
+            game.scene.onAfterRenderObservable.add(() => {
+                if (roomPanel.style.display === "none") return;
+                if (++roomTickCounter >= 60) {
+                    roomTickCounter = 0;
+                    renderRoomList();
+                }
+            });
+
+            // パネル表示時に初回描画
+            let lastRoomDisplay = roomPanel.style.display;
+            new MutationObserver(() => {
+                const now = roomPanel.style.display;
+                if (now !== lastRoomDisplay) {
+                    lastRoomDisplay = now;
+                    if (now !== "none") {
+                        roomTickCounter = 0;
+                        lastWorldListJson = "";
+                        renderRoomList();
+                    }
+                }
+            }).observe(roomPanel, { attributes: true, attributeFilter: ["style"] });
+
+            // 閉じるボタン
+            if (roomClose) {
+                roomClose.addEventListener("click", () => {
+                    roomPanel.style.display = "none";
+                    const sCk = (k: string, v: string) =>
+                        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                    sCk("showRooms", "0");
+                    const mb = document.getElementById("menu-rooms");
+                    if (mb) mb.textContent = "　 部屋一覧";
+                });
+            }
+
+            // ドラッグ
+            const rHeader = document.getElementById("room-list-header");
+            if (rHeader && !isMobileDev) {
+                let isDrag = false, offX = 0, offY = 0;
+                rHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                    if ((e.target as HTMLElement).id === "room-list-close") return;
+                    isDrag = true;
+                    offX = e.clientX - roomPanel.getBoundingClientRect().left;
+                    offY = e.clientY - roomPanel.getBoundingClientRect().top;
+                    rHeader.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+                document.addEventListener("pointermove", (e: PointerEvent) => {
+                    if (!isDrag) return;
+                    roomPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    roomPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                });
+                document.addEventListener("pointerup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                    const r = roomPanel.getBoundingClientRect();
+                    const sCk = (k: string, v: string) =>
+                        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                    sCk("room-list-panel_l", String(Math.round(r.left)));
+                    sCk("room-list-panel_t", String(Math.round(r.top)));
+                });
+                new ResizeObserver(() => {
+                    const r = roomPanel.getBoundingClientRect();
+                    const sCk = (k: string, v: string) =>
+                        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                    sCk("room-list-panel_w", String(Math.round(r.width)));
+                    sCk("room-list-panel_h", String(Math.round(r.height)));
+                }).observe(roomPanel);
             }
         }
     }
