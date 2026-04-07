@@ -198,8 +198,7 @@ const (
 	opPlayersAOIResp   int64 = 12 // S→C     全プレイヤーAOI情報応答（要求者のみ）
 	opChat             int64 = 13 // C→S→C   チャットメッセージ（全員ブロードキャスト）
 	opSystemMsg        int64 = 14 // S→C     システムメッセージ（ログイン/ログアウト通知）
-	opChangeWorld      int64 = 15 // C→S     ワールド切替（worldId）
-	opChangeWorldResp  int64 = 16 // S→C     ワールド切替応答（chunkCount等）
+	// opcode 15 は予約（未使用）
 )
 
 // 地面セル: blockID (uint16) + RGBA 各1バイト
@@ -214,6 +213,9 @@ type chunk struct {
 	cells [chunkSize][chunkSize]blockData
 	hash  uint64 // FNV-1a 64bit ハッシュ（setBlock更新時に再計算）
 }
+
+// worldMovingUsers はワールド移動中のユーザー（userID → true）。MatchLoop と MatchLeave で共有。
+var worldMovingUsers sync.Map
 
 // dirtyChunks は更新されたチャンク座標のキュー（重複排除付き）
 var (
@@ -692,8 +694,8 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 // worldMatchID はプロセス内で一意のワールドマッチIDをキャッシュする
 var (
 	worldMatchMu       sync.Mutex
-	worldMatchID       string
-	worldMatchCachedAt time.Time
+	worldMatchIDs      = make(map[int]string)    // worldId -> matchId
+	worldMatchCachedAt = make(map[int]time.Time) // worldId -> cached time
 )
 
 // worldPlayersCache は getWorldMatch RPC 用のプレイヤー情報キャッシュ
@@ -712,56 +714,69 @@ var (
 
 const worldMatchCacheTTL = 10 * time.Second
 
-// buildWorldMatchResponse は matchId と現在のプレイヤーリストを含むレスポンスを構築する
-func buildWorldMatchResponse(matchId string) map[string]interface{} {
-	worldPlayersMu.RLock()
-	players := make([]*worldPlayerEntry, 0, len(worldPlayersCache))
-	for _, e := range worldPlayersCache {
-		players = append(players, e)
+// buildWorldMatchResponse は matchId とワールド情報を含むレスポンスを構築する
+func buildWorldMatchResponse(matchId string, w *World) map[string]interface{} {
+	return map[string]interface{}{
+		"matchId":     matchId,
+		"worldId":     w.ID,
+		"chunkCountX": w.ChunkCountX,
+		"chunkCountZ": w.ChunkCountZ,
 	}
-	worldPlayersMu.RUnlock()
-	return map[string]interface{}{"matchId": matchId, "players": players}
 }
 
-// rpcGetWorldMatch は稼働中の "world" マッチを探し、なければ新規作成して返す
+// rpcGetWorldMatch は指定ワールドの稼働中マッチを探し、なければ新規作成して返す
 func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
 	defer prof("rpcGetWorldMatch")()
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 	sid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
 	cacheDN(ctx, nk, uid)
-	logf("rcv getWorldMatch uid=%s%s sid=%s\n", uid, dn(uid), shortSID(sid))
+
+	var req struct {
+		WorldID int `json:"worldId"`
+	}
+	if payload != "" {
+		json.Unmarshal([]byte(payload), &req)
+	}
+	wid := req.WorldID
+	w := getWorld(wid)
+	if w == nil {
+		return "", runtime.NewError(fmt.Sprintf("unknown worldId=%d", wid), 3)
+	}
+	label := fmt.Sprintf("world_%d", wid)
+	logf("rcv getWorldMatch uid=%s%s sid=%s worldId=%d\n", uid, dn(uid), shortSID(sid), wid)
 
 	worldMatchMu.Lock()
 	defer worldMatchMu.Unlock()
 
-	// キャッシュを最優先で確認（MatchListはミリ秒以内に作成されたマッチを返さない場合がある）
-	if worldMatchID != "" && time.Since(worldMatchCachedAt) < worldMatchCacheTTL {
-		logger.Info("Returning cached world match: %s", worldMatchID)
-		b, _ := json.Marshal(buildWorldMatchResponse(worldMatchID))
+	// キャッシュを最優先で確認
+	if mid, ok := worldMatchIDs[wid]; ok && mid != "" && time.Since(worldMatchCachedAt[wid]) < worldMatchCacheTTL {
+		logger.Info("Returning cached world match: %s (worldId=%d)", mid, wid)
+		b, _ := json.Marshal(buildWorldMatchResponse(mid, w))
 		return string(b), nil
 	}
 
-	// キャッシュが古い or 空の場合はMatchListで確認
-	matches, err := nk.MatchList(ctx, 1, true, "world", nil, nil, "")
+	// MatchList で検索
+	matches, err := nk.MatchList(ctx, 1, true, label, nil, nil, "")
 	if err != nil {
 		logger.Warn("MatchList failed: %v", err)
 	} else if len(matches) > 0 {
-		worldMatchID = matches[0].GetMatchId()
-		worldMatchCachedAt = time.Now()
-		logger.Info("Found active world match: %s", worldMatchID)
-		b, _ := json.Marshal(buildWorldMatchResponse(worldMatchID))
+		mid := matches[0].GetMatchId()
+		worldMatchIDs[wid] = mid
+		worldMatchCachedAt[wid] = time.Now()
+		logger.Info("Found active world match: %s (worldId=%d)", mid, wid)
+		b, _ := json.Marshal(buildWorldMatchResponse(mid, w))
 		return string(b), nil
 	}
 
-	// マッチが見つからない場合は新規作成
-	worldMatchID, err = nk.MatchCreate(ctx, "world", map[string]interface{}{})
+	// 新規作成
+	mid, err := nk.MatchCreate(ctx, "world", map[string]interface{}{"worldId": float64(wid)})
 	if err != nil {
-		worldMatchID = ""
 		return "", err
 	}
-	worldMatchCachedAt = time.Now()
-	logger.Info("Created world match: %s", worldMatchID)
-	b, _ := json.Marshal(buildWorldMatchResponse(worldMatchID))
+	worldMatchIDs[wid] = mid
+	worldMatchCachedAt[wid] = time.Now()
+	logger.Info("Created world match: %s (worldId=%d)", mid, wid)
+	b, _ := json.Marshal(buildWorldMatchResponse(mid, w))
 	return string(b), nil
 }
 
@@ -777,7 +792,6 @@ func (a *playerAOI) containsChunk(cx, cz int) bool {
 
 // playerPos はプレイヤーの最新位置（チャンク座標）
 type playerPos struct {
-	WorldID     int     // 所属ワールドID
 	CX, CZ      int     // チャンク座標
 	X, Z        float64 // ワールド座標
 	RY          float64 // 回転
@@ -833,6 +847,7 @@ func initValidationConfig() {
 
 // matchState はマッチの状態（プレイヤーごとのAOI管理）
 type matchState struct {
+	WorldID          int                                  // このマッチのワールドID
 	AOIs             map[string]*playerAOI               // sessionID -> AOI
 	Presences        map[string]runtime.Presence          // sessionID -> Presence
 	Positions        map[string]*playerPos               // sessionID -> 位置
@@ -847,7 +862,12 @@ type worldMatch struct{}
 
 func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, params map[string]interface{}) (interface{}, int, string) {
 	defer prof("MatchInit")()
+	wid := 0
+	if v, ok := params["worldId"].(float64); ok { wid = int(v) }
+	label := fmt.Sprintf("world_%d", wid)
+	logger.Info("MatchInit worldId=%d label=%s", wid, label)
 	return &matchState{
+		WorldID:         wid,
 		AOIs:            make(map[string]*playerAOI),
 		Presences:       make(map[string]runtime.Presence),
 		Positions:       make(map[string]*playerPos),
@@ -855,7 +875,7 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		PendingInit:     make(map[string]*playerPos),
 		PrevSIDs:        make(map[string]string),
 		Rates:           make(map[string]*sessionRate),
-	}, 10, "world"
+	}, 10, label
 }
 
 // shortSID はセッションIDを先頭8文字に切り詰める（クライアント送信用）
@@ -890,10 +910,14 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 			CharRow:     cr,
 			NameColor:   metadata["nc"],
 		}
-		logger.Info("PendingInit stored for sid=%s x=%.1f z=%.1f prevSid=%s", shortSID(newSID), x, z, metadata["prevSid"])
+		logger.Info("PendingInit stored for sid=%s x=%.1f z=%.1f prevSid=%s worldMove=%s", shortSID(newSID), x, z, metadata["prevSid"], metadata["worldMove"])
 		// 前回セッションIDを保存（MatchJoin でゴーストキック用）
 		if prevSid := metadata["prevSid"]; prevSid != "" {
 			ms.PrevSIDs[newSID] = prevSid
+		}
+		// ワールド移動フラグ: 旧マッチの MatchLeave で参照
+		if metadata["worldMove"] == "1" {
+			worldMovingUsers.Store(presence.GetUserId(), true)
 		}
 	}
 
@@ -903,7 +927,7 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
 	defer prof("MatchJoin")()
 	ms := state.(*matchState)
-	w := defaultWorld
+	w := getWorld(ms.WorldID); if w == nil { return state }
 	half := float64(w.worldSize() / 2)
 	for _, p := range presences {
 		sid := p.GetSessionId()
@@ -990,10 +1014,15 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 
 		// システムメッセージ: ログイン通知を全員に送信
 		uname := p.GetUsername()
+		// 同一UUIDのセッション数をカウント
+		uidCount := 0
+		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
 		sysMsg, _ := json.Marshal(map[string]interface{}{
-			"type":     "join",
-			"username": uname,
-			"userId":   uid,
+			"type":      "join",
+			"username":  uname,
+			"userId":    uid,
+			"sessionId": sid,
+			"uidCount":  uidCount,
 		})
 		dispatcher.BroadcastMessage(opSystemMsg, sysMsg, nil, p, true)
 	}
@@ -1003,7 +1032,8 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
 	defer prof("MatchLeave")()
 	ms := state.(*matchState)
-	half := float64(defaultWorld.worldSize() / 2)
+	w := getWorld(ms.WorldID); if w == nil { return state }
+	half := float64(w.worldSize() / 2)
 	for _, p := range presences {
 		sid := p.GetSessionId()
 		// 退出プレイヤーの位置を取得し、そのチャンクをAOIに含む他プレイヤーへAOI_LEAVEを通知
@@ -1028,13 +1058,23 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 				}
 			}
 		}
-		// システムメッセージ: ログアウト通知を全員に送信
+		// システムメッセージ: ログアウト or ワールド移動通知を全員に送信
 		uname := p.GetUsername()
 		uid := p.GetUserId()
+		leaveType := "leave"
+		if _, moving := worldMovingUsers.LoadAndDelete(uid); moving {
+			leaveType = "world_move"
+		}
+		logf("MatchLeave uid=%s uname=%s leaveType=%s\n", uid, uname, leaveType)
+		// 同一UUIDのセッション数をカウント（自分を含む、削除前）
+		uidCount := 0
+		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
 		sysMsg, _ := json.Marshal(map[string]interface{}{
-			"type":     "leave",
-			"username": uname,
-			"userId":   uid,
+			"type":      leaveType,
+			"username":  uname,
+			"userId":    uid,
+			"sessionId": sid,
+			"uidCount":  uidCount,
 		})
 		// 残っている全プレゼンスに送信（退出者自身は除外済み）
 		var targets []runtime.Presence
@@ -1127,10 +1167,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if err := json.Unmarshal(msg.GetData(), &aoi); err != nil {
 				continue
 			}
-			// プレイヤーのワールドに基づいてクランプ
-			myPos := ms.Positions[sid]
-			pw := defaultWorld
-			if myPos != nil { pw = getWorld(myPos.WorldID); if pw == nil { pw = defaultWorld } }
+			// マッチのワールドに基づいてクランプ
+			pw := getWorld(ms.WorldID); if pw == nil { return state }
 			if aoi.MinCX < 0 { aoi.MinCX = 0 }
 			if aoi.MinCZ < 0 { aoi.MinCZ = 0 }
 			if aoi.MaxCX >= pw.ChunkCountX { aoi.MaxCX = pw.ChunkCountX - 1 }
@@ -1154,12 +1192,12 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if p, ok := ms.Presences[sid]; ok { aoiUID = p.GetUserId() }
 			logf("rcv AOI_UPDATE uid=%s%s sid=%s (%d,%d)-(%d,%d)\n", aoiUID, dn(aoiUID), shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ)
 			logf("rcv DBG AOI_UPDATE sid=%s newAOI=(%d,%d)-(%d,%d) checking %d other players\n", shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ, len(ms.Positions)-1)
-			half := float64(defaultWorld.worldSize()) / 2
+			half := float64(pw.worldSize()) / 2
 			// AOI_ENTER はバルク送信（N-1件→1件に削減）
 			var enterBulk []map[string]interface{}
 			toUID := senderPresence.GetUserId()
 			for otherSID, otherPos := range ms.Positions {
-				if otherSID == sid || otherPos.WorldID != myPos.WorldID {
+				if otherSID == sid {
 					continue
 				}
 				// CX<0はopInitPos未受信（センチネル）→ X/Z座標から正確なchunkを算出
@@ -1213,11 +1251,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				initUID := ""
 				if p, ok := ms.Presences[sid]; ok { initUID = p.GetUserId() }
 				logf("rcv initPos uid=%s%s sid=%s x=%.1f z=%.1f\n", initUID, dn(initUID), shortSID(sid), pos.X, pos.Z)
-				// プレイヤーのワールドに基づいてチャンク計算
-				curWorldID := 0
-				if p, ok := ms.Positions[sid]; ok { curWorldID = p.WorldID }
-				pw := getWorld(curWorldID); if pw == nil { pw = defaultWorld }
-				half := float64(pw.worldSize()) / 2
+				// マッチのワールドに基づいてチャンク計算
+				ipw := getWorld(ms.WorldID); if ipw == nil { continue }
+				half := float64(ipw.worldSize()) / 2
 				// 座標範囲チェック
 				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
 					logf("WARN invalid initPos coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
@@ -1227,8 +1263,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				cz := int((pos.Z + half) / chunkSize)
 				if cx < 0 { cx = 0 }
 				if cz < 0 { cz = 0 }
-				if cx >= pw.ChunkCountX { cx = pw.ChunkCountX - 1 }
-				if cz >= pw.ChunkCountZ { cz = pw.ChunkCountZ - 1 }
+				if cx >= ipw.ChunkCountX { cx = ipw.ChunkCountX - 1 }
+				if cz >= ipw.ChunkCountZ { cz = ipw.ChunkCountZ - 1 }
 				oldCX, oldCZ := -1, -1
 				if p, ok := ms.Positions[sid]; ok {
 					oldCX, oldCZ = p.CX, p.CZ
@@ -1249,7 +1285,6 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					var enterTargets []runtime.Presence
 					for otherSID, otherAOI := range ms.AOIs {
 						if otherSID == sid { continue }
-						if otherP, ok := ms.Positions[otherSID]; ok && otherP.WorldID != curWorldID { continue }
 						wasVisible := oldCX >= 0 && otherAOI.containsChunk(oldCX, oldCZ)
 						nowVisible := otherAOI.containsChunk(cx, cz)
 						logf("rcv DBG INIT_POS sid=%s other=%s AOI=(%d,%d)-(%d,%d) nowVisible=%v\n", shortSID(sid), shortSID(otherSID), otherAOI.MinCX, otherAOI.MinCZ, otherAOI.MaxCX, otherAOI.MaxCZ, nowVisible)
@@ -1309,10 +1344,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				moveUID := ""
 				if p, ok := ms.Presences[sid]; ok { moveUID = p.GetUserId() }
 				logf("rcv moveTarget uid=%s%s sid=%s x=%.1f z=%.1f\n", moveUID, dn(moveUID), shortSID(sid), pos.X, pos.Z)
-				curWorldID := 0
-				if p, ok := ms.Positions[sid]; ok { curWorldID = p.WorldID }
-				pw := getWorld(curWorldID); if pw == nil { pw = defaultWorld }
-				half := float64(pw.worldSize()) / 2
+				mpw := getWorld(ms.WorldID); if mpw == nil { continue }
+				half := float64(mpw.worldSize()) / 2
 				// 座標範囲チェック
 				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
 					logf("WARN invalid moveTarget coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
@@ -1326,8 +1359,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				cz := int((pos.Z + half) / chunkSize)
 				if cx < 0 { cx = 0 }
 				if cz < 0 { cz = 0 }
-				if cx >= pw.ChunkCountX { cx = pw.ChunkCountX - 1 }
-				if cz >= pw.ChunkCountZ { cz = pw.ChunkCountZ - 1 }
+				if cx >= mpw.ChunkCountX { cx = mpw.ChunkCountX - 1 }
+				if cz >= mpw.ChunkCountZ { cz = mpw.ChunkCountZ - 1 }
 				if p, ok := ms.Positions[sid]; ok {
 					p.CX = cx; p.CZ = cz; p.X = pos.X; p.Z = pos.Z
 				} else {
@@ -1416,9 +1449,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				continue
 			}
 			logf("rcv setBlock(match) sid=%s gx=%d gz=%d blockId=%d\n", shortSID(sid), req.GX, req.GZ, req.BlockID)
-			curWorldID := 0
-			if p, ok := ms.Positions[sid]; ok { curWorldID = p.WorldID }
-			bw := getWorld(curWorldID); if bw == nil { bw = defaultWorld }
+			bw := getWorld(ms.WorldID); if bw == nil { continue }
 			if req.GX < 0 || req.GX >= bw.worldSize() || req.GZ < 0 || req.GZ >= bw.worldSize() {
 				continue
 			}
@@ -1438,7 +1469,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			ch.cells[lx][lz] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
 			ch.calcHash()
 			ch.mu.Unlock()
-			markChunkDirty(curWorldID, cx, cz)
+			markChunkDirty(ms.WorldID, cx, cz)
 			// AOI内のプレイヤーにブロードキャスト
 			var targets []runtime.Presence
 			for aoiSid, aoi := range ms.AOIs {
@@ -1482,48 +1513,6 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			respData, _ := json.Marshal(map[string]interface{}{"players": entries})
 			if senderP, ok := ms.Presences[sid]; ok {
 				dispatcher.BroadcastMessage(opPlayersAOIResp, respData, []runtime.Presence{senderP}, nil, true)
-			}
-			continue
-		}
-
-		if op == opChangeWorld {
-			// ワールド切替: {"worldId":1}
-			var req struct {
-				WorldID int `json:"worldId"`
-			}
-			if err := json.Unmarshal(msg.GetData(), &req); err != nil {
-				continue
-			}
-			w := getWorld(req.WorldID)
-			if w == nil {
-				logf("WARN changeWorld: unknown worldId=%d sid=%s\n", req.WorldID, shortSID(sid))
-				continue
-			}
-			if p, ok := ms.Positions[sid]; ok {
-				// 旧ワールドのAOI内プレイヤーにLEAVE通知
-				for otherSID, otherAOI := range ms.AOIs {
-					if otherSID == sid { continue }
-					if otherP, ok2 := ms.Positions[otherSID]; ok2 && otherP.WorldID == p.WorldID {
-						if otherAOI.containsChunk(p.CX, p.CZ) {
-							if presence, ok3 := ms.Presences[otherSID]; ok3 {
-								leaveData, _ := json.Marshal(map[string]string{"sessionId": sid})
-								dispatcher.BroadcastMessage(opAOILeave, leaveData, []runtime.Presence{presence}, nil, true)
-							}
-						}
-					}
-				}
-				p.WorldID = req.WorldID
-				p.CX = -1; p.CZ = -1 // 次のopInitPosで再計算
-			}
-			logf("rcv changeWorld uid=%s sid=%s worldId=%d chunkCountX=%d chunkCountZ=%d\n", "", shortSID(sid), req.WorldID, w.ChunkCountX, w.ChunkCountZ)
-			// 応答: ワールド情報を返す
-			if senderP, ok := ms.Presences[sid]; ok {
-				respData, _ := json.Marshal(map[string]interface{}{
-					"worldId":     req.WorldID,
-					"chunkCountX": w.ChunkCountX,
-					"chunkCountZ": w.ChunkCountZ,
-				})
-				dispatcher.BroadcastMessage(opChangeWorldResp, respData, []runtime.Presence{senderP}, nil, true)
 			}
 			continue
 		}
@@ -1659,7 +1648,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 
 func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, graceSeconds int) interface{} {
 	defer prof("MatchTerminate")()
-	logger.Info("MatchTerminate called: graceSeconds=%d tick=%d", graceSeconds, tick)
+	ms := state.(*matchState)
+	logger.Info("MatchTerminate called: worldId=%d graceSeconds=%d tick=%d", ms.WorldID, graceSeconds, tick)
 	// シャットダウン時: ダーティチャンクを保存
 	flushDirtyChunks(ctx, nk, logger)
 	// 未フラッシュの1sデータを1mに追加してからDB保存
@@ -1667,7 +1657,8 @@ func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, 
 	saveCcuHistory1m(ctx, nk, logger)
 	// キャッシュをクリア（次の getWorldMatch で新マッチが作成される）
 	worldMatchMu.Lock()
-	worldMatchID = ""
+	delete(worldMatchIDs, ms.WorldID)
+	delete(worldMatchCachedAt, ms.WorldID)
 	worldMatchMu.Unlock()
 	return state
 }

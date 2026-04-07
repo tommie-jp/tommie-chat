@@ -1294,17 +1294,25 @@ export function setupHtmlUI(game: GameScene): void {
         refreshSelfSuffix();
     };
     // システムメッセージ: サーバーからのログイン/ログアウト通知
-    game.nakama.onSystemMessage = (type, username, userId) => {
+    game.nakama.onSystemMessage = (type, username, userId, sessionId, uidCount) => {
+        const existing = [...userMap.values()].find(e => e.uuid === userId);
+        const displayName = existing?.displayName ?? "";
+        const nameText = displayName || ("@" + username);
+        const hashSuffix = sessionId ? "#" + sessionId.slice(0, 4) : "";
+        const nameColor = existing?.nameColor;
+        const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
+        const fallbackColor = uidColorInput?.value ?? "#00bbfa";
+        const color = nameColor || (displayName ? "" : fallbackColor);
+        const colorStyle = color ? ` style="color:${color}"` : "";
+        const nameHtml = `<span class="chat-ol-name"${colorStyle}>${nameText}${hashSuffix}</span>`;
         if (type === "join") {
-            const existing = [...userMap.values()].find(e => e.uuid === userId);
-            const joinColor = existing?.nameColor;
-            const joinColorStyle = joinColor ? ` style="color:${joinColor}"` : "";
-            addChatHistory("[system]", t("system.user_joined").replace("{username}", `<span class="chat-ol-name"${joinColorStyle}>${username}</span>`), undefined, userId);
+            addChatHistory("[system]", t("system.user_joined").replace("{username}", nameHtml), undefined, userId);
         } else if (type === "leave") {
-            const existing = [...userMap.values()].find(e => e.uuid === userId);
-            const leaveColor = existing?.nameColor;
-            const leaveColorStyle = leaveColor ? ` style="color:${leaveColor}"` : "";
-            addChatHistory("[system]", t("system.user_left").replace("{username}", `<span class="chat-ol-name"${leaveColorStyle}>${username}</span>`), undefined, userId);
+            // ワールド切替中の自分自身の leave は抑制
+            if (game.nakama.changingWorld) return;
+            addChatHistory("[system]", t("system.user_left").replace("{username}", nameHtml), undefined, userId);
+        } else if (type === "world_move") {
+            addChatHistory("[system]", t("system.user_world_move").replace("{username}", nameHtml), undefined, userId);
         }
     };
 

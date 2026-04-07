@@ -148,15 +148,6 @@ export class GameScene {
         // NPCSystem, AOIManager はcreateObjects内で初期化済み
         setupHtmlUI(this);
 
-        // ワールド切替応答でチャンク数を動的更新
-        this.nakama.onChangeWorldResp = (worldId, chunkCountX, _chunkCountZ) => {
-            GameScene.WORLD_CHUNK_COUNTS[worldId] = chunkCountX;
-            this.aoiManager.chunkCount = chunkCountX;
-            this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
-            this.rebuildGround();
-            this.aoiManager.updateAOI();
-        };
-
         this.handleResize();
 
         this.engine.runRenderLoop(() => {
@@ -1089,26 +1080,27 @@ export class GameScene {
 
         // ワールド切替
         const newWorldId = worldId ?? this.currentWorldId;
-        if (newWorldId !== this.currentWorldId) {
-            this.currentWorldId = newWorldId;
-            this.clearAllBlocks();
-            // キャッシュがあれば即反映、なければサーバー応答(onChangeWorldResp)で更新
-            const cached = GameScene.WORLD_CHUNK_COUNTS[newWorldId];
-            if (cached) {
-                this.aoiManager.chunkCount = cached;
-                this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
-                this.rebuildGround();
-            }
-            this.nakama.sendChangeWorld(newWorldId);
-        }
-
         const p = pos ?? GameScene.BOOKMARK_POSITIONS[bookmarkId] ?? { x: 0, z: 0 };
         this.playerBox.position.x = p.x;
         this.playerBox.position.z = p.z;
         this.targetPosition = null;
 
-        this.aoiManager.updateAOI();
-        this.nakama.sendInitPos(p.x, p.z, this.playerBox.rotation.y, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+        if (newWorldId !== this.currentWorldId) {
+            this.currentWorldId = newWorldId;
+            this.clearAllBlocks();
+            // マッチ leave → join（非同期）
+            this.nakama.changeWorldMatch(newWorldId).then((info) => {
+                GameScene.WORLD_CHUNK_COUNTS[newWorldId] = info.chunkCountX;
+                this.aoiManager.chunkCount = info.chunkCountX;
+                this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+                this.rebuildGround();
+                this.aoiManager.updateAOI();
+                this.nakama.sendInitPos(p.x, p.z, this.playerBox.rotation.y, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+            });
+        } else {
+            this.aoiManager.updateAOI();
+            this.nakama.sendInitPos(p.x, p.z, this.playerBox.rotation.y, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+        }
         for (const cb of this.onMoveBookmark) cb(bookmarkId);
     }
 
@@ -1119,26 +1111,27 @@ export class GameScene {
 
         this.currentBookmarkId = prev.bookmarkId;
 
-        // ワールド切替
-        if (prev.worldId !== this.currentWorldId) {
-            this.currentWorldId = prev.worldId;
-            this.clearAllBlocks();
-            const cached = GameScene.WORLD_CHUNK_COUNTS[prev.worldId];
-            if (cached) {
-                this.aoiManager.chunkCount = cached;
-                this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
-                this.rebuildGround();
-            }
-            this.nakama.sendChangeWorld(prev.worldId);
-        }
-
         this.playerBox.position.x = prev.x;
         this.playerBox.position.z = prev.z;
         this.playerBox.rotation.y = prev.ry;
         this.targetPosition = null;
 
-        this.aoiManager.updateAOI();
-        this.nakama.sendInitPos(prev.x, prev.z, prev.ry, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+        // ワールド切替
+        if (prev.worldId !== this.currentWorldId) {
+            this.currentWorldId = prev.worldId;
+            this.clearAllBlocks();
+            this.nakama.changeWorldMatch(prev.worldId).then((info) => {
+                GameScene.WORLD_CHUNK_COUNTS[prev.worldId] = info.chunkCountX;
+                this.aoiManager.chunkCount = info.chunkCountX;
+                this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+                this.rebuildGround();
+                this.aoiManager.updateAOI();
+                this.nakama.sendInitPos(prev.x, prev.z, prev.ry, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+            });
+        } else {
+            this.aoiManager.updateAOI();
+            this.nakama.sendInitPos(prev.x, prev.z, prev.ry, this.playerTextureUrl, this.playerCharCol, this.playerCharRow);
+        }
         for (const cb of this.onMoveBookmark) cb(prev.bookmarkId);
         return true;
     }
