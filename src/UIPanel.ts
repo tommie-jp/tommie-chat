@@ -175,7 +175,7 @@ export function setupHtmlUI(game: GameScene): void {
             // スマホ: パネルヘッダーのドラッグでもデバイダーを移動（ポートレートのみ）
             if (isMobileDev) {
                 const headerIds = ["user-list-header", "chat-history-header", "chat-settings-header",
-                                   "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "room-list-header", "debug-title-bar", "about-panel-header", "displayname-header"];
+                                   "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "room-list-header", "debug-title-bar", "about-panel-header"];
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -2895,23 +2895,23 @@ export function setupHtmlUI(game: GameScene): void {
                         const isCurrent = game.currentWorldId === w.id;
 
                         const tdName = document.createElement("td");
-                        tdName.style.cssText = "padding:3px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;";
+                        tdName.style.cssText = "max-width:140px;";
                         if (isCurrent) tdName.style.fontWeight = "bold";
                         tdName.textContent = (w.name || `World ${w.id}`) + (isCurrent ? " ★" : "");
                         tr.appendChild(tdName);
 
                         const tdSize = document.createElement("td");
-                        tdSize.style.cssText = "padding:3px 4px;text-align:center;white-space:nowrap;opacity:0.7;font-size:11px;";
+                        tdSize.style.cssText = "text-align:center;opacity:0.7;";
                         tdSize.textContent = `${w.chunkCountX * 16}x${w.chunkCountZ * 16}`;
                         tr.appendChild(tdSize);
 
                         const tdCount = document.createElement("td");
-                        tdCount.style.cssText = "padding:3px 4px;text-align:center;white-space:nowrap;";
+                        tdCount.style.cssText = "text-align:center;";
                         tdCount.textContent = `${w.playerCount}`;
                         tr.appendChild(tdCount);
 
                         const tdDel = document.createElement("td");
-                        tdDel.style.cssText = "padding:2px;text-align:center;width:24px;";
+                        tdDel.style.cssText = "text-align:center;width:24px;";
                         if (w.id !== 0) {
                             const delBtn = document.createElement("button");
                             delBtn.style.cssText = "padding:0 4px;font-size:10px;opacity:0.4;line-height:1;";

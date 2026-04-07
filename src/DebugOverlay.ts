@@ -430,7 +430,24 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (anyVisible) {
                     savedPtDivider = gCk("ptDivider") || savedPtDivider;
                     if (ptDiv) ptDiv.style.display = "none";
-                    document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
+                    // 表示名パネルだけ表示中はデバイダーをパネル上端に合わせる
+                    const onlyDisplayName = toggleRegistry.every(reg => {
+                        const el = document.getElementById(reg.targetId);
+                        const vis = el && el.style.display !== "none";
+                        return reg.targetId === "displayname-panel" ? vis : !vis;
+                    });
+                    if (onlyDisplayName) {
+                        const dnPanel = document.getElementById("displayname-panel");
+                        if (dnPanel) {
+                            requestAnimationFrame(() => {
+                                const rect = dnPanel.getBoundingClientRect();
+                                document.documentElement.style.setProperty("--pt-divider", rect.top + "px");
+                                game.engine.resize();
+                            });
+                        }
+                    } else {
+                        document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
+                    }
                     document.body.classList.add("sp-panel-visible");
                     if (cvs) cvs.style.height = "";
                 } else {
