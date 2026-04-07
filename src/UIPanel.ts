@@ -2630,137 +2630,167 @@ export function setupHtmlUI(game: GameScene): void {
 
     // ─── ブックマーク（テレポート先の選択） ───
     {
-        const menuBookmarks = document.getElementById("menu-bookmarks");
-        // 固定ブックマーク（クライアント側定義）
-        const builtinBookmarks = [
-            { id: "world_center", name: "ワールド（中心）" },
-            { id: "room_park",    name: "公園" },
-            { id: "room_beach",   name: "ビーチ" },
-            { id: "room_night",   name: "夜の街" },
-        ];
-        // ユーザー定義ブックマーク（サーバーから読み込み）
-        let userBookmarks: { name: string; x: number; z: number; ry: number }[] = [];
-        let bookmarksLoaded = false;
+        const bookmarkPanel = document.getElementById("bookmark-panel") as HTMLElement | null;
+        const bookmarkListEl = document.getElementById("bookmark-list") as HTMLElement | null;
+        const bookmarkClose = document.getElementById("bookmark-close") as HTMLElement | null;
 
-        const loadBookmarks = async () => {
-            if (bookmarksLoaded) return;
-            try {
-                userBookmarks = await game.nakama.getBookmarks();
-                bookmarksLoaded = true;
-            } catch (e) { console.warn("getBookmarks failed:", e); }
-        };
-        const saveBookmarks = async () => {
-            try { await game.nakama.saveBookmarks(userBookmarks); }
-            catch (e) { console.warn("saveBookmarks failed:", e); }
-        };
+        if (bookmarkPanel && bookmarkListEl) {
+            // 固定ブックマーク（クライアント側定義）
+            const builtinBookmarks = [
+                { id: "world_center", name: "ワールド（中心）" },
+                { id: "room_park",    name: "公園" },
+                { id: "room_beach",   name: "ビーチ" },
+                { id: "room_night",   name: "夜の街" },
+            ];
+            // ユーザー定義ブックマーク（サーバーから読み込み）
+            let userBookmarks: { name: string; x: number; z: number; ry: number }[] = [];
+            let bookmarksLoaded = false;
 
-        const bookmarkPanel = document.createElement("div");
-        bookmarkPanel.id = "bookmark-panel";
-        bookmarkPanel.style.cssText = "display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;color:#fff;border-radius:8px;padding:16px;min-width:240px;max-height:80vh;overflow-y:auto;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:14px;";
-        bookmarkPanel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b>ブックマーク</b><button id="bookmark-panel-close" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;">✕</button></div><div id="bookmark-list" style="display:flex;flex-direction:column;gap:6px;"></div>`;
-        document.body.appendChild(bookmarkPanel);
+            const loadBookmarks = async () => {
+                if (bookmarksLoaded) return;
+                try {
+                    userBookmarks = await game.nakama.getBookmarks();
+                    bookmarksLoaded = true;
+                } catch (e) { console.warn("getBookmarks failed:", e); }
+            };
+            const persistBookmarks = async () => {
+                try { await game.nakama.saveBookmarks(userBookmarks); }
+                catch (e) { console.warn("saveBookmarks failed:", e); }
+            };
 
-        const bookmarkListEl = document.getElementById("bookmark-list")!;
-        const bookmarkClose = document.getElementById("bookmark-panel-close")!;
+            const renderBookmarkList = () => {
+                bookmarkListEl.innerHTML = "";
 
-        const btnStyle = "background:#444;color:#fff;border:1px solid #666;border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;";
+                // 「もとに戻る」ボタン（スタックがあれば表示）
+                if (game.canUndoMoveBookmark) {
+                    const backBtn = document.createElement("button");
+                    backBtn.style.fontWeight = "bold";
+                    backBtn.textContent = "← もとに戻る";
+                    backBtn.addEventListener("click", () => {
+                        game.undoMoveBookmark();
+                        renderBookmarkList();
+                    });
+                    bookmarkListEl.appendChild(backBtn);
+                }
 
-        const renderBookmarkList = () => {
-            bookmarkListEl.innerHTML = "";
+                // 固定ブックマーク
+                for (const r of builtinBookmarks) {
+                    const isCurrent = game.currentBookmarkId === r.id;
+                    const btn = document.createElement("button");
+                    if (isCurrent) btn.style.fontWeight = "bold";
+                    btn.textContent = r.name + (isCurrent ? " ★" : "");
+                    btn.addEventListener("click", () => {
+                        if (isCurrent) return;
+                        game.moveBookmark(r.id);
+                        renderBookmarkList();
+                    });
+                    bookmarkListEl.appendChild(btn);
+                }
 
-            // 「もとに戻る」ボタン（スタックがあれば表示）
-            if (game.canUndoMoveBookmark) {
-                const backBtn = document.createElement("button");
-                backBtn.style.cssText = "background:#553;color:#ffa;border:1px solid #aa8;border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;";
-                backBtn.innerHTML = "<b>← もとに戻る</b>";
-                backBtn.addEventListener("click", () => {
-                    bookmarkPanel.style.display = "none";
-                    game.undoMoveBookmark();
-                });
-                bookmarkListEl.appendChild(backBtn);
-            }
+                // ユーザー定義ブックマーク
+                for (let i = 0; i < userBookmarks.length; i++) {
+                    const bm = userBookmarks[i];
+                    const row = document.createElement("div");
+                    row.style.cssText = "display:flex;gap:3px;align-items:stretch;";
 
-            // 固定ブックマーク
-            for (const r of builtinBookmarks) {
-                const isCurrent = game.currentBookmarkId === r.id;
-                const btn = document.createElement("button");
-                btn.style.cssText = `background:${isCurrent ? "#336" : "#444"};color:#fff;border:1px solid ${isCurrent ? "#66f" : "#666"};border-radius:4px;padding:8px 12px;cursor:pointer;text-align:left;font-size:13px;`;
-                btn.innerHTML = `<b>${r.name}</b>${isCurrent ? ' <span style="color:#6f6;font-size:12px;">★ 現在地</span>' : ""}`;
-                btn.addEventListener("click", () => {
-                    bookmarkPanel.style.display = "none";
-                    if (isCurrent) return;
-                    game.moveBookmark(r.id);
-                });
-                bookmarkListEl.appendChild(btn);
-            }
+                    const btn = document.createElement("button");
+                    btn.style.cssText = "flex:1;";
+                    const nameB = document.createElement("b");
+                    nameB.textContent = `📌 ${bm.name}`;
+                    const coordSpan = document.createElement("span");
+                    coordSpan.style.cssText = "font-size:10px;opacity:0.6;margin-left:6px;";
+                    coordSpan.textContent = `(${Math.round(bm.x) + 512}, ${Math.round(bm.z) + 512})`;
+                    btn.appendChild(nameB);
+                    btn.appendChild(coordSpan);
+                    btn.addEventListener("click", () => {
+                        game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z });
+                        game.playerBox.rotation.y = bm.ry;
+                        renderBookmarkList();
+                    });
 
-            // ユーザー定義ブックマーク
-            for (let i = 0; i < userBookmarks.length; i++) {
-                const bm = userBookmarks[i];
-                const row = document.createElement("div");
-                row.style.cssText = "display:flex;gap:4px;align-items:stretch;";
+                    const delBtn = document.createElement("button");
+                    delBtn.style.cssText = "padding:2px 6px;font-size:11px;opacity:0.5;";
+                    delBtn.textContent = "✕";
+                    delBtn.addEventListener("click", () => {
+                        userBookmarks.splice(i, 1);
+                        persistBookmarks();
+                        renderBookmarkList();
+                    });
 
-                const btn = document.createElement("button");
-                btn.style.cssText = btnStyle + "flex:1;";
-                const nameB = document.createElement("b");
-                nameB.textContent = `📌 ${bm.name}`;
-                const coordSpan = document.createElement("span");
-                coordSpan.style.cssText = "font-size:11px;color:#aaa;";
-                coordSpan.textContent = `(${Math.round(bm.x) + 512}, ${Math.round(bm.z) + 512})`;
-                btn.appendChild(nameB);
-                btn.appendChild(document.createElement("br"));
-                btn.appendChild(coordSpan);
-                btn.addEventListener("click", () => {
-                    bookmarkPanel.style.display = "none";
-                    game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z });
-                    game.playerBox.rotation.y = bm.ry;
-                });
+                    row.appendChild(btn);
+                    row.appendChild(delBtn);
+                    bookmarkListEl.appendChild(row);
+                }
 
-                const delBtn = document.createElement("button");
-                delBtn.style.cssText = "background:#633;color:#faa;border:1px solid #a66;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;";
-                delBtn.textContent = "✕";
-                delBtn.addEventListener("click", () => {
-                    userBookmarks.splice(i, 1);
-                    saveBookmarks();
+                // 「現在地を保存」ボタン
+                const addBtn = document.createElement("button");
+                addBtn.style.cssText = "margin-top:2px;font-weight:bold;";
+                addBtn.textContent = "＋ 現在地を保存";
+                addBtn.addEventListener("click", () => {
+                    const p = game.playerBox.position;
+                    const raw = prompt("ブックマーク名を入力（20文字以内）:");
+                    if (!raw || !raw.trim()) return;
+                    const name = raw.trim().slice(0, 20).replace(/[\x00-\x1f\x7f]/g, "");
+                    if (!name) return;
+                    userBookmarks.push({ name, x: p.x, z: p.z, ry: game.playerBox.rotation.y });
+                    persistBookmarks();
                     renderBookmarkList();
                 });
+                bookmarkListEl.appendChild(addBtn);
+            };
 
-                row.appendChild(btn);
-                row.appendChild(delBtn);
-                bookmarkListEl.appendChild(row);
+            // パネル表示時にブックマーク読み込み → リスト描画
+            new MutationObserver(() => {
+                if (bookmarkPanel.style.display !== "none") {
+                    loadBookmarks().then(() => renderBookmarkList());
+                }
+            }).observe(bookmarkPanel, { attributes: true, attributeFilter: ["style"] });
+
+            if (bookmarkClose) {
+                bookmarkClose.addEventListener("click", () => {
+                    bookmarkPanel.style.display = "none";
+                    const setCookie = (k: string, v: string) =>
+                        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                    setCookie("showBookmarks", "0");
+                    const mb = document.getElementById("menu-bookmarks");
+                    if (mb) mb.textContent = "　 ブックマーク";
+                });
             }
 
-            // 「現在地を保存」ボタン
-            const addBtn = document.createElement("button");
-            addBtn.style.cssText = "background:#354;color:#afc;border:1px solid #6a8;border-radius:4px;padding:8px 12px;cursor:pointer;text-align:center;font-size:13px;margin-top:4px;";
-            addBtn.innerHTML = "<b>＋ 現在地を保存</b>";
-            addBtn.addEventListener("click", () => {
-                const p = game.playerBox.position;
-                const raw = prompt("ブックマーク名を入力（20文字以内）:");
-                if (!raw || !raw.trim()) return;
-                const name = raw.trim().slice(0, 20).replace(/[\x00-\x1f\x7f]/g, "");
-                if (!name) return;
-                userBookmarks.push({ name, x: p.x, z: p.z, ry: game.playerBox.rotation.y });
-                saveBookmarks();
-                renderBookmarkList();
-            });
-            bookmarkListEl.appendChild(addBtn);
-        };
-
-        const showBookmarkPanel = async () => {
-            bookmarkPanel.style.display = "";
-            await loadBookmarks();
-            renderBookmarkList();
-        };
-
-        bookmarkClose.addEventListener("click", () => { bookmarkPanel.style.display = "none"; });
-
-        if (menuBookmarks) {
-            menuBookmarks.addEventListener("click", () => {
-                const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
-                if (cl) cl(menuBookmarks); else document.getElementById("menu-popup")?.classList.remove("open");
-                showBookmarkPanel();
-            });
+            // ドラッグ
+            const bHeader = document.getElementById("bookmark-header");
+            if (bHeader && !isMobileDev) {
+                let isDrag = false, offX = 0, offY = 0;
+                bHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                    if ((e.target as HTMLElement).id === "bookmark-close") return;
+                    isDrag = true;
+                    offX = e.clientX - bookmarkPanel.getBoundingClientRect().left;
+                    offY = e.clientY - bookmarkPanel.getBoundingClientRect().top;
+                    bHeader.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+                document.addEventListener("pointermove", (e: PointerEvent) => {
+                    if (!isDrag) return;
+                    bookmarkPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    bookmarkPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                });
+                document.addEventListener("pointerup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                    const r = bookmarkPanel.getBoundingClientRect();
+                    const sCk = (k: string, v: string) =>
+                        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                    sCk("bookmark-panel_l", String(Math.round(r.left)));
+                    sCk("bookmark-panel_t", String(Math.round(r.top)));
+                });
+                new ResizeObserver(() => {
+                    const r = bookmarkPanel.getBoundingClientRect();
+                    const sCk = (k: string, v: string) =>
+                        document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+                    sCk("bookmark-panel_w", String(Math.round(r.width)));
+                    sCk("bookmark-panel_h", String(Math.round(r.height)));
+                }).observe(bookmarkPanel);
+            }
         }
     }
 

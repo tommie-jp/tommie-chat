@@ -37,6 +37,7 @@ export const ja = {
     "menu.userlist": "プレイヤーリスト",
     "menu.chathistory": "チャット履歴",
     "menu.chatsettings": "チャット設定",
+    "menu.bookmarks": "ブックマーク",
     "menu.ping": "Ping グラフ",
     "menu.ccu": "同接グラフ",
     "menu.minimap": "ミニマップ",

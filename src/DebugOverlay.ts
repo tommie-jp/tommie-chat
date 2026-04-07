@@ -298,7 +298,7 @@ export function setupDebugOverlay(game: GameScene): void {
 
         cookieReset.addEventListener("click", () => {
             ["server-settings-panel", "server-log-panel", "user-list-panel",
-             "chat-history-panel", "chat-settings-panel", "ping-panel", "debug-overlay"].forEach(id => {
+             "chat-history-panel", "chat-settings-panel", "ping-panel", "bookmark-panel", "debug-overlay"].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.style.display = "none";
             });
@@ -508,6 +508,7 @@ export function setupDebugOverlay(game: GameScene): void {
                         "server-settings-panel": { w: 210, h: 0,   top: pad, left: window.innerWidth - 210 - 460 },
                         "ping-panel":            { w: 300, h: 160, top: pad, left: window.innerWidth - 300 - 300 },
                         "ccu-panel":             { w: 300, h: 160, top: pad, left: window.innerWidth - 300 - 610 },
+                        "bookmark-panel":        { w: 260, h: 320, top: 80,  left: window.innerWidth - 260 - pad },
                         "about-panel":           { w: 380, h: 0,   top: -1, left: -1 },  // -1 = CSS中央配置を使用
                         "displayname-panel":     { w: 280, h: 0,   top: 80, left: pad },
                     };
@@ -566,6 +567,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-chathistory",    "chat-history-panel",    "menu.chathistory",   "showChatHist");
         makeToggle("menu-chatsettings",  "chat-settings-panel",   "menu.chatsettings",  "showChatSettings");
         makeToggle("menu-ping",           "ping-panel",            "menu.ping",          "showPing");
+        makeToggle("menu-bookmarks",      "bookmark-panel",        "menu.bookmarks",     "showBookmarks");
         makeToggle("menu-ccu",            "ccu-panel",             "menu.ccu",           "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "menu.debug",         "showDebug");
         makeToggle("menu-about",          "about-panel",           "menu.about",         "showAbout");
