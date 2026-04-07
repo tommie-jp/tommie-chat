@@ -113,6 +113,8 @@ export class GameScene {
     private roomStack: { roomId: string | null; x: number; z: number; ry: number }[] = [];
     /** 部屋切替イベント（UIPanel等が購読） */
     onRoomChange: ((roomId: string | null) => void)[] = [];
+    /** チャンク同期完了イベント（ミニマップ等が購読） */
+    onChunkSync: (() => void)[] = [];
 
     constructor(canvas: HTMLCanvasElement) {
         this.engine = new Engine(canvas, false, { stencil: true });
@@ -295,7 +297,10 @@ export class GameScene {
             }
             ch.hash = BigInt(d.hash || "0");
         }
-        if (diffs.length > 0) console.log(`syncChunks updated ${diffs.length} chunks (AOI ${aoi.minCX},${aoi.minCZ}-${aoi.maxCX},${aoi.maxCZ})`);
+        if (diffs.length > 0) {
+            console.log(`syncChunks updated ${diffs.length} chunks (AOI ${aoi.minCX},${aoi.minCZ}-${aoi.maxCX},${aoi.maxCZ})`);
+            for (const cb of this.onChunkSync) cb();
+        }
         } finally { _end(); }
     }
 
