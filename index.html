@@ -1440,9 +1440,11 @@
 
         /* --- 開発者モード: 通常時は非表示 --- */
         #pd-uid, #pd-ping, #pd-fps,
-        #coord-display,
         .dev-only {
             display: none !important;
+        }
+        #coord-display {
+            display: inline !important;
         }
         body.dev-mode #pd-uid,
         body.dev-mode #pd-ping,
@@ -3220,7 +3222,8 @@
         <canvas id="ccu-canvas"></canvas>
     </div>
 
-    <div id="app-footer-version" style="position:fixed;bottom:2px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="coord-display" style="margin-right:2em;"></span><span id="app-footer-text"></span></div>
+    <div id="coord-display" style="position:fixed;bottom:2px;left:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;z-index:9997;line-height:1.5;"></div>
+    <div id="app-footer-version" style="position:fixed;bottom:2px;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;"><span id="app-footer-text"></span></div>
 
     <script type="module" src="/src/main.ts"></script>
     <script>
