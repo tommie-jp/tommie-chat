@@ -516,6 +516,11 @@ export function setupMinimap(game: GameScene): void {
 
     const redraw = () => { chunkCacheValid = false; };
 
+    // 部屋移動（テレポート）時にチャンクキャッシュを無効化して即再描画
+    game.onRoomChange.push(() => { chunkCacheValid = false; playerDirty = true; });
+    // チャンク同期完了時にキャッシュを無効化（テレポート後の新チャンク到着で再描画）
+    game.onChunkSync.push(() => { chunkCacheValid = false; playerDirty = true; });
+
     // チャンクキャッシュ
     let chunkCacheValid = false;
     onVisibilityChanged = () => { chunkCacheValid = false; };
