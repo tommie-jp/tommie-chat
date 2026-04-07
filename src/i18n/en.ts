@@ -131,6 +131,7 @@ export const en: Record<keyof typeof ja, string> = {
     // --- System Messages ---
     "system.user_joined": "{username} joined.",
     "system.user_left": "{username} left.",
+    "system.user_world_move": "{username} moved.",
 
     // --- Build Mode ---
     "buildmode.indicator": "🔨 Build Mode (B/ESC to exit)",

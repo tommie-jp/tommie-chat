@@ -129,6 +129,7 @@ export const ja = {
     // --- システムメッセージ ---
     "system.user_joined": "{username}がログインしました。",
     "system.user_left": "{username}がログアウトしました。",
+    "system.user_world_move": "{username}が移動しました。",
 
     // --- ビルドモード ---
     "buildmode.indicator": "🔨 ビルドモード（B/ESCキーで解除）",

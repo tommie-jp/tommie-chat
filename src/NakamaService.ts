@@ -18,8 +18,7 @@ const OP_PLAYERS_AOI_REQ   = 11; // C→S     全プレイヤーAOI情報要求
 const OP_PLAYERS_AOI_RESP  = 12; // S→C     全プレイヤーAOI情報応答（要求者のみ）
 const OP_CHAT              = 13; // C→S→C   チャットメッセージ（全員ブロードキャスト）
 const OP_SYSTEM_MSG        = 14; // S→C     システムメッセージ（ログイン/ログアウト通知）
-const OP_CHANGE_WORLD      = 15; // C→S     ワールド切替
-const OP_CHANGE_WORLD_RESP = 16; // S→C     ワールド切替応答
+// opcode 15 は予約（未使用）
 
 export class NakamaService {
     private client: Client;
@@ -33,7 +32,7 @@ export class NakamaService {
     get selfMatchId(): string | null { return this.matchId; }
 
     onChatMessage?: (username: string, text: string, userId: string, sessionId: string) => void;
-    onSystemMessage?: (type: string, username: string, userId: string) => void;
+    onSystemMessage?: (type: string, username: string, userId: string, sessionId: string, uidCount: number) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => void;
@@ -45,7 +44,6 @@ export class NakamaService {
     onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string }[]) => void;
     onPlayersAOIResponse?: (players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void;
     onDisplayName?:      (sessionId: string, displayName: string, nameColor?: string) => void;
-    onChangeWorldResp?:  (worldId: number, chunkCountX: number, chunkCountZ: number) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
     /** 再接続時に joinMatch に渡すメタデータを取得するコールバック */
@@ -204,16 +202,17 @@ export class NakamaService {
         } finally { _end(); }
     }
 
-    async joinWorldMatch(initMeta?: Record<string, string>): Promise<void> {
+    async joinWorldMatch(initMeta?: Record<string, string>, worldId = 0): Promise<{ worldId: number; chunkCountX: number; chunkCountZ: number }> {
         const _end = prof("NakamaService.joinWorldMatch");
         try {
-        console.log("snd getWorldMatch");
+        console.log(`snd getWorldMatch worldId=${worldId}`);
         if (!this.session || !this.socket) throw new Error("no session/socket");
-        const result = await this.socket.rpc("getWorldMatch");
+        const result = await this.socket.rpc("getWorldMatch", JSON.stringify({ worldId }));
         if (!result?.payload) throw new Error("getWorldMatch: no payload");
-        const data = JSON.parse(result.payload) as { matchId?: string; players?: { sessionId: string; x: number; z: number; ry: number; textureUrl: string; displayName: string }[] };
+        const data = JSON.parse(result.payload) as { matchId?: string; worldId?: number; chunkCountX?: number; chunkCountZ?: number };
         if (!data.matchId) throw new Error("getWorldMatch: no matchId");
         this.matchId = data.matchId;
+        const worldInfo = { worldId: data.worldId ?? 0, chunkCountX: data.chunkCountX ?? 64, chunkCountZ: data.chunkCountZ ?? 64 };
         // joinMatch() より前にハンドラを登録する（MatchJoin直後のサーバー通知を取りこぼさないため）
         this.socket.onmatchdata = (md: MatchData) => {
             const _mt0 = performance.now();
@@ -246,12 +245,8 @@ export class NakamaService {
                     const chat = payload as { text: string; username: string; userId: string; sessionId: string };
                     this.onChatMessage?.(chat.username ?? "", chat.text ?? "", chat.userId ?? "", chat.sessionId ?? "");
                 } else if (md.op_code === OP_SYSTEM_MSG) {
-                    const sys = payload as { type: string; username: string; userId: string };
-                    this.onSystemMessage?.(sys.type, sys.username, sys.userId);
-                } else if (md.op_code === OP_CHANGE_WORLD_RESP) {
-                    const resp = payload as { worldId: number; chunkCountX: number; chunkCountZ: number };
-                    console.log(`rcv changeWorldResp worldId=${resp.worldId} chunkCount=${resp.chunkCountX}x${resp.chunkCountZ}`);
-                    this.onChangeWorldResp?.(resp.worldId, resp.chunkCountX, resp.chunkCountZ);
+                    const sys = payload as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number };
+                    this.onSystemMessage?.(sys.type, sys.username, sys.userId, sys.sessionId ?? "", sys.uidCount ?? 1);
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
                     const dn = payload as { displayName: string; nc?: string };
                     this.onDisplayName?.(sid, dn.displayName, dn.nc);
@@ -288,6 +283,7 @@ export class NakamaService {
             for (const p of event.joins ?? []) this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
             for (const p of event.leaves ?? []) this.onMatchPresenceLeave?.(p.session_id, p.user_id, p.username);
         };
+        console.log(`snd joinMatch matchId=${this.matchId.slice(0,8)} meta=${JSON.stringify(initMeta)}`);
         const match = await this.socket.joinMatch(this.matchId, undefined, initMeta ?? {});
         // selfSessionId を確定
         if (match.self) {
@@ -297,7 +293,35 @@ export class NakamaService {
         for (const p of match.presences ?? []) {
             this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
         }
+        return worldInfo;
         } finally { _end(); }
+    }
+
+    /** 現在のマッチから離脱 */
+    async leaveMatch(): Promise<void> {
+        if (!this.socket || !this.matchId) return;
+        console.log(`snd leaveMatch matchId=${this.matchId.slice(0, 8)}`);
+        await this.socket.leaveMatch(this.matchId);
+        this.matchId = undefined as unknown as string;
+    }
+
+    /** ワールド切替中フラグ（leave→join の間、ログアウト通知を抑制） */
+    changingWorld = false;
+
+    /** ワールド切替: 新マッチ join（metadata に worldMove=1）→ 旧マッチ leave */
+    async changeWorldMatch(worldId: number, initMeta?: Record<string, string>): Promise<{ worldId: number; chunkCountX: number; chunkCountZ: number }> {
+        this.changingWorld = true;
+        const oldMatchId = this.matchId;
+        // 先に新マッチに join（metadata で worldMove フラグを渡す）
+        // MatchJoinAttempt で worldMovingUsers にセットされてから旧マッチの MatchLeave が呼ばれる
+        const meta = { ...initMeta, worldMove: "1" };
+        const result = await this.joinWorldMatch(meta, worldId);
+        // 旧マッチを leave
+        if (oldMatchId && this.socket) {
+            await this.socket.leaveMatch(oldMatchId);
+        }
+        this.changingWorld = false;
+        return result;
     }
 
     async sendInitPos(x: number, z: number, ry = 0, textureUrl = "", charCol = 0, charRow = 0): Promise<void> {
@@ -309,15 +333,6 @@ export class NakamaService {
             await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl, cc: charCol, cr: charRow, nc: this.selfNameColor })));
         } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
-    }
-
-    /** ワールド切替をサーバーに通知 */
-    async sendChangeWorld(worldId: number): Promise<void> {
-        console.log(`snd changeWorld worldId=${worldId}`);
-        if (!this.socket || !this.matchId) return;
-        try {
-            await this.socket.sendMatchState(this.matchId, OP_CHANGE_WORLD, new TextEncoder().encode(JSON.stringify({ worldId })));
-        } catch (e) { console.warn("NakamaService:", e); }
     }
 
     async sendAvatarChange(textureUrl: string, charCol = 0, charRow = 0): Promise<void> {
