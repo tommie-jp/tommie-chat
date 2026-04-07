@@ -1,11 +1,12 @@
 import { Scene, Mesh, MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
 import { NakamaService } from "./NakamaService";
-import { CHUNK_SIZE, CHUNK_COUNT, WORLD_SIZE } from "./WorldConstants";
+import { CHUNK_SIZE, CHUNK_COUNT } from "./WorldConstants";
 import { prof } from "./Profiler";
 
 export class AOIManager {
     aoiRadius = 48;
     chunkCount = CHUNK_COUNT; // ワールド切替時に変更可能
+    get worldSize(): number { return this.chunkCount * CHUNK_SIZE; }
     lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
     aoiVisEnabled = false;
     remoteAoiEnabled = false;
@@ -58,7 +59,7 @@ export class AOIManager {
         if (!this.aoiVisEnabled) return;
         const a = this.lastAOI;
         if (a.minCX < 0) return;
-        const half = WORLD_SIZE / 2;
+        const half = this.worldSize / 2;
         const CS = CHUNK_SIZE;
         const x0 = a.minCX * CS - half;
         const z0 = a.minCZ * CS - half;
@@ -96,7 +97,7 @@ export class AOIManager {
         this.clearRemoteAoiBoxes();
         if (!this.remoteAoiEnabled) return;
         const mySid = this.nakama.selfSessionId;
-        const half = WORLD_SIZE / 2;
+        const half = this.worldSize / 2;
         const CS = CHUNK_SIZE;
         if (!this.remoteAoiMat) {
             const mat = new StandardMaterial("remoteAoiMat", this.scene);

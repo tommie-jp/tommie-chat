@@ -19,7 +19,7 @@ import { AdvancedDynamicTexture, TextBlock, Rectangle } from "@babylonjs/gui";
 import "@babylonjs/loaders";
 import { NakamaService } from "./NakamaService";
 import { loadAllChunks, saveChunks, ChunkRecord } from "./ChunkDB";
-import { CHUNK_SIZE, CHUNK_COUNT, WORLD_SIZE } from "./WorldConstants";
+import { CHUNK_SIZE, CHUNK_COUNT } from "./WorldConstants";
 import { CloudSystem } from "./CloudSystem";
 import { AvatarSystem } from "./AvatarSystem";
 import { SpriteAvatarSystem } from "./SpriteAvatarSystem";
@@ -67,6 +67,9 @@ export class GameScene {
     remoteSpeeches = new Map<string, (text: string) => void>();
     remoteNameUpdaters = new Map<string, (newName: string, color?: string, suffix?: string) => void>();
 
+    // ===== 地面 =====
+    private ground!: Mesh;
+    private gridMaterial!: GridMaterial;
     // ===== 地面ブロック =====
     chunks = new Map<string, { cells: Uint8Array; hash: bigint }>();
     private dbHashes = new Map<string, string>();
@@ -144,6 +147,15 @@ export class GameScene {
 
         // NPCSystem, AOIManager はcreateObjects内で初期化済み
         setupHtmlUI(this);
+
+        // ワールド切替応答でチャンク数を動的更新
+        this.nakama.onChangeWorldResp = (worldId, chunkCountX, _chunkCountZ) => {
+            GameScene.WORLD_CHUNK_COUNTS[worldId] = chunkCountX;
+            this.aoiManager.chunkCount = chunkCountX;
+            this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+            this.rebuildGround();
+            this.aoiManager.updateAOI();
+        };
 
         this.handleResize();
 
@@ -411,7 +423,7 @@ export class GameScene {
         _end();
     }
 
-    /** ワールド切替時に全ブロックメッシュ・チャンクキャッシュ・リモートアバターをクリア */
+    /** ワールド切替時に全ブロックメッシュ・チャンクキャッシュ・リモートアバター・地面をクリア/再作成 */
     private clearAllBlocks(): void {
         for (const mesh of this.blockMeshes.values()) mesh.dispose();
         this.blockMeshes.clear();
@@ -422,18 +434,30 @@ export class GameScene {
             this.spriteAvatarSystem.setEnabled(sid, false);
         }
         this.remoteTargets.clear();
+        // 座標ツールチップをリセット（次フレームでワールドサイズに応じて再構築）
+        const cd = document.getElementById("coord-display");
+        if (cd) cd.innerHTML = "";
+    }
+
+    /** 地面メッシュを現在のワールドサイズで再作成 */
+    private rebuildGround(): void {
+        if (this.ground) this.ground.dispose();
+        const ws = this.currentWorldSize;
+        this.ground = MeshBuilder.CreateGround("ground", { width: ws, height: ws }, this.scene);
+        if (!this.gridMaterial) {
+            this.gridMaterial = new GridMaterial("gridMaterial", this.scene);
+            this.gridMaterial.mainColor = new Color3(0.85, 0.95, 0.85);
+            this.gridMaterial.lineColor = new Color3(0.35, 0.55, 0.35);
+            this.gridMaterial.gridRatio = 1.0;
+            this.gridMaterial.opacity = 1.0;
+            this.gridMaterial.freeze();
+        }
+        this.ground.material = this.gridMaterial;
+        this.ground.freezeWorldMatrix();
     }
 
     private createObjects(): void {
-        const ground = MeshBuilder.CreateGround("ground", { width: WORLD_SIZE, height: WORLD_SIZE }, this.scene);
-        const gridMaterial = new GridMaterial("gridMaterial", this.scene);
-        gridMaterial.mainColor = new Color3(0.85, 0.95, 0.85);
-        gridMaterial.lineColor = new Color3(0.35, 0.55, 0.35);
-        gridMaterial.gridRatio = 1.0;
-        gridMaterial.opacity = 1.0;
-        gridMaterial.freeze();
-        ground.material = gridMaterial;
-        ground.freezeWorldMatrix();
+        this.rebuildGround();
 
         this.previewBlock = MeshBuilder.CreateBox("previewBlock", { size: 1 }, this.scene);
         this.previewBlock.position.y = 0.5;
@@ -831,7 +855,9 @@ export class GameScene {
                     let posEl = document.getElementById("cd-pos");
                     let dirEl = document.getElementById("cd-dir");
                     if (!posEl || !dirEl) {
-                        cd.innerHTML = `<span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (512, 512)\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(1023, 1023)\nワールドの大きさ: 1024 × 1024" style="font-size:14px;font-weight:bold"></span> <span id="cd-dir" title="方向\nプレイヤーの向いている方向を示します。\nN=北, S=南, E=東, W=西" style="font-size:14px;font-weight:bold"></span>`;
+                        const ws = this.currentWorldSize;
+                        const ch = ws / 2;
+                        cd.innerHTML = `<span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (${ch}, ${ch})\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(${ws - 1}, ${ws - 1})\nワールドの大きさ: ${ws} × ${ws}" style="font-size:14px;font-weight:bold"></span> <span id="cd-dir" title="方向\nプレイヤーの向いている方向を示します。\nN=北, S=南, E=東, W=西" style="font-size:14px;font-weight:bold"></span>`;
                         posEl = document.getElementById("cd-pos");
                         dirEl = document.getElementById("cd-dir");
                     }
@@ -1034,10 +1060,9 @@ export class GameScene {
 
     // ─── 部屋切替（同一 Match 内、テレポート） ───
 
-    /** ワールドごとのチャンク数 */
-    static readonly WORLD_CHUNK_COUNTS: Record<number, number> = {
-        0: 64,  // メインワールド 64x64
-        1: 8,   // サブワールド 8x8
+    /** ワールドごとのチャンク数（サーバー応答で動的に更新） */
+    static WORLD_CHUNK_COUNTS: Record<number, number> = {
+        0: 64,  // デフォルトワールド（初期値）
     };
 
     /** 部屋の固定座標 */
@@ -1067,8 +1092,13 @@ export class GameScene {
         if (newWorldId !== this.currentWorldId) {
             this.currentWorldId = newWorldId;
             this.clearAllBlocks();
-            this.aoiManager.chunkCount = GameScene.WORLD_CHUNK_COUNTS[newWorldId] ?? 64;
-            this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 }; // AOIリセット
+            // キャッシュがあれば即反映、なければサーバー応答(onChangeWorldResp)で更新
+            const cached = GameScene.WORLD_CHUNK_COUNTS[newWorldId];
+            if (cached) {
+                this.aoiManager.chunkCount = cached;
+                this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+                this.rebuildGround();
+            }
             this.nakama.sendChangeWorld(newWorldId);
         }
 
@@ -1093,8 +1123,12 @@ export class GameScene {
         if (prev.worldId !== this.currentWorldId) {
             this.currentWorldId = prev.worldId;
             this.clearAllBlocks();
-            this.aoiManager.chunkCount = GameScene.WORLD_CHUNK_COUNTS[prev.worldId] ?? 64;
-            this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+            const cached = GameScene.WORLD_CHUNK_COUNTS[prev.worldId];
+            if (cached) {
+                this.aoiManager.chunkCount = cached;
+                this.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
+                this.rebuildGround();
+            }
             this.nakama.sendChangeWorld(prev.worldId);
         }
 

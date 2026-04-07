@@ -1,6 +1,6 @@
 import type { GameScene } from "./GameScene";
 import { Scene, Color3, Color4, Vector3, SceneInstrumentation, EngineInstrumentation } from "@babylonjs/core";
-import { CHUNK_SIZE, WORLD_SIZE } from "./WorldConstants";
+import { CHUNK_SIZE } from "./WorldConstants";
 import { profSetEnabled, profReset } from "./Profiler";
 import { t } from "./i18n";
 import { autoChatMessages } from "./AutoChatMessages";
@@ -1941,7 +1941,7 @@ export function setupDebugOverlay(game: GameScene): void {
             const pos = game.playerBox.position;
             playerPosVal.innerText = `${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
             if (chunkVal) {
-                const half = WORLD_SIZE / 2;
+                const half = game.currentWorldSize / 2;
                 const cx = Math.floor((pos.x + half) / CHUNK_SIZE);
                 const cz = Math.floor((pos.z + half) / CHUNK_SIZE);
                 chunkVal.innerText = `(${cx}, ${cz})`;
