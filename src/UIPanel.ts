@@ -2931,6 +2931,7 @@ export function setupHtmlUI(game: GameScene): void {
 
                         tr.addEventListener("click", () => {
                             if (isCurrent) return;
+                            game.currentWorldName = w.name || `World ${w.id}`;
                             game.moveBookmark(`world_${w.id}`, { x: 0, z: 0 }, w.id);
                             lastWorldListJson = "";
                             renderRoomList();
@@ -3014,6 +3015,14 @@ export function setupHtmlUI(game: GameScene): void {
             }
         }
     }
+
+    // ワールド変更時に部屋名を非同期で取得
+    game.onWorldChanged.push(() => {
+        game.nakama.getWorldList().then(worldList => {
+            const w = worldList.find(w => w.id === game.currentWorldId);
+            if (w) game.currentWorldName = w.name || `World ${w.id}`;
+        }).catch(() => {});
+    });
 
     sendBtn.onclick = () => { sendMessage(); };
     textarea.onkeydown = (e) => {
