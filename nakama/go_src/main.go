@@ -1822,6 +1822,7 @@ func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 			Name string  `json:"name"`
 			X    float64 `json:"x"`
 			Z    float64 `json:"z"`
+			Ry   float64 `json:"ry"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {

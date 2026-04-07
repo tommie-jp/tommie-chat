@@ -2639,7 +2639,7 @@ export function setupHtmlUI(game: GameScene): void {
             { id: "room_night",   name: "夜の街" },
         ];
         // ユーザー定義ブックマーク（サーバーから読み込み）
-        let userBookmarks: { name: string; x: number; z: number }[] = [];
+        let userBookmarks: { name: string; x: number; z: number; ry: number }[] = [];
         let bookmarksLoaded = false;
 
         const loadBookmarks = async () => {
@@ -2706,6 +2706,7 @@ export function setupHtmlUI(game: GameScene): void {
                 btn.addEventListener("click", () => {
                     bookmarkPanel.style.display = "none";
                     game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z });
+                    game.playerBox.rotation.y = bm.ry;
                 });
 
                 const delBtn = document.createElement("button");
@@ -2730,7 +2731,7 @@ export function setupHtmlUI(game: GameScene): void {
                 const p = game.playerBox.position;
                 const name = prompt("ブックマーク名を入力:");
                 if (!name || !name.trim()) return;
-                userBookmarks.push({ name: name.trim(), x: p.x, z: p.z });
+                userBookmarks.push({ name: name.trim(), x: p.x, z: p.z, ry: game.playerBox.rotation.y });
                 saveBookmarks();
                 renderBookmarkList();
             });
