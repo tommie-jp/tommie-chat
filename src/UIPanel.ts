@@ -1294,12 +1294,12 @@ export function setupHtmlUI(game: GameScene): void {
         refreshSelfSuffix();
     };
     // システムメッセージ: サーバーからのログイン/ログアウト通知
-    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount) => {
+    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount, serverNameColor) => {
         const existing = [...userMap.values()].find(e => e.uuid === userId);
         const displayName = existing?.displayName ?? "";
         const nameText = displayName || ("@" + username);
         const hashSuffix = sessionId ? "#" + sessionId.slice(0, 4) : "";
-        const nameColor = existing?.nameColor;
+        const nameColor = serverNameColor || existing?.nameColor;
         const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
         const fallbackColor = uidColorInput?.value ?? "#00bbfa";
         const color = nameColor || (displayName ? "" : fallbackColor);

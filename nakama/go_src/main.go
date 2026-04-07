@@ -1050,12 +1050,15 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 		// 同一UUIDのセッション数をカウント
 		uidCount := 0
 		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
+		nc := ""
+		if pos, ok := ms.Positions[sid]; ok { nc = pos.NameColor }
 		sysMsg, _ := json.Marshal(map[string]interface{}{
 			"type":      joinType,
 			"username":  uname,
 			"userId":    uid,
 			"sessionId": sid,
 			"uidCount":  uidCount,
+			"nameColor": nc,
 		})
 		dispatcher.BroadcastMessage(opSystemMsg, sysMsg, nil, p, true)
 	}
@@ -1111,12 +1114,15 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		// 同一UUIDのセッション数をカウント（自分を含む、削除前）
 		uidCount := 0
 		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
+		nc := ""
+		if pos, ok := ms.Positions[sid]; ok { nc = pos.NameColor }
 		sysMsg, _ := json.Marshal(map[string]interface{}{
 			"type":      leaveType,
 			"username":  uname,
 			"userId":    uid,
 			"sessionId": sid,
 			"uidCount":  uidCount,
+			"nameColor": nc,
 		})
 		// 残っている全プレゼンスのスナップショット（退出者自身は除外）
 		var targets []runtime.Presence
