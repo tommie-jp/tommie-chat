@@ -180,8 +180,7 @@ func rpcProfileDump(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.Na
 
 const (
 	chunkSize               = 16 // 1チャンク = 16x16セル
-	chunkCount              = 64 // 64x64チャンク
-	worldSize               = chunkSize * chunkCount // 1024x1024セル
+	defaultChunkCount       = 64 // デフォルトワールドのチャンク数 64x64
 	// matchデータ opコード（WebSocket sendMatchState 経由の双方向メッセージ）
 	// MatchLoop のメッセージキューで処理。同一接続内で送信順が保証される。
 	// RPC と異なり非同期応答（別opコード）で結果を返す。
@@ -199,6 +198,7 @@ const (
 	opPlayersAOIResp   int64 = 12 // S→C     全プレイヤーAOI情報応答（要求者のみ）
 	opChat             int64 = 13 // C→S→C   チャットメッセージ（全員ブロードキャスト）
 	opSystemMsg        int64 = 14 // S→C     システムメッセージ（ログイン/ログアウト通知）
+	opChangeWorld      int64 = 15 // C→S     ワールド切替（worldId）
 )
 
 // 地面セル: blockID (uint16) + RGBA 各1バイト
@@ -270,8 +270,76 @@ func (ch *chunk) fromFlat(flat []uint8) bool {
 	return true
 }
 
-// 地面テーブル: 16x16 チャンクの配列
-var chunks [chunkCount][chunkCount]chunk
+// World はワールドごとのチャンクデータを保持する（サイズ可変）
+type World struct {
+	ID          int
+	ChunkCountX int
+	ChunkCountZ int
+	mu          sync.RWMutex                // worlds map 自体の保護ではなく、Chunks map の追加保護
+	Chunks      map[[2]int]*chunk
+}
+
+// getChunk はチャンクを取得する。存在しなければ自動生成して返す。
+func (w *World) getChunk(cx, cz int) *chunk {
+	key := [2]int{cx, cz}
+	w.mu.RLock()
+	ch, ok := w.Chunks[key]
+	w.mu.RUnlock()
+	if ok {
+		return ch
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	// ダブルチェック
+	if ch, ok = w.Chunks[key]; ok {
+		return ch
+	}
+	ch = &chunk{}
+	w.Chunks[key] = ch
+	return ch
+}
+
+// inBounds はチャンク座標がワールド範囲内か判定する
+func (w *World) inBounds(cx, cz int) bool {
+	return cx >= 0 && cx < w.ChunkCountX && cz >= 0 && cz < w.ChunkCountZ
+}
+
+// worldSize はワールドのセル数を返す（正方形前提: ChunkCountX == ChunkCountZ の場合）
+func (w *World) worldSize() int {
+	return w.ChunkCountX * chunkSize
+}
+
+var (
+	worldsMu     sync.RWMutex
+	worlds       = map[int]*World{}
+	defaultWorld *World // デフォルトワールドへのショートカット
+)
+
+const defaultWorldID = 0
+
+// getWorld はワールドを取得する。存在しなければ nil を返す。
+func getWorld(id int) *World {
+	worldsMu.RLock()
+	defer worldsMu.RUnlock()
+	return worlds[id]
+}
+
+// createWorld はワールドを作成して登録する。既に存在すればそれを返す。
+func createWorld(id int, chunkCountX, chunkCountZ int) *World {
+	worldsMu.Lock()
+	defer worldsMu.Unlock()
+	if w, ok := worlds[id]; ok {
+		return w
+	}
+	w := &World{
+		ID:          id,
+		ChunkCountX: chunkCountX,
+		ChunkCountZ: chunkCountZ,
+		Chunks:      make(map[[2]int]*chunk),
+	}
+	worlds[id] = w
+	return w
+}
 
 // 同接数履歴（2層）
 // 1秒間隔: 最大300サンプル（5分間）
@@ -531,7 +599,7 @@ func flushDirtyChunks(ctx context.Context, nk runtime.NakamaModule, logger runti
 	writes := make([]*runtime.StorageWrite, 0, len(keys))
 	for _, k := range keys {
 		cx, cz := k[0], k[1]
-		ch := &chunks[cx][cz]
+		ch := defaultWorld.getChunk(cx, cz)
 		ch.mu.RLock()
 		flat := ch.toFlat()
 		ch.mu.RUnlock()
@@ -580,9 +648,9 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		"version":      version,
 		"pluginDate":   buildDate,
 		"pluginCommit": buildCommit,
-		"worldSize":    worldSize,
+		"worldSize":    defaultWorld.worldSize(),
 		"chunkSize":    chunkSize,
-		"chunkCount":   chunkCount,
+		"chunkCount":   defaultWorld.ChunkCountX,
 	}
 	b, err := json.Marshal(info)
 	if err != nil {
@@ -679,6 +747,7 @@ func (a *playerAOI) containsChunk(cx, cz int) bool {
 
 // playerPos はプレイヤーの最新位置（チャンク座標）
 type playerPos struct {
+	WorldID     int     // 所属ワールドID
 	CX, CZ      int     // チャンク座標
 	X, Z        float64 // ワールド座標
 	RY          float64 // 回転
@@ -804,7 +873,8 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
 	defer prof("MatchJoin")()
 	ms := state.(*matchState)
-	half := float64(worldSize / 2)
+	w := defaultWorld
+	half := float64(w.worldSize() / 2)
 	for _, p := range presences {
 		sid := p.GetSessionId()
 		uid := p.GetUserId()
@@ -865,8 +935,8 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 			cz := int((init.Z + half) / chunkSize)
 			if cx < 0 { cx = 0 }
 			if cz < 0 { cz = 0 }
-			if cx >= chunkCount { cx = chunkCount - 1 }
-			if cz >= chunkCount { cz = chunkCount - 1 }
+			if cx >= w.ChunkCountX { cx = w.ChunkCountX - 1 }
+			if cz >= w.ChunkCountZ { cz = w.ChunkCountZ - 1 }
 			init.CX = cx
 			init.CZ = cz
 			ms.Positions[sid] = init
@@ -903,7 +973,7 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
 	defer prof("MatchLeave")()
 	ms := state.(*matchState)
-	half := float64(worldSize / 2)
+	half := float64(defaultWorld.worldSize() / 2)
 	for _, p := range presences {
 		sid := p.GetSessionId()
 		// 退出プレイヤーの位置を取得し、そのチャンクをAOIに含む他プレイヤーへAOI_LEAVEを通知
@@ -1027,11 +1097,14 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if err := json.Unmarshal(msg.GetData(), &aoi); err != nil {
 				continue
 			}
-			// クランプ
+			// プレイヤーのワールドに基づいてクランプ
+			myPos := ms.Positions[sid]
+			pw := defaultWorld
+			if myPos != nil { pw = getWorld(myPos.WorldID); if pw == nil { pw = defaultWorld } }
 			if aoi.MinCX < 0 { aoi.MinCX = 0 }
 			if aoi.MinCZ < 0 { aoi.MinCZ = 0 }
-			if aoi.MaxCX >= chunkCount { aoi.MaxCX = chunkCount - 1 }
-			if aoi.MaxCZ >= chunkCount { aoi.MaxCZ = chunkCount - 1 }
+			if aoi.MaxCX >= pw.ChunkCountX { aoi.MaxCX = pw.ChunkCountX - 1 }
+			if aoi.MaxCZ >= pw.ChunkCountZ { aoi.MaxCZ = pw.ChunkCountZ - 1 }
 			// min > max は不正
 			if aoi.MinCX > aoi.MaxCX || aoi.MinCZ > aoi.MaxCZ {
 				logf("WARN invalid AOI sid=%s min(%d,%d) > max(%d,%d)\n", shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ)
@@ -1051,12 +1124,12 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if p, ok := ms.Presences[sid]; ok { aoiUID = p.GetUserId() }
 			logf("rcv AOI_UPDATE uid=%s%s sid=%s (%d,%d)-(%d,%d)\n", aoiUID, dn(aoiUID), shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ)
 			logf("rcv DBG AOI_UPDATE sid=%s newAOI=(%d,%d)-(%d,%d) checking %d other players\n", shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ, len(ms.Positions)-1)
-			half := float64(worldSize) / 2
+			half := float64(defaultWorld.worldSize()) / 2
 			// AOI_ENTER はバルク送信（N-1件→1件に削減）
 			var enterBulk []map[string]interface{}
 			toUID := senderPresence.GetUserId()
 			for otherSID, otherPos := range ms.Positions {
-				if otherSID == sid {
+				if otherSID == sid || otherPos.WorldID != myPos.WorldID {
 					continue
 				}
 				// CX<0はopInitPos未受信（センチネル）→ X/Z座標から正確なchunkを算出
@@ -1110,7 +1183,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				initUID := ""
 				if p, ok := ms.Presences[sid]; ok { initUID = p.GetUserId() }
 				logf("rcv initPos uid=%s%s sid=%s x=%.1f z=%.1f\n", initUID, dn(initUID), shortSID(sid), pos.X, pos.Z)
-				half := float64(worldSize) / 2
+				// プレイヤーのワールドに基づいてチャンク計算
+				curWorldID := 0
+				if p, ok := ms.Positions[sid]; ok { curWorldID = p.WorldID }
+				pw := getWorld(curWorldID); if pw == nil { pw = defaultWorld }
+				half := float64(pw.worldSize()) / 2
 				// 座標範囲チェック
 				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
 					logf("WARN invalid initPos coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
@@ -1120,8 +1197,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				cz := int((pos.Z + half) / chunkSize)
 				if cx < 0 { cx = 0 }
 				if cz < 0 { cz = 0 }
-				if cx >= chunkCount { cx = chunkCount - 1 }
-				if cz >= chunkCount { cz = chunkCount - 1 }
+				if cx >= pw.ChunkCountX { cx = pw.ChunkCountX - 1 }
+				if cz >= pw.ChunkCountZ { cz = pw.ChunkCountZ - 1 }
 				oldCX, oldCZ := -1, -1
 				if p, ok := ms.Positions[sid]; ok {
 					oldCX, oldCZ = p.CX, p.CZ
@@ -1142,6 +1219,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					var enterTargets []runtime.Presence
 					for otherSID, otherAOI := range ms.AOIs {
 						if otherSID == sid { continue }
+						if otherP, ok := ms.Positions[otherSID]; ok && otherP.WorldID != curWorldID { continue }
 						wasVisible := oldCX >= 0 && otherAOI.containsChunk(oldCX, oldCZ)
 						nowVisible := otherAOI.containsChunk(cx, cz)
 						logf("rcv DBG INIT_POS sid=%s other=%s AOI=(%d,%d)-(%d,%d) nowVisible=%v\n", shortSID(sid), shortSID(otherSID), otherAOI.MinCX, otherAOI.MinCZ, otherAOI.MaxCX, otherAOI.MaxCZ, nowVisible)
@@ -1201,7 +1279,10 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				moveUID := ""
 				if p, ok := ms.Presences[sid]; ok { moveUID = p.GetUserId() }
 				logf("rcv moveTarget uid=%s%s sid=%s x=%.1f z=%.1f\n", moveUID, dn(moveUID), shortSID(sid), pos.X, pos.Z)
-				half := float64(worldSize) / 2
+				curWorldID := 0
+				if p, ok := ms.Positions[sid]; ok { curWorldID = p.WorldID }
+				pw := getWorld(curWorldID); if pw == nil { pw = defaultWorld }
+				half := float64(pw.worldSize()) / 2
 				// 座標範囲チェック
 				if pos.X < -half || pos.X > half || pos.Z < -half || pos.Z > half {
 					logf("WARN invalid moveTarget coords sid=%s x=%.1f z=%.1f (out of range)\n", shortSID(sid), pos.X, pos.Z)
@@ -1215,8 +1296,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				cz := int((pos.Z + half) / chunkSize)
 				if cx < 0 { cx = 0 }
 				if cz < 0 { cz = 0 }
-				if cx >= chunkCount { cx = chunkCount - 1 }
-				if cz >= chunkCount { cz = chunkCount - 1 }
+				if cx >= pw.ChunkCountX { cx = pw.ChunkCountX - 1 }
+				if cz >= pw.ChunkCountZ { cz = pw.ChunkCountZ - 1 }
 				if p, ok := ms.Positions[sid]; ok {
 					p.CX = cx; p.CZ = cz; p.X = pos.X; p.Z = pos.Z
 				} else {
@@ -1305,7 +1386,10 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				continue
 			}
 			logf("rcv setBlock(match) sid=%s gx=%d gz=%d blockId=%d\n", shortSID(sid), req.GX, req.GZ, req.BlockID)
-			if req.GX < 0 || req.GX >= worldSize || req.GZ < 0 || req.GZ >= worldSize {
+			curWorldID := 0
+			if p, ok := ms.Positions[sid]; ok { curWorldID = p.WorldID }
+			bw := getWorld(curWorldID); if bw == nil { bw = defaultWorld }
+			if req.GX < 0 || req.GX >= bw.worldSize() || req.GZ < 0 || req.GZ >= bw.worldSize() {
 				continue
 			}
 			// BlockID の有効性チェック（0=削除 は許可）
@@ -1319,12 +1403,12 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			cz := req.GZ / chunkSize
 			lx := req.GX % chunkSize
 			lz := req.GZ % chunkSize
-			ch := &chunks[cx][cz]
+			ch := bw.getChunk(cx, cz)
 			ch.mu.Lock()
 			ch.cells[lx][lz] = blockData{BlockID: req.BlockID, R: req.R, G: req.G, B: req.B, A: a}
 			ch.calcHash()
 			ch.mu.Unlock()
-			markChunkDirty(cx, cz)
+			markChunkDirty(cx, cz) // TODO: ワールドIDもdirtyに含める
 			// AOI内のプレイヤーにブロードキャスト
 			var targets []runtime.Presence
 			for aoiSid, aoi := range ms.AOIs {
@@ -1369,6 +1453,39 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if senderP, ok := ms.Presences[sid]; ok {
 				dispatcher.BroadcastMessage(opPlayersAOIResp, respData, []runtime.Presence{senderP}, nil, true)
 			}
+			continue
+		}
+
+		if op == opChangeWorld {
+			// ワールド切替: {"worldId":1}
+			var req struct {
+				WorldID int `json:"worldId"`
+			}
+			if err := json.Unmarshal(msg.GetData(), &req); err != nil {
+				continue
+			}
+			w := getWorld(req.WorldID)
+			if w == nil {
+				logf("WARN changeWorld: unknown worldId=%d sid=%s\n", req.WorldID, shortSID(sid))
+				continue
+			}
+			if p, ok := ms.Positions[sid]; ok {
+				// 旧ワールドのAOI内プレイヤーにLEAVE通知
+				for otherSID, otherAOI := range ms.AOIs {
+					if otherSID == sid { continue }
+					if otherP, ok2 := ms.Positions[otherSID]; ok2 && otherP.WorldID == p.WorldID {
+						if otherAOI.containsChunk(p.CX, p.CZ) {
+							if presence, ok3 := ms.Presences[otherSID]; ok3 {
+								leaveData, _ := json.Marshal(map[string]string{"sessionId": sid})
+								dispatcher.BroadcastMessage(opAOILeave, leaveData, []runtime.Presence{presence}, nil, true)
+							}
+						}
+					}
+				}
+				p.WorldID = req.WorldID
+				p.CX = -1; p.CZ = -1 // 次のopInitPosで再計算
+			}
+			logf("rcv changeWorld uid=%s sid=%s worldId=%d\n", "", shortSID(sid), req.WorldID)
 			continue
 		}
 
@@ -1571,11 +1688,13 @@ func dumpGroundTableCSV(logger runtime.Logger) {
 		return
 	}
 	// チャンクごとにロックしてスナップショットを取る（ヒープ確保）
-	snapshot := make([][]uint16, worldSize)
-	for i := range snapshot { snapshot[i] = make([]uint16, worldSize) }
-	for cx := 0; cx < chunkCount; cx++ {
-		for cz := 0; cz < chunkCount; cz++ {
-			ch := &chunks[cx][cz]
+	w := defaultWorld
+	ws := w.worldSize()
+	snapshot := make([][]uint16, ws)
+	for i := range snapshot { snapshot[i] = make([]uint16, ws) }
+	for cx := 0; cx < w.ChunkCountX; cx++ {
+		for cz := 0; cz < w.ChunkCountZ; cz++ {
+			ch := w.getChunk(cx, cz)
 			ch.mu.RLock()
 			for lx := 0; lx < chunkSize; lx++ {
 				for lz := 0; lz < chunkSize; lz++ {
@@ -1586,9 +1705,9 @@ func dumpGroundTableCSV(logger runtime.Logger) {
 		}
 	}
 	var sb strings.Builder
-	for gz := 0; gz < worldSize; gz++ {
-		cols := make([]string, worldSize)
-		for gx := 0; gx < worldSize; gx++ {
+	for gz := 0; gz < ws; gz++ {
+		cols := make([]string, ws)
+		for gx := 0; gx < ws; gx++ {
 			cols[gx] = fmt.Sprintf("%d", snapshot[gx][gz])
 		}
 		sb.WriteString(strings.Join(cols, ","))
@@ -1606,17 +1725,20 @@ func rpcGetGroundChunk(ctx context.Context, _ runtime.Logger, _ *sql.DB, _ runti
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 	sid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
 	var req struct {
-		CX int `json:"cx"`
-		CZ int `json:"cz"`
+		WorldID int `json:"worldId"`
+		CX      int `json:"cx"`
+		CZ      int `json:"cz"`
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return "", err
 	}
-	logf("rcv getGroundChunk uid=%s%s sid=%s cx=%d cz=%d\n", uid, dn(uid), shortSID(sid), req.CX, req.CZ)
-	if req.CX < 0 || req.CX >= chunkCount || req.CZ < 0 || req.CZ >= chunkCount {
+	logf("rcv getGroundChunk uid=%s%s sid=%s cx=%d cz=%d worldId=%d\n", uid, dn(uid), shortSID(sid), req.CX, req.CZ, req.WorldID)
+	w := getWorld(req.WorldID)
+	if w == nil { w = defaultWorld }
+	if !w.inBounds(req.CX, req.CZ) {
 		return "", fmt.Errorf("getGroundChunk: out of bounds cx=%d cz=%d", req.CX, req.CZ)
 	}
-	ch := &chunks[req.CX][req.CZ]
+	ch := w.getChunk(req.CX, req.CZ)
 	ch.mu.RLock()
 	flat := ch.toFlat()
 	ch.mu.RUnlock()
@@ -1646,23 +1768,26 @@ func rpcSyncChunks(ctx context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.N
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 	sid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
 	var req struct {
-		MinCX  int               `json:"minCX"`
-		MinCZ  int               `json:"minCZ"`
-		MaxCX  int               `json:"maxCX"`
-		MaxCZ  int               `json:"maxCZ"`
-		Hashes map[string]string `json:"hashes"`
+		WorldID int               `json:"worldId"`
+		MinCX   int               `json:"minCX"`
+		MinCZ   int               `json:"minCZ"`
+		MaxCX   int               `json:"maxCX"`
+		MaxCZ   int               `json:"maxCZ"`
+		Hashes  map[string]string `json:"hashes"`
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return "", err
 	}
+	w := getWorld(req.WorldID)
+	if w == nil { w = defaultWorld }
 	// クランプ
 	if req.MinCX < 0 { req.MinCX = 0 }
 	if req.MinCZ < 0 { req.MinCZ = 0 }
-	if req.MaxCX >= chunkCount { req.MaxCX = chunkCount - 1 }
-	if req.MaxCZ >= chunkCount { req.MaxCZ = chunkCount - 1 }
-	// min > max は不正
+	if req.MaxCX >= w.ChunkCountX { req.MaxCX = w.ChunkCountX - 1 }
+	if req.MaxCZ >= w.ChunkCountZ { req.MaxCZ = w.ChunkCountZ - 1 }
+	// クランプ後に min > max なら範囲外（空結果を返す）
 	if req.MinCX > req.MaxCX || req.MinCZ > req.MaxCZ {
-		return "", fmt.Errorf("syncChunks: invalid range min(%d,%d) > max(%d,%d)", req.MinCX, req.MinCZ, req.MaxCX, req.MaxCZ)
+		return `{"chunks":[]}`, nil
 	}
 	if req.Hashes == nil { req.Hashes = make(map[string]string) }
 
@@ -1679,7 +1804,7 @@ func rpcSyncChunks(ctx context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.N
 		for cz := req.MinCZ; cz <= req.MaxCZ; cz++ {
 			total++
 			key := fmt.Sprintf("%d_%d", cx, cz)
-			ch := &chunks[cx][cz]
+			ch := w.getChunk(cx, cz)
 			ch.mu.RLock()
 			serverHashStr := fmt.Sprintf("%d", ch.hash)
 			ch.mu.RUnlock()
@@ -1819,10 +1944,11 @@ func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	// バリデーション: items 配列を持つ JSON か確認
 	var req struct {
 		Items []struct {
-			Name string  `json:"name"`
-			X    float64 `json:"x"`
-			Z    float64 `json:"z"`
-			Ry   float64 `json:"ry"`
+			Name    string  `json:"name"`
+			X       float64 `json:"x"`
+			Z       float64 `json:"z"`
+			Ry      float64 `json:"ry"`
+			WorldID int     `json:"worldId"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
@@ -1868,10 +1994,15 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		}
 	}()
 
+	// ワールド作成
+	defaultWorld = createWorld(defaultWorldID, defaultChunkCount, defaultChunkCount)
+	createWorld(1, 8, 8) // テスト用サブワールド（128x128セル）
+	w := defaultWorld
+
 	// ストレージから地面テーブルを復元（チャンク単位）
 	loadedChunks := 0
-	for cx := 0; cx < chunkCount; cx++ {
-		for cz := 0; cz < chunkCount; cz++ {
+	for cx := 0; cx < w.ChunkCountX; cx++ {
+		for cz := 0; cz < w.ChunkCountZ; cz++ {
 			objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
 				Collection: groundCollection,
 				Key:        chunkStorageKey(cx, cz),
@@ -1890,7 +2021,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 			for i, v := range chunkData.Table {
 				flat8[i] = uint8(v)
 			}
-			ch := &chunks[cx][cz]
+			ch := w.getChunk(cx, cz)
 			ch.mu.Lock()
 			ch.fromFlat(flat8)
 			ch.calcHash()
@@ -1920,7 +2051,8 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 						cz := gz / chunkSize
 						lx := gx % chunkSize
 						lz := gz % chunkSize
-						chunks[cx][cz].cells[lx][lz] = blockData{
+						ch := w.getChunk(cx, cz)
+						ch.cells[lx][lz] = blockData{
 							BlockID: uint16(newData.Table[i]) | uint16(newData.Table[i+1])<<8,
 							R: uint8(newData.Table[i+2]), G: uint8(newData.Table[i+3]),
 							B: uint8(newData.Table[i+4]), A: uint8(newData.Table[i+5]),
@@ -1928,9 +2060,10 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 					}
 				}
 				logger.Info("Migrated old ground_table (100x100) to chunk format")
-				for cx := 0; cx < chunkCount; cx++ {
-					for cz := 0; cz < chunkCount; cz++ {
-						chunks[cx][cz].calcHash()
+				for cx := 0; cx < w.ChunkCountX; cx++ {
+					for cz := 0; cz < w.ChunkCountZ; cz++ {
+						ch := w.getChunk(cx, cz)
+						ch.calcHash()
 						markChunkDirty(cx, cz)
 					}
 				}
@@ -1947,13 +2080,15 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 							cz := gz / chunkSize
 							lx := gx % chunkSize
 							lz := gz % chunkSize
-							chunks[cx][cz].cells[lx][lz] = blockData{BlockID: oldData.Table[gx*oldSize+gz], R: 51, G: 102, B: 255, A: 255}
+							ch := w.getChunk(cx, cz)
+							ch.cells[lx][lz] = blockData{BlockID: oldData.Table[gx*oldSize+gz], R: 51, G: 102, B: 255, A: 255}
 						}
 					}
 					logger.Info("Migrated old ground_table (100x100, blockID only) to chunk format")
-					for cx := 0; cx < chunkCount; cx++ {
-						for cz := 0; cz < chunkCount; cz++ {
-							chunks[cx][cz].calcHash()
+					for cx := 0; cx < w.ChunkCountX; cx++ {
+						for cz := 0; cz < w.ChunkCountZ; cz++ {
+							ch := w.getChunk(cx, cz)
+							ch.calcHash()
 							markChunkDirty(cx, cz)
 						}
 					}
@@ -2075,6 +2210,6 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 
-	logger.Info("server_info module loaded (world=%dx%d, chunk=%dx%d, %dx%d chunks)", worldSize, worldSize, chunkSize, chunkSize, chunkCount, chunkCount)
+	logger.Info("server_info module loaded (world=%dx%d, chunk=%dx%d, %dx%d chunks)", defaultWorld.worldSize(), defaultWorld.worldSize(), chunkSize, chunkSize, defaultWorld.ChunkCountX, defaultWorld.ChunkCountZ)
 	return nil
 }

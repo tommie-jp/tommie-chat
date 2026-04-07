@@ -2637,13 +2637,14 @@ export function setupHtmlUI(game: GameScene): void {
         if (bookmarkPanel && bookmarkListEl) {
             // 固定ブックマーク（クライアント側定義）
             const builtinBookmarks = [
-                { id: "world_center", name: "ワールド（中心）" },
-                { id: "room_park",    name: "公園" },
-                { id: "room_beach",   name: "ビーチ" },
-                { id: "room_night",   name: "夜の街" },
+                { id: "world_center", name: "ワールド（中心）", worldId: 0 },
+                { id: "room_park",    name: "公園",           worldId: 0 },
+                { id: "room_beach",   name: "ビーチ",         worldId: 0 },
+                { id: "room_night",   name: "夜の街",         worldId: 0 },
+                { id: "sub_world",    name: "サブワールド",    worldId: 1 },
             ];
             // ユーザー定義ブックマーク（サーバーから読み込み）
-            let userBookmarks: { name: string; x: number; z: number; ry: number }[] = [];
+            let userBookmarks: { name: string; x: number; z: number; ry: number; worldId: number }[] = [];
             let bookmarksLoaded = false;
 
             const loadBookmarks = async () => {
@@ -2675,13 +2676,13 @@ export function setupHtmlUI(game: GameScene): void {
 
                 // 固定ブックマーク
                 for (const r of builtinBookmarks) {
-                    const isCurrent = game.currentBookmarkId === r.id;
+                    const isCurrent = game.currentBookmarkId === r.id && game.currentWorldId === r.worldId;
                     const btn = document.createElement("button");
                     if (isCurrent) btn.style.fontWeight = "bold";
                     btn.textContent = r.name + (isCurrent ? " ★" : "");
                     btn.addEventListener("click", () => {
                         if (isCurrent) return;
-                        game.moveBookmark(r.id);
+                        game.moveBookmark(r.id, undefined, r.worldId);
                         renderBookmarkList();
                     });
                     bookmarkListEl.appendChild(btn);
@@ -2699,11 +2700,12 @@ export function setupHtmlUI(game: GameScene): void {
                     nameB.textContent = `📌 ${bm.name}`;
                     const coordSpan = document.createElement("span");
                     coordSpan.style.cssText = "font-size:10px;opacity:0.6;margin-left:6px;";
-                    coordSpan.textContent = `(${Math.round(bm.x) + 512}, ${Math.round(bm.z) + 512})`;
+                    const bmHalf = game.worldSizeOf(bm.worldId) / 2;
+                    coordSpan.textContent = `(${Math.round(bm.x) + bmHalf}, ${Math.round(bm.z) + bmHalf}) w${bm.worldId}`;
                     btn.appendChild(nameB);
                     btn.appendChild(coordSpan);
                     btn.addEventListener("click", () => {
-                        game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z });
+                        game.moveBookmark(`user_${i}`, { x: bm.x, z: bm.z }, bm.worldId);
                         game.playerBox.rotation.y = bm.ry;
                         renderBookmarkList();
                     });
@@ -2732,7 +2734,7 @@ export function setupHtmlUI(game: GameScene): void {
                     if (!raw || !raw.trim()) return;
                     const name = raw.trim().slice(0, 20).replace(/[\x00-\x1f\x7f]/g, "");
                     if (!name) return;
-                    userBookmarks.push({ name, x: p.x, z: p.z, ry: game.playerBox.rotation.y });
+                    userBookmarks.push({ name, x: p.x, z: p.z, ry: game.playerBox.rotation.y, worldId: game.currentWorldId });
                     persistBookmarks();
                     renderBookmarkList();
                 });
