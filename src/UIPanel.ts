@@ -175,7 +175,7 @@ export function setupHtmlUI(game: GameScene): void {
             // スマホ: パネルヘッダーのドラッグでもデバイダーを移動（ポートレートのみ）
             if (isMobileDev) {
                 const headerIds = ["user-list-header", "chat-history-header", "chat-settings-header",
-                                   "server-settings-header", "server-log-header", "ping-header", "ccu-header", "debug-title-bar", "about-panel-header", "displayname-header"];
+                                   "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "debug-title-bar", "about-panel-header", "displayname-header"];
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {

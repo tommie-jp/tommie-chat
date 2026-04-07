@@ -1502,6 +1502,7 @@
             #server-log-panel,
             #ping-panel,
             #ccu-panel,
+            #bookmark-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel {
@@ -1529,6 +1530,7 @@
             #server-log-header,
             #ping-header,
             #ccu-header,
+            #bookmark-header,
             #debug-title-bar,
             #about-panel-header,
             #displayname-header {
@@ -1554,6 +1556,7 @@
             #server-log-close,
             #ping-close,
             #ccu-close,
+            #bookmark-close,
             #about-panel-close,
             #displayname-close {
                 font-size: 15px;
@@ -1844,6 +1847,7 @@
             #server-log-panel,
             #ping-panel,
             #ccu-panel,
+            #bookmark-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel {
@@ -1870,6 +1874,7 @@
             #server-log-header,
             #ping-header,
             #ccu-header,
+            #bookmark-header,
             #debug-title-bar,
             #about-panel-header,
             #displayname-header {
@@ -2004,6 +2009,7 @@
             #server-log-panel,
             #ping-panel,
             #ccu-panel,
+            #bookmark-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel {
@@ -2024,6 +2030,7 @@
             #server-log-header > span:first-child,
             #ping-header > span:first-child,
             #ccu-header > span:first-child,
+            #bookmark-header > span:first-child,
             #debug-title-text,
             #about-panel-header > span:first-child,
             #displayname-header > span:first-child {
@@ -2036,6 +2043,7 @@
             #server-log-close,
             #ping-close,
             #ccu-close,
+            #bookmark-close,
             #about-panel-close,
             #displayname-close,
             #debug-minimize-btn,
@@ -2064,6 +2072,7 @@
             #server-log-panel,
             #ping-panel,
             #ccu-panel,
+            #bookmark-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel {
@@ -2080,6 +2089,7 @@
         body.theme-dark #server-log-panel,
         body.theme-dark #ping-panel,
         body.theme-dark #ccu-panel,
+        body.theme-dark #bookmark-panel,
         body.theme-dark #debug-overlay,
         body.theme-dark #about-panel,
         body.theme-dark #displayname-panel {
@@ -2094,6 +2104,7 @@
         body.theme-dark #server-log-header,
         body.theme-dark #ping-header,
         body.theme-dark #ccu-header,
+        body.theme-dark #bookmark-header,
         body.theme-dark #debug-title-bar,
         body.theme-dark #about-panel-header,
         body.theme-dark #displayname-header {
@@ -2462,7 +2473,8 @@
                 ["showUserList",    "user-list-panel"],
                 ["showChatHist",    "chat-history-panel"],
                 ["showDebug",       "debug-overlay"],
-                ["showPing",        "ping-panel"]
+                ["showPing",        "ping-panel"],
+                ["showBookmarks",   "bookmark-panel"]
             ];
             var getCookie = function(name) {
                 var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
