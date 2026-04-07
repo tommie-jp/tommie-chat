@@ -2628,7 +2628,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
     }
 
-    // ─── 部屋一覧（テレポート先の選択） ───
+    // ─── ブックマーク（テレポート先の選択） ───
     {
         const menuRooms = document.getElementById("menu-rooms");
         // 部屋定義（クライアント側固定リスト — ワールドも「部屋」として扱う）
@@ -2642,7 +2642,7 @@ export function setupHtmlUI(game: GameScene): void {
         const roomPanel = document.createElement("div");
         roomPanel.id = "room-panel";
         roomPanel.style.cssText = "display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;color:#fff;border-radius:8px;padding:16px;min-width:240px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:14px;";
-        roomPanel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b>部屋一覧</b><button id="room-panel-close" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;">✕</button></div><div id="room-list" style="display:flex;flex-direction:column;gap:6px;"></div>`;
+        roomPanel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b>ブックマーク</b><button id="room-panel-close" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;">✕</button></div><div id="room-list" style="display:flex;flex-direction:column;gap:6px;"></div>`;
         document.body.appendChild(roomPanel);
 
         const roomListEl = document.getElementById("room-list")!;
