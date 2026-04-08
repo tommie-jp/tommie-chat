@@ -200,14 +200,20 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # MinIO S3 リバースプロキシ
-    location /s3/ {
-        proxy_pass http://minio:9000/;
+    # MinIO S3 リバースプロキシ（avatars バケットの GET のみ許可）
+    location /s3/avatars/ {
+        limit_except GET HEAD {
+            deny all;
+        }
+        proxy_pass http://minio:9000/avatars/;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host minio:9000;
         proxy_buffering off;
+    }
+
+    # /s3/ の他パスは全て拒否
+    location /s3/ {
+        return 403;
     }
 
     # Nakama HTTP API（Origin 制限: ブラウザからのリクエストのみ許可）
