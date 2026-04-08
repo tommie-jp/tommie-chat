@@ -64,6 +64,44 @@
 
 set -e
 
+# ── trap: Ctrl+C / 異常終了時もクリーンアップを実行 ──
+CLEANUP_WIDS=""
+TEST_USER_ID=""
+TOKEN=""
+API_BASE=""
+SERVER_KEY=""
+_TRAP_FIRED=false
+
+cleanup() {
+    if [ "$_TRAP_FIRED" = true ]; then return; fi
+    _TRAP_FIRED=true
+    # TOKEN 未取得なら何もできない
+    if [ -z "${TOKEN:-}" ] || [ -z "${API_BASE:-}" ]; then return; fi
+    echo ""
+    echo "クリーンアップ中..."
+    # テスト用部屋を削除
+    _cleaned=0
+    for _wid in $CLEANUP_WIDS; do
+        if [ -n "$_wid" ] && [ "$_wid" != "0" ]; then
+            _p=$(printf '%s' "{\"worldId\":${_wid}}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+            curl -s -o /dev/null -X POST "${API_BASE}/v2/rpc/deleteRoom" \
+                -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
+                -d "$_p" --connect-timeout 3 --max-time 5 2>/dev/null || true
+            _cleaned=$((_cleaned + 1))
+        fi
+    done
+    [ "$_cleaned" -gt 0 ] && echo "  テスト用部屋 ${_cleaned} 件を削除"
+    # テストユーザーを削除
+    if [ -n "${TEST_USER_ID:-}" ]; then
+        _p=$(printf '%s' "{\"userIds\":[\"${TEST_USER_ID}\"]}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+        _code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}/v2/rpc/deleteUsers" \
+            -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
+            -d "$_p" --connect-timeout 3 --max-time 5 2>/dev/null || true)
+        [ "$_code" = "200" ] && echo "  テストユーザーを削除"
+    fi
+}
+trap cleanup EXIT
+
 # スクリプト自身の絶対パス（cd 前に解決）
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
@@ -171,7 +209,9 @@ if [ -z "$TOKEN" ]; then
     echo "❌ トークン取得失敗"
     exit 1
 fi
-echo "認証成功"
+# テストユーザーの user_id を保存（クリーンアップ用）
+TEST_USER_ID=$(echo "$BODY" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("token","").split(".")[1] + "==")' 2>/dev/null | base64 -d 2>/dev/null | python3 -c 'import sys,json; print(json.load(sys.stdin).get("uid",""))' 2>/dev/null || true)
+echo "認証成功 (uid=${TEST_USER_ID:0:8}...)"
 echo ""
 
 # ══════════════════════════════════════════
@@ -264,6 +304,9 @@ ROOM_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
 
 ROOM_HTTP=$(echo "$ROOM_RESPONSE" | tail -1)
 ROOM_BODY=$(echo "$ROOM_RESPONSE" | head -n -1)
+# 作成した部屋の ID を保存（後でクリーンアップ）
+XSS_ROOM_WID_1=$(echo "$ROOM_BODY" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); r=json.loads(d.get("payload","{}")); print(r.get("worldId",""))' 2>/dev/null || true)
+CLEANUP_WIDS="${XSS_ROOM_WID_1:-}"
 
 if [ "$ROOM_HTTP" = "200" ]; then
     # ワールドリストを取得して確認
@@ -693,13 +736,8 @@ else
     check "部屋名の HTML がエスケープされる" "1" "部屋作成失敗: ${XSS_ROOM_RESP}"
 fi
 
-# テストで作成した部屋を削除
-for _wid in $CREATED_WID $XSS_ROOM_WID; do
-    if [ -n "$_wid" ]; then
-        _del_payload=$(printf '%s' "{\"worldId\":${_wid}}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
-        rpc_code "deleteRoom" "$_del_payload" > /dev/null 2>&1
-    fi
-done
+# テストで作成した部屋IDを収集
+CLEANUP_WIDS="${CLEANUP_WIDS} ${CREATED_WID:-} ${XSS_ROOM_WID:-}"
 
 echo ""
 echo "--- 6c. deleteRoom ---"
@@ -923,16 +961,7 @@ fi
 
 echo ""
 
-# ── クリーンアップ: テスト用表示名をリセット ──
-CLEAN_PAYLOAD=$(printf '%s' '{"displayName":""}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
-curl -s -X POST \
-    "${API_BASE}/v2/rpc/updateDisplayName" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${TOKEN}" \
-    -d "${CLEAN_PAYLOAD}" \
-    --connect-timeout 5 --max-time 10 > /dev/null 2>&1
-
-# ── 結果 ──
+# ── 結果（クリーンアップは trap EXIT で自動実行） ──
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━"
 if [ "$FAILED" -eq 0 ]; then
