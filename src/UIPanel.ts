@@ -709,9 +709,11 @@ export function setupHtmlUI(game: GameScene): void {
         entry.className = "chat-history-entry";
         const isSystem = avatarName === "[system]";
         const nameClass = isSystem ? "chat-history-system" : "chat-history-name";
+        const safeColor = sanitizeColor(nameColor ?? "");
+        const nameStyle = (!isSystem && safeColor) ? ` style="color:${safeColor}"` : "";
         entry.innerHTML =
             `<span class="chat-history-time">${escapeHtml(timeStr)}</span>` +
-            `<span class="${nameClass}">${escapeHtml(avatarName)}</span>` +
+            `<span class="${nameClass}"${nameStyle}>${escapeHtml(avatarName)}</span>` +
             `<span class="chat-history-text">${isSystem ? text : escapeHtml(text)}</span>`;
         list.appendChild(entry);
         entry.scrollIntoView({ block: "end", behavior: "instant" });
