@@ -21,18 +21,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@babylonjs/core": "^8.53.0",
-    "@babylonjs/gui": "^8.53.0",
-    "@babylonjs/loaders": "^8.53.0",
-    "@babylonjs/materials": "^8.53.0",
+    "@babylonjs/core": "^9.1.0",
+    "@babylonjs/gui": "^9.1.0",
+    "@babylonjs/loaders": "^9.1.0",
+    "@babylonjs/materials": "^9.1.0",
     "@heroiclabs/nakama-js": "^2.8.0"
   },
   "devDependencies": {
-    "@babylonjs/inspector": "^8.53.0",
+    "@babylonjs/inspector": "^9.1.0",
     "@types/ws": "^8.18.1",
-    "typescript": "^5.0.0",
-    "vite": "^5.0.0",
-    "vitest": "^4.0.18",
-    "ws": "^8.19.0"
+    "typescript": "^6.0.2",
+    "vite": "^8.0.7",
+    "vitest": "^4.1.3",
+    "ws": "^8.20.0"
   }
 }
