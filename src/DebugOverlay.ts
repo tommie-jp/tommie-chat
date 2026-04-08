@@ -354,6 +354,67 @@ export function setupDebugOverlay(game: GameScene): void {
         const sCk = (k: string, v: string) =>
             document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
 
+        // ── ツールチップ ON/OFF ──
+        const tooltipBtn = document.getElementById("menu-tooltips");
+        if (tooltipBtn) {
+            game.tooltipsEnabled = gCk("tooltips") !== "0";
+            const updateTooltipBtn = () => {
+                tooltipBtn.textContent = (game.tooltipsEnabled ? "✓" : "　") + " ツールチップ";
+            };
+            let _suppressObserver = false;
+            const applyTooltips = () => {
+                _suppressObserver = true;
+                if (game.tooltipsEnabled) {
+                    document.querySelectorAll<HTMLElement>("[data-title-backup]").forEach(el => {
+                        el.title = el.getAttribute("data-title-backup") || "";
+                        el.removeAttribute("data-title-backup");
+                    });
+                } else {
+                    document.querySelectorAll<HTMLElement>("[title]").forEach(el => {
+                        if (el.title) {
+                            el.setAttribute("data-title-backup", el.title);
+                            el.removeAttribute("title");
+                        }
+                    });
+                }
+                _suppressObserver = false;
+            };
+            updateTooltipBtn();
+            if (!game.tooltipsEnabled) {
+                applyTooltips();
+                setTimeout(applyTooltips, 1000);
+            }
+            // 動的に追加される title も自動で無効化
+            new MutationObserver((mutations) => {
+                if (game.tooltipsEnabled || _suppressObserver) return;
+                _suppressObserver = true;
+                for (const m of mutations) {
+                    if (m.type === "attributes" && m.attributeName === "title") {
+                        const el = m.target as HTMLElement;
+                        if (el.title) {
+                            el.setAttribute("data-title-backup", el.title);
+                            el.removeAttribute("title");
+                        }
+                    }
+                }
+                _suppressObserver = false;
+            }).observe(document.body, { attributes: true, attributeFilter: ["title"], subtree: true });
+            tooltipBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                game.tooltipsEnabled = !game.tooltipsEnabled;
+                (window as unknown as Record<string, unknown>).__tooltipsDisabled = !game.tooltipsEnabled;
+                sCk("tooltips", game.tooltipsEnabled ? "1" : "0");
+                updateTooltipBtn();
+                applyTooltips();
+                // カスタムツールチップが表示中なら非表示にする
+                if (!game.tooltipsEnabled) {
+                    const ct = document.getElementById("custom-tooltip");
+                    if (ct) ct.style.display = "none";
+                }
+                closeMenu(tooltipBtn);
+            });
+        }
+
         const isMobileMenu = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
         const toggleRegistry: { btnId: string; targetId: string; label: string; cookieKey: string }[] = [];
 

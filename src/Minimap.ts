@@ -49,7 +49,7 @@ export function setupMinimap(game: GameScene): void {
     mmPlane.alphaIndex = 100;
 
     // PC のみツールチップ
-    if (!isMobile) {
+    if (!isMobile && game.tooltipsEnabled) {
         container.title = "ミニマップ\nワールド全体の俯瞰図\n緑: 地面\n色付き: ブロック\n白▲: 自分\n緑▲: 他プレイヤー\n\nドラッグ: 移動\n右下ドラッグ: リサイズ\nホイール: ズーム";
     }
 

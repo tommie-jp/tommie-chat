@@ -2469,6 +2469,7 @@
             var tooltipShowTime = 0; // 表示直後のclick誤消去防止用
 
             function showTooltip(text, posX, posY, sourceEl) {
+                if (window.__tooltipsDisabled) return;
                 tooltipEl.textContent = text;
                 tooltipEl.style.display = "block";
                 tooltipVisible = true;
@@ -3061,6 +3062,7 @@
         <button class="menu-item" id="menu-rooms">　 部屋一覧</button>
         <button class="menu-item dev-only" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
         <button class="menu-item dev-only" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
+        <button class="menu-item" id="menu-tooltips">✓ ツールチップ</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
         <button class="menu-item" id="menu-about" data-i18n-prefix="menu.about">　 tommieChatについて</button>
         <button class="menu-item" id="menu-debug" data-i18n-prefix="menu.debug">✓ デバッグツール</button>
@@ -3302,6 +3304,7 @@
     <div id="custom-tooltip"></div>
     <script>
     // カスタムツールチップ: title属性 → data-tip に変換し、画面内に収める
+    window.__tooltipsDisabled = document.cookie.indexOf("tooltips=0") !== -1;
     (function() {
         var tip = document.getElementById("custom-tooltip");
         var showTimer = null;
@@ -3340,6 +3343,7 @@
         }).observe(document.body, { attributes: true, attributeFilter: ["title"], childList: true, subtree: true });
 
         function show(el) {
+            if (window.__tooltipsDisabled) return;
             var text = el.getAttribute("data-tip");
             if (!text) return;
             currentEl = el;

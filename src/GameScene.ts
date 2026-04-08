@@ -84,6 +84,8 @@ export class GameScene {
     connectionState: "connected" | "retry" | "disconnected" = "disconnected";
     /** ミニマップ回転モード（true=プレイヤー向き追従、false=北固定） */
     minimapRotate = true;
+    /** ツールチップ表示（false で全 title 属性を無効化） */
+    tooltipsEnabled = !document.cookie.includes("tooltips=0");
     playerTextureUrl = localStorage.getItem("spriteAvatarUrl") || "/s3/avatars/pipo-nekonin008.png";
     playerCharCol = parseInt(localStorage.getItem("spriteAvatarCol") ?? "0", 10) || 0;
     playerCharRow = parseInt(localStorage.getItem("spriteAvatarRow") ?? "0", 10) || 0;
