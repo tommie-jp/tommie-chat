@@ -17,7 +17,7 @@ import { trackUserId, deleteCreatedUsers } from './test-helpers';
 
 const HOST        = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT        = process.env.NAKAMA_PORT ?? '7350';
-const SERVER_KEY  = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
+const SERVER_KEY  = process.env.NAKAMA_SERVER_KEY ?? 'tommie-chat';
 const TEXTURE_URL = '/textures/pic1.ktx2';
 const CHAT_ROOM   = 'world';
 

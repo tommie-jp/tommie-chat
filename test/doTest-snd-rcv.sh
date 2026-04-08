@@ -205,7 +205,7 @@ MULTI3_RC=-1; MULTI10_RC=-1; MULTI100_RC=-1; MULTI1000_RC=-1; MULTI2000_RC=-1; C
 echo "========================================="
 echo "snd/rcv 整合性テスト"
 echo "========================================="
-echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "server_key: ${NAKAMA_SERVER_KEY:-tommie-chat}"
 echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo "実行フェーズ: $PHASES_TO_RUN"
 

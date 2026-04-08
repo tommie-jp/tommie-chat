@@ -154,7 +154,7 @@ run_step "Nakama health + RPC after restart" bash -c '
     done
     # RPC疎通確認（Goプラグインが正しくロードされているか）
     sleep 2
-    AUTH=$(echo -n "${NAKAMA_SERVER_KEY:-defaultkey}:" | base64)
+    AUTH=$(echo -n "${NAKAMA_SERVER_KEY:-tommie-chat}:" | base64)
     STATUS=$(curl -o /dev/null -w "%{http_code}" -s \
         -H "Authorization: Basic ${AUTH}" \
         http://127.0.0.1:7350/v2/rpc/getWorldMatch? 2>/dev/null || echo "000")

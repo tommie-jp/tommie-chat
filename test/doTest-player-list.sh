@@ -131,7 +131,7 @@ FINAL_RC=0
 echo "========================================="
 echo "プレイヤーリスト通知テスト"
 echo "========================================="
-echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "server_key: ${NAKAMA_SERVER_KEY:-tommie-chat}"
 echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo "テスト人数: ${COUNTS[*]}"
 echo "ログインレート: ${LOGIN_RATE_PER_SEC}人/秒 (0=無制限)"

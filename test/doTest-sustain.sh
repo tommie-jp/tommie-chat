@@ -52,7 +52,7 @@ mkdir -p test/log
 echo "========================================="
 echo "Nakama 接続維持テスト"
 echo "========================================="
-echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "server_key: ${NAKAMA_SERVER_KEY:-tommie-chat}"
 echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo ""
 

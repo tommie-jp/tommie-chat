@@ -19,7 +19,7 @@ import { Client } from '@heroiclabs/nakama-js';
 
 const HOST       = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT       = process.env.NAKAMA_PORT ?? '7350';
-const SERVER_KEY = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
+const SERVER_KEY = process.env.NAKAMA_SERVER_KEY ?? 'tommie-chat';
 const PATTERN    = process.env.SEED_PATTERN ?? 'plaza';
 
 const OP_BLOCK_UPDATE = 4;

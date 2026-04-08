@@ -391,7 +391,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
     # ── 段階モード ──
     echo "========================================="
     echo "全テスト一括実行（段階モード）"
-    echo "  server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+    echo "  server_key: ${NAKAMA_SERVER_KEY:-tommie-chat}"
     echo "  endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
     echo "  人数: ${PLAYER_COUNTS[*]}"
     echo "  テスト: security / reconnect / concurrent / snd-rcv / player-list / sustain / ccu-db"
@@ -438,7 +438,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
     echo "========================================="
 else
     # ── 単一モード（従来互換） ──
-    echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+    echo "server_key: ${NAKAMA_SERVER_KEY:-tommie-chat}"
     echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
     CURRENT_ROUND_LABEL=""
     [ -n "$PLAYERS_OPT" ] && CURRENT_ROUND_LABEL="[$(echo "$PLAYERS_OPT" | grep -oP '\d+')人]"

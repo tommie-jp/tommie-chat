@@ -128,7 +128,7 @@ if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/docker-compose.yml ]; then
     [ -n "$_key" ] && NAKAMA_SERVER_KEY="$_key"
 fi
 
-SERVER_KEY="${NAKAMA_SERVER_KEY:-defaultkey}"
+SERVER_KEY="${NAKAMA_SERVER_KEY:-tommie-chat}"
 HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
 IS_LOCAL=false
 if [ "$HOST" = "127.0.0.1" ] || [ "$HOST" = "localhost" ]; then
