@@ -28,11 +28,14 @@
 #   12. 連続 RPC 呼び出しでレート制限が発動する
 #   13. レート以内の持続呼び出しは全て成功する
 #   14. バースト後にトークンが回復する
-#   === nginx セキュリティヘッダー（リモートのみ） ===
+#   === nginx セキュリティヘッダー（本番 nginx のみ） ===
 #   15. X-Content-Type-Options: nosniff
 #   16. X-Frame-Options: DENY
 #   17. Referrer-Policy ヘッダーが存在する
 #   18. Content-Security-Policy ヘッダーが存在する
+#   === nginx Origin 制限（本番 nginx のみ） ===
+#   19. Origin なしで /v2/ が 403
+#   20. 不正 Origin で /v2/ が 403
 
 set -e
 
@@ -108,6 +111,16 @@ echo "=== セキュリティテスト ==="
 echo "スクリプト: $(stat -c '%y' "$SCRIPT_PATH" | cut -d. -f1)"
 echo "実行時刻:   $(date '+%Y-%m-%d %H:%M:%S')"
 echo "endpoint:   ${API_BASE}"
+IS_PROD_NGINX=false
+if [ "$IS_LOCAL" = true ]; then
+    _8081=$(curl -s -o /dev/null -w "%{http_code}" "http://${HOST}:8081/" --connect-timeout 2 --max-time 3 2>/dev/null || true)
+    if [ "$_8081" = "200" ]; then
+        IS_PROD_NGINX=true
+        echo "nginx:      http://${HOST}:8081（本番 nginx）"
+    fi
+else
+    IS_PROD_NGINX=true
+fi
 echo ""
 
 # ── 認証（テスト用ユーザー作成） ──
@@ -146,7 +159,7 @@ echo "=== 1. XSS サニタイズ ==="
 # RPC 経由で直接テスト可能な部分を確認
 
 # 1-1. 表示名に HTML タグを含むリクエスト
-echo "[1/18] 表示名の HTML エスケープ..."
+echo "[1/20] 表示名の HTML エスケープ..."
 # Nakama HTTP RPC は payload を JSON 文字列でラップする必要がある
 XSS_PAYLOAD=$(printf '%s' '{"displayName":"<script>alert(1)</script>"}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
@@ -185,7 +198,7 @@ else
 fi
 
 # ── 1-2. 表示名に属性エスケープ攻撃 ──
-echo "[2/18] 表示名の属性エスケープ..."
+echo "[2/20] 表示名の属性エスケープ..."
 XSS_ATTR_PAYLOAD=$(printf '%s' '{"displayName":"test\"><img src=x onerror=alert(1)>"}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DN2_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "${API_BASE}/v2/rpc/updateDisplayName" \
@@ -215,7 +228,7 @@ else
 fi
 
 # ── 1-3. ワールド名の HTML エスケープ ──
-echo "[3/18] ワールド名の HTML エスケープ..."
+echo "[3/20] ワールド名の HTML エスケープ..."
 ROOM_PAYLOAD=$(printf '%s' '{"name":"<b>evil</b>","chunkCountX":2,"chunkCountZ":2}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 ROOM_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "${API_BASE}/v2/rpc/createRoom" \
@@ -249,7 +262,7 @@ else
 fi
 
 # ── 1-4. nameColor のバリデーション ──
-echo "[4/18] nameColor バリデーション..."
+echo "[4/20] nameColor バリデーション..."
 # joinMatch のメタデータで不正な nameColor を送信するのは直接テストが難しいため、
 # サーバーの sanitizeColor が正規表現マッチのみ通すことを間接的に確認。
 # ここでは getServerInfo で接続確認し、コードレビュー結果で判定。
@@ -271,7 +284,7 @@ echo ""
 # ══════════════════════════════════════════
 echo "=== 2. ENABLE_TEST_RPC ==="
 
-echo "[5/18] 本番設定で ENABLE_TEST_RPC=false..."
+echo "[5/20] 本番設定で ENABLE_TEST_RPC=false..."
 if [ -f nakama/docker-compose.prod.yml ]; then
     if grep -q 'ENABLE_TEST_RPC=false' nakama/docker-compose.prod.yml; then
         check "docker-compose.prod.yml に ENABLE_TEST_RPC=false が存在する" "0"
@@ -285,7 +298,7 @@ else
 fi
 
 # ── 2-2. deleteUsers RPC が実行不可 ──
-echo "[6/18] deleteUsers RPC が実行不可..."
+echo "[6/20] deleteUsers RPC が実行不可..."
 # 存在しない dummy ユーザーID で呼び出し（実害なし）
 DEL_PAYLOAD=$(printf '%s' '{"userIds":["00000000-0000-0000-0000-000000000000"]}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DEL_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
@@ -295,7 +308,7 @@ DEL_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     -d "${DEL_PAYLOAD}" \
     --connect-timeout 5 --max-time 10 2>/dev/null)
 DEL_HTTP=$(echo "$DEL_RESPONSE" | tail -1)
-if [ "$IS_LOCAL" = true ]; then
+if [ "$IS_LOCAL" = true ] && [ "${IS_PROD_NGINX:-false}" != true ]; then
     # dev 環境: ENABLE_TEST_RPC=true なので RPC は存在する（想定通り）
     if [ "$DEL_HTTP" = "200" ]; then
         check "deleteUsers RPC — dev 環境で有効（想定通り）" "0"
@@ -305,7 +318,7 @@ if [ "$IS_LOCAL" = true ]; then
         check "deleteUsers RPC — dev 環境 (HTTP ${DEL_HTTP})" "0"
     fi
 else
-    # 本番/リモート環境: RPC が存在しない（404）ことを確認
+    # 本番環境（リモート or ローカル8081）: RPC が存在しない（404）ことを確認
     if [ "$DEL_HTTP" = "404" ] || [ "$DEL_HTTP" = "400" ]; then
         check "deleteUsers RPC が本番で無効 (HTTP ${DEL_HTTP})" "0"
     elif [ "$DEL_HTTP" = "200" ]; then
@@ -343,7 +356,11 @@ if [ "$IS_LOCAL" = true ]; then
         SKIP_WEB=true
     fi
     if [ "$SKIP_WEB" != true ]; then
-        echo "web: ${WEB_BASE}"
+        if [ "$IS_PROD_NGINX" = true ]; then
+            echo "web: ${WEB_BASE}（本番 nginx）"
+        else
+            echo "web: ${WEB_BASE}"
+        fi
         # dev nginx が vite 転送モードか判定
         if docker exec nakama-web-1 cat /etc/nginx/conf.d/default.conf 2>/dev/null | grep -q 'host.docker.internal' 2>/dev/null; then
             IS_VITE=true
@@ -351,7 +368,7 @@ if [ "$IS_LOCAL" = true ]; then
     fi
 else
     WEB_BASE="${PROTO}://${HOST}"
-    echo "web: ${WEB_BASE}"
+    echo "web: ${WEB_BASE}（本番 nginx）"
 fi
 
 if [ "${SKIP_WEB:-}" = true ]; then
@@ -359,7 +376,7 @@ if [ "${SKIP_WEB:-}" = true ]; then
 else
 
 # ── 2-1. /s3/avatars/ の GET が成功する ──
-echo "[7/18] /s3/avatars/ GET..."
+echo "[7/20] /s3/avatars/ GET..."
 S3_GET_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     "${WEB_BASE}/s3/avatars/" \
     --connect-timeout 5 --max-time 10 2>/dev/null)
@@ -370,7 +387,7 @@ check "/s3/avatars/ GET が通る (HTTP ${S3_GET_CODE})" \
     "期待: 200、実際: ${S3_GET_CODE}"
 
 # ── 2-2. /s3/avatars/ の PUT が拒否される ──
-echo "[8/18] /s3/avatars/ PUT 拒否..."
+echo "[8/20] /s3/avatars/ PUT 拒否..."
 S3_PUT_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     -X PUT "${WEB_BASE}/s3/avatars/evil-test-upload.txt" \
     -d "malicious content" \
@@ -382,7 +399,7 @@ check "/s3/avatars/ PUT が拒否される (HTTP ${S3_PUT_CODE})" \
     "期待: 403/405、実際: ${S3_PUT_CODE}。nginx の limit_except 設定を確認してください"
 
 # ── 2-3. /s3/uploads/ へのアクセスが拒否される ──
-echo "[9/18] /s3/uploads/ アクセス拒否..."
+echo "[9/20] /s3/uploads/ アクセス拒否..."
 S3_UPLOADS_BODY=$(curl -s "${WEB_BASE}/s3/uploads/" --connect-timeout 5 --max-time 10 2>/dev/null)
 S3_UPLOADS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${WEB_BASE}/s3/uploads/" --connect-timeout 5 --max-time 10 2>/dev/null)
 if [ "$IS_VITE" = true ]; then
@@ -404,7 +421,7 @@ else
 fi
 
 # ── 2-4. /s3/ ルートへのアクセスが拒否される ──
-echo "[10/18] /s3/ ルートアクセス拒否..."
+echo "[10/20] /s3/ ルートアクセス拒否..."
 S3_ROOT_BODY=$(curl -s "${WEB_BASE}/s3/" --connect-timeout 5 --max-time 10 2>/dev/null)
 S3_ROOT_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${WEB_BASE}/s3/" --connect-timeout 5 --max-time 10 2>/dev/null)
 if [ "$IS_VITE" = true ]; then
@@ -431,7 +448,7 @@ fi # SKIP_WEB
 echo "=== 4. RPC レート制限 ==="
 
 # ── 4-1. レート制限設定の存在確認 ──
-echo "[11/18] RPC レート制限の設定が存在する..."
+echo "[11/20] RPC レート制限の設定が存在する..."
 if grep -q 'RATE_LIMIT_RPC' nakama/docker-compose.yml && \
    grep -q 'withRateLimit' nakama/go_src/main.go; then
     check "RPC レート制限の設定が存在する" "0"
@@ -441,7 +458,7 @@ else
 fi
 
 # ── 4-2. 連続 RPC 呼び出しでレート制限が発動する ──
-echo "[12/18] 連続 RPC 呼び出しでレート制限が発動する..."
+echo "[12/20] 連続 RPC 呼び出しでレート制限が発動する..."
 # バースト上限（デフォルト20）を超えるまで ping を連続送信
 RATE_LIMITED=false
 for i in $(seq 1 30); do
@@ -464,7 +481,7 @@ else
 fi
 
 # ── 4-3. レート以内の持続呼び出しは全て成功する ──
-echo "[13/18] レート以内の持続呼び出し（3秒間）..."
+echo "[13/20] レート以内の持続呼び出し（3秒間）..."
 # トークン回復を待ってからテスト開始（前のテスト12でバケットが枯渇しているため）
 sleep 3
 # 秒間5回 × 3秒 = 15回（レート10/秒・バースト20 の範囲内）
@@ -493,7 +510,7 @@ else
 fi
 
 # ── 4-4. バースト後に回復する ──
-echo "[14/18] バースト後のトークン回復..."
+echo "[14/20] バースト後のトークン回復..."
 # まずバースト上限まで一気に消費
 for i in $(seq 1 25); do
     curl -s -o /dev/null -X POST \
@@ -521,18 +538,19 @@ fi
 echo ""
 
 # ══════════════════════════════════════════
-# nginx セキュリティヘッダー（リモートのみ）
+# nginx セキュリティヘッダー（本番 nginx のみ）
 # ══════════════════════════════════════════
 echo "=== 5. nginx セキュリティヘッダー ==="
 
-if [ "$IS_LOCAL" = true ]; then
-    echo "  ⏭️  ローカル環境: セキュリティヘッダーは本番 nginx のみ。スキップします。"
+# 本番 nginx: リモート、またはローカル 8081 ポート（doDeployTest.sh 環境）
+if [ "$IS_LOCAL" = true ] && [ "${IS_PROD_NGINX:-false}" != true ]; then
+    echo "  ⏭️  dev 環境: セキュリティヘッダーは本番 nginx のみ。スキップします。"
     echo ""
 else
     # レスポンスヘッダーを一括取得
     SEC_HEADERS=$(curl -s -I "${WEB_BASE}/" --connect-timeout 5 --max-time 10 2>/dev/null)
 
-    echo "[15/18] X-Content-Type-Options..."
+    echo "[15/20] X-Content-Type-Options..."
     if echo "$SEC_HEADERS" | grep -qi 'X-Content-Type-Options.*nosniff'; then
         check "X-Content-Type-Options: nosniff" "0"
     else
@@ -540,7 +558,7 @@ else
             "ヘッダーが見つかりません"
     fi
 
-    echo "[16/18] X-Frame-Options..."
+    echo "[16/20] X-Frame-Options..."
     if echo "$SEC_HEADERS" | grep -qi 'X-Frame-Options.*DENY'; then
         check "X-Frame-Options: DENY" "0"
     else
@@ -548,7 +566,7 @@ else
             "ヘッダーが見つかりません"
     fi
 
-    echo "[17/18] Referrer-Policy..."
+    echo "[17/20] Referrer-Policy..."
     if echo "$SEC_HEADERS" | grep -qi 'Referrer-Policy'; then
         check "Referrer-Policy ヘッダーが存在する" "0"
     else
@@ -556,12 +574,45 @@ else
             "ヘッダーが見つかりません"
     fi
 
-    echo "[18/18] Content-Security-Policy..."
+    echo "[18/20] Content-Security-Policy..."
     if echo "$SEC_HEADERS" | grep -qi 'Content-Security-Policy'; then
         check "Content-Security-Policy ヘッダーが存在する" "0"
     else
         check "Content-Security-Policy ヘッダーが存在する" "1" \
             "ヘッダーが見つかりません"
+    fi
+    echo ""
+
+    # ══════════════════════════════════════════
+    # nginx Origin 制限（本番 nginx のみ）
+    # ══════════════════════════════════════════
+    echo "=== 6. nginx Origin 制限 ==="
+
+    # ── 6-1. Origin なしで /v2/ が拒否される ──
+    echo "[19/20] Origin なしで /v2/ が 403..."
+    NO_ORIGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        "${WEB_BASE}/v2/account" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        --connect-timeout 5 --max-time 10 2>/dev/null || true)
+    if [ "$NO_ORIGIN_CODE" = "403" ]; then
+        check "Origin なしで /v2/ が拒否される (HTTP 403)" "0"
+    else
+        check "Origin なしで /v2/ が拒否される" "1" \
+            "期待: 403、実際: ${NO_ORIGIN_CODE}"
+    fi
+
+    # ── 6-2. 不正 Origin で /v2/ が拒否される ──
+    echo "[20/20] 不正 Origin で /v2/ が 403..."
+    BAD_ORIGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        "${WEB_BASE}/v2/account" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Origin: https://evil.example.com" \
+        --connect-timeout 5 --max-time 10 2>/dev/null || true)
+    if [ "$BAD_ORIGIN_CODE" = "403" ]; then
+        check "不正 Origin で /v2/ が拒否される (HTTP 403)" "0"
+    else
+        check "不正 Origin で /v2/ が拒否される" "1" \
+            "期待: 403、実際: ${BAD_ORIGIN_CODE}"
     fi
     echo ""
 fi
