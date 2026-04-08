@@ -18,7 +18,8 @@ const OP_PLAYERS_AOI_REQ   = 11; // C→S     全プレイヤーAOI情報要求
 const OP_PLAYERS_AOI_RESP  = 12; // S→C     全プレイヤーAOI情報応答（要求者のみ）
 const OP_CHAT              = 13; // C→S→C   チャットメッセージ（全員ブロードキャスト）
 const OP_SYSTEM_MSG        = 14; // S→C     システムメッセージ（ログイン/ログアウト通知）
-// opcode 15 は予約（未使用）
+const OP_PLAYER_LIST_SUB   = 16; // C→S     プレイヤーリスト購読（{subscribe:true/false}）
+const OP_PLAYER_LIST_DATA  = 17; // S→C     全プレイヤーリスト（プッシュ配信）
 
 export class NakamaService {
     private client: Client;
@@ -44,6 +45,7 @@ export class NakamaService {
     onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string }[]) => void;
     onPlayersAOIResponse?: (players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void;
     onDisplayName?:      (sessionId: string, displayName: string, nameColor?: string) => void;
+    onPlayerListData?:   (players: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[]) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
     /** 再接続時に joinMatch に渡すメタデータを取得するコールバック */
@@ -247,6 +249,9 @@ export class NakamaService {
                 } else if (md.op_code === OP_SYSTEM_MSG) {
                     const sys = payload as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number; nameColor?: string; ts?: number };
                     this.onSystemMessage?.(sys.type, sys.username, sys.userId, sys.sessionId ?? "", sys.uidCount ?? 1, sys.nameColor ?? "", sys.ts ?? 0);
+                } else if (md.op_code === OP_PLAYER_LIST_DATA) {
+                    const resp = payload as { players: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[] };
+                    this.onPlayerListData?.(resp.players ?? []);
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
                     const dn = payload as { displayName: string; nc?: string };
                     this.onDisplayName?.(sid, dn.displayName, dn.nc);
@@ -615,6 +620,14 @@ export class NakamaService {
             return null;
         }
         } finally { _end(); }
+    }
+
+    // プレイヤーリストのプッシュ配信を購読/解除
+    async subscribePlayerList(subscribe: boolean): Promise<void> {
+        if (!this.socket || !this.matchId) return;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_PLAYER_LIST_SUB, new TextEncoder().encode(JSON.stringify({ subscribe })));
+        } catch (e) { console.warn("NakamaService.subscribePlayerList:", e); }
     }
 
     // 全プレイヤーのAOI情報を取得（matchデータ方式: 要求→応答）

@@ -332,7 +332,8 @@ const (
 	opPlayersAOIResp   int64 = 12 // S→C     全プレイヤーAOI情報応答（要求者のみ）
 	opChat             int64 = 13 // C→S→C   チャットメッセージ（全員ブロードキャスト）
 	opSystemMsg        int64 = 14 // S→C     システムメッセージ（ログイン/ログアウト通知）
-	// opcode 15 は予約（未使用）
+	opPlayerListSub    int64 = 16 // C→S     プレイヤーリスト購読（{subscribe:true/false}）
+	opPlayerListData   int64 = 17 // S→C     全プレイヤーリスト（プッシュ配信）
 )
 
 // 地面セル: blockID (uint16) + RGBA 各1バイト
@@ -914,6 +915,88 @@ var (
 	worldPlayersCache map[string]*worldPlayerEntry // sessionID -> entry
 )
 
+// ── グローバル全プレイヤーリスト（プレイヤーリスト「すべて」用）──
+type globalPlayerEntry struct {
+	SessionID   string `json:"sessionId"`
+	UserID      string `json:"userId"`
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	LoginTime   string `json:"loginTime"`
+	NameColor   string `json:"nameColor,omitempty"`
+	WorldID     int    `json:"worldId"`
+	MatchID     string `json:"matchId"`
+}
+
+var (
+	gplMu        sync.RWMutex
+	gplMap       = make(map[string]*globalPlayerEntry) // sessionID -> entry
+	gplVer       uint64                                // atomic: mutation ごとにインクリメント
+	gplCacheData []byte                                // snapshot JSON キャッシュ
+	gplCacheVer  uint64                                // キャッシュの version
+)
+
+func gplAdd(sid string, e *globalPlayerEntry) {
+	gplMu.Lock()
+	gplMap[sid] = e
+	gplMu.Unlock()
+	atomic.AddUint64(&gplVer, 1)
+}
+
+func gplRemove(sid string, matchID string) {
+	gplMu.Lock()
+	if e, ok := gplMap[sid]; ok && (matchID == "" || e.MatchID == matchID) {
+		delete(gplMap, sid)
+		gplMu.Unlock()
+		atomic.AddUint64(&gplVer, 1)
+		return
+	}
+	gplMu.Unlock()
+}
+
+func gplUpdate(sid string, displayName, loginTime, nameColor string) {
+	gplMu.Lock()
+	if e, ok := gplMap[sid]; ok {
+		changed := e.DisplayName != displayName || e.LoginTime != loginTime || e.NameColor != nameColor
+		if changed {
+			e.DisplayName = displayName
+			e.LoginTime = loginTime
+			e.NameColor = nameColor
+		}
+		gplMu.Unlock()
+		if changed {
+			atomic.AddUint64(&gplVer, 1)
+		}
+		return
+	}
+	gplMu.Unlock()
+}
+
+func gplSnapshot() ([]byte, uint64) {
+	ver := atomic.LoadUint64(&gplVer)
+	gplMu.RLock()
+	if gplCacheVer == ver && gplCacheData != nil {
+		data := gplCacheData
+		gplMu.RUnlock()
+		return data, ver
+	}
+	gplMu.RUnlock()
+	// キャッシュ miss — marshal して保存
+	gplMu.Lock()
+	// double-check
+	if gplCacheVer == ver && gplCacheData != nil {
+		data := gplCacheData
+		gplMu.Unlock()
+		return data, ver
+	}
+	entries := make([]*globalPlayerEntry, 0, len(gplMap))
+	for _, e := range gplMap { entries = append(entries, e) }
+	data, _ := json.Marshal(map[string]interface{}{"players": entries})
+	gplCacheData = data
+	gplCacheVer = ver
+	gplMu.Unlock()
+	return data, ver
+}
+
 const worldMatchCacheTTL = 10 * time.Second
 
 // buildWorldMatchResponse は matchId とワールド情報を含むレスポンスを構築する
@@ -1069,6 +1152,8 @@ type matchState struct {
 	Rates            map[string]*sessionRate              // sessionID -> レートリミッター
 	WorldMoveJoin    map[string]bool                      // sessionID -> ワールド移動による入室か
 	PendingLeave     map[string]*pendingLeaveMsg          // userID -> 遅延送信中のleaveメッセージ
+	PlayerListSubs   map[string]bool                      // sessionID -> プレイヤーリスト購読中
+	PlayerListVer    uint64                               // 前回送信した gplVer
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -1089,8 +1174,9 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		PendingInit:     make(map[string]*playerPos),
 		PrevSIDs:        make(map[string]string),
 		Rates:           make(map[string]*sessionRate),
-		WorldMoveJoin:   make(map[string]bool),
-		PendingLeave:    make(map[string]*pendingLeaveMsg),
+		WorldMoveJoin:    make(map[string]bool),
+		PendingLeave:     make(map[string]*pendingLeaveMsg),
+		PlayerListSubs:   make(map[string]bool),
 	}, 10, label
 }
 
@@ -1206,6 +1292,10 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 				worldPlayersMu.Lock()
 				delete(worldPlayersCache, prevSid)
 				worldPlayersMu.Unlock()
+				worldMatchMu.Lock()
+				kickMid := worldMatchIDs[ms.WorldID]
+				worldMatchMu.Unlock()
+				gplRemove(prevSid, kickMid)
 			}
 			delete(ms.PrevSIDs, sid)
 		}
@@ -1238,8 +1328,25 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 				worldPlayersCache[sid] = &worldPlayerEntry{SessionID: sid, X: init.X, Z: init.Z, RY: init.RY, TextureUrl: init.TextureUrl, DisplayName: init.DisplayName}
 				worldPlayersMu.Unlock()
 			}
+			// グローバルプレイヤーリスト登録
+			worldMatchMu.Lock()
+			mid := worldMatchIDs[ms.WorldID]
+			worldMatchMu.Unlock()
+			gplAdd(sid, &globalPlayerEntry{
+				SessionID: sid, UserID: uid, Username: p.GetUsername(),
+				DisplayName: init.DisplayName, LoginTime: init.LoginTime,
+				NameColor: init.NameColor, WorldID: ms.WorldID, MatchID: mid,
+			})
 		} else {
 			ms.Positions[sid] = &playerPos{CX: -1, CZ: -1, X: 0, Z: 0, RY: 0, TextureUrl: ""}
+			// グローバルプレイヤーリスト登録（initPos 未受信なので最小限）
+			worldMatchMu.Lock()
+			mid := worldMatchIDs[ms.WorldID]
+			worldMatchMu.Unlock()
+			gplAdd(sid, &globalPlayerEntry{
+				SessionID: sid, UserID: uid, Username: p.GetUsername(),
+				WorldID: ms.WorldID, MatchID: mid,
+			})
 		}
 
 		// システムメッセージ: ログイン or 入室通知を全員に送信
@@ -1315,6 +1422,10 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 				n := v.(int) - 1; if n < 0 { n = 0 }
 				worldPlayerCounts.Store(ms.WorldID, n)
 			}
+			worldMatchMu.Lock()
+			ghostMid := worldMatchIDs[ms.WorldID]
+			worldMatchMu.Unlock()
+			gplRemove(sid, ghostMid)
 			continue
 		}
 		// システムメッセージ: ログアウト or ワールド移動通知を全員に送信
@@ -1360,6 +1471,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		delete(ms.Rates, sid)
 		delete(ms.PendingInit, sid)
 		delete(ms.PrevSIDs, sid)
+		delete(ms.PlayerListSubs, sid)
 		// ワールド人数カウンター更新
 		if v, ok := worldPlayerCounts.Load(ms.WorldID); ok {
 			n := v.(int) - 1; if n < 0 { n = 0 }
@@ -1383,6 +1495,10 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		worldPlayersMu.Lock()
 		delete(worldPlayersCache, sid)
 		worldPlayersMu.Unlock()
+		worldMatchMu.Lock()
+		leaveMid := worldMatchIDs[ms.WorldID]
+		worldMatchMu.Unlock()
+		gplRemove(sid, leaveMid)
 	}
 	// 最後のプレイヤーが退出したらダーティチャンクを即座に保存
 	if len(ms.Presences) == 0 {
@@ -1562,6 +1678,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				} else {
 					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, CharCol: pos.CharCol, CharRow: pos.CharRow, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime, NameColor: pos.NameColor}
 				}
+				// グローバルプレイヤーリスト更新
+				gplUpdate(sid, pos.DisplayName, pos.LoginTime, pos.NameColor)
 				logf("rcv DBG INIT_POS sid=%s oldCX=%d newCX=%d oldCZ=%d newCZ=%d\n", shortSID(sid), oldCX, cx, oldCZ, cz)
 				// チャンクが変わった場合、他プレイヤーのAOIへの入退場を通知（opMoveTargetと同様）
 				logf("rcv DBG INIT_POS sid=%s cx=%d cz=%d oldCX=%d oldCZ=%d chunkChanged=%v\n", shortSID(sid), cx, cz, oldCX, oldCZ, cx != oldCX || cz != oldCZ)
@@ -1858,6 +1976,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				if p, ok := ms.Positions[sid]; ok {
 					p.DisplayName = dn.DisplayName
 					if dn.NameColor != "" { p.NameColor = dn.NameColor }
+					// グローバルプレイヤーリスト更新
+					gplUpdate(sid, p.DisplayName, p.LoginTime, p.NameColor)
 				}
 			}
 			// 表示名はユーザリスト全体に影響するため全員にブロードキャスト（AOIフィルタなし）
@@ -1903,6 +2023,26 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			continue
 		}
 
+		if op == opPlayerListSub {
+			var sub struct {
+				Subscribe bool `json:"subscribe"`
+			}
+			if err := json.Unmarshal(msg.GetData(), &sub); err == nil {
+				if sub.Subscribe {
+					ms.PlayerListSubs[sid] = true
+					// 即座に現在のスナップショットを送信
+					if p, ok := ms.Presences[sid]; ok {
+						data, ver := gplSnapshot()
+						dispatcher.BroadcastMessage(opPlayerListData, data, []runtime.Presence{p}, nil, true)
+						_ = ver
+					}
+				} else {
+					delete(ms.PlayerListSubs, sid)
+				}
+			}
+			continue
+		}
+
 		// その他のメッセージは全員にブロードキャスト
 		if err := dispatcher.BroadcastMessage(op, msg.GetData(), nil, msg, true); err != nil {
 			logger.Warn("BroadcastMessage error: %v", err)
@@ -1918,6 +2058,22 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			}
 		}
 		ms.PendingAOIEnter = make(map[string][]map[string]interface{})
+	}
+
+	// プレイヤーリスト購読者へプッシュ配信（バージョンが変わった時のみ）
+	if tick%10 == 0 && len(ms.PlayerListSubs) > 0 {
+		curVer := atomic.LoadUint64(&gplVer)
+		if curVer != ms.PlayerListVer {
+			data, ver := gplSnapshot()
+			ms.PlayerListVer = ver
+			var subs []runtime.Presence
+			for sid := range ms.PlayerListSubs {
+				if p, ok := ms.Presences[sid]; ok { subs = append(subs, p) }
+			}
+			if len(subs) > 0 {
+				dispatcher.BroadcastMessage(opPlayerListData, data, subs, nil, true)
+			}
+		}
 	}
 
 	// 同接数サンプリング（1秒ごと）
@@ -1948,6 +2104,13 @@ func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, 
 	// 未フラッシュの1sデータを1mに追加してからDB保存
 	flushCcu1mSample()
 	saveCcuHistory1m(ctx, nk, logger)
+	// グローバルプレイヤーリストからこのマッチの全プレイヤーを除去
+	worldMatchMu.Lock()
+	termMid := worldMatchIDs[ms.WorldID]
+	worldMatchMu.Unlock()
+	for sid := range ms.Presences {
+		gplRemove(sid, termMid)
+	}
 	// キャッシュをクリア（次の getWorldMatch で新マッチが作成される）
 	worldMatchMu.Lock()
 	delete(worldMatchIDs, ms.WorldID)
@@ -1992,6 +2155,13 @@ func rpcGetPlayerCount(ctx context.Context, logger runtime.Logger, db *sql.DB, n
 	return string(b), nil
 }
 
+
+// rpcListOnlinePlayers は全マッチの全プレイヤー一覧を返す RPC
+func rpcListOnlinePlayers(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcListOnlinePlayers")()
+	data, _ := gplSnapshot()
+	return string(data), nil
+}
 
 type blockReq struct {
 	GX      int    `json:"gx"`
@@ -2584,6 +2754,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"getWorldList", rpcGetWorldList},
 		{"createRoom", rpcCreateRoom},
 		{"deleteRoom", rpcDeleteRoom},
+		{"listOnlinePlayers", rpcListOnlinePlayers},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {
