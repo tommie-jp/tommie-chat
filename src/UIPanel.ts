@@ -897,24 +897,30 @@ export function setupHtmlUI(game: GameScene): void {
     };
 
     const isUlPanelVisible = () => ulPanel && ulPanel.style.display !== "none";
-    let _playerListSubbed = false;
+    let _playerListMode: "count" | "full" | null = null; // 現在のサブスクライブモード
 
-    const subPlayerList = () => {
-        if (_playerListSubbed) return;
-        _playerListSubbed = true;
+    /** full モードで購読開始（パネル表示時） */
+    const subPlayerListFull = () => {
+        if (_playerListMode === "full") return;
+        _playerListMode = "full";
         refreshWorldNames();
-        game.nakama.subscribePlayerList(true);
+        game.nakama.subscribePlayerList(true, "full");
     };
-    const unsubPlayerList = () => {
-        if (!_playerListSubbed) return;
-        _playerListSubbed = false;
-        game.nakama.subscribePlayerList(false);
+    /** count モードへダウングレード（パネル非表示時） */
+    const subPlayerListCount = () => {
+        if (_playerListMode === "count") return;
+        _playerListMode = "count";
+        game.nakama.subscribePlayerList(true, "count");
     };
 
-    // サーバーからのプッシュ配信を受信
+    // サーバーからのプッシュ配信を受信（full: プレイヤーリスト）
     game.nakama.onPlayerListData = (players) => {
         _allPlayersCache = players;
         if (isUlPanelVisible()) renderUserList();
+    };
+    // サーバーからのプッシュ配信を受信（count: 部屋人数のみ）
+    game.nakama.onPlayerListCount = (count) => {
+        game.userListProfile.userCount = count;
     };
 
     // フィルタ切り替え
@@ -933,9 +939,9 @@ export function setupHtmlUI(game: GameScene): void {
         new MutationObserver(() => {
             const isHidden = ulPanel.style.display === "none";
             if (ulWasHidden && !isHidden) {
-                subPlayerList();
+                subPlayerListFull();
             } else if (!ulWasHidden && isHidden) {
-                unsubPlayerList();
+                subPlayerListCount();
             }
             ulWasHidden = isHidden;
         }).observe(ulPanel, { attributes: true, attributeFilter: ["style"] });
@@ -1529,11 +1535,11 @@ export function setupHtmlUI(game: GameScene): void {
             // matchId確定後にAOIを強制送信（selfMatchIdガードで未送信になったAOI_UPDATEを再実行）
             game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
             game.aoiManager.updateAOI();
-            // プレイヤーリスト: パネル表示中ならログイン後に購読開始
+            // プレイヤーリスト: ログイン後に購読開始（パネル表示中ならfull、非表示ならcount）
             if (isUlPanelVisible()) {
-                _playerListSubbed = true;
-                refreshWorldNames();
-                game.nakama.subscribePlayerList(true);
+                subPlayerListFull();
+            } else {
+                subPlayerListCount();
             }
 
             // ブロック更新通知の受信
@@ -3083,14 +3089,24 @@ export function setupHtmlUI(game: GameScene): void {
 
     // ワールド変更時に部屋名を非同期で取得
     game.onWorldChanged.push(() => {
+        // 新マッチの presences に含まれない旧エントリを削除
+        // （changeWorldMatch 完了後なので、新マッチの presences は既に userMap に登録済み）
+        const currentPresences = new Set(game.nakama.currentPresenceIds ?? []);
+        for (const sid of userMap.keys()) {
+            if (!currentPresences.has(sid)) userMap.delete(sid);
+        }
         game.nakama.getWorldList().then(worldList => {
             const w = worldList.find(w => w.id === game.currentWorldId);
             if (w) game.currentWorldName = w.name || `World ${w.id}`;
         }).catch(() => {});
         scheduleRenderUserList();
-        // 「すべて」モードで購読中なら新マッチに再 subscribe
-        if (_playerListSubbed) {
-            game.nakama.subscribePlayerList(true);
+        // 新マッチに再 subscribe（パネル表示中ならfull、非表示ならcount）
+        if (isUlPanelVisible()) {
+            _playerListMode = null;
+            subPlayerListFull();
+        } else {
+            _playerListMode = null;
+            subPlayerListCount();
         }
     });
 

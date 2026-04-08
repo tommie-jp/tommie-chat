@@ -1152,8 +1152,9 @@ type matchState struct {
 	Rates            map[string]*sessionRate              // sessionID -> レートリミッター
 	WorldMoveJoin    map[string]bool                      // sessionID -> ワールド移動による入室か
 	PendingLeave     map[string]*pendingLeaveMsg          // userID -> 遅延送信中のleaveメッセージ
-	PlayerListSubs   map[string]bool                      // sessionID -> プレイヤーリスト購読中
-	PlayerListVer    uint64                               // 前回送信した gplVer
+	PlayerListSubs   map[string]string                    // sessionID -> "count" or "full"
+	PlayerListVer    uint64                               // 前回送信した gplVer（full用）
+	PlayerListCount  int                                  // 前回送信した部屋人数（count用）
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -1176,7 +1177,7 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		Rates:           make(map[string]*sessionRate),
 		WorldMoveJoin:    make(map[string]bool),
 		PendingLeave:     make(map[string]*pendingLeaveMsg),
-		PlayerListSubs:   make(map[string]bool),
+		PlayerListSubs:   make(map[string]string),
 	}, 10, label
 }
 
@@ -2025,16 +2026,23 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 
 		if op == opPlayerListSub {
 			var sub struct {
-				Subscribe bool `json:"subscribe"`
+				Subscribe bool   `json:"subscribe"`
+				Mode      string `json:"mode"` // "count" or "full"（省略時は後方互換で "full"）
 			}
 			if err := json.Unmarshal(msg.GetData(), &sub); err == nil {
 				if sub.Subscribe {
-					ms.PlayerListSubs[sid] = true
-					// 即座に現在のスナップショットを送信
+					mode := sub.Mode
+					if mode == "" { mode = "full" }
+					ms.PlayerListSubs[sid] = mode
+					// 即座に現在のデータを送信
 					if p, ok := ms.Presences[sid]; ok {
-						data, ver := gplSnapshot()
-						dispatcher.BroadcastMessage(opPlayerListData, data, []runtime.Presence{p}, nil, true)
-						_ = ver
+						if mode == "full" {
+							data, _ := gplSnapshot()
+							dispatcher.BroadcastMessage(opPlayerListData, data, []runtime.Presence{p}, nil, true)
+						} else {
+							data, _ := json.Marshal(map[string]interface{}{"count": len(ms.Presences)})
+							dispatcher.BroadcastMessage(opPlayerListData, data, []runtime.Presence{p}, nil, true)
+						}
 					}
 				} else {
 					delete(ms.PlayerListSubs, sid)
@@ -2060,18 +2068,37 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		ms.PendingAOIEnter = make(map[string][]map[string]interface{})
 	}
 
-	// プレイヤーリスト購読者へプッシュ配信（バージョンが変わった時のみ）
+	// プレイヤーリスト購読者へプッシュ配信
 	if tick%10 == 0 && len(ms.PlayerListSubs) > 0 {
-		curVer := atomic.LoadUint64(&gplVer)
-		if curVer != ms.PlayerListVer {
-			data, ver := gplSnapshot()
-			ms.PlayerListVer = ver
-			var subs []runtime.Presence
-			for sid := range ms.PlayerListSubs {
-				if p, ok := ms.Presences[sid]; ok { subs = append(subs, p) }
+		// 購読者をモード別に分類
+		var countSubs, fullSubs []runtime.Presence
+		for sid, mode := range ms.PlayerListSubs {
+			if p, ok := ms.Presences[sid]; ok {
+				if mode == "full" {
+					fullSubs = append(fullSubs, p)
+				} else {
+					countSubs = append(countSubs, p)
+				}
 			}
-			if len(subs) > 0 {
-				dispatcher.BroadcastMessage(opPlayerListData, data, subs, nil, true)
+		}
+
+		// count モード: 自マッチの人数が変わった時のみ送信
+		if len(countSubs) > 0 {
+			curCount := len(ms.Presences)
+			if curCount != ms.PlayerListCount {
+				ms.PlayerListCount = curCount
+				cdata, _ := json.Marshal(map[string]interface{}{"count": curCount})
+				dispatcher.BroadcastMessage(opPlayerListData, cdata, countSubs, nil, true)
+			}
+		}
+
+		// full モード: グローバルリストが変わった時のみ送信
+		if len(fullSubs) > 0 {
+			curVer := atomic.LoadUint64(&gplVer)
+			if curVer != ms.PlayerListVer {
+				data, ver := gplSnapshot()
+				ms.PlayerListVer = ver
+				dispatcher.BroadcastMessage(opPlayerListData, data, fullSubs, nil, true)
 			}
 		}
 	}

@@ -29,6 +29,8 @@ export class NakamaService {
     private host = location.hostname;
     private port = location.port || (location.protocol === "https:" ? "443" : "80");
     selfSessionId: string | null = null;
+    /** 現在のマッチに参加中の session ID 一覧 */
+    currentPresenceIds: string[] = [];
 
     get selfMatchId(): string | null { return this.matchId; }
 
@@ -46,6 +48,7 @@ export class NakamaService {
     onPlayersAOIResponse?: (players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void;
     onDisplayName?:      (sessionId: string, displayName: string, nameColor?: string) => void;
     onPlayerListData?:   (players: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[]) => void;
+    onPlayerListCount?:  (count: number) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
     /** 再接続時に joinMatch に渡すメタデータを取得するコールバック */
@@ -250,8 +253,12 @@ export class NakamaService {
                     const sys = payload as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number; nameColor?: string; ts?: number };
                     this.onSystemMessage?.(sys.type, sys.username, sys.userId, sys.sessionId ?? "", sys.uidCount ?? 1, sys.nameColor ?? "", sys.ts ?? 0);
                 } else if (md.op_code === OP_PLAYER_LIST_DATA) {
-                    const resp = payload as { players: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[] };
-                    this.onPlayerListData?.(resp.players ?? []);
+                    const resp = payload as { players?: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[]; count?: number };
+                    if (resp.players) {
+                        this.onPlayerListData?.(resp.players);
+                    } else if (resp.count !== undefined) {
+                        this.onPlayerListCount?.(resp.count);
+                    }
                 } else if (md.op_code === OP_DISPLAY_NAME && sid) {
                     const dn = payload as { displayName: string; nc?: string };
                     this.onDisplayName?.(sid, dn.displayName, dn.nc);
@@ -290,14 +297,18 @@ export class NakamaService {
         };
         console.log(`snd joinMatch matchId=${this.matchId.slice(0,8)} meta=${JSON.stringify(initMeta)}`);
         const match = await this.socket.joinMatch(this.matchId, undefined, initMeta ?? {});
-        // selfSessionId を確定
+        // selfSessionId を確定 + 現在の presences を記録
+        const ids: string[] = [];
         if (match.self) {
             this.selfSessionId = match.self.session_id;
+            ids.push(match.self.session_id);
             this.onMatchPresenceJoin?.(match.self.session_id, match.self.user_id, match.self.username);
         }
         for (const p of match.presences ?? []) {
+            ids.push(p.session_id);
             this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
         }
+        this.currentPresenceIds = ids;
         return worldInfo;
         } finally { _end(); }
     }
@@ -623,10 +634,10 @@ export class NakamaService {
     }
 
     // プレイヤーリストのプッシュ配信を購読/解除
-    async subscribePlayerList(subscribe: boolean): Promise<void> {
+    async subscribePlayerList(subscribe: boolean, mode: "count" | "full" = "full"): Promise<void> {
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_PLAYER_LIST_SUB, new TextEncoder().encode(JSON.stringify({ subscribe })));
+            await this.socket.sendMatchState(this.matchId, OP_PLAYER_LIST_SUB, new TextEncoder().encode(JSON.stringify({ subscribe, mode })));
         } catch (e) { console.warn("NakamaService.subscribePlayerList:", e); }
     }
 
