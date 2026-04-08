@@ -4,6 +4,7 @@ import { fnv1a64, CHUNK_SIZE } from "./WorldConstants";
 import { prof } from "./Profiler";
 import { t, getLang, setLang, applyI18n } from "./i18n";
 import type { Lang } from "./i18n";
+import { escapeHtml, sanitizeColor } from "./utils";
 
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
@@ -654,13 +655,14 @@ export function setupHtmlUI(game: GameScene): void {
         line.className = "chat-ol-line";
         if (isSystem) {
             line.innerHTML =
-                `<span class="chat-ol-time">${timeStr}</span>` +
+                `<span class="chat-ol-time">${escapeHtml(timeStr)}</span>` +
                 `${text}`;
         } else {
-            const colorStyle = nameColor ? ` style="color:${nameColor}"` : "";
+            const safeColor = sanitizeColor(nameColor ?? "");
+            const colorStyle = safeColor ? ` style="color:${safeColor}"` : "";
             line.innerHTML =
-                `<span class="chat-ol-time">${timeStr}</span>` +
-                `<span class="chat-ol-name"${colorStyle}>${avatarName}:</span> ${text}`;
+                `<span class="chat-ol-time">${escapeHtml(timeStr)}</span>` +
+                `<span class="chat-ol-name"${colorStyle}>${escapeHtml(avatarName)}:</span> ${escapeHtml(text)}`;
         }
         if (senderId) line.dataset.sender = senderId;
         chatOverlay.appendChild(line);
@@ -696,11 +698,12 @@ export function setupHtmlUI(game: GameScene): void {
 
         const entry = document.createElement("div");
         entry.className = "chat-history-entry";
-        const nameClass = avatarName === "[system]" ? "chat-history-system" : "chat-history-name";
+        const isSystem = avatarName === "[system]";
+        const nameClass = isSystem ? "chat-history-system" : "chat-history-name";
         entry.innerHTML =
-            `<span class="chat-history-time">${timeStr}</span>` +
-            `<span class="${nameClass}">${avatarName}</span>` +
-            `<span class="chat-history-text">${text}</span>`;
+            `<span class="chat-history-time">${escapeHtml(timeStr)}</span>` +
+            `<span class="${nameClass}">${escapeHtml(avatarName)}</span>` +
+            `<span class="chat-history-text">${isSystem ? text : escapeHtml(text)}</span>`;
         list.appendChild(entry);
         entry.scrollIntoView({ block: "end", behavior: "instant" });
 
@@ -846,7 +849,9 @@ export function setupHtmlUI(game: GameScene): void {
             const rel = relativeTime(loginTimestamp);
             const lbl = resolveDisplayLabel(displayName, username, sessionId);
             const fullName = lbl.suffix ? lbl.text + lbl.suffix : lbl.text;
-            tr.innerHTML = `<td${bold} title="${username}">${username}</td><td title="${fullName}">${fullName}</td><td class="uuid-cell" data-copy="${uuid}" title="${uuid}&#10;クリックでコピー">${uuid.slice(0, 8)}</td><td class="uuid-cell" data-copy="${sessionId.slice(0, 8)}" title="${sessionId.slice(0, 8)}&#10;クリックでコピー">${sessionId.slice(0, 8)}</td><td title="${channel}">${channel}</td><td class="uuid-cell" data-copy="${myMatchId}" title="${myMatchId}&#10;クリックでコピー">${matchShort}</td><td title="${rel}">${rel}</td><td title="${loginTime}">${loginTime}</td>`;
+            const eu = escapeHtml(username), ef = escapeHtml(fullName), ech = escapeHtml(channel), er = escapeHtml(rel), elt = escapeHtml(loginTime);
+            const eUuid = escapeHtml(uuid), eSid = escapeHtml(sessionId.slice(0, 8)), eMid = escapeHtml(myMatchId), eMs = escapeHtml(matchShort);
+            tr.innerHTML = `<td${bold} title="${eu}">${eu}</td><td title="${ef}">${ef}</td><td class="uuid-cell" data-copy="${eUuid}" title="${eUuid}&#10;クリックでコピー">${escapeHtml(uuid.slice(0, 8))}</td><td class="uuid-cell" data-copy="${eSid}" title="${eSid}&#10;クリックでコピー">${eSid}</td><td title="${ech}">${ech}</td><td class="uuid-cell" data-copy="${eMid}" title="${eMid}&#10;クリックでコピー">${eMs}</td><td title="${er}">${er}</td><td title="${elt}">${elt}</td>`;
             frag.appendChild(tr);
         }
         userListBody.innerHTML = "";
@@ -1309,9 +1314,9 @@ export function setupHtmlUI(game: GameScene): void {
         const nameColor = serverNameColor || existing?.nameColor;
         const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
         const fallbackColor = uidColorInput?.value ?? "#00bbfa";
-        const color = nameColor || (displayName ? "" : fallbackColor);
+        const color = sanitizeColor(nameColor || (displayName ? "" : fallbackColor) || "");
         const colorStyle = color ? ` style="color:${color}"` : "";
-        const nameHtml = `<span class="chat-ol-name"${colorStyle}>${nameText}${hashSuffix}</span>`;
+        const nameHtml = `<span class="chat-ol-name"${colorStyle}>${escapeHtml(nameText)}${escapeHtml(hashSuffix)}</span>`;
         if (type === "join") {
             addChatHistory("[system]", t("system.user_joined").replace("{username}", nameHtml), undefined, userId, ts);
         } else if (type === "world_enter") {

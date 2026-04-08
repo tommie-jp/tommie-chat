@@ -1,6 +1,7 @@
 import { Mesh, Vector3 } from "@babylonjs/core";
 import { AvatarSystem } from "./AvatarSystem";
 import { prof } from "./Profiler";
+import { escapeHtml } from "./utils";
 
 export class NPCSystem {
     npc001!: Mesh;
@@ -50,8 +51,8 @@ export class NPCSystem {
         entry.className = "chat-history-entry";
         entry.innerHTML =
             `<span class="chat-history-time">${hh}:${mm}:${ss}</span>` +
-            `<span class="chat-history-name">${name}</span>` +
-            `<span class="chat-history-text">${text}</span>`;
+            `<span class="chat-history-name">${escapeHtml(name)}</span>` +
+            `<span class="chat-history-text">${escapeHtml(text)}</span>`;
         list.appendChild(entry);
         entry.scrollIntoView({ block: "end", behavior: "instant" });
     }
