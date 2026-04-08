@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/heroiclabs/nakama-common/runtime"
@@ -31,6 +32,23 @@ var (
 
 
 // ── サニタイズ用ヘルパー ──
+
+// 入力長さ制限（環境変数で上書き可能）
+var (
+	maxDisplayNameLen = 30  // 表示名の最大文字数 (MAX_DISPLAY_NAME_LEN)
+	maxTextureUrlLen  = 128 // テクスチャURLの最大バイト数 (MAX_TEXTURE_URL_LEN)
+	maxArraySize      = 100 // 配列リクエストの最大要素数 (MAX_ARRAY_SIZE)
+)
+
+// truncateRunes は文字列をルーン単位で最大n文字に切り捨てる
+func truncateRunes(s string, n int) string {
+	i := 0
+	for pos := range s {
+		if i >= n { return s[:pos] }
+		i++
+	}
+	return s
+}
 
 // sanitizeText は HTML 特殊文字をエスケープし、制御文字を除去する
 func sanitizeText(s string) string {
@@ -1025,8 +1043,11 @@ func initValidationConfig() {
 	readInt("RATE_LIMIT_BLOCK", &rateLimitBlock)
 	readInt("RATE_LIMIT_MOVE", &rateLimitMove)
 	readInt("MAX_BLOCK_ID", &maxBlockID)
-	logf("validationConfig: MAX_CHAT_LEN=%d RATE_LIMIT_CHAT=%d RATE_LIMIT_BLOCK=%d RATE_LIMIT_MOVE=%d MAX_BLOCK_ID=%d\n",
-		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID)
+	readInt("MAX_DISPLAY_NAME_LEN", &maxDisplayNameLen)
+	readInt("MAX_TEXTURE_URL_LEN", &maxTextureUrlLen)
+	readInt("MAX_ARRAY_SIZE", &maxArraySize)
+	logf("validationConfig: MAX_CHAT_LEN=%d RATE_LIMIT_CHAT=%d RATE_LIMIT_BLOCK=%d RATE_LIMIT_MOVE=%d MAX_BLOCK_ID=%d MAX_DISPLAY_NAME_LEN=%d MAX_TEXTURE_URL_LEN=%d MAX_ARRAY_SIZE=%d\n",
+		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID, maxDisplayNameLen, maxTextureUrlLen, maxArraySize)
 }
 
 // pendingLeaveMsg は遅延送信中の leave システムメッセージ
@@ -1508,8 +1529,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				NameColor   string  `json:"nc"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &pos); err == nil {
-				pos.DisplayName = sanitizeText(pos.DisplayName)
-				pos.TextureUrl = sanitizeTextureUrl(pos.TextureUrl)
+				pos.DisplayName = sanitizeText(truncateRunes(pos.DisplayName, maxDisplayNameLen))
+				pos.TextureUrl = sanitizeTextureUrl(pos.TextureUrl[:min(len(pos.TextureUrl), maxTextureUrlLen)])
+				pos.LoginTime = truncateRunes(pos.LoginTime, 30)
 				pos.NameColor = sanitizeColor(pos.NameColor)
 				initUID := ""
 				if p, ok := ms.Presences[sid]; ok { initUID = p.GetUserId() }
@@ -1680,7 +1702,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				CharRow    int    `json:"cr"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &av); err == nil {
-				av.TextureUrl = sanitizeTextureUrl(av.TextureUrl)
+				av.TextureUrl = sanitizeTextureUrl(av.TextureUrl[:min(len(av.TextureUrl), maxTextureUrlLen)])
 				avatarUID := ""
 				if p, ok := ms.Presences[sid]; ok { avatarUID = p.GetUserId() }
 				logf("rcv avatarChange uid=%s%s sid=%s\n", avatarUID, dn(avatarUID), shortSID(sid))
@@ -1787,6 +1809,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				SessionIds []string `json:"sessionIds"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &req); err == nil {
+				if len(req.SessionIds) > maxArraySize {
+					req.SessionIds = req.SessionIds[:maxArraySize]
+				}
 				type profileEntry struct {
 					SessionId   string `json:"sessionId"`
 					DisplayName string `json:"displayName"`
@@ -1828,7 +1853,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				NameColor   string `json:"nc"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &dn); err == nil {
-				dn.DisplayName = sanitizeText(dn.DisplayName)
+				dn.DisplayName = sanitizeText(truncateRunes(dn.DisplayName, maxDisplayNameLen))
 				dn.NameColor = sanitizeColor(dn.NameColor)
 				if p, ok := ms.Positions[sid]; ok {
 					p.DisplayName = dn.DisplayName
@@ -2141,6 +2166,9 @@ func rpcUpdateDisplayName(ctx context.Context, logger runtime.Logger, db *sql.DB
 		return "", runtime.NewError("invalid payload", 3)
 	}
 	dn := strings.TrimSpace(req.DisplayName)
+	if utf8.RuneCountInString(dn) > maxDisplayNameLen {
+		return "", runtime.NewError("display name too long", 3)
+	}
 	for _, r := range dn {
 		if unicode.IsControl(r) {
 			return "", runtime.NewError("display name must not contain control characters", 3)
@@ -2169,6 +2197,9 @@ func rpcGetDisplayNames(ctx context.Context, logger runtime.Logger, db *sql.DB, 
 	}
 	if len(req.UserIds) == 0 {
 		return `{"users":[]}`, nil
+	}
+	if len(req.UserIds) > maxArraySize {
+		req.UserIds = req.UserIds[:maxArraySize]
 	}
 	users, err := nk.UsersGetId(ctx, req.UserIds, nil)
 	if err != nil {
@@ -2256,9 +2287,9 @@ func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	if len(req.Items) > 50 {
 		return "", runtime.NewError("too many bookmarks (max 50)", 3)
 	}
-	for _, item := range req.Items {
+	for i, item := range req.Items {
 		name := strings.TrimSpace(item.Name)
-		if name == "" || len([]rune(name)) > 20 {
+		if name == "" || utf8.RuneCountInString(name) > 20 {
 			return "", runtime.NewError("bookmark name must be 1-20 characters", 3)
 		}
 		for _, r := range name {
@@ -2266,12 +2297,14 @@ func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 				return "", runtime.NewError("bookmark name must not contain control characters", 3)
 			}
 		}
+		req.Items[i].Name = html.EscapeString(name)
 	}
+	sanitized, _ := json.Marshal(req)
 	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
 		Collection:      bookmarkCollection,
 		Key:             bookmarkKey,
 		UserID:          uid,
-		Value:           payload,
+		Value:           string(sanitized),
 		PermissionRead:  1, // 本人のみ読み取り
 		PermissionWrite: 1, // 本人のみ書き込み
 	}}); err != nil {
@@ -2328,8 +2361,8 @@ func rpcCreateRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 	}
 	// バリデーション
 	name := strings.TrimSpace(req.Name)
-	if name == "" || len([]rune(name)) > 30 {
-		return "", runtime.NewError("name must be 1-30 characters", 3)
+	if name == "" || utf8.RuneCountInString(name) > maxDisplayNameLen {
+		return "", runtime.NewError(fmt.Sprintf("name must be 1-%d characters", maxDisplayNameLen), 3)
 	}
 	name = html.EscapeString(name)
 	if req.ChunkCountX < 2 { req.ChunkCountX = 2 }

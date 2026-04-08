@@ -68,6 +68,9 @@ services:
             --runtime.env MAX_BLOCK_ID=255 `# 有効ブロックID上限` \
             --runtime.env RATE_LIMIT_RPC=10 `# RPC制限[回/秒/ユーザー]` \
             --runtime.env RATE_LIMIT_RPC_BURST=20 `# RPCバースト上限[回]` \
+            --runtime.env MAX_DISPLAY_NAME_LEN=30 `# 表示名文字数上限` \
+            --runtime.env MAX_TEXTURE_URL_LEN=128 `# テクスチャURL長上限[bytes]` \
+            --runtime.env MAX_ARRAY_SIZE=100 `# 配列リクエスト要素数上限` \
             --runtime.env ENABLE_TEST_RPC=true `# dev専用: テスト用RPC有効（本番はprod.ymlでfalse）` \
             --runtime.env MINIO_ENDPOINT=minio:9000 `# MinIO S3 API` \
             --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \

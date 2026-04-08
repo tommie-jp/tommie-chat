@@ -32,11 +32,35 @@
 #   15. 正常 Origin で /v2/ が許可される
 #   16. Origin なしで /v2/ が 403
 #   17. 不正 Origin で /v2/ が 403
+#   === 入力バリデーション（M-3, M-6） ===
+#   --- updateDisplayName ---
+#   18. 長すぎる表示名（31文字）がエラー
+#   19. 表示名の上限ちょうど（30文字）は成功
+#   20. 表示名の制御文字がエラー
+#   21. 空の表示名でクリアできる
+#   --- createRoom ---
+#   22. 長すぎる部屋名（31文字）がエラー
+#   23. 空の部屋名がエラー
+#   24. 部屋名の上限ちょうど（30文字）は成功
+#   25. 部屋名の HTML がエスケープされる
+#   --- deleteRoom ---
+#   26. デフォルトワールド削除がエラー
+#   27. 存在しないワールド削除がエラー
+#   --- saveBookmarks ---
+#   28. ブックマーク名が長すぎる（21文字）とエラー
+#   29. ブックマーク名の上限ちょうど（20文字）は成功
+#   30. ブックマーク名の制御文字がエラー
+#   31. ブックマーク51件超過がエラー
+#   32. ブックマーク50件ちょうどは成功
+#   --- getDisplayNames ---
+#   33. 大量配列リクエスト（150要素）がエラーにならない
+#   --- getPlayerCount ---
+#   34. 不正な range でもエラーにならない
 #   === RPC レート制限（時間がかかるため最後） ===
-#   18. RPC レート制限の設定が存在する
-#   19. 連続 RPC 呼び出しでレート制限が発動する
-#   20. レート以内の持続呼び出しは全て成功する
-#   21. バースト後にトークンが回復する
+#   35. RPC レート制限の設定が存在する
+#   36. 連続 RPC 呼び出しでレート制限が発動する
+#   37. レート以内の持続呼び出しは全て成功する
+#   38. バースト後にトークンが回復する
 
 set -e
 
@@ -160,7 +184,7 @@ echo "=== 1. XSS サニタイズ ==="
 # RPC 経由で直接テスト可能な部分を確認
 
 # 1-1. 表示名に HTML タグを含むリクエスト
-echo "[1/21] 表示名の HTML エスケープ..."
+echo "[1/38] 表示名の HTML エスケープ..."
 # Nakama HTTP RPC は payload を JSON 文字列でラップする必要がある
 XSS_PAYLOAD=$(printf '%s' '{"displayName":"<script>alert(1)</script>"}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
@@ -199,7 +223,7 @@ else
 fi
 
 # ── 1-2. 表示名に属性エスケープ攻撃 ──
-echo "[2/21] 表示名の属性エスケープ..."
+echo "[2/38] 表示名の属性エスケープ..."
 XSS_ATTR_PAYLOAD=$(printf '%s' '{"displayName":"test\"><img src=x onerror=alert(1)>"}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DN2_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "${API_BASE}/v2/rpc/updateDisplayName" \
@@ -229,7 +253,7 @@ else
 fi
 
 # ── 1-3. ワールド名の HTML エスケープ ──
-echo "[3/21] ワールド名の HTML エスケープ..."
+echo "[3/38] ワールド名の HTML エスケープ..."
 ROOM_PAYLOAD=$(printf '%s' '{"name":"<b>evil</b>","chunkCountX":2,"chunkCountZ":2}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 ROOM_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "${API_BASE}/v2/rpc/createRoom" \
@@ -263,7 +287,7 @@ else
 fi
 
 # ── 1-4. nameColor のバリデーション ──
-echo "[4/21] nameColor バリデーション..."
+echo "[4/38] nameColor バリデーション..."
 # joinMatch のメタデータで不正な nameColor を送信するのは直接テストが難しいため、
 # サーバーの sanitizeColor が正規表現マッチのみ通すことを間接的に確認。
 # ここでは getServerInfo で接続確認し、コードレビュー結果で判定。
@@ -285,7 +309,7 @@ echo ""
 # ══════════════════════════════════════════
 echo "=== 2. ENABLE_TEST_RPC ==="
 
-echo "[5/21] 本番設定で ENABLE_TEST_RPC=false..."
+echo "[5/38] 本番設定で ENABLE_TEST_RPC=false..."
 if [ -f nakama/docker-compose.prod.yml ]; then
     if grep -q 'ENABLE_TEST_RPC=false' nakama/docker-compose.prod.yml; then
         check "docker-compose.prod.yml に ENABLE_TEST_RPC=false が存在する" "0"
@@ -299,7 +323,7 @@ else
 fi
 
 # ── 2-2. deleteUsers RPC が実行不可 ──
-echo "[6/21] deleteUsers RPC が実行不可..."
+echo "[6/38] deleteUsers RPC が実行不可..."
 # 存在しない dummy ユーザーID で呼び出し（実害なし）
 DEL_PAYLOAD=$(printf '%s' '{"userIds":["00000000-0000-0000-0000-000000000000"]}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DEL_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
@@ -377,7 +401,7 @@ if [ "${SKIP_WEB:-}" = true ]; then
 else
 
 # ── 2-1. /s3/avatars/ の GET が成功する ──
-echo "[7/21] /s3/avatars/ GET..."
+echo "[7/38] /s3/avatars/ GET..."
 S3_GET_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     "${WEB_BASE}/s3/avatars/" \
     --connect-timeout 5 --max-time 10 2>/dev/null)
@@ -388,7 +412,7 @@ check "/s3/avatars/ GET が通る (HTTP ${S3_GET_CODE})" \
     "期待: 200、実際: ${S3_GET_CODE}"
 
 # ── 2-2. /s3/avatars/ の PUT が拒否される ──
-echo "[8/21] /s3/avatars/ PUT 拒否..."
+echo "[8/38] /s3/avatars/ PUT 拒否..."
 S3_PUT_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     -X PUT "${WEB_BASE}/s3/avatars/evil-test-upload.txt" \
     -d "malicious content" \
@@ -400,7 +424,7 @@ check "/s3/avatars/ PUT が拒否される (HTTP ${S3_PUT_CODE})" \
     "期待: 403/405、実際: ${S3_PUT_CODE}。nginx の limit_except 設定を確認してください"
 
 # ── 2-3. /s3/uploads/ へのアクセスが拒否される ──
-echo "[9/21] /s3/uploads/ アクセス拒否..."
+echo "[9/38] /s3/uploads/ アクセス拒否..."
 S3_UPLOADS_BODY=$(curl -s "${WEB_BASE}/s3/uploads/" --connect-timeout 5 --max-time 10 2>/dev/null)
 S3_UPLOADS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${WEB_BASE}/s3/uploads/" --connect-timeout 5 --max-time 10 2>/dev/null)
 if [ "$IS_VITE" = true ]; then
@@ -422,7 +446,7 @@ else
 fi
 
 # ── 2-4. /s3/ ルートへのアクセスが拒否される ──
-echo "[10/21] /s3/ ルートアクセス拒否..."
+echo "[10/38] /s3/ ルートアクセス拒否..."
 S3_ROOT_BODY=$(curl -s "${WEB_BASE}/s3/" --connect-timeout 5 --max-time 10 2>/dev/null)
 S3_ROOT_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${WEB_BASE}/s3/" --connect-timeout 5 --max-time 10 2>/dev/null)
 if [ "$IS_VITE" = true ]; then
@@ -456,7 +480,7 @@ else
     # レスポンスヘッダーを一括取得
     SEC_HEADERS=$(curl -s -I "${WEB_BASE}/" --connect-timeout 5 --max-time 10 2>/dev/null)
 
-    echo "[11/21] X-Content-Type-Options..."
+    echo "[11/38] X-Content-Type-Options..."
     if echo "$SEC_HEADERS" | grep -qi 'X-Content-Type-Options.*nosniff'; then
         check "X-Content-Type-Options: nosniff" "0"
     else
@@ -464,7 +488,7 @@ else
             "ヘッダーが見つかりません"
     fi
 
-    echo "[12/21] X-Frame-Options..."
+    echo "[12/38] X-Frame-Options..."
     if echo "$SEC_HEADERS" | grep -qi 'X-Frame-Options.*DENY'; then
         check "X-Frame-Options: DENY" "0"
     else
@@ -472,7 +496,7 @@ else
             "ヘッダーが見つかりません"
     fi
 
-    echo "[13/21] Referrer-Policy..."
+    echo "[13/38] Referrer-Policy..."
     if echo "$SEC_HEADERS" | grep -qi 'Referrer-Policy'; then
         check "Referrer-Policy ヘッダーが存在する" "0"
     else
@@ -480,7 +504,7 @@ else
             "ヘッダーが見つかりません"
     fi
 
-    echo "[14/21] Content-Security-Policy..."
+    echo "[14/38] Content-Security-Policy..."
     if echo "$SEC_HEADERS" | grep -qi 'Content-Security-Policy'; then
         check "Content-Security-Policy ヘッダーが存在する" "0"
     else
@@ -495,7 +519,7 @@ else
     echo "=== 5. nginx Origin 制限 ==="
 
     # ── 5-1. 正常 Origin で /v2/ が許可される ──
-    echo "[15/21] 正常 Origin で /v2/ が許可される..."
+    echo "[15/38] 正常 Origin で /v2/ が許可される..."
     # localhost は nginx Origin チェックで許可されている
     OK_ORIGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         "${WEB_BASE}/v2/account" \
@@ -510,7 +534,7 @@ else
     fi
 
     # ── 5-2. Origin なしで /v2/ が拒否される ──
-    echo "[16/21] Origin なしで /v2/ が 403..."
+    echo "[16/38] Origin なしで /v2/ が 403..."
     NO_ORIGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         "${WEB_BASE}/v2/account" \
         -H "Authorization: Bearer ${TOKEN}" \
@@ -523,7 +547,7 @@ else
     fi
 
     # ── 5-3. 不正 Origin で /v2/ が拒否される ──
-    echo "[17/21] 不正 Origin で /v2/ が 403..."
+    echo "[17/38] 不正 Origin で /v2/ が 403..."
     BAD_ORIGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         "${WEB_BASE}/v2/account" \
         -H "Authorization: Bearer ${TOKEN}" \
@@ -539,12 +563,278 @@ else
 fi
 
 # ══════════════════════════════════════════
+# 入力バリデーション（M-3, M-6）
+# ══════════════════════════════════════════
+VNUM=18  # テスト番号カウンター
+VTOTAL=38  # 入力バリデーション含む総テスト数
+
+echo "=== 6. 入力バリデーション ==="
+
+# ── RPC ヘルパー: payload を送信して HTTP コードを返す ──
+rpc_code() {
+    local rpc_name="$1"
+    local payload="$2"
+    curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "${API_BASE}/v2/rpc/${rpc_name}" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d "${payload}" \
+        --connect-timeout 5 --max-time 10 2>/dev/null
+}
+rpc_body() {
+    local rpc_name="$1"
+    local payload="$2"
+    curl -s -X POST \
+        "${API_BASE}/v2/rpc/${rpc_name}" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d "${payload}" \
+        --connect-timeout 5 --max-time 10 2>/dev/null
+}
+
+echo ""
+echo "--- 6a. updateDisplayName ---"
+
+# 6a-1. 長すぎる表示名がエラーになる
+echo "[18/38] 長すぎる表示名（31文字）がエラーになる..."
+LONG_NAME=$(python3 -c 'print("あ" * 31)')
+LONG_PAYLOAD=$(printf '%s' "{\"displayName\":\"${LONG_NAME}\"}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+LONG_CODE=$(rpc_code "updateDisplayName" "${LONG_PAYLOAD}")
+if [ "$LONG_CODE" = "400" ]; then
+    check "長すぎる表示名（31文字）がエラー" "0"
+else
+    check "長すぎる表示名（31文字）がエラー" "1" "期待: 400, 実際: ${LONG_CODE}"
+fi
+
+# 6a-2. 表示名の長さ上限ちょうどは成功する
+echo "[19/38] 表示名の長さ上限ちょうど（30文字）は成功..."
+EXACT_NAME=$(python3 -c 'print("あ" * 30)')
+EXACT_PAYLOAD=$(printf '%s' "{\"displayName\":\"${EXACT_NAME}\"}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+EXACT_CODE=$(rpc_code "updateDisplayName" "${EXACT_PAYLOAD}")
+if [ "$EXACT_CODE" = "200" ]; then
+    check "表示名の長さ上限ちょうど（30文字）は成功" "0"
+else
+    check "表示名の長さ上限ちょうど（30文字）は成功" "1" "期待: 200, 実際: ${EXACT_CODE}"
+fi
+
+# 6a-3. 表示名の制御文字がエラーになる
+echo "[20/38] 表示名の制御文字がエラーになる..."
+CTRL_PAYLOAD=$(python3 -c 'import json; print(json.dumps(json.dumps({"displayName":"test\x01name"})))')
+CTRL_CODE=$(rpc_code "updateDisplayName" "${CTRL_PAYLOAD}")
+if [ "$CTRL_CODE" = "400" ]; then
+    check "表示名の制御文字がエラー" "0"
+else
+    check "表示名の制御文字がエラー" "1" "期待: 400, 実際: ${CTRL_CODE}"
+fi
+
+# 6a-4. 空の表示名でクリアできる
+echo "[21/38] 空の表示名でクリアできる..."
+EMPTY_PAYLOAD=$(printf '%s' '{"displayName":""}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+EMPTY_CODE=$(rpc_code "updateDisplayName" "${EMPTY_PAYLOAD}")
+if [ "$EMPTY_CODE" = "200" ]; then
+    check "空の表示名でクリアできる" "0"
+else
+    check "空の表示名でクリアできる" "1" "期待: 200, 実際: ${EMPTY_CODE}"
+fi
+
+echo ""
+echo "--- 6b. createRoom ---"
+
+# 6b-1. 長すぎる部屋名がエラーになる
+echo "[22/38] 長すぎる部屋名（31文字）がエラーになる..."
+LONG_ROOM=$(python3 -c 'print("部" * 31)')
+ROOM_PAYLOAD=$(printf '%s' "{\"name\":\"${LONG_ROOM}\",\"chunkCountX\":2,\"chunkCountZ\":2}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+ROOM_CODE=$(rpc_code "createRoom" "${ROOM_PAYLOAD}")
+if [ "$ROOM_CODE" = "400" ]; then
+    check "長すぎる部屋名（31文字）がエラー" "0"
+else
+    check "長すぎる部屋名（31文字）がエラー" "1" "期待: 400, 実際: ${ROOM_CODE}"
+fi
+
+# 6b-2. 空の部屋名がエラーになる
+echo "[23/38] 空の部屋名がエラーになる..."
+EMPTY_ROOM_PAYLOAD=$(printf '%s' '{"name":"","chunkCountX":2,"chunkCountZ":2}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+EMPTY_ROOM_CODE=$(rpc_code "createRoom" "${EMPTY_ROOM_PAYLOAD}")
+if [ "$EMPTY_ROOM_CODE" = "400" ]; then
+    check "空の部屋名がエラー" "0"
+else
+    check "空の部屋名がエラー" "1" "期待: 400, 実際: ${EMPTY_ROOM_CODE}"
+fi
+
+# 6b-3. 部屋名の上限ちょうど（30文字）は成功する
+echo "[24/38] 部屋名の上限ちょうど（30文字）は成功..."
+EXACT_ROOM=$(python3 -c 'print("部" * 30)')
+EXACT_ROOM_PAYLOAD=$(printf '%s' "{\"name\":\"${EXACT_ROOM}\",\"chunkCountX\":2,\"chunkCountZ\":2}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+EXACT_ROOM_RESP=$(rpc_body "createRoom" "${EXACT_ROOM_PAYLOAD}")
+EXACT_ROOM_CODE=$(echo "$EXACT_ROOM_RESP" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); print("200")' 2>/dev/null || echo "ERR")
+# レスポンスに worldId が含まれるか確認
+CREATED_WID=$(echo "$EXACT_ROOM_RESP" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); r=json.loads(d.get("payload","{}")); print(r.get("worldId",""))' 2>/dev/null || true)
+if [ -n "$CREATED_WID" ] && [ "$CREATED_WID" != "" ]; then
+    check "部屋名の上限ちょうど（30文字）は成功" "0"
+else
+    check "部屋名の上限ちょうど（30文字）は成功" "1" "レスポンス: ${EXACT_ROOM_RESP}"
+fi
+
+# 6b-4. 部屋名の HTML がエスケープされる
+echo "[25/38] 部屋名の HTML がエスケープされる..."
+XSS_ROOM_PAYLOAD=$(python3 -c 'import json; print(json.dumps(json.dumps({"name":"<b>XSS</b>","chunkCountX":2,"chunkCountZ":2})))')
+XSS_ROOM_RESP=$(rpc_body "createRoom" "${XSS_ROOM_PAYLOAD}")
+XSS_ROOM_WID=$(echo "$XSS_ROOM_RESP" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); r=json.loads(d.get("payload","{}")); print(r.get("worldId",""))' 2>/dev/null || true)
+# getWorldList で確認
+if [ -n "$XSS_ROOM_WID" ]; then
+    WL_RESP=$(rpc_body "getWorldList" '""')
+    HAS_RAW_HTML=$(echo "$WL_RESP" | grep -c '<b>XSS</b>' || true)
+    if [ "$HAS_RAW_HTML" = "0" ]; then
+        check "部屋名の HTML がエスケープされる" "0"
+    else
+        check "部屋名の HTML がエスケープされる" "1" "エスケープされていない HTML が含まれる"
+    fi
+else
+    check "部屋名の HTML がエスケープされる" "1" "部屋作成失敗: ${XSS_ROOM_RESP}"
+fi
+
+# テストで作成した部屋を削除
+for _wid in $CREATED_WID $XSS_ROOM_WID; do
+    if [ -n "$_wid" ]; then
+        _del_payload=$(printf '%s' "{\"worldId\":${_wid}}" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+        rpc_code "deleteRoom" "$_del_payload" > /dev/null 2>&1
+    fi
+done
+
+echo ""
+echo "--- 6c. deleteRoom ---"
+
+# 6c-1. デフォルトワールドは削除できない
+echo "[26/38] デフォルトワールド（ID=0）は削除できない..."
+DEL_DEFAULT_PAYLOAD=$(printf '%s' '{"worldId":0}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+DEL_DEFAULT_CODE=$(rpc_code "deleteRoom" "${DEL_DEFAULT_PAYLOAD}")
+if [ "$DEL_DEFAULT_CODE" = "400" ]; then
+    check "デフォルトワールド削除がエラー" "0"
+else
+    check "デフォルトワールド削除がエラー" "1" "期待: 400, 実際: ${DEL_DEFAULT_CODE}"
+fi
+
+# 6c-2. 存在しないワールドはエラー
+echo "[27/38] 存在しないワールドの削除がエラーになる..."
+DEL_NOTFOUND_PAYLOAD=$(printf '%s' '{"worldId":99999}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+DEL_NOTFOUND_CODE=$(rpc_code "deleteRoom" "${DEL_NOTFOUND_PAYLOAD}")
+if [ "$DEL_NOTFOUND_CODE" = "404" ]; then
+    check "存在しないワールド削除がエラー" "0"
+else
+    check "存在しないワールド削除がエラー" "1" "期待: 404, 実際: ${DEL_NOTFOUND_CODE}"
+fi
+
+echo ""
+echo "--- 6d. saveBookmarks ---"
+
+# 6d-1. ブックマーク名が長すぎるとエラー
+echo "[28/38] ブックマーク名が長すぎる（21文字）とエラー..."
+BM_LONG_PAYLOAD=$(python3 -c '
+import json
+bm = {"items": [{"name": "あ" * 21, "x": 0, "z": 0, "ry": 0, "worldId": 0}]}
+print(json.dumps(json.dumps(bm)))
+')
+BM_LONG_CODE=$(rpc_code "saveBookmarks" "${BM_LONG_PAYLOAD}")
+if [ "$BM_LONG_CODE" = "400" ]; then
+    check "ブックマーク名が長すぎる（21文字）とエラー" "0"
+else
+    check "ブックマーク名が長すぎる（21文字）とエラー" "1" "期待: 400, 実際: ${BM_LONG_CODE}"
+fi
+
+# 6d-2. ブックマーク名の上限ちょうど（20文字）は成功
+echo "[29/38] ブックマーク名の上限ちょうど（20文字）は成功..."
+BM_EXACT_PAYLOAD=$(python3 -c '
+import json
+bm = {"items": [{"name": "あ" * 20, "x": 0, "z": 0, "ry": 0, "worldId": 0}]}
+print(json.dumps(json.dumps(bm)))
+')
+BM_EXACT_CODE=$(rpc_code "saveBookmarks" "${BM_EXACT_PAYLOAD}")
+if [ "$BM_EXACT_CODE" = "200" ]; then
+    check "ブックマーク名の上限ちょうど（20文字）は成功" "0"
+else
+    check "ブックマーク名の上限ちょうど（20文字）は成功" "1" "期待: 200, 実際: ${BM_EXACT_CODE}"
+fi
+
+# 6d-3. ブックマーク名の制御文字がエラー
+echo "[30/38] ブックマーク名の制御文字がエラー..."
+BM_CTRL_PAYLOAD=$(python3 -c '
+import json
+bm = {"items": [{"name": "test\x01bm", "x": 0, "z": 0, "ry": 0, "worldId": 0}]}
+print(json.dumps(json.dumps(bm)))
+')
+BM_CTRL_CODE=$(rpc_code "saveBookmarks" "${BM_CTRL_PAYLOAD}")
+if [ "$BM_CTRL_CODE" = "400" ]; then
+    check "ブックマーク名の制御文字がエラー" "0"
+else
+    check "ブックマーク名の制御文字がエラー" "1" "期待: 400, 実際: ${BM_CTRL_CODE}"
+fi
+
+# 6d-4. ブックマーク51件超過がエラー
+echo "[31/38] ブックマーク51件超過がエラー..."
+BM_OVER_PAYLOAD=$(python3 -c '
+import json
+items = [{"name": f"bm{i}", "x": 0, "z": 0, "ry": 0, "worldId": 0} for i in range(51)]
+print(json.dumps(json.dumps({"items": items})))
+')
+BM_OVER_CODE=$(rpc_code "saveBookmarks" "${BM_OVER_PAYLOAD}")
+if [ "$BM_OVER_CODE" = "400" ]; then
+    check "ブックマーク51件超過がエラー" "0"
+else
+    check "ブックマーク51件超過がエラー" "1" "期待: 400, 実際: ${BM_OVER_CODE}"
+fi
+
+# 6d-5. ブックマーク50件ちょうどは成功
+echo "[32/38] ブックマーク50件ちょうどは成功..."
+BM_50_PAYLOAD=$(python3 -c '
+import json
+items = [{"name": f"bm{i}", "x": 0, "z": 0, "ry": 0, "worldId": 0} for i in range(50)]
+print(json.dumps(json.dumps({"items": items})))
+')
+BM_50_CODE=$(rpc_code "saveBookmarks" "${BM_50_PAYLOAD}")
+if [ "$BM_50_CODE" = "200" ]; then
+    check "ブックマーク50件ちょうどは成功" "0"
+else
+    check "ブックマーク50件ちょうどは成功" "1" "期待: 200, 実際: ${BM_50_CODE}"
+fi
+
+echo ""
+echo "--- 6e. getDisplayNames ---"
+
+# 6e-1. 大量配列リクエスト（切り捨てのみ、エラーなし）
+echo "[33/38] 大量配列リクエスト（150要素）がエラーにならない..."
+UIDS_JSON=$(python3 -c '
+import json, uuid
+ids = [str(uuid.uuid4()) for _ in range(150)]
+print(json.dumps(json.dumps({"userIds": ids})))
+')
+ARRAY_CODE=$(rpc_code "getDisplayNames" "${UIDS_JSON}")
+if [ "$ARRAY_CODE" = "200" ]; then
+    check "大量配列リクエスト（150要素）がエラーにならない" "0"
+else
+    check "大量配列リクエスト（150要素）がエラーにならない" "1" "期待: 200, 実際: ${ARRAY_CODE}"
+fi
+
+echo ""
+echo "--- 6f. getPlayerCount ---"
+
+# 6f-1. 不正な range でもエラーにならない（安全にフォールバック）
+echo "[34/38] 不正な range でもエラーにならない..."
+RANGE_PAYLOAD=$(printf '%s' '{"range":"INVALID<script>"}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+RANGE_CODE=$(rpc_code "getPlayerCount" "${RANGE_PAYLOAD}")
+if [ "$RANGE_CODE" = "200" ]; then
+    check "不正な range でもエラーにならない（安全にフォールバック）" "0"
+else
+    check "不正な range でもエラーにならない（安全にフォールバック）" "1" "期待: 200, 実際: ${RANGE_CODE}"
+fi
+echo ""
+
+# ══════════════════════════════════════════
 # RPC レート制限（時間がかかるため最後に実行）
 # ══════════════════════════════════════════
-echo "=== 6. RPC レート制限 ==="
+echo "=== 7. RPC レート制限 ==="
 
 # ── 6-1. レート制限設定の存在確認 ──
-echo "[18/21] RPC レート制限の設定が存在する..."
+echo "[35/38] RPC レート制限の設定が存在する..."
 if grep -q 'RATE_LIMIT_RPC' nakama/docker-compose.yml && \
    grep -q 'withRateLimit' nakama/go_src/main.go; then
     check "RPC レート制限の設定が存在する" "0"
@@ -554,7 +844,7 @@ else
 fi
 
 # ── 6-2. 連続 RPC 呼び出しでレート制限が発動する ──
-echo "[19/21] 連続 RPC 呼び出しでレート制限が発動する..."
+echo "[36/38] 連続 RPC 呼び出しでレート制限が発動する..."
 # バースト上限（デフォルト20）を超えるまで ping を連続送信
 RATE_LIMITED=false
 for i in $(seq 1 30); do
@@ -577,7 +867,7 @@ else
 fi
 
 # ── 6-3. レート以内の持続呼び出しは全て成功する ──
-echo "[20/21] レート以内の持続呼び出し（3秒間）..."
+echo "[37/38] レート以内の持続呼び出し（3秒間）..."
 # トークン回復を待ってからテスト開始（前のテスト18でバケットが枯渇しているため）
 sleep 3
 # 秒間5回 × 3秒 = 15回（レート10/秒・バースト20 の範囲内）
@@ -606,7 +896,7 @@ else
 fi
 
 # ── 6-4. バースト後に回復する ──
-echo "[21/21] バースト後のトークン回復..."
+echo "[38/38] バースト後のトークン回復..."
 # まずバースト上限まで一気に消費
 for i in $(seq 1 25); do
     curl -s -o /dev/null -X POST \

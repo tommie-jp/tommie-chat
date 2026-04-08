@@ -70,6 +70,9 @@ services:
             --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \
             --runtime.env MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin} \
             --runtime.env MINIO_USE_SSL=false \
+            --runtime.env MAX_DISPLAY_NAME_LEN=30 \
+            --runtime.env MAX_TEXTURE_URL_LEN=128 \
+            --runtime.env MAX_ARRAY_SIZE=100 \
             --runtime.env ENABLE_TEST_RPC=false \
             --socket.server_key ${NAKAMA_SERVER_KEY:-tommie-chat} \
             --console.username ${NAKAMA_CONSOLE_USER:-admin} \
