@@ -208,12 +208,10 @@ export function setupMinimap(game: GameScene): void {
     const btnPlus = document.createElement("button");
     btnPlus.textContent = "+";
     btnPlus.style.cssText = btnStyle;
-    if (!isMobile) btnPlus.title = "ズームイン";
 
     const btnMinus = document.createElement("button");
     btnMinus.textContent = "−";
     btnMinus.style.cssText = btnStyle;
-    if (!isMobile) btnMinus.title = "ズームアウト";
 
     const zoomLabel = document.createElement("div");
     zoomLabel.style.cssText = "font-size:12px;font-family:monospace;color:#fff;text-shadow:0 0 2px #000,0 0 4px #000;pointer-events:none;white-space:nowrap;";
@@ -514,7 +512,7 @@ export function setupMinimap(game: GameScene): void {
         }
     };
 
-    const redraw = () => { chunkCacheValid = false; };
+    const redraw = () => { chunkCacheValid = false; playerDirty = true; };
 
     // 部屋移動（テレポート）時にチャンクキャッシュを無効化して即再描画
     game.onMoveBookmark.push(() => { chunkCacheValid = false; playerDirty = true; });
