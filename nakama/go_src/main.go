@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
+	"regexp"
 	"strconv"
 	"hash/fnv"
 	"net/http"
@@ -27,6 +29,31 @@ var (
 )
 
 
+
+// ── サニタイズ用ヘルパー ──
+
+// sanitizeText は HTML 特殊文字をエスケープし、制御文字を除去する
+func sanitizeText(s string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && r != '\n' { return -1 }
+		return r
+	}, s)
+	return html.EscapeString(cleaned)
+}
+
+var colorCodeRe = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
+
+// sanitizeColor は CSS 色コードとして安全な値のみ通す（不正値は空文字）
+func sanitizeColor(s string) string {
+	if colorCodeRe.MatchString(s) { return s }
+	return ""
+}
+
+// sanitizeTextureUrl は /s3/avatars/ で始まるパスのみ通す（不正値は空文字）
+func sanitizeTextureUrl(s string) string {
+	if strings.HasPrefix(s, "/s3/avatars/") && !strings.Contains(s, "..") && !strings.Contains(s, "<") { return s }
+	return ""
+}
 
 // loginRateLimiter はログイン試行を秒あたりの最大数で制限する
 var loginRateLimiter = newLoginRateLimiter()
@@ -982,12 +1009,12 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 		cr, _ := strconv.Atoi(metadata["cr"])
 		ms.PendingInit[newSID] = &playerPos{
 			X: x, Z: z, RY: ry,
-			TextureUrl:  metadata["tx"],
-			DisplayName: metadata["dn"],
+			TextureUrl:  sanitizeTextureUrl(metadata["tx"]),
+			DisplayName: sanitizeText(metadata["dn"]),
 			LoginTime:   metadata["lt"],
 			CharCol:     cc,
 			CharRow:     cr,
-			NameColor:   metadata["nc"],
+			NameColor:   sanitizeColor(metadata["nc"]),
 		}
 		logger.Info("PendingInit stored for sid=%s x=%.1f z=%.1f prevSid=%s worldMove=%s", shortSID(newSID), x, z, metadata["prevSid"], metadata["worldMove"])
 		// 前回セッションIDを保存（MatchJoin でゴーストキック用）
@@ -1392,6 +1419,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				NameColor   string  `json:"nc"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &pos); err == nil {
+				pos.DisplayName = sanitizeText(pos.DisplayName)
+				pos.TextureUrl = sanitizeTextureUrl(pos.TextureUrl)
+				pos.NameColor = sanitizeColor(pos.NameColor)
 				initUID := ""
 				if p, ok := ms.Presences[sid]; ok { initUID = p.GetUserId() }
 				logf("rcv initPos uid=%s%s sid=%s x=%.1f z=%.1f\n", initUID, dn(initUID), shortSID(sid), pos.X, pos.Z)
@@ -1561,6 +1591,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				CharRow    int    `json:"cr"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &av); err == nil {
+				av.TextureUrl = sanitizeTextureUrl(av.TextureUrl)
 				avatarUID := ""
 				if p, ok := ms.Presences[sid]; ok { avatarUID = p.GetUserId() }
 				logf("rcv avatarChange uid=%s%s sid=%s\n", avatarUID, dn(avatarUID), shortSID(sid))
@@ -1708,6 +1739,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				NameColor   string `json:"nc"`
 			}
 			if err := json.Unmarshal(msg.GetData(), &dn); err == nil {
+				dn.DisplayName = sanitizeText(dn.DisplayName)
+				dn.NameColor = sanitizeColor(dn.NameColor)
 				if p, ok := ms.Positions[sid]; ok {
 					p.DisplayName = dn.DisplayName
 					if dn.NameColor != "" { p.NameColor = dn.NameColor }
@@ -1732,14 +1765,15 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				logger.Warn("opChat json.Unmarshal error: %v, raw=%s", err, string(raw))
 				continue
 			}
-			// テキストのバリデーション: 長さ制限 → 制御文字除去（長さ制限を先にして処理量を抑える）
+			// テキストのバリデーション: 長さ制限 → 制御文字除去 → HTMLエスケープ
 			if text, ok := chatMsg["text"].(string); ok {
 				runes := []rune(text)
 				if len(runes) > maxChatLen { runes = runes[:maxChatLen] }
-				chatMsg["text"] = strings.Map(func(r rune) rune {
+				cleaned := strings.Map(func(r rune) rune {
 					if unicode.IsControl(r) && r != '\n' { return -1 }
 					return r
 				}, string(runes))
+				chatMsg["text"] = html.EscapeString(cleaned)
 			}
 			if p, ok := ms.Presences[sid]; ok {
 				chatMsg["username"] = p.GetUsername()
@@ -2023,6 +2057,7 @@ func rpcUpdateDisplayName(ctx context.Context, logger runtime.Logger, db *sql.DB
 			return "", runtime.NewError("display name must not contain control characters", 3)
 		}
 	}
+	dn = html.EscapeString(dn)
 	if dn == "" {
 		// AccountUpdateId は空文字を「変更なし」と見なすため、直接DBでクリア
 		if _, err := db.ExecContext(ctx, "UPDATE users SET display_name = '' WHERE id = $1", uid); err != nil {
@@ -2207,6 +2242,7 @@ func rpcCreateRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 	if name == "" || len([]rune(name)) > 30 {
 		return "", runtime.NewError("name must be 1-30 characters", 3)
 	}
+	name = html.EscapeString(name)
 	if req.ChunkCountX < 2 { req.ChunkCountX = 2 }
 	if req.ChunkCountZ < 2 { req.ChunkCountZ = 2 }
 	if req.ChunkCountX > 64 { req.ChunkCountX = 64 }

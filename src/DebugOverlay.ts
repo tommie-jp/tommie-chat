@@ -4,6 +4,7 @@ import { CHUNK_SIZE } from "./WorldConstants";
 import { profSetEnabled, profReset } from "./Profiler";
 import { t } from "./i18n";
 import { autoChatMessages } from "./AutoChatMessages";
+import { escapeHtml } from "./utils";
 
 /** コントロール要素の親行からラベルセルを取得し、デフォルト値と異なる場合に * を付ける */
 const _nonDefaultCtrls = new WeakMap<HTMLElement, Set<HTMLElement>>();
@@ -1840,10 +1841,10 @@ export function setupDebugOverlay(game: GameScene): void {
                         pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#8b2020;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">OFF</span> 回線切断中 <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
                         pd.style.color = "#ff4444";
                     } else if (state === "retry") {
-                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#b8860b;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">RETRY</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#b8860b;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">RETRY</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${escapeHtml(uid)}</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
                         pd.style.color = "#b8860b";
                     } else {
-                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">ON</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${uid}</span> <span id="pd-ccu" ${tipCcu} style="cursor:pointer;"><span id="pd-ccu-val" ${mono}></span>人</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
+                        pd.innerHTML = `<span id="pd-badge" ${tipBadge} style="background:#2d8a2d;color:#fff;padding:2px 6px;border-radius:3px;cursor:pointer;">ON</span> <span id="pd-uid" ${tipUid} style="cursor:pointer;">${escapeHtml(uid)}</span> <span id="pd-ccu" ${tipCcu} style="cursor:pointer;"><span id="pd-ccu-val" ${mono}></span>人</span> <span id="pd-ping" ${tipPing} style="cursor:pointer;"><span id="pd-ping-val" ${mono}></span>ms</span> <span id="pd-fps" ${tipFps} style="cursor:pointer;"><span id="pd-fps-val" ${mono}></span>FPS</span>`;
                         pd.style.color = "";
                     }
                 }
