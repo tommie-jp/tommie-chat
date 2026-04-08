@@ -35,7 +35,7 @@ mkdir -p test/log
 echo "========================================="
 echo "同接履歴 DB永続化テスト"
 echo "========================================="
-echo "server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
+echo "server_key: ${NAKAMA_SERVER_KEY:-tommie-chat}"
 echo "endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
 echo ""
 if [ "$IS_LOCAL" = true ]; then

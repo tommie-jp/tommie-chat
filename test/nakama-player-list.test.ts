@@ -18,8 +18,8 @@ import { trackUserId, deleteCreatedUsers } from './test-helpers';
 
 const HOST        = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT        = process.env.NAKAMA_PORT ?? '7350';
-const SERVER_KEY  = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
-const TEXTURE_URL = '/textures/pic1.ktx2';
+const SERVER_KEY  = process.env.NAKAMA_SERVER_KEY ?? 'tommie-chat';
+const TEXTURE_URL = '/s3/avatars/pic1.ktx2';
 const CHAT_ROOM   = 'world';
 
 const OP_INIT_POS          = 1;
@@ -487,7 +487,7 @@ function makeTextureChangeTest(count: number): void {
         });
 
         it('avatarChange 後にプロフィール取得すると新しい textureUrl が反映されている', async () => {
-            const newTexture = '/textures/changed.ktx2';
+            const newTexture = '/s3/avatars/changed.ktx2';
             clog(players[0].name, `snd avatarChange textureUrl=${newTexture}`);
             await players[0].socket.sendMatchState(players[0].matchId, OP_AVATAR_CHANGE,
                 JSON.stringify({ textureUrl: newTexture }));

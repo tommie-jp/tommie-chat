@@ -65,7 +65,7 @@ if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
     set -a; source nakama/.env; set +a
 fi
 
-SERVER_KEY="${NAKAMA_SERVER_KEY:-defaultkey}"
+SERVER_KEY="${NAKAMA_SERVER_KEY:-tommie-chat}"
 # 優先順位: --host > NAKAMA_HOST > 127.0.0.1
 HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
 PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"

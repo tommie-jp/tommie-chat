@@ -14,7 +14,7 @@ import { trackUserId, deleteCreatedUsers } from './test-helpers';
 
 const HOST = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT = process.env.NAKAMA_PORT ?? '7350';
-const SERVER_KEY = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
+const SERVER_KEY = process.env.NAKAMA_SERVER_KEY ?? 'tommie-chat';
 const OP_INIT_POS = 1;
 const OP_MOVE_TARGET = 2;
 const OP_AOI_UPDATE = 5;

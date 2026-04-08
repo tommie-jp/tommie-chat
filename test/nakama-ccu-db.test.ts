@@ -22,7 +22,7 @@ import { execSync } from 'child_process';
 
 const HOST = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT = process.env.NAKAMA_PORT ?? '7350';
-const SERVER_KEY = process.env.NAKAMA_SERVER_KEY ?? 'defaultkey';
+const SERVER_KEY = process.env.NAKAMA_SERVER_KEY ?? 'tommie-chat';
 const PLAYER_COUNT = 5;
 const NAKAMA_DIR = new URL('../nakama', import.meta.url).pathname;
 

@@ -106,7 +106,7 @@ ssh -o ConnectTimeout=10 "${SSH_TARGET}" bash -s <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 # .env から server_key を取得
-SERVER_KEY="defaultkey"
+SERVER_KEY="tommie-chat"
 if [ -f ~/tommie-chat/nakama/.env ]; then
     SK=$(grep '^NAKAMA_SERVER_KEY=' ~/tommie-chat/nakama/.env 2>/dev/null | cut -d= -f2)
     [ -n "$SK" ] && SERVER_KEY="$SK"
