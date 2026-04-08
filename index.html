@@ -2146,9 +2146,14 @@
             }
             /* chatInput のサイズはJSで制御（DebugOverlay.ts updateMobileLayout） */
 
-            /* ランドスケープ: チャットオーバーレイはデバイダーの左側下部 */
+            /* ランドスケープ: 部屋名を画面左下に表示 */
+            #coord-display {
+                left: max(8px, env(safe-area-inset-left, 8px)) !important;
+                bottom: 2px !important;
+            }
+            /* ランドスケープ: チャットオーバーレイはデバイダーの左側下部（部屋名の上） */
             #chat-overlay {
-                bottom: 8px !important;
+                bottom: 22px !important;
                 left: max(8px, env(safe-area-inset-left, 8px)) !important;
                 width: calc(var(--ls-divider, 60%) - 24px) !important;
                 max-width: none !important;

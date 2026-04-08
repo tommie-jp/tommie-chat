@@ -874,7 +874,7 @@ export class GameScene {
                     if (worldEl && worldEl.textContent !== worldText) worldEl.textContent = worldText;
                     if (posEl && posEl.textContent !== posText) posEl.textContent = posText;
                 }
-                // フッター位置を送信ボタンの右端に合わせる（座標非表示でも実行）
+                // フッター位置を送信ボタン / セリフ入力に合わせる（座標非表示でも実行）
                 const fv = document.getElementById("app-footer-version");
                 const sb = document.getElementById("sendBtn");
                 if (fv && sb) {
