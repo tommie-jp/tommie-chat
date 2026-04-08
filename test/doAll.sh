@@ -44,12 +44,14 @@ Usage: ./test/doAll.sh [-n N] [-s S] [--step D] [--counts C] [-v] [-h]
   -s S [--step D]      S人から開始しD人ずつ増加（失敗で停止）
                         --step省略時: 100,500,1000,1500,2000,3000...
 
-テスト項目:
-  1. doTest-concurrent-login.sh  同時接続テスト
-  2. doTest-sustain.sh           持続接続テスト
-  3. doTest-snd-rcv.sh           送受信整合性テスト
-  4. doTest-player-list.sh       プレイヤーリスト通知テスト
-  5. doTest-ccu-db.sh            同接履歴 DB永続化テスト
+テスト項目（実行時間の短い順）:
+  1. doTest-security.sh          セキュリティテスト
+  2. doTest-reconnect.sh         再接続テスト
+  3. doTest-concurrent-login.sh  同時接続テスト
+  4. doTest-snd-rcv.sh           送受信整合性テスト
+  5. doTest-player-list.sh       プレイヤーリスト通知テスト
+  6. doTest-sustain.sh           持続接続テスト
+  7. doTest-ccu-db.sh            同接履歴 DB永続化テスト
 
 例:
   ./test/doAll.sh --counts 100,500,1000,2000
@@ -74,6 +76,11 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="$ROOT_DIR/nakama/.env"
 if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
+fi
+# .env が無い場合、docker-compose.yml から server_key を自動取得
+if [ -z "${NAKAMA_SERVER_KEY:-}" ]; then
+    _KEY=$(grep -oP '(?<=--socket\.server_key\s)\S+' "$ROOT_DIR/nakama/docker-compose.yml" 2>/dev/null | head -1)
+    [ -n "$_KEY" ] && export NAKAMA_SERVER_KEY="$_KEY"
 fi
 # --host/--port 優先 > 環境変数 > デフォルト
 export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
@@ -204,7 +211,7 @@ TOTAL_FAILED=0
 TOTAL_PASSED=0
 TOTAL_RUN=0
 TEST_IDX=0
-TOTAL_TESTS=5
+TOTAL_TESTS=7
 CURRENT_ROUND_LABEL=""
 
 run_test() {
@@ -312,7 +319,25 @@ run_one_round() {
     local round_failed=0
     TEST_IDX=0
 
-    # 1. 同時接続テスト
+    # 1. セキュリティテスト（人数不要・短時間）
+    set +e
+    run_test "doTest-security.sh" $HOST_PORT_OPT
+    [ $? -ne 0 ] && round_failed=$((round_failed + 1))
+    set -e
+
+    echo "  テスト間クールダウン (3秒)..."
+    sleep 3
+
+    # 2. 再接続テスト（人数不要・短時間）
+    set +e
+    run_test "doTest-reconnect.sh"
+    [ $? -ne 0 ] && round_failed=$((round_failed + 1))
+    set -e
+
+    echo "  テスト間クールダウン (3秒)..."
+    sleep 3
+
+    # 3. 同時接続テスト
     set +e
     run_test "doTest-concurrent-login.sh" $players_opt $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
@@ -321,16 +346,7 @@ run_one_round() {
     echo "  テスト間クールダウン (3秒)..."
     sleep 3
 
-    # 2. 持続接続テスト
-    set +e
-    run_test "doTest-sustain.sh" $players_opt $HOST_PORT_OPT
-    [ $? -ne 0 ] && round_failed=$((round_failed + 1))
-    set -e
-
-    echo "  テスト間クールダウン (3秒)..."
-    sleep 3
-
-    # 3. 送受信整合性テスト
+    # 4. 送受信整合性テスト
     set +e
     run_test "doTest-snd-rcv.sh" $players_opt $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
@@ -339,7 +355,7 @@ run_one_round() {
     echo "  テスト間クールダウン (3秒)..."
     sleep 3
 
-    # 4. プレイヤーリスト通知テスト
+    # 5. プレイヤーリスト通知テスト
     set +e
     run_test "doTest-player-list.sh" $players_opt $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
@@ -348,7 +364,16 @@ run_one_round() {
     echo "  テスト間クールダウン (3秒)..."
     sleep 3
 
-    # 5. 同接履歴 DB永続化テスト
+    # 6. 持続接続テスト
+    set +e
+    run_test "doTest-sustain.sh" $players_opt $HOST_PORT_OPT
+    [ $? -ne 0 ] && round_failed=$((round_failed + 1))
+    set -e
+
+    echo "  テスト間クールダウン (3秒)..."
+    sleep 3
+
+    # 7. 同接履歴 DB永続化テスト
     set +e
     run_test "doTest-ccu-db.sh" $HOST_PORT_OPT
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
@@ -369,7 +394,7 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
     echo "  server_key: ${NAKAMA_SERVER_KEY:-defaultkey}"
     echo "  endpoint:   ${NAKAMA_HOST}:${NAKAMA_PORT:-7350}"
     echo "  人数: ${PLAYER_COUNTS[*]}"
-    echo "  テスト: concurrent / sustain / snd-rcv / player-list / ccu-db"
+    echo "  テスト: security / reconnect / concurrent / snd-rcv / player-list / sustain / ccu-db"
     echo "========================================="
 
     last_ok=0
@@ -391,11 +416,11 @@ if [ ${#PLAYER_COUNTS[@]} -gt 0 ]; then
 
         if [ $round_failed -eq 0 ]; then
             last_ok=$count_n
-            ROUND_RESULTS+=("${count_n}|5|0|${round_elapsed}")
+            ROUND_RESULTS+=("${count_n}|${TOTAL_TESTS}|0|${round_elapsed}")
             echo ""
             echo "✅ ${count_n}人: 全テスト PASS"
         else
-            round_passed=$((5 - round_failed))
+            round_passed=$((TOTAL_TESTS - round_failed))
             ROUND_RESULTS+=("${count_n}|${round_passed}|${round_failed}|${round_elapsed}")
             echo ""
             echo "❌ ${count_n}人: ${round_failed}件失敗 — 停止"
