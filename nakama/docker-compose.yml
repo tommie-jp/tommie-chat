@@ -66,7 +66,7 @@ services:
             --runtime.env RATE_LIMIT_BLOCK=20 `# ブロック設置制限[回/秒]` \
             --runtime.env RATE_LIMIT_MOVE=30 `# 移動制限[回/秒]` \
             --runtime.env MAX_BLOCK_ID=255 `# 有効ブロックID上限` \
-            --runtime.env ENABLE_TEST_RPC=true `# テスト用RPC有効（本番では設定しない）` \
+            --runtime.env ENABLE_TEST_RPC=true `# dev専用: テスト用RPC有効（本番はprod.ymlでfalse）` \
             --runtime.env MINIO_ENDPOINT=minio:9000 `# MinIO S3 API` \
             --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \
             --runtime.env MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin} \
