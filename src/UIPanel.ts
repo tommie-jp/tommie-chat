@@ -293,9 +293,17 @@ export function setupHtmlUI(game: GameScene): void {
 
         if (ulPanel && ulHeader) {
             if (!isMobileDev) {
-                const initRect = ulPanel.getBoundingClientRect();
-                ulPanel.style.left  = initRect.left + "px";
-                ulPanel.style.right = "auto";
+                const gCkUl = (k: string): string | null => {
+                    const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                    return m ? decodeURIComponent(m[1]) : null;
+                };
+                const sL = gCkUl("user-list-panel_l"), sT = gCkUl("user-list-panel_t");
+                const sW = gCkUl("user-list-panel_w"), sH = gCkUl("user-list-panel_h");
+                if (sL !== null) { ulPanel.style.left = sL + "px"; ulPanel.style.right = "auto"; }
+                else { ulPanel.style.left = ulPanel.getBoundingClientRect().left + "px"; ulPanel.style.right = "auto"; }
+                if (sT !== null) ulPanel.style.top = sT + "px";
+                if (sW !== null) ulPanel.style.width = sW + "px";
+                if (sH !== null) ulPanel.style.height = sH + "px";
             }
 
             const sCookieFn = (k: string, v: string) =>
@@ -303,6 +311,7 @@ export function setupHtmlUI(game: GameScene): void {
             let isDrag = false, offX = 0, offY = 0;
             ulHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                 if ((e.target as HTMLElement).id === "user-list-close") return;
+                if ((e.target as HTMLElement).tagName === "SELECT") return;
                 if (isMobileDev) return;
                 isDrag = true;
                 offX = e.clientX - ulPanel.getBoundingClientRect().left;
@@ -778,23 +787,18 @@ export function setupHtmlUI(game: GameScene): void {
     type UlSortKey = "username" | "displayName" | "uuid" | "sessionId" | "loginTime" | "loginTimestamp" | "channel";
     let ulSortKey: UlSortKey = "username";
     let ulSortAsc = true;
+    const _ulCkMatch = document.cookie.match(/(?:^|; )ulFilter=([^;]*)/);
+    let ulFilterMode: "room" | "all" = _ulCkMatch && decodeURIComponent(_ulCkMatch[1]) === "all" ? "all" : "room";
     const thUser  = document.getElementById("ul-th-user")  as HTMLTableCellElement;
     const thDname = document.getElementById("ul-th-dname") as HTMLTableCellElement;
     const thUuid  = document.getElementById("ul-th-uuid")  as HTMLTableCellElement;
     const thSid   = document.getElementById("ul-th-sid")   as HTMLTableCellElement;
     const thTime  = document.getElementById("ul-th-time")  as HTMLTableCellElement;
     const thRel   = document.getElementById("ul-th-rel")   as HTMLTableCellElement;
+    const thMatchId = document.getElementById("ul-th-matchid") as HTMLTableCellElement;
+    const ulFilterEl = document.getElementById("ul-filter");
 
-    const relativeTime = (ts: number): string => {
-        const secs = Math.floor((Date.now() - ts) / 1000);
-        if (secs < 60) return `${secs}秒`;
-        const mins = Math.floor(secs / 60);
-        if (mins < 60) return `${mins}分`;
-        const hours = Math.floor(mins / 60);
-        const remMins = mins % 60;
-        if (hours < 24) return remMins > 0 ? `${hours}時間${remMins}分` : `${hours}時間`;
-        return `${Math.floor(hours / 24)}日`;
-    };
+
 
     // デバウンス付きrenderUserList — 短期間の連続呼び出しをまとめる
     let _renderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -815,43 +819,52 @@ export function setupHtmlUI(game: GameScene): void {
 
     const ulPanel = document.getElementById("user-list-panel");
 
+    // 「すべて」モード用キャッシュ
+    let _allPlayersCache: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[] = [];
+
     const renderUserList = () => {
         cc("renderUserList");
         const _end = prof("UIPanel.renderUserList");
         if (!userListBody) { _end(); return; }
         // パネルが非表示ならスキップ（表示時に再レンダリングされる）
         if (ulPanel && ulPanel.style.display === "none") { _end(); return; }
+
         const _rt0 = performance.now();
-        const entries = [...userMap.values()].sort((a, b) => {
-            if (ulSortKey === "loginTimestamp")
-                return ulSortAsc ? a.loginTimestamp - b.loginTimestamp : b.loginTimestamp - a.loginTimestamp;
-            const va = a[ulSortKey as "username" | "displayName" | "uuid" | "sessionId" | "loginTime" | "channel"] ?? "";
-            const vb = b[ulSortKey as "username" | "displayName" | "uuid" | "sessionId" | "loginTime" | "channel"] ?? "";
-            return ulSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-        });
-        const arrow = ulSortAsc ? "▲" : "▼";
-        if (thUser)  thUser.dataset.sort  = ulSortKey === "username"        ? arrow : "";
-        if (thDname) thDname.dataset.sort = ulSortKey === "displayName"   ? arrow : "";
-        if (thUuid)  thUuid.dataset.sort  = ulSortKey === "uuid"          ? arrow : "";
-        if (thSid)   thSid.dataset.sort   = ulSortKey === "sessionId"     ? arrow : "";
-        if (thTime)  thTime.dataset.sort  = ulSortKey === "loginTime"     ? arrow : "";
-        if (thRel)   thRel.dataset.sort   = ulSortKey === "loginTimestamp" ? arrow : "";
-        const thCh = document.getElementById("ul-th-ch");
-        if (thCh)    thCh.dataset.sort    = ulSortKey === "channel"        ? arrow : "";
         const myId = game.nakama.selfSessionId ?? "";
-        const myMatchId  = game.nakama.selfMatchId  ?? "";
-        const matchShort = myMatchId  ? myMatchId.slice(0, 8)  : "-";
-        // DocumentFragment でまとめて構築し一度だけ DOM に挿入
+        const myMatchId = game.nakama.selfMatchId ?? "";
+
+        // 「この部屋」: 自分の matchId でフィルタ / 「すべて」: 全員表示
+        let source = _allPlayersCache;
+        if (ulFilterMode === "room") {
+            source = _allPlayersCache.filter(p => p.matchId === myMatchId);
+            if (thMatchId) thMatchId.textContent = "MatchID";
+        } else {
+            if (thMatchId) thMatchId.textContent = "部屋";
+        }
+
+        const sorted = [...source].sort((a, b) => {
+            if (ulSortKey === "username") return ulSortAsc ? a.username.localeCompare(b.username) : b.username.localeCompare(a.username);
+            if (ulSortKey === "displayName") return ulSortAsc ? a.displayName.localeCompare(b.displayName) : b.displayName.localeCompare(a.displayName);
+            return ulSortAsc ? a.username.localeCompare(b.username) : b.username.localeCompare(a.username);
+        });
+
         const frag = document.createDocumentFragment();
-        for (const { username, displayName, uuid, sessionId, loginTimestamp, loginTime, channel } of entries) {
+        for (const p of sorted) {
             const tr = document.createElement("tr");
-            const bold = sessionId === myId ? " class=\"ul-self\"" : "";
-            const rel = relativeTime(loginTimestamp);
-            const lbl = resolveDisplayLabel(displayName, username, sessionId);
+            const bold = p.sessionId === myId ? " class=\"ul-self\"" : "";
+            const lbl = resolveDisplayLabel(p.displayName, p.username, p.sessionId);
             const fullName = lbl.suffix ? lbl.text + lbl.suffix : lbl.text;
-            const eu = escapeHtml(username), ef = escapeHtml(fullName), ech = escapeHtml(channel), er = escapeHtml(rel), elt = escapeHtml(loginTime);
-            const eUuid = escapeHtml(uuid), eSid = escapeHtml(sessionId.slice(0, 8)), eMid = escapeHtml(myMatchId), eMs = escapeHtml(matchShort);
-            tr.innerHTML = `<td${bold} title="${eu}">${eu}</td><td title="${ef}">${ef}</td><td class="uuid-cell" data-copy="${eUuid}" title="${eUuid}&#10;クリックでコピー">${escapeHtml(uuid.slice(0, 8))}</td><td class="uuid-cell" data-copy="${eSid}" title="${eSid}&#10;クリックでコピー">${eSid}</td><td title="${ech}">${ech}</td><td class="uuid-cell" data-copy="${eMid}" title="${eMid}&#10;クリックでコピー">${eMs}</td><td title="${er}">${er}</td><td title="${elt}">${elt}</td>`;
+            const eu = escapeHtml(p.username), ef = escapeHtml(fullName);
+            const eUuid = escapeHtml(p.userId), eSid = escapeHtml(p.sessionId.slice(0, 8));
+            const elt = escapeHtml(p.loginTime || "-");
+            if (ulFilterMode === "room") {
+                const matchShort = myMatchId ? myMatchId.slice(0, 8) : "-";
+                const eMs = escapeHtml(matchShort), eMid = escapeHtml(myMatchId);
+                tr.innerHTML = `<td${bold} title="${eu}">${eu}</td><td title="${ef}">${ef}</td><td class="uuid-cell" data-copy="${eUuid}" title="${eUuid}&#10;クリックでコピー">${escapeHtml(p.userId.slice(0, 8))}</td><td class="uuid-cell" data-copy="${eSid}" title="${eSid}&#10;クリックでコピー">${eSid}</td><td>-</td><td class="uuid-cell" data-copy="${eMid}" title="${eMid}&#10;クリックでコピー">${eMs}</td><td>-</td><td title="${elt}">${elt}</td>`;
+            } else {
+                const worldName = escapeHtml(resolveWorldName(p.worldId));
+                tr.innerHTML = `<td${bold} title="${eu}">${eu}</td><td title="${ef}">${ef}</td><td class="uuid-cell" data-copy="${eUuid}" title="${eUuid}&#10;クリックでコピー">${escapeHtml(p.userId.slice(0, 8))}</td><td class="uuid-cell" data-copy="${eSid}" title="${eSid}&#10;クリックでコピー">${eSid}</td><td>-</td><td title="${worldName}">${worldName}</td><td>-</td><td title="${elt}">${elt}</td>`;
+            }
             frag.appendChild(tr);
         }
         userListBody.innerHTML = "";
@@ -870,12 +883,60 @@ export function setupHtmlUI(game: GameScene): void {
         _end();
     };
 
+    // worldId → 部屋名のキャッシュ
+    const worldNameCache = new Map<number, string>();
+    const resolveWorldName = (worldId: number): string => {
+        if (worldNameCache.has(worldId)) return worldNameCache.get(worldId)!;
+        return `World ${worldId}`;
+    };
+    // ワールドリスト取得で名前キャッシュを更新
+    const refreshWorldNames = () => {
+        game.nakama.getWorldList().then(list => {
+            for (const w of list) worldNameCache.set(w.id, w.name || `World ${w.id}`);
+        }).catch(() => {});
+    };
+
+    const isUlPanelVisible = () => ulPanel && ulPanel.style.display !== "none";
+    let _playerListSubbed = false;
+
+    const subPlayerList = () => {
+        if (_playerListSubbed) return;
+        _playerListSubbed = true;
+        refreshWorldNames();
+        game.nakama.subscribePlayerList(true);
+    };
+    const unsubPlayerList = () => {
+        if (!_playerListSubbed) return;
+        _playerListSubbed = false;
+        game.nakama.subscribePlayerList(false);
+    };
+
+    // サーバーからのプッシュ配信を受信
+    game.nakama.onPlayerListData = (players) => {
+        _allPlayersCache = players;
+        if (isUlPanelVisible()) renderUserList();
+    };
+
+    // フィルタ切り替え
+    if (ulFilterEl) {
+        (ulFilterEl as HTMLSelectElement).value = ulFilterMode;
+        ulFilterEl.addEventListener("change", () => {
+            ulFilterMode = (ulFilterEl as HTMLSelectElement).value as "room" | "all";
+            document.cookie = `ulFilter=${ulFilterMode};path=/;max-age=${60*60*24*365}`;
+            renderUserList();
+        });
+    }
+
     // パネル表示時にレンダリングをトリガー（非表示中はスキップしているため）
     if (ulPanel) {
         let ulWasHidden = ulPanel.style.display === "none";
         new MutationObserver(() => {
             const isHidden = ulPanel.style.display === "none";
-            if (ulWasHidden && !isHidden) renderUserList();
+            if (ulWasHidden && !isHidden) {
+                subPlayerList();
+            } else if (!ulWasHidden && isHidden) {
+                unsubPlayerList();
+            }
             ulWasHidden = isHidden;
         }).observe(ulPanel, { attributes: true, attributeFilter: ["style"] });
     }
@@ -908,14 +969,7 @@ export function setupHtmlUI(game: GameScene): void {
     if (thRel)   thRel.addEventListener("click",   () => setUlSort("loginTimestamp"));
     { const thCh = document.getElementById("ul-th-ch"); if (thCh) thCh.addEventListener("click", () => setUlSort("channel")); }
 
-    // 約10秒おきにプレイヤーリストを更新（tick方式）
-    let ulTickCounter = 0;
-    game.scene.onAfterRenderObservable.add(() => {
-        if (++ulTickCounter >= 600) { // ≈10秒（60FPS想定）
-            ulTickCounter = 0;
-            scheduleRenderUserList();
-        }
-    });
+    // プレイヤーリストはサーバープッシュ(op=17)で更新されるため、定期ポーリングは不要
 
     // カラムリサイズハンドル
     {
@@ -1475,6 +1529,12 @@ export function setupHtmlUI(game: GameScene): void {
             // matchId確定後にAOIを強制送信（selfMatchIdガードで未送信になったAOI_UPDATEを再実行）
             game.aoiManager.lastAOI = { minCX: -1, minCZ: -1, maxCX: -1, maxCZ: -1 };
             game.aoiManager.updateAOI();
+            // プレイヤーリスト: パネル表示中ならログイン後に購読開始
+            if (isUlPanelVisible()) {
+                _playerListSubbed = true;
+                refreshWorldNames();
+                game.nakama.subscribePlayerList(true);
+            }
 
             // ブロック更新通知の受信
             game.nakama.onBlockUpdate = (gx, gz, blockId, r, g, b, a) => {
@@ -3027,6 +3087,11 @@ export function setupHtmlUI(game: GameScene): void {
             const w = worldList.find(w => w.id === game.currentWorldId);
             if (w) game.currentWorldName = w.name || `World ${w.id}`;
         }).catch(() => {});
+        scheduleRenderUserList();
+        // 「すべて」モードで購読中なら新マッチに再 subscribe
+        if (_playerListSubbed) {
+            game.nakama.subscribePlayerList(true);
+        }
     });
 
     sendBtn.onclick = () => { sendMessage(); };
