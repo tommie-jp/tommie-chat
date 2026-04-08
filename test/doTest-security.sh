@@ -1,5 +1,5 @@
 #!/bin/bash
-# セキュリティテスト（XSS サニタイズ + /s3/ アクセス制限）
+# セキュリティテスト（XSS サニタイズ + /s3/ アクセス制限 + RPC レート制限）
 #
 # Nakama サーバに接続し、XSS 攻撃パターンがサニタイズされるか確認する。
 # また nginx の /s3/ アクセス制限が正しく動作するか確認する。
@@ -23,6 +23,11 @@
 #    8. /s3/avatars/ の PUT が拒否される
 #    9. /s3/uploads/ へのアクセスが拒否される
 #   10. /s3/ ルートへのアクセスが拒否される
+#   === RPC レート制限 ===
+#   11. RPC レート制限の設定が存在する
+#   12. 連続 RPC 呼び出しでレート制限が発動する
+#   13. レート以内の持続呼び出しは全て成功する
+#   14. バースト後にトークンが回復する
 
 set -e
 
@@ -131,7 +136,7 @@ echo "=== 1. XSS サニタイズ ==="
 # RPC 経由で直接テスト可能な部分を確認
 
 # 1-1. 表示名に HTML タグを含むリクエスト
-echo "[1/10] 表示名の HTML エスケープ..."
+echo "[1/14] 表示名の HTML エスケープ..."
 # Nakama HTTP RPC は payload を JSON 文字列でラップする必要がある
 XSS_PAYLOAD=$(printf '%s' '{"displayName":"<script>alert(1)</script>"}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
@@ -170,7 +175,7 @@ else
 fi
 
 # ── 1-2. 表示名に属性エスケープ攻撃 ──
-echo "[2/10] 表示名の属性エスケープ..."
+echo "[2/14] 表示名の属性エスケープ..."
 XSS_ATTR_PAYLOAD=$(printf '%s' '{"displayName":"test\"><img src=x onerror=alert(1)>"}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DN2_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "${API_BASE}/v2/rpc/updateDisplayName" \
@@ -200,7 +205,7 @@ else
 fi
 
 # ── 1-3. ワールド名の HTML エスケープ ──
-echo "[3/10] ワールド名の HTML エスケープ..."
+echo "[3/14] ワールド名の HTML エスケープ..."
 ROOM_PAYLOAD=$(printf '%s' '{"name":"<b>evil</b>","chunkCountX":2,"chunkCountZ":2}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 ROOM_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "${API_BASE}/v2/rpc/createRoom" \
@@ -234,7 +239,7 @@ else
 fi
 
 # ── 1-4. nameColor のバリデーション ──
-echo "[4/10] nameColor バリデーション..."
+echo "[4/14] nameColor バリデーション..."
 # joinMatch のメタデータで不正な nameColor を送信するのは直接テストが難しいため、
 # サーバーの sanitizeColor が正規表現マッチのみ通すことを間接的に確認。
 # ここでは getServerInfo で接続確認し、コードレビュー結果で判定。
@@ -256,7 +261,7 @@ echo ""
 # ══════════════════════════════════════════
 echo "=== 2. ENABLE_TEST_RPC ==="
 
-echo "[5/10] 本番設定で ENABLE_TEST_RPC=false..."
+echo "[5/14] 本番設定で ENABLE_TEST_RPC=false..."
 if [ -f nakama/docker-compose.prod.yml ]; then
     if grep -q 'ENABLE_TEST_RPC=false' nakama/docker-compose.prod.yml; then
         check "docker-compose.prod.yml に ENABLE_TEST_RPC=false が存在する" "0"
@@ -270,7 +275,7 @@ else
 fi
 
 # ── 2-2. deleteUsers RPC が実行不可 ──
-echo "[6/10] deleteUsers RPC が実行不可..."
+echo "[6/14] deleteUsers RPC が実行不可..."
 # 存在しない dummy ユーザーID で呼び出し（実害なし）
 DEL_PAYLOAD=$(printf '%s' '{"userIds":["00000000-0000-0000-0000-000000000000"]}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
 DEL_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
@@ -341,7 +346,7 @@ else
 fi
 
 # ── 2-1. /s3/avatars/ の GET が成功する ──
-echo "[7/10] /s3/avatars/ GET..."
+echo "[7/14] /s3/avatars/ GET..."
 S3_GET_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     "${WEB_BASE}/s3/avatars/" \
     --connect-timeout 5 --max-time 10 2>/dev/null)
@@ -352,7 +357,7 @@ check "/s3/avatars/ GET が通る (HTTP ${S3_GET_CODE})" \
     "期待: 200、実際: ${S3_GET_CODE}"
 
 # ── 2-2. /s3/avatars/ の PUT が拒否される ──
-echo "[8/10] /s3/avatars/ PUT 拒否..."
+echo "[8/14] /s3/avatars/ PUT 拒否..."
 S3_PUT_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     -X PUT "${WEB_BASE}/s3/avatars/evil-test-upload.txt" \
     -d "malicious content" \
@@ -364,7 +369,7 @@ check "/s3/avatars/ PUT が拒否される (HTTP ${S3_PUT_CODE})" \
     "期待: 403/405、実際: ${S3_PUT_CODE}。nginx の limit_except 設定を確認してください"
 
 # ── 2-3. /s3/uploads/ へのアクセスが拒否される ──
-echo "[9/10] /s3/uploads/ アクセス拒否..."
+echo "[9/14] /s3/uploads/ アクセス拒否..."
 S3_UPLOADS_BODY=$(curl -s "${WEB_BASE}/s3/uploads/" --connect-timeout 5 --max-time 10 2>/dev/null)
 S3_UPLOADS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${WEB_BASE}/s3/uploads/" --connect-timeout 5 --max-time 10 2>/dev/null)
 if [ "$IS_VITE" = true ]; then
@@ -386,7 +391,7 @@ else
 fi
 
 # ── 2-4. /s3/ ルートへのアクセスが拒否される ──
-echo "[10/10] /s3/ ルートアクセス拒否..."
+echo "[10/14] /s3/ ルートアクセス拒否..."
 S3_ROOT_BODY=$(curl -s "${WEB_BASE}/s3/" --connect-timeout 5 --max-time 10 2>/dev/null)
 S3_ROOT_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${WEB_BASE}/s3/" --connect-timeout 5 --max-time 10 2>/dev/null)
 if [ "$IS_VITE" = true ]; then
@@ -404,6 +409,101 @@ else
         "$([ "$S3_ROOT_CODE" = "403" ] || [ "$S3_ROOT_CODE" = "404" ] && echo 0 || echo 1)" \
         "期待: 403/404、実際: ${S3_ROOT_CODE}"
 fi
+
+# ══════════════════════════════════════════
+# RPC レート制限
+# ══════════════════════════════════════════
+echo "=== 4. RPC レート制限 ==="
+
+# ── 4-1. レート制限設定の存在確認 ──
+echo "[11/14] RPC レート制限の設定が存在する..."
+if grep -q 'RATE_LIMIT_RPC' nakama/docker-compose.yml && \
+   grep -q 'withRateLimit' nakama/go_src/main.go; then
+    check "RPC レート制限の設定が存在する" "0"
+else
+    check "RPC レート制限の設定が存在する" "1" \
+        "RATE_LIMIT_RPC または withRateLimit が見つかりません"
+fi
+
+# ── 4-2. 連続 RPC 呼び出しでレート制限が発動する ──
+echo "[12/14] 連続 RPC 呼び出しでレート制限が発動する..."
+# バースト上限（デフォルト20）を超えるまで ping を連続送信
+RATE_LIMITED=false
+for i in $(seq 1 30); do
+    RL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "${API_BASE}/v2/rpc/ping" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '""' \
+        --connect-timeout 2 --max-time 3 2>/dev/null)
+    if [ "$RL_CODE" = "429" ] || [ "$RL_CODE" = "500" ]; then
+        RATE_LIMITED=true
+        break
+    fi
+done
+if [ "$RATE_LIMITED" = true ]; then
+    check "連続 RPC 呼び出しでレート制限が発動（${i}回目で拒否）" "0"
+else
+    check "連続 RPC 呼び出しでレート制限が発動" "1" \
+        "30回連続呼び出しでもレート制限が発動しませんでした"
+fi
+
+# ── 4-3. レート以内の持続呼び出しは全て成功する ──
+echo "[13/14] レート以内の持続呼び出し（3秒間）..."
+# トークン回復を待ってからテスト開始（前のテスト12でバケットが枯渇しているため）
+sleep 3
+# 秒間5回 × 3秒 = 15回（レート10/秒・バースト20 の範囲内）
+SUSTAINED_OK=true
+SUSTAINED_FAIL_AT=0
+for i in $(seq 1 15); do
+    RL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "${API_BASE}/v2/rpc/ping" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '""' \
+        --connect-timeout 2 --max-time 3 2>/dev/null)
+    if [ "$RL_CODE" != "200" ]; then
+        SUSTAINED_OK=false
+        SUSTAINED_FAIL_AT=$i
+        break
+    fi
+    # 200ms 間隔 ≒ 秒間5回
+    sleep 0.2
+done
+if [ "$SUSTAINED_OK" = true ]; then
+    check "レート以内の持続呼び出し（15回/3秒）は全て成功" "0"
+else
+    check "レート以内の持続呼び出し（15回/3秒）は全て成功" "1" \
+        "${SUSTAINED_FAIL_AT}回目で失敗（HTTP ${RL_CODE}）"
+fi
+
+# ── 4-4. バースト後に回復する ──
+echo "[14/14] バースト後のトークン回復..."
+# まずバースト上限まで一気に消費
+for i in $(seq 1 25); do
+    curl -s -o /dev/null -X POST \
+        "${API_BASE}/v2/rpc/ping" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '""' \
+        --connect-timeout 2 --max-time 3 2>/dev/null
+done
+# 3秒待ってトークン回復（10/秒 × 3秒 = 30トークン補充）
+sleep 3
+RECOVERY_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    "${API_BASE}/v2/rpc/ping" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -d '""' \
+    --connect-timeout 2 --max-time 3 2>/dev/null)
+if [ "$RECOVERY_CODE" = "200" ]; then
+    check "バースト後に回復（3秒待機後に成功）" "0"
+else
+    check "バースト後に回復（3秒待機後に成功）" "1" \
+        "回復後も拒否された（HTTP ${RECOVERY_CODE}）"
+fi
+
+echo ""
 
 # ── クリーンアップ: テスト用表示名をリセット ──
 CLEAN_PAYLOAD=$(printf '%s' '{"displayName":""}' | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')

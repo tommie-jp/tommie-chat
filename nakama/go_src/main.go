@@ -94,6 +94,95 @@ func (r *loginRateLimiterT) Allow() bool {
 	return true
 }
 
+// rpcRateLimiter はユーザーごとのRPCレート制限（トークンバケット方式）
+type rpcRateLimiter struct {
+	mu      sync.Mutex
+	buckets map[string]*rpcBucket
+	rate    float64 // トークン補充レート[個/秒]
+	burst   int     // バケット最大容量
+}
+
+type rpcBucket struct {
+	tokens   float64
+	lastTime time.Time
+}
+
+var rateLimitRPC = 10 // デフォルト: 秒間10回 (RATE_LIMIT_RPC)
+var rateLimitRPCBurst = 20 // バースト上限 (RATE_LIMIT_RPC_BURST)
+
+func initRpcRateLimiter() *rpcRateLimiter {
+	readInt := func(key string, dst *int) {
+		if v := os.Getenv(key); v != "" {
+			var n int
+			if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+				*dst = n
+			}
+		}
+	}
+	readInt("RATE_LIMIT_RPC", &rateLimitRPC)
+	readInt("RATE_LIMIT_RPC_BURST", &rateLimitRPCBurst)
+	logf("rpcRateLimiter: RATE_LIMIT_RPC=%d RATE_LIMIT_RPC_BURST=%d\n", rateLimitRPC, rateLimitRPCBurst)
+	rl := &rpcRateLimiter{
+		buckets: make(map[string]*rpcBucket),
+		rate:    float64(rateLimitRPC),
+		burst:   rateLimitRPCBurst,
+	}
+	// 古いバケットの定期GC（60秒ごと）
+	go func() {
+		for {
+			time.Sleep(60 * time.Second)
+			rl.gc()
+		}
+	}()
+	return rl
+}
+
+func (rl *rpcRateLimiter) allow(userID string) bool {
+	now := time.Now()
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	b, ok := rl.buckets[userID]
+	if !ok {
+		b = &rpcBucket{tokens: float64(rl.burst), lastTime: now}
+		rl.buckets[userID] = b
+	}
+	// 経過時間分トークンを補充
+	elapsed := now.Sub(b.lastTime).Seconds()
+	b.tokens += elapsed * rl.rate
+	if b.tokens > float64(rl.burst) {
+		b.tokens = float64(rl.burst)
+	}
+	b.lastTime = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+func (rl *rpcRateLimiter) gc() {
+	cutoff := time.Now().Add(-5 * time.Minute)
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	for uid, b := range rl.buckets {
+		if b.lastTime.Before(cutoff) {
+			delete(rl.buckets, uid)
+		}
+	}
+}
+
+// withRateLimit はRPC関数にユーザーごとのレート制限を適用するラッパー
+func withRateLimit(rl *rpcRateLimiter, fn func(context.Context, runtime.Logger, *sql.DB, runtime.NakamaModule, string) (string, error)) func(context.Context, runtime.Logger, *sql.DB, runtime.NakamaModule, string) (string, error) {
+	return func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+		userID, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+		if !rl.allow(userID) {
+			logger.Warn("RPC rate limit exceeded: user=%s", userID)
+			return "", runtime.NewError("rate limit exceeded", 8) // RESOURCE_EXHAUSTED
+		}
+		return fn(ctx, logger, db, nk, payload)
+	}
+}
+
 // displayNameCache は uid → 表示名 のキャッシュ
 var displayNameCache sync.Map
 
@@ -2438,63 +2527,42 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	}); err != nil {
 		return err
 	}
-	if err := initializer.RegisterRpc("getServerInfo", rpcGetServerInfo); err != nil {
-		return err
+	// RPC レート制限（ユーザーごと、全RPCに適用）
+	rl := initRpcRateLimiter()
+
+	rpcs := []struct {
+		name string
+		fn   func(context.Context, runtime.Logger, *sql.DB, runtime.NakamaModule, string) (string, error)
+	}{
+		{"getServerInfo", rpcGetServerInfo},
+		{"getWorldMatch", rpcGetWorldMatch},
+		{"ping", rpcPing},
+		{"getGroundTable", rpcGetGroundTable},
+		{"getGroundChunk", rpcGetGroundChunk},
+		{"syncChunks", rpcSyncChunks},
+		{"getPlayerCount", rpcGetPlayerCount},
+		{"profileStart", rpcProfileStart},
+		{"profileStop", rpcProfileStop},
+		{"profileDump", rpcProfileDump},
+		{"updateDisplayName", rpcUpdateDisplayName},
+		{"getDisplayNames", rpcGetDisplayNames},
+		{"getBookmarks", rpcGetBookmarks},
+		{"saveBookmarks", rpcSaveBookmarks},
+		{"getWorldList", rpcGetWorldList},
+		{"createRoom", rpcCreateRoom},
+		{"deleteRoom", rpcDeleteRoom},
 	}
-	if err := initializer.RegisterRpc("getWorldMatch", rpcGetWorldMatch); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("ping", rpcPing); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("getGroundTable", rpcGetGroundTable); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("getGroundChunk", rpcGetGroundChunk); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("syncChunks", rpcSyncChunks); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("getPlayerCount", rpcGetPlayerCount); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("profileStart", rpcProfileStart); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("profileStop", rpcProfileStop); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("profileDump", rpcProfileDump); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("updateDisplayName", rpcUpdateDisplayName); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("getDisplayNames", rpcGetDisplayNames); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("getBookmarks", rpcGetBookmarks); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("saveBookmarks", rpcSaveBookmarks); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("getWorldList", rpcGetWorldList); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("createRoom", rpcCreateRoom); err != nil {
-		return err
-	}
-	if err := initializer.RegisterRpc("deleteRoom", rpcDeleteRoom); err != nil {
-		return err
+	for _, r := range rpcs {
+		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {
+			return err
+		}
 	}
 
 	// テスト用 RPC（ENABLE_TEST_RPC=true 時のみ）
 	env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
 	if env["ENABLE_TEST_RPC"] == "true" {
 		logger.Info("Test RPCs enabled (ENABLE_TEST_RPC=true)")
-		if err := initializer.RegisterRpc("deleteUsers", rpcDeleteUsers); err != nil {
+		if err := initializer.RegisterRpc("deleteUsers", withRateLimit(rl, rpcDeleteUsers)); err != nil {
 			return err
 		}
 	}

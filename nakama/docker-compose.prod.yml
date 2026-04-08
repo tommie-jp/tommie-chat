@@ -64,6 +64,8 @@ services:
             --runtime.max_count 8192 \
             --match.max_empty_sec 30 \
             --runtime.env MAX_LOGIN_RATE_PER_SEC=50 \
+            --runtime.env RATE_LIMIT_RPC=10 \
+            --runtime.env RATE_LIMIT_RPC_BURST=20 \
             --runtime.env MINIO_ENDPOINT=minio:9000 \
             --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \
             --runtime.env MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin} \
