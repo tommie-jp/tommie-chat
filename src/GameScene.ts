@@ -454,12 +454,15 @@ export class GameScene {
         for (const mesh of this.blockMeshes.values()) mesh.dispose();
         this.blockMeshes.clear();
         this.chunks.clear();
-        // リモートアバターを非表示（サーバーからAOI_LEAVEが来る前にクリア）
+        // リモートアバターを破棄（ワールド切替時に旧ワールドのアバターを完全除去）
         for (const [sid, av] of this.remoteAvatars) {
-            av.setEnabled(false);
-            this.spriteAvatarSystem.setEnabled(sid, false);
+            this.spriteAvatarSystem.dispose(sid);
+            av.dispose();
         }
+        this.remoteAvatars.clear();
         this.remoteTargets.clear();
+        this.remoteSpeeches.clear();
+        this.remoteNameUpdaters.clear();
         // 座標ツールチップをリセット（次フレームでワールドサイズに応じて再構築）
         const cd = document.getElementById("coord-display");
         if (cd) cd.innerHTML = "";
