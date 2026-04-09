@@ -37,7 +37,7 @@ export function setupHtmlUI(game: GameScene): void {
     if (isMobileDev) {
         const wrapIds = ["user-list-wrap", "chat-history-wrap", "server-settings-body",
                          "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body", "displayname-body",
-                         "room-list-body"];
+                         "room-list-body", "room-list-scroll"];
         for (const id of wrapIds) {
             const el = document.getElementById(id);
             if (!el) continue;
@@ -2916,6 +2916,15 @@ export function setupHtmlUI(game: GameScene): void {
         const roomTbody = document.getElementById("room-list-tbody") as HTMLElement | null;
         const roomClose = document.getElementById("room-list-close") as HTMLElement | null;
         const roomCreateBtn = document.getElementById("room-create-btn") as HTMLElement | null;
+        const roomScroll = document.getElementById("room-list-scroll") as HTMLElement | null;
+        const roomTheadWrap = document.getElementById("room-list-thead-wrap") as HTMLElement | null;
+
+        // 水平スクロール同期: body→thead
+        if (roomScroll && roomTheadWrap) {
+            roomScroll.addEventListener("scroll", () => {
+                roomTheadWrap.scrollLeft = roomScroll.scrollLeft;
+            });
+        }
 
         if (roomPanel && roomTbody) {
             // ソート状態
@@ -2991,35 +3000,35 @@ export function setupHtmlUI(game: GameScene): void {
                         const isCurrent = game.currentWorldId === w.id;
 
                         const tdName = document.createElement("td");
-                        tdName.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:8em;";
+                        tdName.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
                         if (isCurrent) tdName.style.fontWeight = "bold";
                         tdName.textContent = (isCurrent ? "⭐️" : "") + (w.name || `World ${w.id}`);
                         tr.appendChild(tdName);
 
                         const tdCount = document.createElement("td");
-                        tdCount.style.cssText = "text-align:center;white-space:nowrap;width:3em;";
+                        tdCount.style.cssText = "text-align:center;white-space:nowrap;";
                         tdCount.textContent = `${w.playerCount}`;
                         tr.appendChild(tdCount);
 
                         const tdOwnerName = document.createElement("td");
-                        tdOwnerName.style.cssText = "white-space:nowrap;width:80px;overflow:hidden;text-overflow:ellipsis;";
+                        tdOwnerName.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
                         tdOwnerName.textContent = w.ownerName || "—";
                         tdOwnerName.title = w.ownerName || "";
                         tr.appendChild(tdOwnerName);
 
                         const tdOwnerUid = document.createElement("td");
-                        tdOwnerUid.style.cssText = "white-space:nowrap;opacity:0.5;font-size:10px;width:70px;overflow:hidden;text-overflow:ellipsis;";
+                        tdOwnerUid.style.cssText = "white-space:nowrap;opacity:0.5;font-size:11px;overflow:hidden;text-overflow:ellipsis;";
                         tdOwnerUid.textContent = w.ownerUid ? w.ownerUid.substring(0, 8) : "—";
                         tdOwnerUid.title = w.ownerUid || "";
                         tr.appendChild(tdOwnerUid);
 
                         const tdSize = document.createElement("td");
-                        tdSize.style.cssText = "text-align:center;opacity:0.7;white-space:nowrap;width:80px;";
+                        tdSize.style.cssText = "text-align:center;opacity:0.7;white-space:nowrap;";
                         tdSize.textContent = `${w.chunkCountX * 16}x${w.chunkCountZ * 16}`;
                         tr.appendChild(tdSize);
 
                         const tdDel = document.createElement("td");
-                        tdDel.style.cssText = "text-align:center;width:24px;";
+                        tdDel.style.cssText = "text-align:center;";
                         if (canDelete(w)) {
                             const delBtn = document.createElement("button");
                             delBtn.style.cssText = "padding:0 4px;font-size:10px;opacity:0.4;line-height:1;";
