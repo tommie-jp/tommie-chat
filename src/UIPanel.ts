@@ -2978,18 +2978,18 @@ export function setupHtmlUI(game: GameScene): void {
                         const isCurrent = game.currentWorldId === w.id;
 
                         const tdName = document.createElement("td");
-                        tdName.style.cssText = "max-width:140px;";
+                        tdName.style.cssText = "max-width:140px;width:100%;";
                         if (isCurrent) tdName.style.fontWeight = "bold";
                         tdName.textContent = (w.name || `World ${w.id}`) + (isCurrent ? " ★" : "");
                         tr.appendChild(tdName);
 
                         const tdSize = document.createElement("td");
-                        tdSize.style.cssText = "text-align:center;opacity:0.7;";
+                        tdSize.style.cssText = "text-align:center;opacity:0.7;white-space:nowrap;";
                         tdSize.textContent = `${w.chunkCountX * 16}x${w.chunkCountZ * 16}`;
                         tr.appendChild(tdSize);
 
                         const tdCount = document.createElement("td");
-                        tdCount.style.cssText = "text-align:center;";
+                        tdCount.style.cssText = "text-align:center;white-space:nowrap;";
                         tdCount.textContent = `${w.playerCount}`;
                         tr.appendChild(tdCount);
 
