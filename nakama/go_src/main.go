@@ -1771,7 +1771,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z}
 				}
 				// チャンクが変わった場合、新しいチャンクのAOIに入っている他プレイヤーに通知
+				// Enter/Leave対象を先に収集し、Marshal 1回 + BroadcastMessage 1回にバッチ化
 				if cx != oldCX || cz != oldCZ {
+					var enterTargets, leaveTargets []runtime.Presence
 					for otherSID, otherAOI := range ms.AOIs {
 						if otherSID == sid {
 							continue
@@ -1779,26 +1781,34 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 						wasVisible := oldCX >= 0 && otherAOI.containsChunk(oldCX, oldCZ)
 						nowVisible := otherAOI.containsChunk(cx, cz)
 						if nowVisible && !wasVisible {
-							// 他プレイヤーのAOIに自分が入った → OP_AOI_ENTER
 							if otherP, ok := ms.Presences[otherSID]; ok {
-								myPos := ms.Positions[sid]
-								enterData, _ := json.Marshal(map[string]interface{}{
-									"sessionId": sid,
-									"x":         myPos.X,
-									"z":         myPos.Z,
-									"ry":        myPos.RY,
-								})
-								dispatcher.BroadcastMessage(opAOIEnter, enterData, []runtime.Presence{otherP}, nil, true)
+								enterTargets = append(enterTargets, otherP)
 							}
 						} else if wasVisible && !nowVisible {
-							// 他プレイヤーのAOIから自分が出た → OP_AOI_LEAVE
 							if otherP, ok := ms.Presences[otherSID]; ok {
-								leaveData, _ := json.Marshal(map[string]interface{}{
-									"sessionId": sid,
-								})
-								dispatcher.BroadcastMessage(opAOILeave, leaveData, []runtime.Presence{otherP}, nil, true)
+								leaveTargets = append(leaveTargets, otherP)
 							}
 						}
+					}
+					if len(enterTargets) > 0 {
+						myPos := ms.Positions[sid]
+						entry := map[string]interface{}{
+							"sessionId": sid,
+							"x":         myPos.X,
+							"z":         myPos.Z,
+							"ry":        myPos.RY,
+						}
+						// PendingAOIEnter バッファに積む（tick末にバルクフラッシュ）
+						for _, otherP := range enterTargets {
+							recipSID := otherP.GetSessionId()
+							ms.PendingAOIEnter[recipSID] = append(ms.PendingAOIEnter[recipSID], entry)
+						}
+					}
+					if len(leaveTargets) > 0 {
+						leaveData, _ := json.Marshal(map[string]interface{}{
+							"sessionId": sid,
+						})
+						dispatcher.BroadcastMessage(opAOILeave, leaveData, leaveTargets, nil, true)
 					}
 				}
 			}
