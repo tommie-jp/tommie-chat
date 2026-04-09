@@ -1,16 +1,29 @@
 #!/bin/bash
 set -e
 
-# prod コンテナが動いていればポート競合を避けるため停止
-PROD_COMPOSE="docker compose -p tommchat-prod -f docker-compose.yml -f docker-compose.prod.yml"
-if docker ps --format '{{.Names}}' | grep -q 'tommchat-prod'; then
-    echo "prod コンテナを停止中..."
-    $PROD_COMPOSE down || true
+# 本番判定: ユーザーが deploy なら本番環境
+if [ "$(whoami)" = "deploy" ]; then
+    IS_PROD=true
+else
+    IS_PROD=false
 fi
 
-COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
-$COMPOSE down
-$COMPOSE up -d --scale prometheus=0
+if [ "$IS_PROD" = true ]; then
+    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+    echo "本番環境で再起動します..."
+    $COMPOSE down
+    $COMPOSE up -d
+else
+    # dev: prod コンテナが動いていればポート競合を避けるため停止
+    PROD_COMPOSE="docker compose -p tommchat-prod -f docker-compose.yml -f docker-compose.prod.yml"
+    if docker ps --format '{{.Names}}' | grep -q 'tommchat-prod'; then
+        echo "prod コンテナを停止中..."
+        $PROD_COMPOSE down || true
+    fi
+    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
+    $COMPOSE down
+    $COMPOSE up -d --scale prometheus=0
+fi
 
 # 起動確認（最大60秒待機）
 # prometheus はスケール0で除外
