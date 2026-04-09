@@ -1075,6 +1075,34 @@ func (a *playerAOI) containsChunk(cx, cz int) bool {
 	return cx >= a.MinCX && cx <= a.MaxCX && cz >= a.MinCZ && cz <= a.MaxCZ
 }
 
+// addChunkViewer はプレイヤーのAOI範囲内の全チャンクを ChunkViewers に登録する
+func (ms *matchState) addChunkViewer(sid string, aoi *playerAOI) {
+	if aoi.MinCX < 0 { return } // センチネルAOI(-1,-1,-1,-1)はスキップ
+	for cx := aoi.MinCX; cx <= aoi.MaxCX; cx++ {
+		for cz := aoi.MinCZ; cz <= aoi.MaxCZ; cz++ {
+			key := [2]int{cx, cz}
+			if ms.ChunkViewers[key] == nil {
+				ms.ChunkViewers[key] = make(map[string]bool)
+			}
+			ms.ChunkViewers[key][sid] = true
+		}
+	}
+}
+
+// removeChunkViewer はプレイヤーのAOI範囲内の全チャンクを ChunkViewers から除去する
+func (ms *matchState) removeChunkViewer(sid string, aoi *playerAOI) {
+	if aoi.MinCX < 0 { return }
+	for cx := aoi.MinCX; cx <= aoi.MaxCX; cx++ {
+		for cz := aoi.MinCZ; cz <= aoi.MaxCZ; cz++ {
+			key := [2]int{cx, cz}
+			if m := ms.ChunkViewers[key]; m != nil {
+				delete(m, sid)
+				if len(m) == 0 { delete(ms.ChunkViewers, key) }
+			}
+		}
+	}
+}
+
 // playerPos はプレイヤーの最新位置（チャンク座標）
 type playerPos struct {
 	CX, CZ      int     // チャンク座標
@@ -1155,6 +1183,7 @@ type matchState struct {
 	PlayerListSubs   map[string]string                    // sessionID -> "count" or "full"
 	PlayerListVer    uint64                               // 前回送信した gplVer（full用）
 	PlayerListCount  int                                  // 前回送信した部屋人数（count用）
+	ChunkViewers     map[[2]int]map[string]bool           // (cx,cz) → AOI内にこのチャンクを含むセッションID群
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -1178,6 +1207,7 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		WorldMoveJoin:    make(map[string]bool),
 		PendingLeave:     make(map[string]*pendingLeaveMsg),
 		PlayerListSubs:   make(map[string]string),
+		ChunkViewers:     make(map[[2]int]map[string]bool),
 	}, 10, label
 }
 
@@ -1273,6 +1303,7 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 				// ステートから即座に除去
 				delete(ms.Presences, prevSid)
 				delete(ms.Positions, prevSid)
+				if oldAOI, ok := ms.AOIs[prevSid]; ok { ms.removeChunkViewer(prevSid, oldAOI) }
 				delete(ms.AOIs, prevSid)
 				delete(ms.PendingInit, prevSid)
 				delete(ms.PendingAOIEnter, prevSid)
@@ -1415,6 +1446,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		// ゴーストキックされたセッションはシステムメッセージを抑制
 		if _, ghosted := ghostKickedSessions.LoadAndDelete(sid); ghosted {
 			logf("MatchLeave ghost-kicked sid=%s (suppressed)\n", shortSID(sid))
+			if a, ok := ms.AOIs[sid]; ok { ms.removeChunkViewer(sid, a) }
 			delete(ms.AOIs, sid)
 			delete(ms.Presences, sid)
 			delete(ms.Positions, sid)
@@ -1466,6 +1498,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 			ms.PendingLeave[uid] = &pendingLeaveMsg{tick: tick, sysMsg: sysMsg, targets: targets}
 		}
 
+		if a, ok := ms.AOIs[sid]; ok { ms.removeChunkViewer(sid, a) }
 		delete(ms.AOIs, sid)
 		delete(ms.Presences, sid)
 		delete(ms.Positions, sid)
@@ -1509,16 +1542,16 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 }
 
 // collectAOITargets は送信者のチャンク位置(cx,cz)がAOI内にある他プレイヤーを収集する
-// AOI未登録のプレイヤーは全体可視とみなす（参加直後でまだsendAOIしていない場合）
+// ChunkViewers 空間インデックスを使用: O(N)全走査 → O(viewers) に高速化
 func (ms *matchState) collectAOITargets(senderSID string, cx, cz int) []runtime.Presence {
 	defer prof("collectAOITargets")()
-	var targets []runtime.Presence
-	for sid, p := range ms.Presences {
-		if sid == senderSID {
+	viewers := ms.ChunkViewers[[2]int{cx, cz}]
+	targets := make([]runtime.Presence, 0, len(viewers))
+	for viewerSID := range viewers {
+		if viewerSID == senderSID {
 			continue // 送信者自身はスキップ（reliable=true で自動受信）
 		}
-		aoi, hasAOI := ms.AOIs[sid]
-		if !hasAOI || aoi.containsChunk(cx, cz) {
+		if p, ok := ms.Presences[viewerSID]; ok {
 			targets = append(targets, p)
 		}
 	}
@@ -1579,6 +1612,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 
 			oldAOI := ms.AOIs[sid]
 			newAOI := &playerAOI{aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ}
+			// ChunkViewers 更新: 旧AOI除去 → 新AOI登録
+			if oldAOI != nil { ms.removeChunkViewer(sid, oldAOI) }
+			ms.addChunkViewer(sid, newAOI)
 			ms.AOIs[sid] = newAOI
 
 			// AOI変更時: 新しいAOI内に入ったプレイヤーの情報を通知
