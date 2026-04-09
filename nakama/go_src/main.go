@@ -2700,6 +2700,10 @@ func rpcDeleteRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 	if !isAdmin(uid) && w.OwnerUID != uid {
 		return "", runtime.NewError("permission denied", 7)
 	}
+	// プレイヤーがいる部屋は削除不可
+	if v, ok := worldPlayerCounts.Load(req.WorldID); ok && v.(int) > 0 {
+		return "", runtime.NewError("cannot delete room with players", 9)
+	}
 
 	// ワールドを削除
 	worldsMu.Lock()

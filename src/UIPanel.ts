@@ -2972,7 +2972,7 @@ export function setupHtmlUI(game: GameScene): void {
                     const myUid = game.currentUserId ?? "";
                     const adminSet = new Set(adminUids);
                     const canDelete = (w: typeof worldList[0]) =>
-                        w.id !== 0 && (adminSet.has(myUid) || w.ownerUid === myUid);
+                        w.id !== 0 && w.playerCount === 0 && (adminSet.has(myUid) || w.ownerUid === myUid);
 
                     const json = JSON.stringify(worldList.map(w => `${w.id}:${w.name}:${w.playerCount}:${game.currentWorldId}:${canDelete(w)}`));
                     if (json === lastWorldListJson) return;
