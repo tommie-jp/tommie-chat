@@ -36,7 +36,8 @@ export function setupHtmlUI(game: GameScene): void {
     // ヘッダーはデバイダードラッグに使うので除外
     if (isMobileDev) {
         const wrapIds = ["user-list-wrap", "chat-history-wrap", "server-settings-body",
-                         "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body", "displayname-body"];
+                         "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body", "displayname-body",
+                         "room-list-body"];
         for (const id of wrapIds) {
             const el = document.getElementById(id);
             if (!el) continue;
@@ -903,8 +904,8 @@ export function setupHtmlUI(game: GameScene): void {
     };
     // ワールドリスト取得で名前キャッシュを更新
     const refreshWorldNames = () => {
-        game.nakama.getWorldList().then(list => {
-            for (const w of list) worldNameCache.set(w.id, w.name || `World ${w.id}`);
+        game.nakama.getWorldList().then(({ worlds }) => {
+            for (const w of worlds) worldNameCache.set(w.id, w.name || `World ${w.id}`);
         }).catch(() => {});
     };
 
@@ -2954,8 +2955,13 @@ export function setupHtmlUI(game: GameScene): void {
             // 差分更新
             let lastWorldListJson = "";
             const renderRoomList = () => {
-                game.nakama.getWorldList().then(worldList => {
-                    const json = JSON.stringify(worldList.map(w => `${w.id}:${w.name}:${w.playerCount}:${game.currentWorldId}`));
+                game.nakama.getWorldList().then(({ worlds: worldList, adminUids }) => {
+                    const myUid = game.currentUserId ?? "";
+                    const adminSet = new Set(adminUids);
+                    const canDelete = (w: typeof worldList[0]) =>
+                        w.id !== 0 && (adminSet.has(myUid) || w.ownerUid === myUid);
+
+                    const json = JSON.stringify(worldList.map(w => `${w.id}:${w.name}:${w.playerCount}:${game.currentWorldId}:${canDelete(w)}`));
                     if (json === lastWorldListJson) return;
                     lastWorldListJson = json;
 
@@ -2978,10 +2984,22 @@ export function setupHtmlUI(game: GameScene): void {
                         const isCurrent = game.currentWorldId === w.id;
 
                         const tdName = document.createElement("td");
-                        tdName.style.cssText = "max-width:140px;width:100%;";
+                        tdName.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
                         if (isCurrent) tdName.style.fontWeight = "bold";
                         tdName.textContent = (w.name || `World ${w.id}`) + (isCurrent ? " ★" : "");
                         tr.appendChild(tdName);
+
+                        const tdOwnerName = document.createElement("td");
+                        tdOwnerName.style.cssText = "white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;";
+                        tdOwnerName.textContent = w.ownerName || "—";
+                        tdOwnerName.title = w.ownerName || "";
+                        tr.appendChild(tdOwnerName);
+
+                        const tdOwnerUid = document.createElement("td");
+                        tdOwnerUid.style.cssText = "white-space:nowrap;opacity:0.5;font-size:10px;max-width:60px;overflow:hidden;text-overflow:ellipsis;";
+                        tdOwnerUid.textContent = w.ownerUid ? w.ownerUid.substring(0, 8) : "—";
+                        tdOwnerUid.title = w.ownerUid || "";
+                        tr.appendChild(tdOwnerUid);
 
                         const tdSize = document.createElement("td");
                         tdSize.style.cssText = "text-align:center;opacity:0.7;white-space:nowrap;";
@@ -2995,7 +3013,7 @@ export function setupHtmlUI(game: GameScene): void {
 
                         const tdDel = document.createElement("td");
                         tdDel.style.cssText = "text-align:center;width:24px;";
-                        if (w.id !== 0) {
+                        if (canDelete(w)) {
                             const delBtn = document.createElement("button");
                             delBtn.style.cssText = "padding:0 4px;font-size:10px;opacity:0.4;line-height:1;";
                             delBtn.textContent = "✕";
@@ -3107,8 +3125,8 @@ export function setupHtmlUI(game: GameScene): void {
         for (const sid of userMap.keys()) {
             if (!currentPresences.has(sid)) userMap.delete(sid);
         }
-        game.nakama.getWorldList().then(worldList => {
-            const w = worldList.find(w => w.id === game.currentWorldId);
+        game.nakama.getWorldList().then(({ worlds }) => {
+            const w = worlds.find(w => w.id === game.currentWorldId);
             if (w) game.currentWorldName = w.name || `World ${w.id}`;
         }).catch(() => {});
         scheduleRenderUserList();

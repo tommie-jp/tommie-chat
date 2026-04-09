@@ -970,7 +970,7 @@
             align-items: center;
             user-select: none;
             touch-action: none;
-            flex-shrink: 0;
+            overflow: visible;
         }
         #room-list-header:active { cursor: grabbing; }
         #room-list-close {
@@ -982,23 +982,23 @@
         }
         #room-list-close:hover { opacity: 1; }
         #room-list-body {
+            overflow: auto;
             flex: 1;
-            overflow-y: auto;
-            padding: 6px 8px;
-            background: inherit;
+            min-height: 0;
         }
-        #room-list-body::-webkit-scrollbar { width: 8px; }
+        #room-list-body::-webkit-scrollbar { width: 8px; height: 8px; }
         #room-list-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
         #room-list-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
         #room-list-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
-        #room-list-thead-table,
         #room-list-table {
-            width: 100%;
             border-collapse: collapse;
             font-size: 13px;
+            table-layout: fixed;
+            width: 560px;
         }
-        #room-list-thead-table { padding: 0 8px; box-sizing: border-box; }
-        #room-list-thead-table thead th {
+        #room-list-table thead th {
+            position: sticky;
+            top: 0;
             background: rgba(255,255,255,0.95);
             border-bottom: 1px solid rgba(0,0,0,0.2);
             padding: 2px 6px;
@@ -1008,11 +1008,12 @@
             cursor: pointer;
             user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
-        #room-list-thead-table thead th:hover { background: rgba(220,220,255,0.8); }
-        #room-list-thead-table thead th:nth-child(2),
-        #room-list-thead-table thead th:nth-child(3) { text-align: center; }
-        #room-list-thead-table thead th[data-sort]::after {
+        #room-list-table thead th:hover { background: rgba(220,220,255,0.8); }
+        #room-list-table thead th:nth-child(2),
+        #room-list-table thead th:nth-child(3) { text-align: center; }
+        #room-list-table thead th[data-sort]::after {
             content: " " attr(data-sort);
             font-size: 9px;
             opacity: 0.7;
@@ -1794,13 +1795,15 @@
             }
 
             /* --- 部屋一覧 --- */
-            #room-list-thead-table thead th {
+            #room-list-body::-webkit-scrollbar { display: none; }
+            #room-list-body { -webkit-overflow-scrolling: touch; }
+            #room-list-table thead th {
                 background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
                 color: #fff !important;
                 border-bottom: none !important;
                 font-size: 15px !important;
             }
-            #room-list-thead-table thead th:hover {
+            #room-list-table thead th:hover {
                 background: linear-gradient(135deg, #6a4cc8, #4a7cde) !important;
             }
             #room-list-table tbody td {
@@ -2326,12 +2329,12 @@
         body.theme-dark #user-list tbody tr:nth-child(odd) td {
             background-color: rgba(80, 150, 220, 0.25) !important;
         }
-        body.theme-dark #room-list-thead-table thead th {
+        body.theme-dark #room-list-table thead th {
             background: #3a3a3c !important;
             color: #eee !important;
             border-bottom: 1px solid rgba(255,255,255,0.15) !important;
         }
-        body.theme-dark #room-list-thead-table thead th:hover { background: #48484a !important; }
+        body.theme-dark #room-list-table thead th:hover { background: #48484a !important; }
         body.theme-dark #room-list-table tbody td { color: #eee !important; }
         body.theme-dark #room-list-table tbody tr:nth-child(odd) td {
             background-color: rgba(80, 150, 220, 0.25) !important;
@@ -3246,18 +3249,18 @@
             <span>部屋一覧</span>
             <span id="room-list-close">❌️</span>
         </div>
-        <table id="room-list-thead-table" style="width:100%;flex-shrink:0;">
-            <thead>
-                <tr>
-                    <th id="room-th-name" style="width:100%;">部屋名</th>
-                    <th id="room-th-size" style="white-space:nowrap;">サイズ</th>
-                    <th id="room-th-count" style="white-space:nowrap;">人数</th>
-                    <th style="width:24px;"></th>
-                </tr>
-            </thead>
-        </table>
         <div id="room-list-body">
             <table id="room-list-table">
+                <thead id="room-list-thead">
+                    <tr>
+                        <th id="room-th-name">部屋名</th>
+                        <th style="white-space:nowrap;">オーナー</th>
+                        <th style="white-space:nowrap;">オーナーアカウント</th>
+                        <th id="room-th-size" style="white-space:nowrap;">サイズ</th>
+                        <th id="room-th-count" style="white-space:nowrap;">人数</th>
+                        <th style="width:24px;"></th>
+                    </tr>
+                </thead>
                 <tbody id="room-list-tbody"></tbody>
             </table>
             <button id="room-create-btn" style="margin-top:4px;font-weight:bold;width:100%;">＋ 部屋を作成</button>

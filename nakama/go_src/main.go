@@ -1138,11 +1138,13 @@ var (
 	rateLimitMove  = 30  // 移動: N回/秒 (RATE_LIMIT_MOVE)
 	maxBlockID     = 255 // 有効ブロックID上限 (MAX_BLOCK_ID)
 	maxChatLen     = 200 // チャット文字数上限 (MAX_CHAT_LEN)
+	adminUIDs      = map[string]bool{} // 管理者UIDセット (ADMIN_UIDS, カンマ区切り)
 )
 
-func initValidationConfig() {
+func initValidationConfig(ctx context.Context) {
+	env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
 	readInt := func(key string, dst *int) {
-		if v := os.Getenv(key); v != "" {
+		if v, ok := env[key]; ok && v != "" {
 			var n int
 			if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
 				*dst = n
@@ -1157,8 +1159,22 @@ func initValidationConfig() {
 	readInt("MAX_DISPLAY_NAME_LEN", &maxDisplayNameLen)
 	readInt("MAX_TEXTURE_URL_LEN", &maxTextureUrlLen)
 	readInt("MAX_ARRAY_SIZE", &maxArraySize)
-	logf("validationConfig: MAX_CHAT_LEN=%d RATE_LIMIT_CHAT=%d RATE_LIMIT_BLOCK=%d RATE_LIMIT_MOVE=%d MAX_BLOCK_ID=%d MAX_DISPLAY_NAME_LEN=%d MAX_TEXTURE_URL_LEN=%d MAX_ARRAY_SIZE=%d\n",
-		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID, maxDisplayNameLen, maxTextureUrlLen, maxArraySize)
+	// 管理者UID読込（カンマ区切り）
+	if v, ok := env["ADMIN_UIDS"]; ok && v != "" {
+		for _, uid := range strings.Split(v, ",") {
+			uid = strings.TrimSpace(uid)
+			if uid != "" {
+				adminUIDs[uid] = true
+			}
+		}
+	}
+	logf("validationConfig: MAX_CHAT_LEN=%d RATE_LIMIT_CHAT=%d RATE_LIMIT_BLOCK=%d RATE_LIMIT_MOVE=%d MAX_BLOCK_ID=%d MAX_DISPLAY_NAME_LEN=%d MAX_TEXTURE_URL_LEN=%d MAX_ARRAY_SIZE=%d ADMIN_UIDS=%d人\n",
+		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID, maxDisplayNameLen, maxTextureUrlLen, maxArraySize, len(adminUIDs))
+}
+
+// isAdmin は管理者UIDかどうかを返す
+func isAdmin(uid string) bool {
+	return adminUIDs[uid]
 }
 
 // pendingLeaveMsg は遅延送信中の leave システムメッセージ
@@ -2569,6 +2585,7 @@ func rpcGetWorldList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 		ChunkCountX int    `json:"chunkCountX"`
 		ChunkCountZ int    `json:"chunkCountZ"`
 		OwnerUID    string `json:"ownerUid"`
+		OwnerName   string `json:"ownerName"`
 		PlayerCount int    `json:"playerCount"`
 	}
 	list := make([]entry, 0, len(worlds))
@@ -2580,13 +2597,41 @@ func rpcGetWorldList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 		})
 	}
 	worldsMu.RUnlock()
+	// オーナー表示名を取得（キャッシュ優先、なければ UsersGetId）
+	needLookup := make([]string, 0)
+	for _, e := range list {
+		if e.OwnerUID != "" {
+			if _, ok := displayNameCache.Load(e.OwnerUID); !ok {
+				needLookup = append(needLookup, e.OwnerUID)
+			}
+		}
+	}
+	if len(needLookup) > 0 {
+		if users, err := nk.UsersGetId(ctx, needLookup, nil); err == nil {
+			for _, u := range users {
+				displayNameCache.Store(u.Id, u.DisplayName)
+			}
+		}
+	}
+	for i := range list {
+		if list[i].OwnerUID != "" {
+			if v, ok := displayNameCache.Load(list[i].OwnerUID); ok {
+				list[i].OwnerName = v.(string)
+			}
+		}
+	}
 	// グローバルカウンターから接続人数を取得
 	for i := range list {
 		if v, ok := worldPlayerCounts.Load(list[i].ID); ok {
 			list[i].PlayerCount = v.(int)
 		}
 	}
-	b, _ := json.Marshal(map[string]interface{}{"worlds": list})
+	// 管理者UIDリスト
+	admins := make([]string, 0, len(adminUIDs))
+	for uid := range adminUIDs {
+		admins = append(admins, uid)
+	}
+	b, _ := json.Marshal(map[string]interface{}{"worlds": list, "adminUids": admins})
 	return string(b), nil
 }
 
@@ -2651,8 +2696,8 @@ func rpcDeleteRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 	if w == nil {
 		return "", runtime.NewError("world not found", 5)
 	}
-	// 権限チェック: 作成者のみ削除可
-	if w.OwnerUID != "" && w.OwnerUID != uid {
+	// 権限チェック: 管理者 or 作成者のみ削除可
+	if !isAdmin(uid) && w.OwnerUID != uid {
 		return "", runtime.NewError("permission denied", 7)
 	}
 
@@ -2688,8 +2733,8 @@ func rpcDeleteRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
-	// バリデーション設定の読み込み（環境変数から）
-	initValidationConfig()
+	// バリデーション設定の読み込み（runtime.env から）
+	initValidationConfig(ctx)
 
 	// pprof サーバ (ポート6060)
 	go func() {
