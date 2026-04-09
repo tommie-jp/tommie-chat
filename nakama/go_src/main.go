@@ -2609,7 +2609,11 @@ func rpcGetWorldList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	if len(needLookup) > 0 {
 		if users, err := nk.UsersGetId(ctx, needLookup, nil); err == nil {
 			for _, u := range users {
-				displayNameCache.Store(u.Id, u.DisplayName)
+				name := u.DisplayName
+				if name == "" {
+					name = u.Username
+				}
+				displayNameCache.Store(u.Id, name)
 			}
 		}
 	}
