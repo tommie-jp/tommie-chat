@@ -162,7 +162,7 @@ export function setupHtmlUI(game: GameScene): void {
             let dragOffsetPx = 0; // タッチ位置とデバイダー位置の差分
             const startDrag = (e: PointerEvent, captureEl: HTMLElement) => {
                 // 現在のデバイダー位置（px）を取得
-                const vhPx = document.body.getBoundingClientRect().height;
+                const vhPx = window.innerHeight;
                 const curVal = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pt-divider")) || 60;
                 const dividerPx = (curVal / 100) * vhPx;
                 dragOffsetPx = e.clientY - dividerPx;
@@ -190,7 +190,7 @@ export function setupHtmlUI(game: GameScene): void {
             }
             document.addEventListener("pointermove", (e: PointerEvent) => {
                 if (!dragging) return;
-                const vhPx = document.body.getBoundingClientRect().height;
+                const vhPx = window.innerHeight;
                 const pct = Math.max(30, Math.min(75, ((e.clientY - dragOffsetPx) / vhPx) * 100));
                 document.documentElement.style.setProperty("--pt-divider", pct + "vh");
                 game.engine.resize();
@@ -246,8 +246,9 @@ export function setupHtmlUI(game: GameScene): void {
             // Xボタン上のクリックはドラッグしない
             if ((e.target as HTMLElement).id === "chat-history-close") return;
             isDragging = true;
-            dragOffsetX = e.clientX - historyPanel.getBoundingClientRect().left;
-            dragOffsetY = e.clientY - historyPanel.getBoundingClientRect().top;
+            const hRect = historyPanel.getBoundingClientRect();
+            dragOffsetX = e.clientX - hRect.left;
+            dragOffsetY = e.clientY - hRect.top;
             historyHeader.setPointerCapture(e.pointerId);
             e.preventDefault();
         });
@@ -314,8 +315,9 @@ export function setupHtmlUI(game: GameScene): void {
                 if ((e.target as HTMLElement).tagName === "SELECT") return;
                 if (isMobileDev) return;
                 isDrag = true;
-                offX = e.clientX - ulPanel.getBoundingClientRect().left;
-                offY = e.clientY - ulPanel.getBoundingClientRect().top;
+                const uRect = ulPanel.getBoundingClientRect();
+                offX = e.clientX - uRect.left;
+                offY = e.clientY - uRect.top;
                 ulHeader.setPointerCapture(e.pointerId);
                 e.preventDefault();
             });

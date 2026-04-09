@@ -30,6 +30,9 @@ import { setupDebugOverlay } from "./DebugOverlay";
 import { prof } from "./Profiler";
 import { t } from "./i18n";
 
+/** 角度差を [-π, π] に正規化 */
+const wrapAngle = (d: number) => d - Math.PI * 2 * Math.round(d / (Math.PI * 2));
+
 export class GameScene {
     engine: Engine;
     scene: Scene;
@@ -724,9 +727,7 @@ export class GameScene {
                 this.playerBox.position.addInPlace(moveDirection.scale(moveDist));
 
                 const targetAngle = Math.atan2(moveDirection.x, moveDirection.z) + Math.PI;
-                let diff = targetAngle - this.playerBox.rotation.y;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
+                const diff = wrapAngle(targetAngle - this.playerBox.rotation.y);
                 this.playerBox.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
 
                 const now = performance.now();
@@ -748,18 +749,14 @@ export class GameScene {
                     this.playerBox.position.addInPlace(direction.scale(moveDist));
 
                     const targetAngle = Math.atan2(direction.x, direction.z) + Math.PI;
-                    let diff = targetAngle - this.playerBox.rotation.y;
-                    while (diff < -Math.PI) diff += Math.PI * 2;
-                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    const diff = wrapAngle(targetAngle - this.playerBox.rotation.y);
                     this.playerBox.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
 
                     if (this.camAutoRotate) {
                         const moveAngle = Math.atan2(direction.x, direction.z);
                         const destAlpha = -moveAngle - Math.PI / 2;
 
-                        let alphaDiff = destAlpha - this.camera.alpha;
-                        while (alphaDiff < -Math.PI) alphaDiff += Math.PI * 2;
-                        while (alphaDiff >  Math.PI) alphaDiff -= Math.PI * 2;
+                        const alphaDiff = wrapAngle(destAlpha - this.camera.alpha);
                         this.camera.alpha += alphaDiff * Math.min(1.0, 2.0 * deltaTime);
                     }
                 } else {
@@ -813,9 +810,7 @@ export class GameScene {
                 } else {
                     // メッシュの場合: 回転を補間
                     const targetAngle = Math.atan2(dx, dz) + Math.PI;
-                    let diff = targetAngle - av.rotation.y;
-                    while (diff < -Math.PI) diff += Math.PI * 2;
-                    while (diff >  Math.PI) diff -= Math.PI * 2;
+                    const diff = wrapAngle(targetAngle - av.rotation.y);
                     av.rotation.y += diff * Math.min(1.0, 15.0 * deltaTime);
                 }
             }

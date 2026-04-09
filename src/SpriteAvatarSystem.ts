@@ -129,8 +129,16 @@ export class SpriteAvatarSystem {
         // name tag
         const { plane: namePlane, update: nameUpdate } = this.createNameTag(root, name, s.height);
 
-        // speech bubble
-        const { updater: speechUpdate, redraw: speechRedraw, setAlpha: speechSetAlpha, getAlpha: speechGetAlpha } = this.createSpeechBubble(namePlane);
+        // speech bubble（遅延生成: 初回のspeechUpdate呼出時に実体を作成）
+        let speechImpl: { updater: (text: string) => void; redraw: () => void; setAlpha: (a: number) => void; getAlpha: () => number } | null = null;
+        const ensureSpeech = () => {
+            if (!speechImpl) speechImpl = this.createSpeechBubble(namePlane);
+            return speechImpl;
+        };
+        const speechUpdate = (text: string) => ensureSpeech().updater(text);
+        const speechRedraw = () => { if (speechImpl) speechImpl.redraw(); };
+        const speechSetAlpha = (a: number) => { if (speechImpl) speechImpl.setAlpha(a); };
+        const speechGetAlpha = () => speechImpl ? speechImpl.getAlpha() : 0;
 
         // 新しいアバターの準備が完了してから旧アバターを破棄（ちらつき防止）
         if (this.avatars.has(id)) {
@@ -427,7 +435,7 @@ export class SpriteAvatarSystem {
     }
 
     private createNameTag(parent: TransformNode, nameText: string, spriteHeight: number): { plane: Mesh; update: (name: string, color?: string, suffix?: string) => void } {
-        const nameTexW = 1024, nameTexH = 384;
+        const nameTexW = 512, nameTexH = 192;
         const nameW = 3.0;
         const nameH = nameW * (nameTexH / nameTexW);
         const namePlane = MeshBuilder.CreatePlane("sprNameTag_" + parent.name, { width: nameW, height: nameH }, this.scene);
@@ -452,20 +460,20 @@ export class SpriteAvatarSystem {
         const tbAt = new TextBlock();
         tbAt.text = "";
         tbAt.color = "white";
-        tbAt.fontSize = "48px";
+        tbAt.fontSize = "24px";
         tbAt.fontWeight = "bold";
-        tbAt.outlineWidth = 5;
+        tbAt.outlineWidth = 3;
         tbAt.outlineColor = "black";
-        tbAt.widthInPixels = 80;
+        tbAt.widthInPixels = 40;
         tbAt.heightInPixels = nameTexH;
         panel.addControl(tbAt);
 
         const tbName = new TextBlock();
         tbName.text = nameText;
         tbName.color = "white";
-        tbName.fontSize = "48px";
+        tbName.fontSize = "24px";
         tbName.fontWeight = "bold";
-        tbName.outlineWidth = 5;
+        tbName.outlineWidth = 3;
         tbName.outlineColor = "black";
         tbName.resizeToFit = true;
         tbName.heightInPixels = nameTexH;
@@ -475,9 +483,9 @@ export class SpriteAvatarSystem {
         const tbHash = new TextBlock();
         tbHash.text = "";
         tbHash.color = "white";
-        tbHash.fontSize = "40px";
+        tbHash.fontSize = "20px";
         tbHash.fontWeight = "bold";
-        tbHash.outlineWidth = 5;
+        tbHash.outlineWidth = 3;
         tbHash.outlineColor = "black";
         tbHash.resizeToFit = true;
         tbHash.heightInPixels = nameTexH;
@@ -486,9 +494,9 @@ export class SpriteAvatarSystem {
         const tbSuffixId = new TextBlock();
         tbSuffixId.text = "";
         tbSuffixId.color = "white";
-        tbSuffixId.fontSize = "40px";
+        tbSuffixId.fontSize = "20px";
         tbSuffixId.fontWeight = "bold";
-        tbSuffixId.outlineWidth = 5;
+        tbSuffixId.outlineWidth = 3;
         tbSuffixId.outlineColor = "black";
         tbSuffixId.resizeToFit = true;
         tbSuffixId.heightInPixels = nameTexH;
@@ -527,9 +535,9 @@ export class SpriteAvatarSystem {
     }
 
     private createSpeechBubble(namePlane: Mesh): { updater: (text: string) => void; redraw: () => void; setAlpha: (a: number) => void; getAlpha: () => number } {
-        const texW = 1024, texH = 1024;
+        const texW = 512, texH = 512;
         // 1テクスチャpx = worldScale ワールド単位
-        const worldScale = 1 / 256;  // 256px = 1.0 ワールド単位
+        const worldScale = 1 / 128;  // 128px = 1.0 ワールド単位
 
         const bubblePlane = MeshBuilder.CreatePlane("sprBubble_" + namePlane.name,
             { width: texW * worldScale, height: texH * worldScale }, this.scene);
