@@ -30,7 +30,7 @@ if (canvas) {
     w.game = game; // デバッグ用: コンソールから game.nakama.socket.disconnect() 等
     w.profileStart = () => {
         game.profiling = true;
-        game['_profileHistory'].length = 0;
+        game['_profileRingIdx'] = 0; game['_profileRingLen'] = 0;
         game.callCounts = {};
         profSetEnabled(true);
         profReset();

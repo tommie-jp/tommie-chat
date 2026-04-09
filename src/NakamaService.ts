@@ -61,6 +61,7 @@ export class NakamaService {
     selfDisplayName: string = "";
     selfNameColor: string = "";
     private readonly _decoder = new TextDecoder();
+    private readonly _encoder = new TextEncoder();
 
     // onmatchdata プロファイル（呼び出し回数とコスト）
     matchDataProfile = { calls: 0, totalMs: 0, maxMs: 0 };
@@ -364,7 +365,7 @@ export class NakamaService {
         console.log(`snd initPos x=${(+x).toFixed(1)} z=${(+z).toFixed(1)} ry=${(+ry).toFixed(1)} tx=${textureUrl} cc=${charCol} cr=${charRow}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, new TextEncoder().encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl, cc: charCol, cr: charRow, nc: this.selfNameColor })));
+            await this.socket.sendMatchState(this.matchId, OP_INIT_POS, this._encoder.encode(JSON.stringify({ x, z, ry, lt: this.loginTimeISO, dn: this.selfDisplayName, tx: textureUrl, cc: charCol, cr: charRow, nc: this.selfNameColor })));
         } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
@@ -375,7 +376,7 @@ export class NakamaService {
         console.log(`snd sendAvatarChange textureUrl=${textureUrl} cc=${charCol} cr=${charRow}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, new TextEncoder().encode(JSON.stringify({ textureUrl, cc: charCol, cr: charRow })));
+            await this.socket.sendMatchState(this.matchId, OP_AVATAR_CHANGE, this._encoder.encode(JSON.stringify({ textureUrl, cc: charCol, cr: charRow })));
         } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
@@ -386,7 +387,7 @@ export class NakamaService {
         console.log(`snd sendDisplayName displayName=${displayName}`);
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName, nc: this.selfNameColor })));
+            await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, this._encoder.encode(JSON.stringify({ displayName, nc: this.selfNameColor })));
         } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
@@ -395,7 +396,7 @@ export class NakamaService {
         if (!this.socket || !this.matchId) return;
         this.selfNameColor = nameColor;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, new TextEncoder().encode(JSON.stringify({ displayName: this.selfDisplayName, nc: nameColor })));
+            await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, this._encoder.encode(JSON.stringify({ displayName: this.selfDisplayName, nc: nameColor })));
         } catch (e) { console.warn("NakamaService:", e); }
     }
 
@@ -425,7 +426,7 @@ export class NakamaService {
         console.log(`snd profileRequest sids=${sessionIds.map(s => s.slice(0, 8)).join(",")}`);
         if (!this.socket || !this.matchId || sessionIds.length === 0) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_PROFILE_REQUEST, new TextEncoder().encode(JSON.stringify({ sessionIds })));
+            await this.socket.sendMatchState(this.matchId, OP_PROFILE_REQUEST, this._encoder.encode(JSON.stringify({ sessionIds })));
         } catch (e) { console.warn("NakamaService:", e); }
         } finally { _end(); }
     }
@@ -435,7 +436,7 @@ export class NakamaService {
         try {
         console.log(`snd sendChatMessage text=${text}`);
         if (!this.socket || !this.matchId) return;
-        await this.socket.sendMatchState(this.matchId, OP_CHAT, new TextEncoder().encode(JSON.stringify({ text })));
+        await this.socket.sendMatchState(this.matchId, OP_CHAT, this._encoder.encode(JSON.stringify({ text })));
         } finally { _end(); }
     }
 
@@ -655,7 +656,7 @@ export class NakamaService {
     async subscribePlayerList(subscribe: boolean, mode: "count" | "full" = "full"): Promise<void> {
         if (!this.socket || !this.matchId) return;
         try {
-            await this.socket.sendMatchState(this.matchId, OP_PLAYER_LIST_SUB, new TextEncoder().encode(JSON.stringify({ subscribe, mode })));
+            await this.socket.sendMatchState(this.matchId, OP_PLAYER_LIST_SUB, this._encoder.encode(JSON.stringify({ subscribe, mode })));
         } catch (e) { console.warn("NakamaService.subscribePlayerList:", e); }
     }
 

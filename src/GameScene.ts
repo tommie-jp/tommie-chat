@@ -48,6 +48,12 @@ export class GameScene {
     private inputMap: { [key: string]: boolean } = {};
     private lastKeyboardSendTime = 0;
 
+    // レンダーループ用再利用 Vector3（毎フレーム new を避ける）
+    private readonly _tmpMoveDir = new Vector3();
+    private readonly _tmpTarget = new Vector3();
+    private readonly _tmpDirection = new Vector3();
+    private readonly _tmpPanTest = new Vector3();
+
     private hoverMarker!: Mesh;
     private clickMarker!: Mesh;
     previewBlock!: Mesh;
@@ -96,7 +102,20 @@ export class GameScene {
     private _profileAccum = { playerMove: 0, remoteAvatars: 0, npc: 0, total: 0, frames: 0 };
     /** DevTools Performance タブの Timings レーンに mark/measure を出すか */
     profiling = false;
-    private _profileHistory: { ts: number; playerMove: number; remoteAvatars: number; npc: number; total: number; avatarCount: number }[] = [];
+    // プロファイル履歴リングバッファ（最大600フレーム = 約10秒分、O(1) 追加）
+    private _profileRing: ({ ts: number; playerMove: number; remoteAvatars: number; npc: number; total: number; avatarCount: number } | null)[] = new Array(600).fill(null);
+    private _profileRingIdx = 0;
+    private _profileRingLen = 0;
+
+    /** 外部参照用: リングバッファを時系列順の配列として返す */
+    get _profileHistory(): { ts: number; playerMove: number; remoteAvatars: number; npc: number; total: number; avatarCount: number }[] {
+        const cap = this._profileRing.length;
+        const len = this._profileRingLen;
+        const start = (this._profileRingIdx - len + cap) % cap;
+        const result = new Array(len);
+        for (let i = 0; i < len; i++) result[i] = this._profileRing[(start + i) % cap]!;
+        return result;
+    }
     /** ユーザーリスト DOM 再構築プロファイル（UIPanel から書き込まれる） */
     userListProfile = { calls: 0, totalMs: 0, maxMs: 0, userCount: 0 };
     /** 関数呼び出しカウンタ（プロファイル期間中に加算、profileDump で表示） */
@@ -676,7 +695,7 @@ export class GameScene {
             const moveDist = this.moveSpeed * deltaTime;
 
             let isKeyboardMoving = false;
-            let moveDirection = new Vector3(0, 0, 0);
+            const moveDirection = this._tmpMoveDir.setAll(0);
 
             const forward = this.camera.getDirection(Vector3.Forward());
             forward.y = 0;
@@ -713,11 +732,12 @@ export class GameScene {
             }
 
             if (!isKeyboardMoving && this.targetPosition) {
-                const target = new Vector3(this.targetPosition.x, currentPos.y, this.targetPosition.z);
+                const target = this._tmpTarget.set(this.targetPosition.x, currentPos.y, this.targetPosition.z);
                 const distance = Vector3.Distance(currentPos, target);
 
                 if (distance > moveDist) {
-                    const direction = target.subtract(currentPos).normalize();
+                    target.subtractToRef(currentPos, this._tmpDirection);
+                    const direction = this._tmpDirection.normalize();
                     this.playerBox.position.addInPlace(direction.scale(moveDist));
 
                     const targetAngle = Math.atan2(direction.x, direction.z) + Math.PI;
@@ -824,9 +844,10 @@ export class GameScene {
                 performance.measure('remoteAvatars', { start: _t1, end: _t2 });
                 performance.measure('npc', { start: _t2, end: _t3 });
                 performance.measure('frame-total', { start: _t0, end: _t3 });
-                // 履歴に記録（最大600フレーム = 約10秒分）
-                this._profileHistory.push({ ts: _t0, playerMove: pM, remoteAvatars: rA, npc: nC, total: tT, avatarCount: this.remoteAvatars.size });
-                if (this._profileHistory.length > 600) this._profileHistory.shift();
+                // 履歴に記録（リングバッファ、O(1)）
+                this._profileRing[this._profileRingIdx] = { ts: _t0, playerMove: pM, remoteAvatars: rA, npc: nC, total: tT, avatarCount: this.remoteAvatars.size };
+                this._profileRingIdx = (this._profileRingIdx + 1) % this._profileRing.length;
+                if (this._profileRingLen < this._profileRing.length) this._profileRingLen++;
             }
 
             const acc = this._profileAccum;
@@ -956,7 +977,7 @@ export class GameScene {
 
                 // 仮オフセットでプレイヤーが画面内に収まるか、
                 // 現在より画面中央に近づく方向なら許可
-                const testOffset = new Vector3(newX, 0, newZ);
+                const testOffset = this._tmpPanTest.set(newX, 0, newZ);
                 const inScreen = isPlayerInScreen(testOffset);
                 const movesTowardCenter = !inScreen && (() => {
                     const cur = screenDistFromCenter(this.panOffset);

@@ -1633,7 +1633,7 @@ export function setupDebugOverlay(game: GameScene): void {
     if (profileStartBtn) {
         profileStartBtn.addEventListener("click", () => {
             game.profiling = true;
-            (game as any)._profileHistory.length = 0;
+            (game as any)._profileRingIdx = 0; (game as any)._profileRingLen = 0;
             game.callCounts = {};
             profSetEnabled(true);
             profReset();
