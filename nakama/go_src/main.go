@@ -1290,7 +1290,7 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 				// AOI_ENTER が既にフラッシュ済みの場合がある。
 				// 明示的に AOI_LEAVE を全員に送信して打ち消す。
 				leaveData, _ := json.Marshal(map[string]interface{}{"sessionId": prevSid})
-				var leaveTargets []runtime.Presence
+				leaveTargets := make([]runtime.Presence, 0, len(ms.Presences))
 				for otherSID2, otherP2 := range ms.Presences {
 					if otherSID2 != prevSid && otherSID2 != sid {
 						leaveTargets = append(leaveTargets, otherP2)
@@ -1484,7 +1484,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 			"ts":        time.Now().UnixMilli(),
 		})
 		// 残っている全プレゼンスのスナップショット（退出者自身は除外）
-		var targets []runtime.Presence
+		targets := make([]runtime.Presence, 0, len(ms.Presences))
 		for otherSID, otherP := range ms.Presences {
 			if otherSID != sid { targets = append(targets, otherP) }
 		}
@@ -1628,7 +1628,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			logf("rcv DBG AOI_UPDATE sid=%s newAOI=(%d,%d)-(%d,%d) checking %d other players\n", shortSID(sid), aoi.MinCX, aoi.MinCZ, aoi.MaxCX, aoi.MaxCZ, len(ms.Positions)-1)
 			half := float64(pw.worldSize()) / 2
 			// AOI_ENTER はバルク送信（N-1件→1件に削減）
-			var enterBulk []map[string]interface{}
+			enterBulk := make([]map[string]interface{}, 0, len(ms.Positions))
 			toUID := senderPresence.GetUserId()
 			for otherSID, otherPos := range ms.Positions {
 				if otherSID == sid {
@@ -1722,7 +1722,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				logf("rcv DBG INIT_POS sid=%s cx=%d cz=%d oldCX=%d oldCZ=%d chunkChanged=%v\n", shortSID(sid), cx, cz, oldCX, oldCZ, cx != oldCX || cz != oldCZ)
 				if cx != oldCX || cz != oldCZ {
 					// AOI_ENTER: 自分の参加を他プレイヤーへ通知（presencesをまとめてBroadcastMessage1回）
-					var enterTargets []runtime.Presence
+					enterTargets := make([]runtime.Presence, 0, len(ms.AOIs))
 					for otherSID, otherAOI := range ms.AOIs {
 						if otherSID == sid { continue }
 						wasVisible := oldCX >= 0 && otherAOI.containsChunk(oldCX, oldCZ)
@@ -1809,7 +1809,9 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				// チャンクが変わった場合、新しいチャンクのAOIに入っている他プレイヤーに通知
 				// Enter/Leave対象を先に収集し、Marshal 1回 + BroadcastMessage 1回にバッチ化
 				if cx != oldCX || cz != oldCZ {
-					var enterTargets, leaveTargets []runtime.Presence
+					aoiCap := len(ms.AOIs)
+					enterTargets := make([]runtime.Presence, 0, aoiCap)
+					leaveTargets := make([]runtime.Presence, 0, aoiCap)
 					for otherSID, otherAOI := range ms.AOIs {
 						if otherSID == sid {
 							continue
@@ -1922,7 +1924,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			ch.mu.Unlock()
 			markChunkDirty(ms.WorldID, cx, cz)
 			// AOI内のプレイヤーにブロードキャスト
-			var targets []runtime.Presence
+			targets := make([]runtime.Presence, 0, len(ms.ChunkViewers[[2]int{cx, cz}]))
 			for aoiSid, aoi := range ms.AOIs {
 				if aoi.containsChunk(cx, cz) {
 					if p, ok := ms.Presences[aoiSid]; ok {

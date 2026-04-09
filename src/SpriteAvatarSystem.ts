@@ -323,81 +323,103 @@ export class SpriteAvatarSystem {
         return this.creating.has(id);
     }
 
-    private createStandBase(id: string, parent: TransformNode, color?: Color3): Mesh {
-        const baseThickness = 0.05;
-        const y = baseThickness / 2;
-        const baseColor = color ?? new Color3(0.4, 0.75, 0.95);
+    // 台座の頂点データ（形状は全アバター共通）をキャッシュ
+    private _standFrontVd: VertexData | null = null;
+    private _standBackVd: VertexData | null = null;
+    // デフォルト色のMaterialを共有（色指定なしのアバター全員で使い回す）
+    private _defaultFrontMat: StandardMaterial | null = null;
+    private _defaultBackMat: StandardMaterial | null = null;
 
-        const p0 = new Vector3(0, y, -0.5);
-        const p1 = new Vector3(0.5, y, -0.1);
-        const p2 = new Vector3(0.5, y, 0.5);
-        const p3 = new Vector3(-0.5, y, 0.5);
-        const p4 = new Vector3(-0.5, y, -0.1);
-        const b0 = new Vector3(0, -y, -0.5);
-        const b1 = new Vector3(0.5, -y, -0.1);
-        const b2 = new Vector3(0.5, -y, 0.5);
-        const b3 = new Vector3(-0.5, -y, 0.5);
-        const b4 = new Vector3(-0.5, -y, -0.1);
-
-        // 先頭三角形（p0-p1-p4 と底面 b0-b1-b4 + 側面）
-        const frontMesh = new Mesh("sprStandFront_" + id, this.scene);
+    private getStandVertexData(): { front: VertexData; back: VertexData } {
+        if (this._standFrontVd && this._standBackVd) {
+            return { front: this._standFrontVd, back: this._standBackVd };
+        }
+        const y = 0.025; // baseThickness(0.05) / 2
+        // 頂点座標（上面5点 + 底面5点）
+        const p = [
+            [0, y, -0.5], [0.5, y, -0.1], [0.5, y, 0.5], [-0.5, y, 0.5], [-0.5, y, -0.1],
+            [0, -y, -0.5], [0.5, -y, -0.1], [0.5, -y, 0.5], [-0.5, -y, 0.5], [-0.5, -y, -0.1],
+        ];
+        const v = (i: number) => p[i];
+        // Front mesh: 先頭三角形（p0-p1-p4 + 底面 + 側面）
         const fPos: number[] = [], fInd: number[] = [];
         let fi = 0;
-        const fAdd = (v0: Vector3, v1: Vector3, v2: Vector3) => {
-            fPos.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+        const fAdd = (a: number[], b: number[], c: number[]) => {
+            fPos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
             fInd.push(fi, fi + 1, fi + 2); fi += 3;
         };
-        const fQuad = (v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3) => { fAdd(v0, v1, v2); fAdd(v0, v2, v3); };
-        fAdd(p0, p4, p1); // top
-        fAdd(b0, b1, b4); // bottom
-        fQuad(p0, p1, b1, b0); // side front-right
-        fQuad(p4, p0, b0, b4); // side front-left
+        const fQuad = (a: number[], b: number[], c: number[], d: number[]) => { fAdd(a, b, c); fAdd(a, c, d); };
+        fAdd(v(0), v(4), v(1));
+        fAdd(v(5), v(6), v(9));
+        fQuad(v(0), v(1), v(6), v(5));
+        fQuad(v(4), v(0), v(5), v(9));
         const fNorm: number[] = [];
         VertexData.ComputeNormals(fPos, fInd, fNorm);
-        const fVd = new VertexData();
-        fVd.positions = fPos; fVd.indices = fInd; fVd.normals = fNorm;
-        fVd.applyToMesh(frontMesh);
-
-        const frontMat = new StandardMaterial("sprBaseMatFront_" + id, this.scene);
-        frontMat.diffuseColor = baseColor;
-        frontMat.alpha = 0.8;
-        frontMat.specularColor = new Color3(0, 0, 0);
-        frontMat.backFaceCulling = false;
-        frontMat.needDepthPrePass = true;
-        frontMesh.material = frontMat;
-
-        // 後方四角形（p1-p2-p3-p4 と底面 b1-b2-b3-b4 + 側面）
-        const backMesh = new Mesh("sprStandBack_" + id, this.scene);
+        this._standFrontVd = new VertexData();
+        this._standFrontVd.positions = fPos; this._standFrontVd.indices = fInd; this._standFrontVd.normals = fNorm;
+        // Back mesh: 後方四角形（p1-p2-p3-p4 + 底面 + 側面）
         const bPos: number[] = [], bInd: number[] = [];
         let bi = 0;
-        const bAdd = (v0: Vector3, v1: Vector3, v2: Vector3) => {
-            bPos.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+        const bAdd = (a: number[], b: number[], c: number[]) => {
+            bPos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
             bInd.push(bi, bi + 1, bi + 2); bi += 3;
         };
-        const bQuad = (v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3) => { bAdd(v0, v1, v2); bAdd(v0, v2, v3); };
-        bQuad(p1, p2, p3, p4); // top
-        bQuad(b4, b3, b2, b1); // bottom
-        bQuad(p1, p2, b2, b1); // side right
-        bQuad(p2, p3, b3, b2); // side back
-        bQuad(p3, p4, b4, b3); // side left
+        const bQuad = (a: number[], b: number[], c: number[], d: number[]) => { bAdd(a, b, c); bAdd(a, c, d); };
+        bQuad(v(1), v(2), v(3), v(4));
+        bQuad(v(9), v(8), v(7), v(6));
+        bQuad(v(1), v(2), v(7), v(6));
+        bQuad(v(2), v(3), v(8), v(7));
+        bQuad(v(3), v(4), v(9), v(8));
         const bNorm: number[] = [];
         VertexData.ComputeNormals(bPos, bInd, bNorm);
-        const bVd = new VertexData();
-        bVd.positions = bPos; bVd.indices = bInd; bVd.normals = bNorm;
+        this._standBackVd = new VertexData();
+        this._standBackVd.positions = bPos; this._standBackVd.indices = bInd; this._standBackVd.normals = bNorm;
+        return { front: this._standFrontVd, back: this._standBackVd };
+    }
+
+    private getDefaultStandMaterials(): { front: StandardMaterial; back: StandardMaterial } {
+        if (!this._defaultFrontMat) {
+            const c = new Color3(0.4, 0.75, 0.95);
+            const f = new StandardMaterial("sprBaseMatFront_default", this.scene);
+            f.diffuseColor = c; f.alpha = 0.8; f.specularColor = Color3.Black();
+            f.backFaceCulling = false; f.needDepthPrePass = true;
+            this._defaultFrontMat = f;
+            const b = new StandardMaterial("sprBaseMatBack_default", this.scene);
+            b.diffuseColor = c; b.alpha = 0.4; b.specularColor = Color3.Black();
+            b.backFaceCulling = false; b.needDepthPrePass = true;
+            this._defaultBackMat = b;
+        }
+        return { front: this._defaultFrontMat, back: this._defaultBackMat! };
+    }
+
+    private createStandBase(id: string, parent: TransformNode, color?: Color3): Mesh {
+        const { front: fVd, back: bVd } = this.getStandVertexData();
+
+        const frontMesh = new Mesh("sprStandFront_" + id, this.scene);
+        fVd.applyToMesh(frontMesh);
+        const backMesh = new Mesh("sprStandBack_" + id, this.scene);
         bVd.applyToMesh(backMesh);
 
-        const backMat = new StandardMaterial("sprBaseMatBack_" + id, this.scene);
-        backMat.diffuseColor = baseColor;
-        backMat.alpha = 0.4;
-        backMat.specularColor = new Color3(0, 0, 0);
-        backMat.backFaceCulling = false;
-        backMat.needDepthPrePass = true;
-        backMesh.material = backMat;
+        if (color) {
+            // カスタム色（自分のアバター）は専用Material
+            const fm = new StandardMaterial("sprBaseMatFront_" + id, this.scene);
+            fm.diffuseColor = color; fm.alpha = 0.8; fm.specularColor = Color3.Black();
+            fm.backFaceCulling = false; fm.needDepthPrePass = true;
+            frontMesh.material = fm;
+            const bm = new StandardMaterial("sprBaseMatBack_" + id, this.scene);
+            bm.diffuseColor = color; bm.alpha = 0.4; bm.specularColor = Color3.Black();
+            bm.backFaceCulling = false; bm.needDepthPrePass = true;
+            backMesh.material = bm;
+        } else {
+            // デフォルト色は共有Material
+            const { front: fm, back: bm } = this.getDefaultStandMaterials();
+            frontMesh.material = fm;
+            backMesh.material = bm;
+        }
 
-        // 親にまとめる
         const standRoot = new TransformNode("sprStand_" + id, this.scene);
         standRoot.parent = parent;
-        standRoot.position.set(0, y + 0.01, 0);
+        standRoot.position.set(0, 0.025 + 0.01, 0);
         frontMesh.parent = standRoot;
         backMesh.parent = standRoot;
 

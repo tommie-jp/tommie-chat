@@ -594,56 +594,64 @@ export function setupHtmlUI(game: GameScene): void {
     // GameScene 経由で外部からアクセスできるようにする
     (game as any).chatOverlayMax = chatOverlayMax;
     /** テキスト1行の高さ（px） */
+    // チャットオーバーレイのテキスト行高さ・パディングのキャッシュ
+    let olTextLineHCache = 0;
+    let olPaddingCache = -1; // paddingTop (CSSクラスで固定)
     const getOlTextLineH = (): number => {
+        if (olTextLineHCache > 0) return olTextLineHCache;
         if (!chatOverlay) return 19.5;
         const fs = parseFloat(getComputedStyle(chatOverlay).fontSize) || 13;
-        return fs * 1.5; // line-height: 1.5
+        olTextLineHCache = fs * 1.5; // line-height: 1.5
+        return olTextLineHCache;
     };
-    /** メッセージが占めるテキスト行数を計算（折り返し含む） */
-    const getOlMsgLines = (el: HTMLElement): number => {
-        const textLineH = getOlTextLineH();
+    const getOlPadding = (el: HTMLElement): number => {
+        if (olPaddingCache >= 0) return olPaddingCache;
         const cs = getComputedStyle(el);
-        const contentH = el.offsetHeight - parseFloat(cs.paddingTop || "0") - parseFloat(cs.paddingBottom || "0");
-        return Math.max(1, Math.ceil(contentH / textLineH - 0.1));
+        olPaddingCache = parseFloat(cs.paddingTop || "0");
+        return olPaddingCache;
     };
     /** 全メッセージをDOMに保持し、テキスト行数の合計がchatOverlayMaxに収まる分だけ表示
-     *  枠を超えるメッセージは下の行だけ部分表示する */
+     *  枠を超えるメッセージは下の行だけ部分表示する
+     *  レイアウトスラッシング回避: リセット(書込) → 行数計算(読取) → 表示制御(書込) の3フェーズ */
     const trimOlVisibility = () => {
         if (!chatOverlay) return;
         if (chatOverlayMax === 0) { chatOverlay.style.display = "none"; return; }
         chatOverlay.style.display = "";
         const children = Array.from(chatOverlay.children) as HTMLElement[];
-        // まず全てリセット
+        // Phase 1: 全スタイルをリセット（バッチ書込）
         for (const el of children) {
             el.style.display = "";
             el.style.maxHeight = "";
             el.style.overflow = "";
             el.style.marginTop = "";
         }
-        // 末尾（最新）からテキスト行数を積み上げ
+        // Phase 2: 全要素の行数を一括計算（バッチ読取 — reflow 1回のみ）
+        const lineH = getOlTextLineH();
+        const linesCounts = new Array<number>(children.length);
+        for (let i = 0; i < children.length; i++) {
+            const el = children[i];
+            const pt = getOlPadding(el);
+            const contentH = el.offsetHeight - pt * 2;
+            linesCounts[i] = Math.max(1, Math.ceil(contentH / lineH - 0.1));
+        }
+        // Phase 3: 末尾から積み上げて表示制御（バッチ書込）
         let totalLines = 0;
         for (let i = children.length - 1; i >= 0; i--) {
-            const lines = getOlMsgLines(children[i]);
+            const lines = linesCounts[i];
             if (totalLines + lines <= chatOverlayMax) {
                 totalLines += lines;
             } else {
-                // 残り行数分だけ部分表示
                 const remainLines = chatOverlayMax - totalLines;
                 if (remainLines > 0) {
-                    const el = children[i];
-                    const msgLines = getOlMsgLines(el);
-                    const hideLines = msgLines - remainLines;
+                    const hideLines = lines - remainLines;
                     if (hideLines > 0) {
-                        const cs = getComputedStyle(el);
-                        const pt = parseFloat(cs.paddingTop || "0");
-                        // 上部の行を隠す: paddingTop + 隠す行数分を負のmargin-topで押し上げ
-                        el.style.marginTop = "-" + (hideLines * getOlTextLineH() + pt) + "px";
-                        el.style.overflow = "hidden";
+                        const pt = getOlPadding(children[i]);
+                        children[i].style.marginTop = "-" + (hideLines * lineH + pt) + "px";
+                        children[i].style.overflow = "hidden";
                     }
                 } else {
                     children[i].style.display = "none";
                 }
-                // それ以前を全て非表示
                 for (let j = i - 1; j >= 0; j--) children[j].style.display = "none";
                 break;
             }

@@ -54,6 +54,13 @@ export class GameScene {
     private readonly _tmpDirection = new Vector3();
     private readonly _tmpPanTest = new Vector3();
 
+    // DOM要素キャッシュ（座標表示・フッター）
+    private _elCoordDisplay: HTMLElement | null = null;
+    private _elCdWorld: HTMLElement | null = null;
+    private _elCdPos: HTMLElement | null = null;
+    private _elFooterVersion: HTMLElement | null = null;
+    private _elSendBtn: HTMLElement | null = null;
+
     private hoverMarker!: Mesh;
     private clickMarker!: Mesh;
     previewBlock!: Mesh;
@@ -870,37 +877,36 @@ export class GameScene {
             // 座標表示の更新（30フレームごと）
             if (++coordCounter >= 30) {
                 coordCounter = 0;
-                const cd = document.getElementById("coord-display");
+                if (!this._elCoordDisplay) this._elCoordDisplay = document.getElementById("coord-display");
+                const cd = this._elCoordDisplay;
                 if (cd) {
                     const p = this.playerBox.position;
                     const coordHalf = this.currentWorldSize / 2;
                     const x3 = String(Math.round(p.x) + coordHalf).padStart(4, "\u2007");
                     const z3 = String(Math.round(p.z) + coordHalf).padStart(4, "\u2007");
                     // DOM要素は初回のみ構築、以降はテキスト更新のみ（ホバー点滅防止）
-                    let worldEl = document.getElementById("cd-world");
-                    let posEl = document.getElementById("cd-pos");
-                    if (!worldEl || !posEl) {
+                    if (!this._elCdWorld || !this._elCdPos) {
                         const ws = this.currentWorldSize;
                         const ch = ws / 2;
                         cd.innerHTML = `<span id="cd-world" title="現在の部屋\nタップで部屋一覧を表示" style="font-size:14px;font-weight:bold;cursor:pointer;"></span> <span id="cd-pos" title="座標位置（X, Z）\nプレイヤーの現在地を示します。\n中央: (${ch}, ${ch})\n原点 (0, 0): ワールドの左下（南西）\nワールドの範囲: (0, 0)〜(${ws - 1}, ${ws - 1})\nワールドの大きさ: ${ws} × ${ws}" style="font-size:14px;font-weight:bold"></span>`;
                         document.getElementById("cd-world")?.addEventListener("click", () => {
                             document.getElementById("menu-rooms")?.click();
                         });
-                        worldEl = document.getElementById("cd-world");
-                        posEl = document.getElementById("cd-pos");
+                        this._elCdWorld = document.getElementById("cd-world");
+                        this._elCdPos = document.getElementById("cd-pos");
                     }
                     const name = this.currentWorldName;
                     const worldText = name.length > 8 ? name.slice(0, 8) + "…" : name;
                     const posText = `(${x3}, ${z3})`;
-                    if (worldEl && worldEl.textContent !== worldText) worldEl.textContent = worldText;
-                    if (posEl && posEl.textContent !== posText) posEl.textContent = posText;
+                    if (this._elCdWorld && this._elCdWorld.textContent !== worldText) this._elCdWorld.textContent = worldText;
+                    if (this._elCdPos && this._elCdPos.textContent !== posText) this._elCdPos.textContent = posText;
                 }
                 // フッター位置を送信ボタン / セリフ入力に合わせる（座標非表示でも実行）
-                const fv = document.getElementById("app-footer-version");
-                const sb = document.getElementById("sendBtn");
-                if (fv && sb) {
-                    const sr = sb.getBoundingClientRect();
-                    fv.style.right = (window.innerWidth - sr.right) + "px";
+                if (!this._elFooterVersion) this._elFooterVersion = document.getElementById("app-footer-version");
+                if (!this._elSendBtn) this._elSendBtn = document.getElementById("sendBtn");
+                if (this._elFooterVersion && this._elSendBtn) {
+                    const sr = this._elSendBtn.getBoundingClientRect();
+                    this._elFooterVersion.style.right = (window.innerWidth - sr.right) + "px";
                 }
             }
 
