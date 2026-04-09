@@ -2919,9 +2919,9 @@ export function setupHtmlUI(game: GameScene): void {
 
         if (roomPanel && roomTbody) {
             // ソート状態
-            type RoomSortKey = "name" | "size" | "count";
-            let roomSortKey: RoomSortKey = "name";
-            let roomSortAsc = true;
+            type RoomSortKey = "name" | "count" | "owner" | "uid" | "size";
+            let roomSortKey: RoomSortKey = "count";
+            let roomSortAsc = false;
             const setRoomSort = (key: RoomSortKey) => {
                 if (roomSortKey === key) roomSortAsc = !roomSortAsc;
                 else { roomSortKey = key; roomSortAsc = true; }
@@ -2931,11 +2931,15 @@ export function setupHtmlUI(game: GameScene): void {
 
             // ソートヘッダ
             const thName = document.getElementById("room-th-name");
-            const thSize = document.getElementById("room-th-size");
             const thCount = document.getElementById("room-th-count");
+            const thOwner = document.getElementById("room-th-owner");
+            const thUid = document.getElementById("room-th-uid");
+            const thSize = document.getElementById("room-th-size");
             if (thName) thName.addEventListener("click", () => setRoomSort("name"));
-            if (thSize) thSize.addEventListener("click", () => setRoomSort("size"));
             if (thCount) thCount.addEventListener("click", () => setRoomSort("count"));
+            if (thOwner) thOwner.addEventListener("click", () => setRoomSort("owner"));
+            if (thUid) thUid.addEventListener("click", () => setRoomSort("uid"));
+            if (thSize) thSize.addEventListener("click", () => setRoomSort("size"));
 
             // 部屋作成
             if (roomCreateBtn) {
@@ -2969,14 +2973,17 @@ export function setupHtmlUI(game: GameScene): void {
                         let cmp: number;
                         if (roomSortKey === "count") cmp = a.playerCount - b.playerCount;
                         else if (roomSortKey === "size") cmp = (a.chunkCountX * a.chunkCountZ) - (b.chunkCountX * b.chunkCountZ);
+                        else if (roomSortKey === "owner") cmp = (a.ownerName || "").localeCompare(b.ownerName || "", "ja");
+                        else if (roomSortKey === "uid") cmp = (a.ownerUid || "").localeCompare(b.ownerUid || "");
                         else cmp = (a.name || "").localeCompare(b.name || "", "ja");
+                        if (cmp === 0 && roomSortKey !== "name") cmp = (b.name || "").localeCompare(a.name || "", "ja");
                         return roomSortAsc ? cmp : -cmp;
                     });
 
                     const arrow = roomSortAsc ? "▲" : "▼";
-                    if (thName) thName.dataset.sort = roomSortKey === "name" ? arrow : "";
-                    if (thSize) thSize.dataset.sort = roomSortKey === "size" ? arrow : "";
-                    if (thCount) thCount.dataset.sort = roomSortKey === "count" ? arrow : "";
+                    for (const [th, key] of [[thName, "name"], [thCount, "count"], [thOwner, "owner"], [thUid, "uid"], [thSize, "size"]] as const) {
+                        if (th) th.dataset.sort = roomSortKey === key ? arrow : "";
+                    }
 
                     const frag = document.createDocumentFragment();
                     for (const w of worldList) {
@@ -2984,32 +2991,32 @@ export function setupHtmlUI(game: GameScene): void {
                         const isCurrent = game.currentWorldId === w.id;
 
                         const tdName = document.createElement("td");
-                        tdName.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+                        tdName.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:8em;";
                         if (isCurrent) tdName.style.fontWeight = "bold";
-                        tdName.textContent = (w.name || `World ${w.id}`) + (isCurrent ? " ★" : "");
+                        tdName.textContent = (isCurrent ? "⭐️" : "") + (w.name || `World ${w.id}`);
                         tr.appendChild(tdName);
 
+                        const tdCount = document.createElement("td");
+                        tdCount.style.cssText = "text-align:center;white-space:nowrap;width:3em;";
+                        tdCount.textContent = `${w.playerCount}`;
+                        tr.appendChild(tdCount);
+
                         const tdOwnerName = document.createElement("td");
-                        tdOwnerName.style.cssText = "white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;";
+                        tdOwnerName.style.cssText = "white-space:nowrap;width:80px;overflow:hidden;text-overflow:ellipsis;";
                         tdOwnerName.textContent = w.ownerName || "—";
                         tdOwnerName.title = w.ownerName || "";
                         tr.appendChild(tdOwnerName);
 
                         const tdOwnerUid = document.createElement("td");
-                        tdOwnerUid.style.cssText = "white-space:nowrap;opacity:0.5;font-size:10px;max-width:60px;overflow:hidden;text-overflow:ellipsis;";
+                        tdOwnerUid.style.cssText = "white-space:nowrap;opacity:0.5;font-size:10px;width:70px;overflow:hidden;text-overflow:ellipsis;";
                         tdOwnerUid.textContent = w.ownerUid ? w.ownerUid.substring(0, 8) : "—";
                         tdOwnerUid.title = w.ownerUid || "";
                         tr.appendChild(tdOwnerUid);
 
                         const tdSize = document.createElement("td");
-                        tdSize.style.cssText = "text-align:center;opacity:0.7;white-space:nowrap;";
+                        tdSize.style.cssText = "text-align:center;opacity:0.7;white-space:nowrap;width:80px;";
                         tdSize.textContent = `${w.chunkCountX * 16}x${w.chunkCountZ * 16}`;
                         tr.appendChild(tdSize);
-
-                        const tdCount = document.createElement("td");
-                        tdCount.style.cssText = "text-align:center;white-space:nowrap;";
-                        tdCount.textContent = `${w.playerCount}`;
-                        tr.appendChild(tdCount);
 
                         const tdDel = document.createElement("td");
                         tdDel.style.cssText = "text-align:center;width:24px;";

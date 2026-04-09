@@ -306,23 +306,51 @@
         #user-list-close:hover { opacity: 1; }
         #user-list-panel.minimized #user-list-wrap { display: none; }
         #user-list-wrap {
-            overflow: auto;
+            overflow-x: auto;
+            overflow-y: hidden;
             flex: 1;
             min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
         #user-list-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
         #user-list-wrap::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
         #user-list-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
         #user-list-wrap::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
         #user-list {
-            border-collapse: collapse;
             font-size: 13px;
+            width: 840px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+        #user-list thead {
+            flex-shrink: 0;
+        }
+        #user-list thead tr {
+            display: table;
             table-layout: fixed;
             width: 840px;
+            border-collapse: collapse;
+        }
+        #user-list tbody {
+            display: block;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        #user-list tbody::-webkit-scrollbar { width: 8px; }
+        #user-list tbody::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+        #user-list tbody::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+        #user-list tbody::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+        #user-list tbody tr {
+            display: table;
+            table-layout: fixed;
+            width: 840px;
+            border-collapse: collapse;
         }
         #user-list thead th {
-            position: sticky;
-            top: 0;
             background: rgba(255,255,255,0.7);
             border-bottom: 1px solid rgba(0,0,0,0.2);
             padding: 2px 6px;
@@ -942,10 +970,10 @@
             top: 80px;
             right: 280px;
             width: 280px;
+            height: 280px;
             min-width: 200px;
             min-height: 120px;
-            max-height: 70vh;
-            background: rgba(255,255,255,0.96);
+            background: rgba(255,255,255,0.88);
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.12);
             z-index: 100;
@@ -972,7 +1000,6 @@
             touch-action: none;
             overflow: visible;
         }
-        #room-list-header:active { cursor: grabbing; }
         #room-list-close {
             cursor: pointer;
             font-size: 11px;
@@ -982,37 +1009,64 @@
         }
         #room-list-close:hover { opacity: 1; }
         #room-list-body {
-            overflow: auto;
+            overflow-x: auto;
+            overflow-y: hidden;
             flex: 1;
             min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
         #room-list-body::-webkit-scrollbar { width: 8px; height: 8px; }
         #room-list-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
         #room-list-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
         #room-list-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
         #room-list-table {
-            border-collapse: collapse;
             font-size: 13px;
+            width: 560px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+        #room-list-table thead {
+            flex-shrink: 0;
+        }
+        #room-list-table thead tr {
+            display: table;
             table-layout: fixed;
             width: 560px;
+            border-collapse: collapse;
+        }
+        #room-list-table tbody {
+            display: block;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        #room-list-table tbody::-webkit-scrollbar { width: 8px; }
+        #room-list-table tbody::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+        #room-list-table tbody::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+        #room-list-table tbody::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+        #room-list-table tbody tr {
+            display: table;
+            table-layout: fixed;
+            width: 560px;
+            border-collapse: collapse;
         }
         #room-list-table thead th {
-            position: sticky;
-            top: 0;
-            background: rgba(255,255,255,0.95);
+            background: rgba(255,255,255,0.7);
             border-bottom: 1px solid rgba(0,0,0,0.2);
             padding: 2px 6px;
             text-align: left;
             font-weight: bold;
             white-space: nowrap;
+            box-sizing: border-box;
             cursor: pointer;
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
         }
         #room-list-table thead th:hover { background: rgba(220,220,255,0.8); }
-        #room-list-table thead th:nth-child(2),
-        #room-list-table thead th:nth-child(3) { text-align: center; }
         #room-list-table thead th[data-sort]::after {
             content: " " attr(data-sort);
             font-size: 9px;
@@ -1027,12 +1081,11 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            max-width: 0;
+            box-sizing: border-box;
         }
         #room-list-table tbody tr:nth-child(odd) td {
             background-color: rgba(180, 220, 255, 0.35);
-        }
-        #room-list-table tbody tr:hover td {
-            background-color: rgba(100, 180, 255, 0.3);
         }
         #room-list-body button {
             background: rgba(0,0,0,0.06);
@@ -1574,6 +1627,8 @@
             /* スマホ: カスタムスクロールバーを無効化（ネイティブに戻す） */
             #user-list-wrap::-webkit-scrollbar { display: none; }
             #user-list-wrap { -webkit-overflow-scrolling: touch; }
+            #user-list tbody::-webkit-scrollbar { display: none; }
+            #user-list tbody { -webkit-overflow-scrolling: touch; }
             /* --- ミニマップ --- */
             #minimap-container {
                 width: 120px;
@@ -1797,11 +1852,14 @@
             /* --- 部屋一覧 --- */
             #room-list-body::-webkit-scrollbar { display: none; }
             #room-list-body { -webkit-overflow-scrolling: touch; }
+            #room-list-table tbody::-webkit-scrollbar { display: none; }
+            #room-list-table tbody { -webkit-overflow-scrolling: touch; }
             #room-list-table thead th {
                 background: linear-gradient(135deg, #7c5ce0, #5b8def) !important;
                 color: #fff !important;
                 border-bottom: none !important;
                 font-size: 15px !important;
+                padding: 2px 8px !important;
             }
             #room-list-table thead th:hover {
                 background: linear-gradient(135deg, #6a4cc8, #4a7cde) !important;
@@ -1815,6 +1873,11 @@
             }
             #room-list-table tbody tr:nth-child(odd) td {
                 background-color: rgba(120, 100, 220, 0.1) !important;
+            }
+            #room-create-btn {
+                height: 36px !important;
+                padding: 0 8px !important;
+                font-size: 14px !important;
             }
 
             /* --- デバッグオーバーレイ --- */
@@ -3253,18 +3316,18 @@
             <table id="room-list-table">
                 <thead id="room-list-thead">
                     <tr>
-                        <th id="room-th-name">部屋名</th>
-                        <th style="white-space:nowrap;">オーナー</th>
-                        <th style="white-space:nowrap;">オーナーアカウント</th>
-                        <th id="room-th-size" style="white-space:nowrap;">サイズ</th>
-                        <th id="room-th-count" style="white-space:nowrap;">人数</th>
+                        <th id="room-th-name" style="width:8em;">部屋名</th>
+                        <th id="room-th-count" style="white-space:nowrap;width:3em;">人数</th>
+                        <th id="room-th-owner" style="white-space:nowrap;width:80px;">オーナー</th>
+                        <th id="room-th-uid" style="white-space:nowrap;width:70px;">アカウント</th>
+                        <th id="room-th-size" style="white-space:nowrap;width:80px;">サイズ</th>
                         <th style="width:24px;"></th>
                     </tr>
                 </thead>
                 <tbody id="room-list-tbody"></tbody>
             </table>
-            <button id="room-create-btn" style="margin-top:4px;font-weight:bold;width:100%;">＋ 部屋を作成</button>
         </div>
+        <button id="room-create-btn" style="margin:4px 8px;padding:6px 8px;font-weight:bold;width:calc(100% - 16px);">＋ 部屋を作成</button>
     </div>
 
     <div id="ccu-panel" style="display:none;">

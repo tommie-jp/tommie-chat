@@ -146,7 +146,7 @@ export class GameScene {
     /** 現在のワールドID */
     currentWorldId = 0;
     /** 現在のワールド名（部屋名） */
-    currentWorldName = "メインワールド";
+    currentWorldName = "メイン";
     /** 現在のワールドのセル数 */
     get currentWorldSize(): number {
         return this.worldSizeOf(this.currentWorldId);
