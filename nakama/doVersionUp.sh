@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 
 # ---------- ヘルプ ----------
 show_help() {
-    echo "index.html と package.json のバージョン・日付を更新するスクリプト"
+    echo "public/js/app-init.js と package.json のバージョン・日付を更新するスクリプト"
     echo ""
     echo "Usage: $0 [new-version]"
     echo "  引数なし — マイナーバージョンを +1 (例: 0.1.20 → 0.1.21)"
