@@ -48,6 +48,11 @@ ss/*.mp4
 .claude/
 01-README.md
 
+# --- 公開しない内部ドキュメント ---
+# セキュリティレビュー(脆弱性詳細・防御の弱点を含むためローカル管理)
+doc/92-セキュリティレビュー.md
+doc/private/
+
 # --- Large Binary / Build Output ---
 pic1.png
 pic/ktx2_output/
