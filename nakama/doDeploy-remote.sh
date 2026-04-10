@@ -6,9 +6,18 @@
 # フロントエンドビルド → git clone → dist/ 転送 → doDeploy.sh を一括で行う。
 SCRIPT_VERSION="2026-04-03"
 
+# ── .env.deploy 読み込み（任意、git 管理外） ──
+# 形式は doc/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
+ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
+if [ -f "$ENV_DEPLOY" ]; then
+    # shellcheck source=/dev/null
+    set -a; . "$ENV_DEPLOY"; set +a
+fi
+
 # ── 引数解析 ──
-VPS_HOST=""
-SSH_USER="deploy"
+# 解決順: 引数 > .env.deploy(DEPLOY_SSH_USER) > デフォルト "deploy"
+VPS_HOST="${DEPLOY_SSH_HOST:-}"
+SSH_USER="${DEPLOY_SSH_USER:-deploy}"
 FORCE_YES=false
 
 for arg in "$@"; do
@@ -27,17 +36,20 @@ Usage: ./nakama/doDeploy-remote.sh [-y] <VPSホスト> [SSHユーザー]
 
 引数:
   VPSホスト    SSH接続先（例: mmo.tommie.jp, 123.45.67.89）
-  SSHユーザー  SSHユーザー名（デフォルト: deploy）
+               nakama/.env.deploy の DEPLOY_SSH_HOST で省略可
+  SSHユーザー  SSHユーザー名（解決順: 引数 > .env.deploy > デフォルト "deploy"）
   -y, --yes    既存ディレクトリを確認なしで削除
 
 前提:
   - VPS に SSH 鍵認証で接続可能
   - Node.js がインストール済み（開発環境）
+  - 推奨: nakama/.env.deploy に DEPLOY_SSH_USER / DEPLOY_SSH_HOST を設定
+    （形式は doc/40-デプロイ手順.md 参照）
 
 例:
   ./nakama/doDeploy-remote.sh mmo.tommie.jp
   ./nakama/doDeploy-remote.sh -y mmo.tommie.jp
-  ./nakama/doDeploy-remote.sh mmo.tommie.jp -y deploy
+  ./nakama/doDeploy-remote.sh mmo.tommie.jp -y myuser
 EOF
             exit 0 ;;
         -v|--version)

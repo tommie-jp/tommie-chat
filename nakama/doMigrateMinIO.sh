@@ -22,8 +22,12 @@ Usage: ./nakama/doMigrateMinIO.sh <VPSホスト> [--pull] [SSHユーザー]
 
 引数:
   VPSホスト    SSH接続先（例: mmo.tommie.jp）
+               nakama/.env.deploy の DEPLOY_SSH_HOST で省略可
   --pull       VPS → ローカル（デフォルトはローカル → VPS）
-  SSHユーザー  SSHユーザー名（デフォルト: deploy）
+  SSHユーザー  SSHユーザー名（解決順: 引数 > .env.deploy > デフォルト "deploy"）
+
+推奨: nakama/.env.deploy に DEPLOY_SSH_USER / DEPLOY_SSH_HOST を設定
+      （形式は doc/40-デプロイ手順.md 参照）
 
 処理内容:
   1. 転送元の MinIO データディレクトリを tar.gz にエクスポート
@@ -42,16 +46,25 @@ Usage: ./nakama/doMigrateMinIO.sh <VPSホスト> [--pull] [SSHユーザー]
 例:
   ./nakama/doMigrateMinIO.sh mmo.tommie.jp                # ローカル → VPS
   ./nakama/doMigrateMinIO.sh mmo.tommie.jp --pull          # VPS → ローカル
-  ./nakama/doMigrateMinIO.sh mmo.tommie.jp --pull ubuntu   # ユーザー指定
+  ./nakama/doMigrateMinIO.sh mmo.tommie.jp --pull myuser   # ユーザー指定
 EOF
         exit 0 ;;
 esac
 
 set -euo pipefail
 
+# ── .env.deploy 読み込み（任意、git 管理外） ──
+# 形式は doc/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
+ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
+if [ -f "$ENV_DEPLOY" ]; then
+    # shellcheck source=/dev/null
+    set -a; . "$ENV_DEPLOY"; set +a
+fi
+
 # ── 引数解析 ──
-VPS_HOST=""
-SSH_USER="deploy"
+# 解決順: 引数 > .env.deploy(DEPLOY_SSH_*) > デフォルト
+VPS_HOST="${DEPLOY_SSH_HOST:-}"
+SSH_USER="${DEPLOY_SSH_USER:-deploy}"
 DIRECTION="push"
 
 for arg in "$@"; do

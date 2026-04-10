@@ -23,7 +23,7 @@ npm run preview      # Preview production build
 
 ```bash
 bash nakama/doBuild.sh --fresh       # Go plugin ビルド (.so)
-bash nakama/doRestart.sh             # dev/prod 自動判定で再起動 (whoami=deploy なら本番)
+bash nakama/doRestart.sh             # dev/prod 自動判定で再起動 (TOMMIE_PROD=1 か /etc/tommie-chat-prod で本番)
 bash nakama/doDeploy.sh              # 本番デプロイ (dist + nginx設定 + CSP)
 bash nakama/doVersionUp.sh [X.Y.Z]   # public/js/app-init.js と package.json のバージョン更新
 ```
@@ -91,7 +91,9 @@ Single Go file (~3000 lines) containing:
 
 サービス: PostgreSQL / Nakama (7350 HTTP+WS, 7351 Console, 9100 Prometheus) / Nginx (web) / MinIO (9000 S3, 9001 Console) / Prometheus
 
-`nakama/doRestart.sh` は `whoami=deploy` のとき本番 overlay、それ以外は dev overlay を自動選択する。
+`nakama/doRestart.sh` は環境変数 `TOMMIE_PROD=1` またはマーカーファイル `/etc/tommie-chat-prod` の存在で本番 overlay、それ以外は dev overlay を自動選択する。本番化は VPS で `sudo touch /etc/tommie-chat-prod` を 1 回実行。
+
+リモート操作系スクリプト（`doDeploy-remote.sh` / `doStop-remote.sh` / `doMigrateGround.sh` / `doMigrateMinIO.sh`）は `nakama/.env.deploy`（git 管理外）から `DEPLOY_SSH_USER` / `DEPLOY_SSH_HOST` を読み込む。解決順は **コマンドライン引数 > .env.deploy > デフォルト `deploy`**。形式は `doc/40-デプロイ手順.md` 参照。
 
 ## Key Conventions
 

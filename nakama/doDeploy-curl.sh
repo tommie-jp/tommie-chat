@@ -22,7 +22,7 @@ git clone → dist/ 転送待ち → doDeploy.sh を実行します。
   3. nakama/doDeploy.sh（Docker 環境構築・サーバー起動・MinIO 初期化）
 
 前提:
-  - VPS に deploy ユーザーで SSH ログイン済み
+  - VPS に作業ユーザー（任意の SSH ユーザー）でログイン済み
   - 開発環境（WSL2 Ubuntu 24.04）に Node.js がインストール済み
 
 手順:
@@ -35,7 +35,7 @@ git clone → dist/ 転送待ち → doDeploy.sh を実行します。
   # --- 開発環境（WSL2）で実行 ---
   cd ~/24-mmo-Tommie-chat
   npm run build
-  rsync -avz --delete dist/ deploy@<VPS_IP>:~/tommie-chat/dist/
+  rsync -avz --delete dist/ <deploy_user>@<VPS_IP>:~/tommie-chat/dist/
 
   # → VPS 側で Enter を押すとデプロイが続行される
 EOF
@@ -100,7 +100,7 @@ if [ ! -d "$DIST_DIR" ] || [ ! -f "$DIST_DIR/index.html" ]; then
     echo "  EOF"
     echo "  npm run build"
     echo "  rm .env"
-    echo "  rsync -avz --delete dist/ deploy@${VPS_IP}:${DIST_DIR}/"
+    echo "  rsync -avz --delete dist/ <deploy_user>@${VPS_IP}:${DIST_DIR}/"
     echo ""
     read -p "rsync 完了後、Enter を押してください..."
 

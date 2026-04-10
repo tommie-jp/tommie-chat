@@ -23,11 +23,15 @@ case "${1:-}" in
         echo ""
         echo "引数:"
         echo "  VPSホスト    SSH接続先（例: mmo.tommie.jp, 123.45.67.89）"
-        echo "  SSHユーザー  SSHユーザー名（デフォルト: deploy）"
+        echo "               nakama/.env.deploy の DEPLOY_SSH_HOST で省略可"
+        echo "  SSHユーザー  SSHユーザー名（解決順: 引数 > .env.deploy > デフォルト \"deploy\"）"
+        echo ""
+        echo "推奨: nakama/.env.deploy に DEPLOY_SSH_USER / DEPLOY_SSH_HOST を設定"
+        echo "      （形式は doc/40-デプロイ手順.md 参照）"
         echo ""
         echo "例:"
         echo "  $0 mmo.tommie.jp"
-        echo "  $0 mmo.tommie.jp ubuntu"
+        echo "  $0 mmo.tommie.jp myuser"
         echo ""
         echo "データ内容:"
         echo "  Nakama Storage: collection='world_data', key='chunk_X_Z'"
@@ -37,9 +41,24 @@ esac
 
 set -euo pipefail
 
-VPS_HOST="$1"
-SSH_USER="${2:-deploy}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ── .env.deploy 読み込み（任意、git 管理外） ──
+# 形式は doc/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
+ENV_DEPLOY="${SCRIPT_DIR}/.env.deploy"
+if [ -f "$ENV_DEPLOY" ]; then
+    # shellcheck source=/dev/null
+    set -a; . "$ENV_DEPLOY"; set +a
+fi
+
+# 解決順: 引数 > .env.deploy(DEPLOY_SSH_*) > デフォルト
+VPS_HOST="${1:-${DEPLOY_SSH_HOST:-}}"
+SSH_USER="${2:-${DEPLOY_SSH_USER:-deploy}}"
+
+if [ -z "$VPS_HOST" ]; then
+    echo "Usage: $0 <VPSホスト> [SSHユーザー]  (-h でヘルプ表示)"
+    exit 1
+fi
 DUMP_FILE="/tmp/ground_data_$(date +%Y%m%d-%H%M%S).sql"
 
 # ── 色付き出力 ──

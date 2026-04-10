@@ -53,6 +53,10 @@ ss/*.mp4
 doc/92-セキュリティレビュー.md
 doc/private/
 
+# --- SSH デプロイ設定（個人環境別、ユーザー名漏洩防止） ---
+# 形式は doc/40-デプロイ手順.md を参照
+nakama/.env.deploy
+
 # --- Large Binary / Build Output ---
 pic1.png
 pic/ktx2_output/

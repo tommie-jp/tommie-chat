@@ -5,9 +5,18 @@
 # 開発環境（WSL2 Ubuntu 24.04）から実行する。
 SCRIPT_VERSION="2026-04-05"
 
+# ── .env.deploy 読み込み（任意、git 管理外） ──
+# 形式は doc/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
+ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
+if [ -f "$ENV_DEPLOY" ]; then
+    # shellcheck source=/dev/null
+    set -a; . "$ENV_DEPLOY"; set +a
+fi
+
 # ── 引数解析 ──
-VPS_HOST=""
-SSH_USER="deploy"
+# 解決順: 引数 > .env.deploy(DEPLOY_SSH_USER) > デフォルト "deploy"
+VPS_HOST="${DEPLOY_SSH_HOST:-}"
+SSH_USER="${DEPLOY_SSH_USER:-deploy}"
 
 for arg in "$@"; do
     case "$arg" in
@@ -23,14 +32,17 @@ Usage: ./nakama/doStop-remote.sh <VPSホスト> [SSHユーザー]
 
 引数:
   VPSホスト    SSH接続先（例: mmo.tommie.jp, 123.45.67.89）
-  SSHユーザー  SSHユーザー名（デフォルト: deploy）
+               nakama/.env.deploy の DEPLOY_SSH_HOST で省略可
+  SSHユーザー  SSHユーザー名（解決順: 引数 > .env.deploy > デフォルト "deploy"）
 
 前提:
   - VPS に SSH 鍵認証で接続可能
+  - 推奨: nakama/.env.deploy に DEPLOY_SSH_USER を設定
+    （形式は doc/40-デプロイ手順.md 参照）
 
 例:
   ./nakama/doStop-remote.sh mmo.tommie.jp
-  ./nakama/doStop-remote.sh mmo.tommie.jp deploy
+  ./nakama/doStop-remote.sh mmo.tommie.jp myuser
 EOF
             exit 0 ;;
         -v|--version)

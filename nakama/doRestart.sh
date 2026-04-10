@@ -1,8 +1,16 @@
 #!/bin/bash
 set -e
 
-# 本番判定: ユーザーが deploy なら本番環境
-if [ "$(whoami)" = "deploy" ]; then
+# 本番判定（優先順位）:
+#   1. 環境変数 TOMMIE_PROD=1
+#   2. マーカーファイル /etc/tommie-chat-prod が存在
+#   それ以外は dev 環境
+#
+# 旧来は whoami=deploy で判定していたが、ユーザー名と本番判定が密結合し
+# ユーザー名変更で本番に dev compose が起動するリスクがあったため変更。
+# 既存環境を本番化するには VPS で次を 1 回実行:
+#   sudo touch /etc/tommie-chat-prod
+if [ "${TOMMIE_PROD:-}" = "1" ] || [ -f /etc/tommie-chat-prod ]; then
     IS_PROD=true
 else
     IS_PROD=false

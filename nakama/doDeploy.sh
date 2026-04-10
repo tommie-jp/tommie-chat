@@ -263,7 +263,7 @@ step "7. フロントエンド配置"
 if [ ! -d "$ROOT_DIR/dist" ] || [ ! -f "$ROOT_DIR/dist/index.html" ]; then
     fail "dist/ が見つかりません。開発環境で先にビルドしてください:
    npm run build  （開発環境で実行）
-   rsync -avz --delete dist/ deploy@<VPS>:~/tommie-chat/dist/"
+   rsync -avz --delete dist/ <deploy_user>@<VPS>:~/tommie-chat/dist/"
 fi
 DIST_FILES=$(find "$ROOT_DIR/dist" -type f | wc -l)
 echo "  dist/ 検出: ${DIST_FILES} ファイル"
