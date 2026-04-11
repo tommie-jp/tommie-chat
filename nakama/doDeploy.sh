@@ -123,6 +123,65 @@ if [ "$(id -u)" -eq 0 ]; then
     fail "root で実行しないでください。sudo 権限を持つ一般ユーザーで実行してください"
 fi
 
+# ── 旧 project 名からのマイグレーション ──
+# 既存 .env が tommchat-prod / tommchat-test を指している場合、
+# ホスト名ベースの新名 (mmo-tommie-jp / mmo-test-tommie-jp) に自動リネームする。
+# データは bind mount (data/postgres-prod/, data/minio/) で保持されているため、
+# 旧コンテナを停止してから .env を書き換え、新名で再起動するだけで移行できる。
+# ports はホスト側 nginx upstream を変えずに済むよう、旧 project の値を維持する。
+_desired_project=""
+_hn_mig="${DEPLOY_HOSTNAME:-$(hostname -f 2>/dev/null || true)}"
+case "$_hn_mig" in
+    ""|localhost|localhost.*|.|..|*[!a-zA-Z0-9.-]*) : ;;
+    *) _desired_project=$(echo "$_hn_mig" | tr '.' '-' | tr '[:upper:]' '[:lower:]') ;;
+esac
+unset _hn_mig
+
+if [ -n "$_desired_project" ] && [ -n "${COMPOSE_PROJECT_NAME:-}" ] \
+   && [ "$COMPOSE_PROJECT_NAME" != "$_desired_project" ]; then
+    case "$COMPOSE_PROJECT_NAME" in
+        tommchat-prod|tommchat-test)
+            _old_project="$COMPOSE_PROJECT_NAME"
+            step "旧 project 名 ${_old_project} → ${_desired_project} にマイグレーション"
+
+            # ports を旧 project のまま維持（ホスト側 nginx upstream を変えずに済む）
+            if [ -f "$SCRIPT_DIR/.env" ] && ! grep -q '^PORT_OFFSET=' "$SCRIPT_DIR/.env" 2>/dev/null; then
+                if [ "$_old_project" = "tommchat-prod" ]; then
+                    _old_offset=0
+                else
+                    _old_offset=$(( ($(echo -n "$_old_project" | cksum | awk '{print $1}') % 9) + 1 ))
+                fi
+                echo "PORT_OFFSET=$_old_offset" >> "$SCRIPT_DIR/.env"
+                echo "  .env に PORT_OFFSET=$_old_offset を追記（旧 ports を維持）"
+                export PORT_OFFSET="$_old_offset"
+                unset _old_offset
+            fi
+
+            # 旧 project のコンテナを停止（docker 未導入なら何もしない）
+            if command -v docker &>/dev/null; then
+                cd "$SCRIPT_DIR"
+                docker compose -p "$_old_project" \
+                    -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
+                docker compose -p "$_old_project" \
+                    -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
+                _remaining=$(docker ps -aq --filter "name=${_old_project}-" 2>/dev/null | sort -u | grep -v '^$' || true)
+                if [ -n "$_remaining" ]; then
+                    echo "  旧 project の残留コンテナを強制削除"
+                    echo "$_remaining" | xargs -r docker rm -f
+                fi
+                unset _remaining
+            fi
+
+            # .env の COMPOSE_PROJECT_NAME を書き換え
+            sed -i "s|^COMPOSE_PROJECT_NAME=.*|COMPOSE_PROJECT_NAME=${_desired_project}|" "$SCRIPT_DIR/.env"
+            echo "  .env を COMPOSE_PROJECT_NAME=${_desired_project} に更新"
+            export COMPOSE_PROJECT_NAME="$_desired_project"
+            unset _old_project
+            ;;
+    esac
+fi
+unset _desired_project
+
 # ── 既存コンテナの停止（ポート競合防止） ──
 # Bind mount（./data/）を使用するため、データはコンテナ削除後も保持される
 # 複数環境が同一 VPS で動くため、COMPOSE_PROJECT_NAME に紐づくコンテナのみを対象にする。
