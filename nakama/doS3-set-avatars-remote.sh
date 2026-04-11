@@ -6,7 +6,7 @@
 #
 # パス解決はローカルで行い、PNG 本体を rsync で VPS の一時ディレクトリに転送、
 # SSH 経由で VPS 上の minio コンテナに投入する（VPS 側 jq/curl 不要）。
-SCRIPT_VERSION="2026-04-11i"
+SCRIPT_VERSION="2026-04-12a"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
@@ -148,6 +148,13 @@ for s in "${SKIPPED[@]}"; do
     warn "enable != true のためスキップ: $s"
 done
 
+# enable != true エントリの png_paths（S3 から削除する候補）
+mapfile -t DISABLED_PATHS < <(jq -r '
+    if type == "array" then .[] | select(.enable != true) | .png_paths[]?
+    else select(.enable != true) | .png_paths[]?
+    end
+' "$JSON_FILE")
+
 RESOLVED=()
 shopt -s nullglob
 for p in "${PATHS[@]}"; do
@@ -193,6 +200,50 @@ if [ ${#RESOLVED[@]} -eq 0 ]; then
 fi
 echo "  PNG count: ${#RESOLVED[@]}"
 
+# enable != true 側のパスを解決して basename を集める（S3 からの削除候補）
+DISABLED_BASENAMES=()
+shopt -s nullglob
+for p in "${DISABLED_PATHS[@]}"; do
+    [ -z "$p" ] && continue
+    case "$p" in
+        *'<'*|*'>'*) continue ;;
+        /*)    abs="$p" ;;
+        '~/'*) abs="${HOME}/${p#\~/}" ;;
+        ~)     abs="${HOME}" ;;
+        *)     abs="${SCRIPT_DIR}/${p}" ;;
+    esac
+    case "$abs" in
+        *'*'*|*'?'*|*'['*)
+            matched=($abs)
+            for m in "${matched[@]}"; do
+                case "$(basename -- "$m")" in
+                    *.png) [ -f "$m" ] && DISABLED_BASENAMES+=("$(basename -- "$m")") ;;
+                esac
+            done
+            continue ;;
+    esac
+    case "$(basename -- "$abs")" in
+        *.png) DISABLED_BASENAMES+=("$(basename -- "$abs")") ;;
+    esac
+done
+shopt -u nullglob
+# 有効側の basename に含まれるものは削除対象から除外（同一 PNG を enable/disable 両方で参照した場合の保険）
+if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
+    ENABLED_BASENAMES=()
+    for f in "${RESOLVED[@]}"; do
+        ENABLED_BASENAMES+=("$(basename -- "$f")")
+    done
+    mapfile -t DISABLED_BASENAMES < <(
+        {
+            printf 'D %s\n' "${DISABLED_BASENAMES[@]}"
+            printf 'E %s\n' "${ENABLED_BASENAMES[@]}"
+        } | awk '$1=="E"{skip[$2]=1; next} $1=="D" && !skip[$2] && !seen[$2]++ {print $2}'
+    )
+fi
+if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
+    echo "  disable count: ${#DISABLED_BASENAMES[@]}"
+fi
+
 # ── 0. SSH 接続テスト ──
 if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "${SSH_TARGET}" "echo ok" >/dev/null 2>&1; then
     fail "SSH 接続に失敗しました: ${SSH_TARGET}"
@@ -206,6 +257,16 @@ case "$REMOTE_TMP" in
 esac
 trap 'ssh "${SSH_TARGET}" "rm -rf ${REMOTE_TMP}" 2>/dev/null || true' EXIT
 rsync -az "${RESOLVED[@]}" "${SSH_TARGET}:${REMOTE_TMP}/"
+
+# 削除対象 basename 一覧をリモートに転送（enable != true のエントリ）
+LOCAL_DEL_LIST=""
+if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
+    LOCAL_DEL_LIST=$(mktemp)
+    # shellcheck disable=SC2064
+    trap "rm -f '${LOCAL_DEL_LIST}'; ssh '${SSH_TARGET}' 'rm -rf ${REMOTE_TMP}' 2>/dev/null || true" EXIT
+    printf '%s\n' "${DISABLED_BASENAMES[@]}" > "$LOCAL_DEL_LIST"
+    rsync -az "$LOCAL_DEL_LIST" "${SSH_TARGET}:${REMOTE_TMP}/disabled.txt"
+fi
 
 # ── 2. VPS の minio コンテナに投入 ──
 # heredoc の \$ はリモート bash に渡り、その先の sh -c '...' 内の $VAR は
@@ -230,6 +291,22 @@ done
     mc cp /tmp/avatars-restore/*.png local/avatars/ >/dev/null
     rm -rf /tmp/avatars-restore
 ' </dev/null
+
+# enable != true のエントリを S3 から削除
+if [ -f "${REMOTE_TMP}/disabled.txt" ]; then
+    \$COMPOSE cp "${REMOTE_TMP}/disabled.txt" minio:/tmp/avatars-disabled.txt </dev/null
+    \$COMPOSE exec -T minio sh -c '
+        mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
+        while IFS= read -r name; do
+            [ -z "\$name" ] && continue
+            case "\$name" in */*|*..*) continue ;; esac
+            if mc stat "local/avatars/\$name" >/dev/null 2>&1; then
+                mc rm "local/avatars/\$name" >/dev/null
+            fi
+        done < /tmp/avatars-disabled.txt
+        rm -f /tmp/avatars-disabled.txt
+    ' </dev/null
+fi
 REMOTE_EOF
 
 # ── 3. 投入結果の確認（件数のみ） ──

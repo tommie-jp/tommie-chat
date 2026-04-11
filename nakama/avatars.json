@@ -232,7 +232,7 @@
   },
   {
     "no": "013",
-    "enable": true,
+    "enable": false,
     "title": "アイストマトバズーカの素材置き場 (テントウムシ歩行グラフィック)",
     "author": "アイストマトバズーカ",
     "author_url": "https://icedtomatobazooka.site/sozai",
@@ -245,7 +245,7 @@
     "redistribution": false,
     "credit_required": true,
     "usage_restriction": "原型が無くなる程の改変は禁止（AI学習素材としての使用も含む）。Web等に掲載時はクレジット表記必須。",
-    "note": "48×48 ピクセル・3コマ×4方向（RPGツクールMZ 規格）のテントウムシ歩行キャラチップ。無料。『RPGツクール以外にも使用して頂けます』と明記されている貴重なMZ規格素材。",
+    "note": "透明の処理が上手くいかない。小さい。48×48 ピクセル・3コマ×4方向（RPGツクールMZ 規格）のテントウムシ歩行キャラチップ。無料。『RPGツクール以外にも使用して頂けます』と明記されている貴重なMZ規格素材。",
     "png_paths": [
       "./avatars/13-icedtomatobazooka-tentoumushi/*.png"
     ]
