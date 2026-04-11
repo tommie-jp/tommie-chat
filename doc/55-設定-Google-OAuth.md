@@ -186,8 +186,9 @@ docker compose -f nakama/docker-compose.yml logs nakama | grep -i "google\|oauth
 bash nakama/doDeploy-remote.sh mmo-test
 
 # 初回のみ: リモート側の nakama/.env に GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を設定
+# （デプロイ先は既定で ~/<ホスト名>/ に展開される — doc/40 §4 参照）
 ssh <user>@mmo-test.tommie.jp
-cd ~/tommie-chat/nakama
+cd ~/mmo-test.tommie.jp/nakama
 vi .env   # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を追記
 TOMMIE_PROD=1 bash doRestart.sh
 exit
@@ -204,10 +205,67 @@ iPhone Safari の **通常タブ** と **PWA standalone** の両方で:
 
 PWA でポップアップが開けない場合はリダイレクト方式へ自動フォールバックし、アプリに戻ってきた後に自動でリンクが完了する（[public/js/google-oauth.js](../public/js/google-oauth.js) 参照）。
 
-### 4-5. 本番 (mmo.tommie.jp) へ反映
+### 4-5. 本番 (mmo.tommie.jp) へ反映 — 2 クライアント分離運用
 
-ステージングで確認できたら本番へ。手順は 4-4 と同じ（`nakama/.env` 更新 + `TOMMIE_PROD=1 bash doRestart.sh`）。
-本番は Cloud Console で **別の OAuth クライアント** を発行して ID/Secret を分離するのが望ましい（漏洩時の影響範囲を限定）。
+本番は Cloud Console で **dev/staging とは別の OAuth クライアント** を発行して ID/Secret を分離する（漏洩時の影響範囲を限定）。
+
+#### 4-5-1. Cloud Console で 2 つ目の OAuth クライアントを作成
+
+§3 と同じ手順で `tommieChat (prod)` という名前でもう 1 つ作成する。
+
+| 項目 | `tommieChat (dev/staging)` | `tommieChat (prod)` |
+| --- | --- | --- |
+| JavaScript 生成元 | `http://localhost:5173` と `https://mmo-test.tommie.jp` | `https://mmo.tommie.jp` |
+| リダイレクト URI | 上記 + `/oauth-callback.html` | `https://mmo.tommie.jp/oauth-callback.html` |
+| 配布先 | 手元 dev + mmo-test VPS の `nakama/.env` | mmo.tommie.jp VPS の `nakama/.env` |
+| `index.html` の `<meta>` | ソースにハードコード | `doDeploy-remote.sh -c` でビルド時に差し替え |
+
+#### 4-5-2. ソース `index.html` は dev/staging 用 Client ID のまま維持
+
+`index.html` にハードコードされた Client ID は **dev/staging 用** とし、触らない。
+`mmo-test.tommie.jp` へのデプロイ時はそのままの値が使われる。
+
+#### 4-5-3. 本番デプロイ時に Client ID を差し替え
+
+`doDeploy-remote.sh` の `-c` オプションで、`npm run build` 後の `dist/index.html` の
+`<meta name="google-oauth-client-id">` を本番用 Client ID に sed 置換してから rsync する。
+ソース `index.html` は変更されない。
+
+```bash
+# 手元 dev マシンから本番へデプロイ
+./nakama/doDeploy-remote.sh \
+    -c 999-prod.apps.googleusercontent.com \
+    mmo.tommie.jp
+```
+
+毎回引数を打ちたくない場合は `nakama/.env.deploy` に書いておく:
+
+```bash
+# nakama/.env.deploy （git 管理外）
+DEPLOY_GOOGLE_CLIENT_ID=999-prod.apps.googleusercontent.com
+```
+
+ただし `.env.deploy` は手元マシン全体で 1 つしかないので、
+**本番デプロイ時のみ `-c` を引数で渡す運用** の方が誤爆しにくい。
+`mmo-test` へのデプロイと `mmo` へのデプロイを同じ手元から行うなら引数方式が安全。
+
+#### 4-5-4. 本番 VPS 側の `nakama/.env`
+
+```bash
+# mmo.tommie.jp VPS の nakama/.env
+GOOGLE_CLIENT_ID=999-prod.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-<prod 専用 Secret>
+```
+
+`TOMMIE_PROD=1 bash nakama/doRestart.sh` で反映。
+
+#### 4-5-5. 動作原理まとめ
+
+1. `index.html` の `<meta>` = **フロントが使う** Client ID → `dist/index.html` の値
+2. `nakama/.env` の `GOOGLE_CLIENT_ID` = **サーバが `aud` 検証に使う** Client ID
+3. **この 2 つが同じ値でないと [BeforeLinkGoogle](../nakama/go_src/main.go) の aud チェックで弾かれる**
+
+したがって `dist/index.html` の差し替え値と `mmo.tommie.jp` 側 `nakama/.env` の `GOOGLE_CLIENT_ID` は必ず一致させる。
 
 ### 4-6. Secret ローテーション時の手順
 
