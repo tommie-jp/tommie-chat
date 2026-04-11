@@ -6,7 +6,7 @@
 #
 # パス解決はローカルで行い、PNG 本体を rsync で VPS の一時ディレクトリに転送、
 # SSH 経由で VPS 上の minio コンテナに投入する（VPS 側 jq/curl 不要）。
-SCRIPT_VERSION="2026-04-11h"
+SCRIPT_VERSION="2026-04-11i"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
@@ -117,13 +117,12 @@ GREEN=$'\e[32m'
 RED=$'\e[31m'
 YELLOW=$'\e[33m'
 RESET=$'\e[0m'
-step() { echo ""; echo "${GREEN}━━━ $1 ━━━${RESET}"; }
+# 表示は控えめに。エラー系 (warn/fail) のみ目立たせる。
+step() { :; }
 warn() { echo "${YELLOW}⚠️  $1${RESET}"; }
 fail() { echo "${RED}❌ $1${RESET}"; exit 1; }
 
-echo "doS3-set-avatars-remote.sh  version: ${SCRIPT_VERSION}"
-echo "  target:     ${SSH_TARGET}"
-echo "  remote dir: ${REMOTE_DIR}"
+echo "doS3-set-avatars-remote.sh  version: ${SCRIPT_VERSION}  target: ${SSH_TARGET}"
 
 [ -f "$JSON_FILE" ] || fail "avatars.json が見つかりません: $JSON_FILE"
 command -v jq    >/dev/null 2>&1 || fail "jq が必要です。apt install jq を実行してください"
@@ -192,33 +191,28 @@ fi
 if [ ${#RESOLVED[@]} -eq 0 ]; then
     fail "avatars.json の png_paths に有効な PNG がありません（プレースホルダのまま?）"
 fi
-echo "  PNG count:  ${#RESOLVED[@]}"
+echo "  PNG count: ${#RESOLVED[@]}"
 
 # ── 0. SSH 接続テスト ──
-step "0. SSH 接続テスト"
 if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "${SSH_TARGET}" "echo ok" >/dev/null 2>&1; then
     fail "SSH 接続に失敗しました: ${SSH_TARGET}"
 fi
-echo "  ✅ OK"
 
 # ── 1. VPS に rsync ──
-step "1. PNG を VPS に転送（rsync）"
 REMOTE_TMP=$(ssh "${SSH_TARGET}" "mktemp -d")
 case "$REMOTE_TMP" in
     /tmp/*) : ;;
     *) fail "リモート mktemp が想定外のパスを返しました: ${REMOTE_TMP}" ;;
 esac
 trap 'ssh "${SSH_TARGET}" "rm -rf ${REMOTE_TMP}" 2>/dev/null || true' EXIT
-rsync -avz "${RESOLVED[@]}" "${SSH_TARGET}:${REMOTE_TMP}/"
-echo "  ✅ 転送完了"
+rsync -az "${RESOLVED[@]}" "${SSH_TARGET}:${REMOTE_TMP}/"
 
 # ── 2. VPS の minio コンテナに投入 ──
 # heredoc の \$ はリモート bash に渡り、その先の sh -c '...' 内の $VAR は
 # minio コンテナの環境変数を参照する。
 # 注意: docker compose exec -T は STDIN を継承するため、</dev/null で
 # 切り離さないと heredoc 本体を読み込んでしまい、以降のコマンドが実行されない。
-step "2. VPS の minio コンテナに投入"
-ssh "${SSH_TARGET}" bash <<REMOTE_EOF
+ssh "${SSH_TARGET}" bash <<REMOTE_EOF >/dev/null
 set -eu
 cd ${REMOTE_DIR}/nakama
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
@@ -233,14 +227,12 @@ done
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
     mc mb --ignore-existing local/avatars >/dev/null
-    mc cp /tmp/avatars-restore/*.png local/avatars/
+    mc cp /tmp/avatars-restore/*.png local/avatars/ >/dev/null
     rm -rf /tmp/avatars-restore
 ' </dev/null
 REMOTE_EOF
-echo "  ✅ 投入完了"
 
-# ── 3. 投入結果の確認 ──
-step "3. 投入結果の確認 (mc ls local/avatars/)"
+# ── 3. 投入結果の確認（件数のみ） ──
 EXPECTED=${#RESOLVED[@]}
 LS_OUTPUT=$(ssh "${SSH_TARGET}" bash <<REMOTE_EOF
 set -eu
@@ -252,18 +244,8 @@ COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 ' </dev/null
 REMOTE_EOF
 )
-echo "$LS_OUTPUT"
 ACTUAL=$(echo "$LS_OUTPUT" | grep -c '\.png$' || true)
-echo ""
-echo "  期待: ${EXPECTED} ファイル"
-echo "  実際: ${ACTUAL} ファイル"
 if [ "$ACTUAL" -lt "$EXPECTED" ]; then
     fail "投入されたファイル数が期待より少ないです (${ACTUAL}/${EXPECTED})"
 fi
-echo "  ✅ 確認完了"
-
-echo ""
-echo "${GREEN}=========================================${RESET}"
-echo "${GREEN}  MinIO アバター投入完了 (${VPS_HOST})${RESET}"
-echo "${GREEN}  投入ファイル数: ${ACTUAL}${RESET}"
-echo "${GREEN}=========================================${RESET}"
+echo "  ✅ MinIO アバター投入完了 (${ACTUAL}/${EXPECTED})"

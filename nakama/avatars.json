@@ -101,7 +101,7 @@
     "modification": true,
     "redistribution": false,
     "credit_required": true,
-    "note": "ツクール/ウディタ等あらゆるゲーム制作ツールで利用可。Webアプリ配布時はスタッフロール等1か所にサイト名とURLの表示が必要。",
+    "note": "ドットが小さい。ツクール/ウディタ等あらゆるゲーム制作ツールで利用可。Webアプリ配布時はスタッフロール等1か所にサイト名とURLの表示が必要。",
     "png_paths": [
       "./avatars/06-dotartworld/*.png"
     ]
@@ -142,6 +142,62 @@
     "note": "RPGツクールMV/MZ用キャラチップ素材を中心に配布。ツクール以外のゲーム制作ツールでの利用も明示的に許可されている。",
     "png_paths": [
       "./avatars/08-bougainvillea/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "Kenney Roguelike Characters",
+    "author": "Kenney",
+    "author_url": "https://kenney.nl/",
+    "site_url": "https://kenney.nl/assets/roguelike-characters",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "note": "形式が違うので使えない。450 種類のキャラクタースプライトをスプライトシート形式で配布。CC0 のため無制限に利用可能。Kenney は CC0 ゲーム素材の老舗サイト。",
+    "png_paths": [
+      "./avatars/09-kenney-roguelike-characters/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "DOTOWN",
+    "author": "前田デザイン室 (Maeda Design Room)",
+    "author_url": "https://dotown.maeda-design-room.net/",
+    "site_url": "https://dotown.maeda-design-room.net/",
+    "terms_url": "https://dotown.maeda-design-room.net/term-of-use/",
+    "license": "DOTOWN 利用規約 (https://dotown.maeda-design-room.net/term-of-use/) / 個人・法人・商用・非商用問わず無料で利用可。クレジット表記不要。色変え・反転・縮小拡大等の一部加工可。素材をコンテンツ・商品として再配布/販売は禁止。",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "usage_restriction": "NFT化不可、Scratch プラットフォームでの使用不可、直リンク不可、素材を含むロゴの商標登録不可。",
+    "note": "ドットが小さすぎて使えない。前田デザイン室運営のドット絵フリー素材サイト。人物・動物・モンスター等のキャラクター素材が多数。",
+    "png_paths": [
+      "./avatars/10-dotown/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "Liberated Pixel Cup (LPC) Base Assets",
+    "author": "Lanea Zimmerman (Sharm), Stephen Challener (Redshrike), 他",
+    "author_url": "https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles",
+    "site_url": "https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles",
+    "terms_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "license": "CC-BY-SA 3.0 / GPL 3.0 デュアルライセンス。一部素材 (Sharm / Redshrike 作) は CC-BY 3.0 も選択可。",
+    "credit": "Credits must include all artists listed in CREDITS.TXT (see https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles)",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": true,
+    "usage_restriction": "CC-BY-SA の継承条項により、改変・派生したスプライト画像自体は CC-BY-SA 3.0 (または互換ライセンス) で配布する必要がある。ゲームコード本体は対象外だが、改変版スプライトを配布・公開する場合は同じライセンスを付与すること。CREDITS.TXT に記載された全作者をクレジットする必要あり。",
+    "note": "2012年 Liberated Pixel Cup コンペの成果物。32×32 ベースのトップダウン RPG 用スプライトシート。多様な体型・装備バリエーションあり。Universal LPC Spritesheet Generator で組み合わせ生成が可能。",
+    "png_paths": [
+      "./avatars/11-lpc-base-assets/*.png"
     ]
   }
 ]
