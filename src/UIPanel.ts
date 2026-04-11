@@ -476,6 +476,148 @@ export function setupHtmlUI(game: GameScene): void {
                     }
                 });
             }
+
+            // ─── アカウント情報セクション（doc/53 §8 最小実装） ───
+            const savedEl  = document.getElementById("account-info-saved");
+            const googleEl = document.getElementById("account-info-google");
+            const deviceEl = document.getElementById("account-info-device");
+            const linkBtn  = document.getElementById("googleLinkBtn") as HTMLButtonElement | null;
+            const refreshBtn = document.getElementById("accountRefreshBtn") as HTMLButtonElement | null;
+            const linkResultEl = document.getElementById("googleLinkResult");
+
+            const renderAccountStatus = async () => {
+                if (!savedEl || !googleEl || !deviceEl) return;
+                if (!game.nakama.selfSessionId) {
+                    savedEl.textContent  = "未ログイン";
+                    googleEl.textContent = "―";
+                    deviceEl.textContent = "―";
+                    return;
+                }
+                try {
+                    const st = await game.nakama.getAccountStatus();
+                    savedEl.textContent  = st.saved ? "✅ 保存済み" : "⚠️ 仮アカウント（未保存）";
+                    googleEl.textContent = st.hasGoogle
+                        ? (st.email ? `✅ ${st.email}` : "✅ リンク済み")
+                        : "未リンク";
+                    deviceEl.textContent = st.hasDevice ? "✅ このブラウザに紐付け" : "なし";
+                    if (linkBtn) linkBtn.disabled = st.hasGoogle;
+                    if (linkBtn && st.hasGoogle) linkBtn.textContent = "🅖 Google リンク済み";
+                } catch (e) {
+                    console.warn("getAccountStatus failed:", e);
+                    savedEl.textContent = "取得失敗";
+                }
+            };
+
+            // 初回 & ログイン後に取得
+            void renderAccountStatus();
+            game.nakama.onMatchReconnect = ((prev) => () => { prev?.(); void renderAccountStatus(); })(game.nakama.onMatchReconnect);
+
+            if (refreshBtn) {
+                refreshBtn.addEventListener("click", () => { void renderAccountStatus(); });
+            }
+
+            // window.tommieGoogleOAuth は public/js/google-oauth.js が defer で読み込む
+            type OAuthApi = {
+                getClientId: () => string | null;
+                startLink: (opts?: { captureState?: () => unknown }) => { popup: Window | null; promise: Promise<string> };
+                resumeFromRedirect: () => { code: string; resumeState: unknown | null } | null;
+            };
+            const getOAuthApi = (): OAuthApi | null => {
+                return (window as unknown as { tommieGoogleOAuth?: OAuthApi }).tommieGoogleOAuth ?? null;
+            };
+
+            const setLinkResult = (msg: string, isErr = false) => {
+                if (!linkResultEl) return;
+                linkResultEl.textContent = msg;
+                linkResultEl.style.color = isErr ? "#c00" : "#666";
+            };
+
+            // 認可コードをサーバへ送って LinkGoogle 完了させる
+            const completeLinkWithCode = async (code: string) => {
+                setLinkResult("認可完了 → サーバ側でリンク処理中...");
+                try {
+                    const redirectUri = location.origin + "/oauth-callback.html";
+                    await game.nakama.linkGoogleByCode(code, redirectUri);
+                    setLinkResult("✅ Google アカウントを紐付けました");
+                    await renderAccountStatus();
+                } catch (e) {
+                    console.warn("linkGoogleByCode failed:", e);
+                    setLinkResult("リンク失敗: " + (e instanceof Error ? e.message : String(e)), true);
+                }
+            };
+
+            if (linkBtn) {
+                linkBtn.addEventListener("click", () => {
+                    // ─── 重要 ───
+                    // iOS Safari のポップアップブロッカーは「ユーザー操作直後の同期 window.open」しか許可しない。
+                    // ここでは絶対に await を挟まず、startLink() を同期呼び出しすること。
+                    if (!game.nakama.selfSessionId) {
+                        setLinkResult("先にログインしてください", true);
+                        return;
+                    }
+                    const api = getOAuthApi();
+                    if (!api) { setLinkResult("OAuth スクリプト未読み込み", true); return; }
+                    if (!api.getClientId()) {
+                        setLinkResult("Google Client ID 未設定（index.html の <meta> または server の GOOGLE_CLIENT_ID）", true);
+                        return;
+                    }
+
+                    setLinkResult("Google 認証画面を開いています...");
+
+                    // リダイレクト方式フォールバックに渡す現在地スナップショット
+                    const captureState = () => ({
+                        worldId: game.currentWorldId,
+                        x: game.playerBox.position.x,
+                        z: game.playerBox.position.z,
+                        ry: game.playerBox.rotation.y,
+                    });
+
+                    const { popup, promise } = api.startLink({ captureState });
+                    if (!popup) {
+                        // フォールバックが発火した（リダイレクト遷移中） → ここから先は実行されない
+                        return;
+                    }
+                    promise.then(
+                        (code) => { void completeLinkWithCode(code); },
+                        (err) => {
+                            console.warn("google-oauth promise rejected:", err);
+                            setLinkResult("認証中断: " + (err instanceof Error ? err.message : String(err)), true);
+                        }
+                    );
+                });
+            }
+
+            // ─── リダイレクト方式フォールバックからの復帰 ───
+            // ページ初期化時に sessionStorage に code が残っていれば、復元して継続。
+            // ログインが完了するまで待ってから RPC を発行する。
+            const tryResume = async () => {
+                const api = getOAuthApi();
+                if (!api) return;
+                const r = api.resumeFromRedirect();
+                if (!r) return;
+                console.log("oauth resume detected:", r);
+                // ログイン完了を待つ
+                for (let i = 0; i < 100; i++) {
+                    if (game.nakama.selfSessionId) break;
+                    await new Promise((res) => setTimeout(res, 100));
+                }
+                if (!game.nakama.selfSessionId) {
+                    setLinkResult("ログイン完了待ちタイムアウト", true);
+                    return;
+                }
+                // 元の部屋・位置に復元
+                const rs = r.resumeState as { worldId?: number; x?: number; z?: number; ry?: number } | null;
+                if (rs && typeof rs.worldId === "number") {
+                    try {
+                        game.moveBookmark("oauth_resume", { x: rs.x ?? 0, z: rs.z ?? 0 }, rs.worldId);
+                        if (typeof rs.ry === "number") game.playerBox.rotation.y = rs.ry;
+                    } catch (e) {
+                        console.warn("oauth resume moveBookmark failed:", e);
+                    }
+                }
+                await completeLinkWithCode(r.code);
+            };
+            void tryResume();
         }
     }
     // ===== チャット設定パネル ドラッグ & 閉じる =====

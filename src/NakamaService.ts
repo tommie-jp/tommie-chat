@@ -466,6 +466,49 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    /**
+     * Google OAuth2 認可コードを使って現在のアカウントに Google を紐付ける。
+     * doc/53-設計-認証システム.md §13 参照。
+     * @param code         クライアント側で取得した OAuth2 認可コード
+     * @param redirectUri  認可リクエストで使用した redirect_uri と完全一致させる
+     */
+    async linkGoogleByCode(code: string, redirectUri: string): Promise<void> {
+        const _end = prof("NakamaService.linkGoogleByCode");
+        try {
+            console.log("snd linkGoogleByCode");
+            if (!this.socket) throw new Error("no socket");
+            const r = await this.socket.rpc("linkGoogleByCode", JSON.stringify({ code, redirectUri }));
+            if (r?.payload) {
+                const data = JSON.parse(r.payload) as { linked?: boolean };
+                if (!data.linked) throw new Error("link failed");
+            }
+        } finally { _end(); }
+    }
+
+    /**
+     * 現在のアカウントが「保存済み」(Google/Apple/Email のいずれかにリンク済み) かを取得する。
+     */
+    async getAccountStatus(): Promise<{ saved: boolean; hasGoogle: boolean; hasApple: boolean; hasEmail: boolean; hasDevice: boolean; email: string }> {
+        const _end = prof("NakamaService.getAccountStatus");
+        try {
+            const empty = { saved: false, hasGoogle: false, hasApple: false, hasEmail: false, hasDevice: false, email: "" };
+            if (!this.socket) return empty;
+            const r = await this.socket.rpc("getAccountStatus");
+            if (r?.payload) {
+                const d = JSON.parse(r.payload) as Partial<typeof empty>;
+                return {
+                    saved:     d.saved     ?? false,
+                    hasGoogle: d.hasGoogle ?? false,
+                    hasApple:  d.hasApple  ?? false,
+                    hasEmail:  d.hasEmail  ?? false,
+                    hasDevice: d.hasDevice ?? false,
+                    email:     d.email     ?? "",
+                };
+            }
+            return empty;
+        } finally { _end(); }
+    }
+
     async getDisplayNames(userIds: string[]): Promise<Map<string, string>> {
         const _end = prof("NakamaService.getDisplayNames");
         try {

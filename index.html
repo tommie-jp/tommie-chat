@@ -9,6 +9,8 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="manifest" href="/manifest.json">
+    <!-- Google OAuth2 Client ID（サーバ側 GOOGLE_CLIENT_ID と一致させること。Client ID は公開情報） -->
+    <meta name="google-oauth-client-id" content="574480291314-g4tavjelttoea848vpqpej85onampqe9.apps.googleusercontent.com">
     <title>tommieChat</title>
     <style>
         html { overflow: hidden; height: 100%; }
@@ -2755,6 +2757,20 @@
                 <button id="srvNakamaPingBtn" class="ui-btn" data-i18n="server.rpc_ping" style="font-size:11px;padding:3px 10px;background:#d98a4a;color:#fff;border:1px solid #b07035;" title="NakamaサーバへWebSocket RPCでpingを送信します（ログイン後に使用可能）">RPC応答</button>
             </div>
             <div id="srvPingResult"></div>
+
+            <!-- アカウント情報（doc/53 §8 最小実装） -->
+            <hr style="margin:10px 0;border:none;border-top:1px solid rgba(0,0,0,0.15);">
+            <div class="srv-desc" title="アカウント情報&#10;──────────&#10;現在のユーザーがどの認証方式と紐付いているかを表示します。&#10;Google アカウントを紐付けると、デバイスを変えても同じアカウントで遊べます。">アカウント情報</div>
+            <div id="account-info-status" style="font-size:11px;color:#444;margin-top:4px;line-height:1.7;">
+                <div>状態: <span id="account-info-saved">未取得</span></div>
+                <div>Google: <span id="account-info-google">―</span></div>
+                <div>デバイス: <span id="account-info-device">―</span></div>
+            </div>
+            <div class="srv-row" style="margin-top:6px;gap:6px;">
+                <button id="googleLinkBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#fff;color:#3c4043;border:1px solid #dadce0;font-weight:bold;" title="Google アカウントを紐付けてアカウントを永続化します&#10;（ブラウザを消してもログインできるようになります）">🅖 Google でアカウント保存</button>
+                <button id="accountRefreshBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#666;color:#fff;border:1px solid #444;" title="アカウント情報を再取得">↻</button>
+            </div>
+            <div id="googleLinkResult" style="font-size:11px;color:#666;margin-top:4px;min-height:14px;"></div>
         </div>
     </div>
 
@@ -3035,6 +3051,7 @@
 
     <script type="module" src="/src/main.ts"></script>
     <script src="/js/sw-register.js"></script>
+    <script src="/js/google-oauth.js" defer></script>
     <div id="custom-tooltip"></div>
     <script src="/js/custom-tooltip.js"></script>
 </body>

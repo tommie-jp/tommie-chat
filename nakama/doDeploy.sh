@@ -187,7 +187,11 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.babylonjs.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' wss://*.tommie.jp https://cdn.babylonjs.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'" always;
+    # CSP: Google OAuth2 用に accounts.google.com / oauth2.googleapis.com を許可
+    #   - form-action: 認可リダイレクト先
+    #   - connect-src: トークン交換 (サーバ側 RPC 経由なので厳密には不要だが将来的な fetch 用に許可)
+    #   - script-src / frame-src: One Tap 併用時用（現状の方式 B のみなら不要）
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.babylonjs.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' wss://*.tommie.jp https://cdn.babylonjs.com https://oauth2.googleapis.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'; frame-src https://accounts.google.com; form-action 'self' https://accounts.google.com" always;
 
     # SPA フォールバック
     location / {

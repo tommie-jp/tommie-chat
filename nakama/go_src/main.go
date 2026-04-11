@@ -3,14 +3,17 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"regexp"
 	"strconv"
 	"hash/fnv"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -2739,6 +2742,182 @@ func rpcDeleteRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 	return string(b), nil
 }
 
+// ─────────────────────────────────────────
+// Google OAuth2 アカウントリンク
+// ─────────────────────────────────────────
+//
+// クライアント (public/js/google-oauth.js) は OAuth 2.0 Authorization Code Flow で
+// 認可コードを取得し、この RPC に渡す。サーバ側で:
+//   1. code → ID token を Google に問い合わせて交換
+//   2. ID token を使って nk.LinkGoogle で現在のユーザーにリンク
+//
+// 必要な環境変数:
+//   GOOGLE_CLIENT_ID     — Google Cloud Console の OAuth 2.0 クライアント ID
+//   GOOGLE_CLIENT_SECRET — 同シークレット（Web アプリケーションタイプの場合）
+//
+// redirect_uri は client から渡された値をそのまま使う（リダイレクトとポップアップで
+// 同一のパスを使うが、Origin が異なる検証環境を考慮して client から受け取る）。
+
+type linkGoogleByCodeReq struct {
+	Code        string `json:"code"`
+	RedirectURI string `json:"redirectUri"`
+}
+
+type googleTokenResp struct {
+	IDToken     string `json:"id_token"`
+	AccessToken string `json:"access_token"`
+	Error       string `json:"error"`
+	ErrorDesc   string `json:"error_description"`
+}
+
+// googleIDTokenClaims は ID token JWT のペイロードから必要なフィールドだけを取り出す。
+// 署名検証は Nakama (nk.LinkGoogle) が Google の公開鍵で行うので、ここでは base64 デコードのみ。
+// 目的は aud (audience) クレームの照合 — Nakama 本体は aud を検証しないため、
+// 別の Google OAuth クライアント向けに発行されたトークンでリンクされる攻撃を防ぐ。
+type googleIDTokenClaims struct {
+	Aud   string `json:"aud"`
+	Iss   string `json:"iss"`
+	Email string `json:"email"`
+	Sub   string `json:"sub"`
+}
+
+// parseGoogleIDTokenAud は ID token (JWT) のペイロード部分をデコードして aud を取り出す。
+// 署名検証はしない（呼び出し側で Nakama に委ねるか別途検証する）。
+func parseGoogleIDTokenAud(idToken string) (string, error) {
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid jwt format")
+	}
+	// JWT は base64url (padding なし) エンコード
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		// パディング付きの場合にも対応
+		payload, err = base64.URLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return "", fmt.Errorf("payload base64 decode: %w", err)
+		}
+	}
+	var claims googleIDTokenClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("payload json parse: %w", err)
+	}
+	return claims.Aud, nil
+}
+
+func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcLinkGoogleByCode")()
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("not authenticated", 16)
+	}
+
+	var req linkGoogleByCodeReq
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return "", runtime.NewError("invalid payload", 3)
+	}
+	if req.Code == "" || req.RedirectURI == "" {
+		return "", runtime.NewError("code and redirectUri required", 3)
+	}
+
+	clientID := os.Getenv("GOOGLE_CLIENT_ID")
+	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
+	if clientID == "" || clientSecret == "" {
+		logger.Warn("rpcLinkGoogleByCode: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET 未設定")
+		return "", runtime.NewError("google oauth not configured on server", 13)
+	}
+
+	// ─── 1. code → token 交換 ───
+	form := url.Values{}
+	form.Set("code", req.Code)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
+	form.Set("redirect_uri", req.RedirectURI)
+	form.Set("grant_type", "authorization_code")
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
+		"https://oauth2.googleapis.com/token",
+		strings.NewReader(form.Encode()))
+	if err != nil {
+		logger.Warn("rpcLinkGoogleByCode: NewRequest: %v", err)
+		return "", runtime.NewError("internal", 13)
+	}
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		logger.Warn("rpcLinkGoogleByCode: token endpoint: %v", err)
+		return "", runtime.NewError("google token exchange failed", 13)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		logger.Warn("rpcLinkGoogleByCode: read body: %v", err)
+		return "", runtime.NewError("google token exchange read failed", 13)
+	}
+
+	var tok googleTokenResp
+	if err := json.Unmarshal(body, &tok); err != nil {
+		logger.Warn("rpcLinkGoogleByCode: parse token resp: %v body=%s", err, string(body))
+		return "", runtime.NewError("google token parse failed", 13)
+	}
+	if resp.StatusCode != 200 || tok.Error != "" {
+		logger.Warn("rpcLinkGoogleByCode: token exchange error status=%d err=%s desc=%s",
+			resp.StatusCode, tok.Error, tok.ErrorDesc)
+		return "", runtime.NewError("google rejected the code", 7)
+	}
+	if tok.IDToken == "" {
+		return "", runtime.NewError("google did not return id_token", 13)
+	}
+
+	// ─── 2. nk.LinkGoogle で現在のユーザーにリンク ───
+	// aud 検証は BeforeLinkGoogle フックで行うので、ここでは直接呼び出す。
+	if err := nk.LinkGoogle(ctx, uid, tok.IDToken); err != nil {
+		logger.Warn("rpcLinkGoogleByCode: LinkGoogle uid=%s: %v", uid, err)
+		// エラーメッセージに内部情報が含まれる可能性があるので generic に。
+		// 重複リンクだけはクライアントに分かるよう判別する。
+		msg := "link failed"
+		if strings.Contains(err.Error(), "already") {
+			msg = "this google account is already linked to another user"
+		}
+		return "", runtime.NewError(msg, 9)
+	}
+
+	logger.Info("rpcLinkGoogleByCode: linked uid=%s", uid)
+	out, _ := json.Marshal(map[string]interface{}{"linked": true})
+	return string(out), nil
+}
+
+// rpcGetAccountStatus は「保存済みアカウントか」フラグを返す
+// （フレンド機能の前提チェック用 — doc/53 §8）
+func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcGetAccountStatus")()
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("not authenticated", 16)
+	}
+	acc, err := nk.AccountGetId(ctx, uid)
+	if err != nil {
+		return "", runtime.NewError("account fetch failed", 13)
+	}
+	user := acc.GetUser()
+	hasGoogle := user != nil && user.GetGoogleId() != ""
+	hasApple := user != nil && user.GetAppleId() != ""
+	hasEmail := acc.GetEmail() != ""
+	hasDevice := len(acc.GetDevices()) > 0
+	saved := hasGoogle || hasApple || hasEmail
+	out, _ := json.Marshal(map[string]interface{}{
+		"saved":     saved,
+		"hasGoogle": hasGoogle,
+		"hasApple":  hasApple,
+		"hasEmail":  hasEmail,
+		"hasDevice": hasDevice,
+		"email":     acc.GetEmail(),
+	})
+	return string(out), nil
+}
+
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// バリデーション設定の読み込み（runtime.env から）
@@ -2888,6 +3067,8 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"createRoom", rpcCreateRoom},
 		{"deleteRoom", rpcDeleteRoom},
 		{"listOnlinePlayers", rpcListOnlinePlayers},
+		{"linkGoogleByCode", rpcLinkGoogleByCode},
+		{"getAccountStatus", rpcGetAccountStatus},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {
@@ -2902,6 +3083,32 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		if err := initializer.RegisterRpc("deleteUsers", withRateLimit(rl, rpcDeleteUsers)); err != nil {
 			return err
 		}
+	}
+
+	// Google ID token の aud (audience) 検証（LinkGoogle のフック）
+	// Nakama 本体は aud を検証しないため、別の OAuth クライアント向けに
+	// 発行されたトークンでリンクされる攻撃を防ぐための防御層。
+	// GOOGLE_CLIENT_ID 未設定時は素通り（dev 用）。
+	if err := initializer.RegisterBeforeLinkGoogle(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, in *api.AccountGoogle) (*api.AccountGoogle, error) {
+		expectedAud := os.Getenv("GOOGLE_CLIENT_ID")
+		if expectedAud == "" {
+			return in, nil
+		}
+		if in == nil || in.Token == "" {
+			return nil, runtime.NewError("google token required", 3)
+		}
+		aud, err := parseGoogleIDTokenAud(in.Token)
+		if err != nil {
+			logger.Warn("BeforeLinkGoogle: parse aud failed: %v", err)
+			return nil, runtime.NewError("invalid google id token", 3)
+		}
+		if aud != expectedAud {
+			logger.Warn("BeforeLinkGoogle: aud mismatch got=%s want=%s", aud, expectedAud)
+			return nil, runtime.NewError("google token audience mismatch", 3)
+		}
+		return in, nil
+	}); err != nil {
+		return err
 	}
 
 	// 表示名バリデーション（updateAccount のフック）
