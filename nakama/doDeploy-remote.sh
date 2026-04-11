@@ -4,7 +4,7 @@
 #
 # 開発環境（WSL2 Ubuntu 24.04）から実行する。
 # フロントエンドビルド → git clone → dist/ 転送 → doDeploy.sh を一括で行う。
-SCRIPT_VERSION="2026-04-11d"
+SCRIPT_VERSION="2026-04-11g"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 # 形式は doc/40-デプロイ手順.md 参照:
@@ -191,6 +191,11 @@ fi
 
 SSH_TARGET="${SSH_USER}@${VPS_HOST}"
 
+# VPS_HOST から COMPOSE_PROJECT_NAME を導出（ドット → ダッシュ）。
+# doDeploy.sh と同じアルゴリズムで、既存 .env に未記載の環境でも
+# 同じ名前で残留コンテナを掃除できるようにする。
+EXPECTED_PROJECT=$(echo "$VPS_HOST" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
+
 echo "doDeploy-remote.sh  version: ${SCRIPT_VERSION}"
 echo "  target:     ${SSH_TARGET}"
 echo "  remote dir: ${REMOTE_DIR}"
@@ -299,10 +304,26 @@ if ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
                 docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
                 docker compose down 2>/dev/null || true
             } || true
-            REMAINING=\$(docker ps -aq --filter \"name=nakama\" 2>/dev/null; docker ps -aq --filter \"name=tommchat-prod\" 2>/dev/null)
-            REMAINING=\$(echo \"\$REMAINING\" | sort -u | grep -v \"^\$\" || true)
-            if [ -n \"\$REMAINING\" ]; then
-                echo \"\$REMAINING\" | xargs -r docker rm -f
+            # 残留コンテナの強制削除は当該プロジェクトのみを対象にする。
+            # プロジェクト名の解決順:
+            #   1. .env の COMPOSE_PROJECT_NAME（既存環境との後方互換）
+            #   2. VPS ホスト名のドットをダッシュに置換した値（新規環境の既定）
+            # 過去に \"name=nakama\" や \"name=tommchat-prod-\" を使っていたが、
+            # 前者は部分一致、後者はハードコードのため、逆向きのデプロイで
+            # 他プロジェクト (test → prod, prod → test) を巻き込んで停止させた実績がある。
+            CURRENT_PROJECT=\"\"
+            if [ -f .env ]; then
+                CURRENT_PROJECT=\$(sed -n \"s/^COMPOSE_PROJECT_NAME=//p\" .env | tail -n1)
+            fi
+            if [ -z \"\$CURRENT_PROJECT\" ]; then
+                CURRENT_PROJECT=\"${EXPECTED_PROJECT}\"
+            fi
+            if [ -n \"\$CURRENT_PROJECT\" ]; then
+                REMAINING=\$(docker ps -aq --filter \"name=\${CURRENT_PROJECT}-\" 2>/dev/null | sort -u | grep -v \"^\$\" || true)
+                if [ -n \"\$REMAINING\" ]; then
+                    echo \"残留コンテナを削除: project=\$CURRENT_PROJECT\"
+                    echo \"\$REMAINING\" | xargs -r docker rm -f
+                fi
             fi
             # data/ と .env は保持し、それ以外を削除して再クローン
             if [ -d ${REMOTE_DIR}/nakama/data ]; then

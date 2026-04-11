@@ -65,9 +65,10 @@ if [ -d "tommie-chat" ]; then
             docker compose down 2>/dev/null || true
             cd "$SCRIPT_DIR"
         } || true
-        # 残留コンテナがあれば強制削除
-        REMAINING=$(docker ps -aq --filter "name=nakama" 2>/dev/null; docker ps -aq --filter "name=tommchat-prod" 2>/dev/null)
-        REMAINING=$(echo "$REMAINING" | sort -u | grep -v '^$' || true)
+        # 残留コンテナの強制削除は tommchat-prod プロジェクトのみを対象にする。
+        # "name=nakama" のような部分一致フィルタは他プロジェクト (tommchat-test 等) の
+        # nakama コンテナまで巻き込んで削除するため使わない。
+        REMAINING=$(docker ps -aq --filter "name=tommchat-prod-" 2>/dev/null | sort -u | grep -v '^$' || true)
         if [ -n "$REMAINING" ]; then
             echo "$REMAINING" | xargs -r docker rm -f
         fi

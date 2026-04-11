@@ -41,6 +41,28 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     set +a
 fi
 
+# ── COMPOSE_PROJECT_NAME の自動導出 ──
+# 同一 VPS 上で複数ホスト (mmo.tommie.jp / mmo-test.tommie.jp / mmo1.tommie.jp ...)
+# を並行運用しても衝突しないよう、プロジェクト名はホスト名ベースで一意にする。
+# docker compose の project 名はドット不可なのでドットはダッシュに置換する。
+#   mmo.tommie.jp       → mmo-tommie-jp
+#   mmo-test.tommie.jp  → mmo-test-tommie-jp
+#   mmo1.tommie.jp      → mmo1-tommie-jp
+# 既存 .env に COMPOSE_PROJECT_NAME が設定されていればそれを優先する（後方互換）。
+# 以前の運用では tommchat-prod / tommchat-test を手動で設定していたため、
+# 既存環境の project 名は変わらないまま新規ホストだけ自動導出される。
+if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+    _hn="${DEPLOY_HOSTNAME:-$(hostname -f 2>/dev/null || true)}"
+    case "$_hn" in
+        ""|localhost|localhost.*|.|..|*[!a-zA-Z0-9.-]*) : ;;
+        *)
+            COMPOSE_PROJECT_NAME=$(echo "$_hn" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
+            export COMPOSE_PROJECT_NAME
+            ;;
+    esac
+    unset _hn
+fi
+
 # ── 色付き出力 ──
 GREEN=$'\e[32m'
 RED=$'\e[31m'
@@ -229,6 +251,14 @@ ensure_env() {
     eval "export ${key}=\"\$value\""
     echo "  .env に ${key} を生成・追記"
 }
+
+# COMPOSE_PROJECT_NAME はホスト名から自動導出済み（スクリプト冒頭参照）。
+# ここで .env に未記載なら追記することで、2 回目以降のデプロイでも同じ名前を
+# 再利用できるようにする。
+if [ -n "${COMPOSE_PROJECT_NAME:-}" ] && ! grep -q '^COMPOSE_PROJECT_NAME=' "$ENV_FILE" 2>/dev/null; then
+    echo "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" >> "$ENV_FILE"
+    echo "  .env に COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME を追記"
+fi
 
 ensure_env POSTGRES_PASSWORD    "$(openssl rand -hex 16)"
 ensure_env NAKAMA_SERVER_KEY    "tommie-chat"

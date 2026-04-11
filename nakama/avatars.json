@@ -1,5 +1,6 @@
 [
   {
+    "enable": true,
     "title": "ぴぽや (Pipoya)",
     "author": "ぴぽや (Pipoya)",
     "author_url": "https://pipoya.net/",
@@ -11,12 +12,12 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
-    "enable": true,
     "png_paths": [
       "./avatars/01-pipoya/*.png"
     ]
   },
   {
+    "enable": false,
     "title": "てきとーツクール素材",
     "author": "mine",
     "author_url": "http://tkool.kagati.com/",
@@ -29,9 +30,118 @@
     "redistribution": false,
     "credit_required": false,
     "usage_restriction": "RPGツクール作品での利用に限定（オリジナル素材を除く）。Webアプリ等のツクール以外での利用は規約違反の可能性あり。オリジナル素材のみ誰でも利用可。",
-    "enable": false,
     "png_paths": [
       "./avatars/02-tkool.kagati.com/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "ぴぽや倉庫 キャラクターチップ２",
+    "author": "ぴぽや (Pipoya)",
+    "author_url": "https://pipoya.net/",
+    "site_url": "https://pipoya.net/sozai/?p=742",
+    "terms_url": "https://pipoya.net/sozai/terms-of-use/",
+    "license": "ぴぽや倉庫 素材利用規約 (https://pipoya.net/sozai/terms-of-use/) / 商用利用可・改変可・クレジット表記任意。素材単体の再配布・販売は禁止。",
+    "credit": "ぴぽや https://pipoya.net/",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "note": "32×32 PNG、4方向3パターン歩行アニメ。出力画像＋α セット、猫にんセット、男女/老人/子供基本パーツ等を含む。",
+    "png_paths": [
+      "./avatars/03-pipoya-charachip2/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "OpenGameArt 32x32 RPG Character Sprites",
+    "author": "Eldiran",
+    "author_url": "https://opengameart.org/users/eldiran",
+    "site_url": "https://opengameart.org/content/32x32-rpg-character-sprites",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "note": "32×32 ピクセル、20種前後のキャラクター（walking / standing / charging）。CC0 のため無制限。",
+    "png_paths": [
+      "./avatars/04-oga-eldiran-32x32/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "OpenGameArt CC0 Walk Cycles",
+    "author": "Technopeasant",
+    "author_url": "https://opengameart.org/users/technopeasant",
+    "site_url": "https://opengameart.org/content/cc0-walk-cycles",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "note": "CC0 ライセンスの4方向歩行キャラクター集。クレジット任意だが慣例として記載推奨。",
+    "png_paths": [
+      "./avatars/05-oga-cc0-walk-cycles/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "ドット絵世界 (Pixel Art World)",
+    "author": "yms",
+    "author_url": "https://yms.main.jp/dotartworld/",
+    "site_url": "https://yms.main.jp/dotartworld/page3/chara01.html",
+    "terms_url": "https://yms.main.jp/dotartworld/page1/rule.html",
+    "license": "ドット絵世界 利用規約 (https://yms.main.jp/dotartworld/page1/rule.html) / 商用利用可・改変可・ツクール/ウディタ/その他ゲーム制作ツール全般で利用可。二次配布禁止。Web等で不特定多数に配布する際は著作権表示が必要。",
+    "credit": "ドット絵世界 (Pixel Art World) https://yms.main.jp/dotartworld/",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": true,
+    "note": "ツクール/ウディタ等あらゆるゲーム制作ツールで利用可。Webアプリ配布時はスタッフロール等1か所にサイト名とURLの表示が必要。",
+    "png_paths": [
+      "./avatars/06-dotartworld/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "DOT ILLUST (ドットイラスト)",
+    "author": "nko",
+    "author_url": "https://dot-illust.net/",
+    "site_url": "https://dot-illust.net/category/character/",
+    "terms_url": "https://dot-illust.net/terms/",
+    "license": "DOT ILLUST 利用規約 (https://dot-illust.net/terms/) / 商用・非商用とも無料。1つのアプリ/ゲームにつき30点まで無料、31点以上は有償。改変可（著作権譲渡なし）。素材そのもの・加工物の再配布/販売は禁止。クレジット表記不要。",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "usage_restriction": "1制作物あたり30点まで無料。重複使用は1点としてカウント。31点以上使う場合は作者へ有償対応の相談が必要。",
+    "note": "Webゲーム/Webアプリでの利用を明示的に許可。5000点以上の素材を公開。",
+    "png_paths": [
+      "./avatars/07-dot-illust/*.png"
+    ]
+  },
+  {
+    "enable": false,
+    "title": "BOUGAINVILLEA 素材置き場",
+    "author": "BOUGAINVILLEA",
+    "author_url": "https://bougainvillea.egoism.jp/",
+    "site_url": "https://bougainvillea.egoism.jp/material/materialmv.html",
+    "terms_url": "https://bougainvillea.egoism.jp/material/readmej.jpg",
+    "license": "BOUGAINVILLEA 素材利用規約 / ツクールシリーズ以外のゲーム制作ツール上での使用可。年齢制限有り/有料作品での使用可。位置調整・色調変更は可だが素材の加工/分解は不可。二次配布禁止。",
+    "credit": "BOUGAINVILLEA https://bougainvillea.egoism.jp/",
+    "commercial_use": true,
+    "modification": false,
+    "redistribution": false,
+    "credit_required": false,
+    "usage_restriction": "素材の加工（分解して一部のみ抜き出す等）は不可。位置調整や色調変更の範囲に留める必要あり。",
+    "note": "RPGツクールMV/MZ用キャラチップ素材を中心に配布。ツクール以外のゲーム制作ツールでの利用も明示的に許可されている。",
+    "png_paths": [
+      "./avatars/08-bougainvillea/*.png"
     ]
   }
 ]
