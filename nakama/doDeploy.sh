@@ -51,6 +51,51 @@ step() { echo ""; echo "${GREEN}━━━ $1 ━━━${RESET}"; }
 warn() { echo "${YELLOW}⚠️  $1${RESET}"; }
 fail() { echo "${RED}❌ $1${RESET}"; exit 1; }
 
+# ── 別 compose プロジェクトとの bind mount 衝突検査 ──
+# 過去、同一 VPS 上で複数環境を並行運用した際に、別ディレクトリから起動した
+# にもかかわらず同じ bind mount（./data/postgres-prod/）を掴んで DB が破壊された
+# 事故があった。起動前に他プロジェクトが $SCRIPT_DIR 配下を使用していないか検査する。
+preflight_bind_mount_check() {
+    local script_dir="$1"
+    local current_project="$2"
+    if ! command -v docker &>/dev/null; then
+        return 0  # 初回デプロイでは docker 未インストールのためスキップ
+    fi
+    local all_containers
+    all_containers=$(docker ps -aq 2>/dev/null || true)
+    [ -z "$all_containers" ] && return 0
+
+    local collisions="" cn proj
+    for cn in $all_containers; do
+        proj=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$cn" 2>/dev/null || echo "")
+        [ -z "$proj" ] && continue
+        [ "$proj" = "$current_project" ] && continue
+        local sources
+        sources=$(docker inspect --format '{{ range .Mounts }}{{ if eq .Type "bind" }}{{ .Source }}{{"\n"}}{{ end }}{{ end }}' "$cn" 2>/dev/null || true)
+        local src
+        while IFS= read -r src; do
+            [ -z "$src" ] && continue
+            case "$src" in
+                "$script_dir"|"$script_dir"/*)
+                    collisions+="  $cn (project=$proj): $src"$'\n'
+                    ;;
+            esac
+        done <<< "$sources"
+    done
+
+    if [ -n "$collisions" ]; then
+        echo "${RED}❌ 別 compose プロジェクトが ${script_dir} 配下を bind mount しています:${RESET}"
+        printf '%s' "$collisions"
+        echo ""
+        echo "対処:"
+        echo "  1. 衝突している環境を先に停止してください"
+        echo "     docker compose -p <project> down"
+        echo "  2. 各環境は別ディレクトリ（例: ~/mmo.tommie.jp と ~/mmo-test.tommie.jp）から"
+        echo "     異なる COMPOSE_PROJECT_NAME で起動する必要があります"
+        exit 1
+    fi
+}
+
 # ── 前提チェック ──
 if [ "$(id -u)" -eq 0 ]; then
     fail "root で実行しないでください。sudo 権限を持つ一般ユーザーで実行してください"
@@ -64,6 +109,10 @@ cd "$SCRIPT_DIR"
 # docker compose は cwd の .env を自動で読むので、COMPOSE_PROJECT_NAME は yml の name 解決で使用される
 CURRENT_PROJECT="${COMPOSE_PROJECT_NAME:-tommchat-prod}"
 echo "  project name: ${CURRENT_PROJECT}"
+
+# ── bind mount 衝突検査（destructive な操作の前に実行） ──
+preflight_bind_mount_check "$SCRIPT_DIR" "$CURRENT_PROJECT"
+
 if [ -f docker-compose.prod.yml ]; then
     docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
 fi
@@ -140,27 +189,102 @@ fi
 # ── 5. 環境変数の設定 ──
 step "5. 環境変数の設定"
 ENV_FILE="$SCRIPT_DIR/.env"
-# Bind mount でデータ永続化するため、.env が既にあれば再利用する
+# Bind mount でデータ永続化するため、.env が既にあれば再利用する。
+# ただし必須フィールドが欠けていれば都度生成して追記する
+# （例: .env に DEPLOY_HOSTNAME だけ書いた状態で実行しても落ちないように）。
 if [ -f "$ENV_FILE" ]; then
     echo ".env が既に存在します（再利用）"
     set -a; source "$ENV_FILE"; set +a
 else
-    PG_PASS=$(openssl rand -hex 16)
-    SERVER_KEY=tommie-chat
-    CONSOLE_PASS=$(openssl rand -hex 12)
-    MINIO_USER="minio-$(openssl rand -hex 4)"
-    MINIO_PASS=$(openssl rand -hex 16)
-    cat > "$ENV_FILE" <<EOV
-POSTGRES_PASSWORD=$PG_PASS
-NAKAMA_SERVER_KEY=$SERVER_KEY
-NAKAMA_CONSOLE_USER=admin
-NAKAMA_CONSOLE_PASS=$CONSOLE_PASS
-MINIO_ROOT_USER=$MINIO_USER
-MINIO_ROOT_PASSWORD=$MINIO_PASS
-EOV
-    set -a; source "$ENV_FILE"; set +a
-    echo "✅ .env 生成完了（初回生成）"
+    echo ".env が存在しません — 初回生成します"
+    : > "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
 fi
+
+# 必須フィールドを 1 項目ずつチェック。未設定・空文字なら生成して .env に追記する。
+ensure_env() {
+    local key="$1"
+    local value="$2"
+    local current
+    current=$(eval "printf '%s' \"\${${key}:-}\"")
+    if [ -n "$current" ]; then
+        return 0
+    fi
+    if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+        # .env には書かれているが空文字 → 警告のみ、上書きはしない
+        warn "${key} が .env に存在しますが空です（そのまま使用）"
+        eval "export ${key}=\"\$value\""
+        return 0
+    fi
+    echo "${key}=${value}" >> "$ENV_FILE"
+    eval "export ${key}=\"\$value\""
+    echo "  .env に ${key} を生成・追記"
+}
+
+ensure_env POSTGRES_PASSWORD    "$(openssl rand -hex 16)"
+ensure_env NAKAMA_SERVER_KEY    "tommie-chat"
+ensure_env NAKAMA_CONSOLE_USER  "admin"
+ensure_env NAKAMA_CONSOLE_PASS  "$(openssl rand -hex 12)"
+ensure_env MINIO_ROOT_USER      "minio-$(openssl rand -hex 4)"
+ensure_env MINIO_ROOT_PASSWORD  "$(openssl rand -hex 16)"
+
+# ── PORT_OFFSET 決定とポート番号の補完 ──
+# 同一 VPS 上で複数環境（prod + test 等）を動かす際のポート衝突を防ぐ。
+# 決定順:
+#   1. 環境変数 / .env の PORT_OFFSET が指定されていればそれを使用
+#   2. COMPOSE_PROJECT_NAME=tommchat-prod なら offset=0（正規のベースポート）
+#   3. それ以外はプロジェクト名の cksum から [1..9] を決定論的に算出
+# 各ポートは base + PORT_OFFSET*100 で割当てる。
+if [ -z "${PORT_OFFSET:-}" ]; then
+    if [ "$CURRENT_PROJECT" = "tommchat-prod" ]; then
+        PORT_OFFSET=0
+    else
+        _SUM=$(echo -n "$CURRENT_PROJECT" | cksum | awk '{print $1}')
+        PORT_OFFSET=$(( (_SUM % 9) + 1 ))
+        unset _SUM
+    fi
+fi
+case "$PORT_OFFSET" in
+    ''|*[!0-9]*) fail "PORT_OFFSET が数値ではありません: '${PORT_OFFSET}'" ;;
+esac
+if [ "$PORT_OFFSET" -lt 0 ] || [ "$PORT_OFFSET" -gt 9 ]; then
+    fail "PORT_OFFSET は 0〜9 の範囲で指定してください: ${PORT_OFFSET}"
+fi
+if ! grep -q '^PORT_OFFSET=' "$ENV_FILE" 2>/dev/null; then
+    echo "PORT_OFFSET=$PORT_OFFSET" >> "$ENV_FILE"
+    echo "  .env に PORT_OFFSET=$PORT_OFFSET を追記"
+fi
+export PORT_OFFSET
+
+ensure_port() {
+    local key="$1"
+    local base="$2"
+    local current
+    current=$(eval "printf '%s' \"\${${key}:-}\"")
+    if [ -n "$current" ]; then
+        return 0
+    fi
+    if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+        warn "${key} が .env に存在しますが空です（そのまま使用）"
+        return 0
+    fi
+    local val=$((base + PORT_OFFSET * 100))
+    echo "${key}=${val}" >> "$ENV_FILE"
+    eval "export ${key}=${val}"
+    echo "  .env に ${key}=${val} を追記"
+}
+
+ensure_port POSTGRES_PORT        5432
+ensure_port NAKAMA_PPROF_PORT    6060
+ensure_port NAKAMA_GRPC_PORT     7349
+ensure_port NAKAMA_API_PORT      7350
+ensure_port NAKAMA_CONSOLE_PORT  7351
+ensure_port WEB_PORT             8081
+ensure_port PROMETHEUS_PORT      9090
+ensure_port MINIO_S3_PORT        9000
+ensure_port MINIO_CONSOLE_PORT   9001
+
+echo "  port offset: ${PORT_OFFSET} (WEB=${WEB_PORT}, POSTGRES=${POSTGRES_PORT}, NAKAMA_API=${NAKAMA_API_PORT})"
 
 # ── DEPLOY_HOSTNAME 解決 ──
 # nginx.conf の Origin/Referer 検査で使用する公開ホスト名。

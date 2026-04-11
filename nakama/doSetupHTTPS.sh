@@ -8,8 +8,10 @@
 #   - VPS 上で実行する
 #
 # 構成:
-#   ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8081/HTTP) → Nakama
+#   ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (${WEB_PORT}/HTTP) → Nakama
 #   Docker nginx は HTTP のまま変更しない。HTTPS はホスト nginx が終端する。
+#   Docker nginx の公開ポートは nakama/.env の WEB_PORT で決まる（既定 8081）。
+#   複数環境（prod+staging 等）を同一 VPS で運用する場合は環境ごとに別ポートとする。
 
 case "${1:-}" in
     -h|--help|"")
@@ -17,8 +19,9 @@ case "${1:-}" in
         echo "  Let's Encrypt で HTTPS を設定します"
         echo ""
         echo "構成:"
-        echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8081/HTTP) → Nakama"
+        echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (\${WEB_PORT}/HTTP) → Nakama"
         echo "  Docker nginx.conf は変更しません"
+        echo "  プロキシ先のポートは nakama/.env の WEB_PORT を参照します（既定 8081）"
         echo ""
         echo "例: $0 mmo.tommie.jp"
         echo ""
@@ -32,6 +35,27 @@ set -euo pipefail
 
 DOMAIN="$1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# nakama/.env を読み込んで WEB_PORT / COMPOSE_PROJECT_NAME 等を取得
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+WEB_PORT="${WEB_PORT:-8081}"
+
+# WEB_PORT は 1-65535 の数値のみ許可（nginx 設定への注入防止）
+case "$WEB_PORT" in
+    ''|*[!0-9]*)
+        echo "❌ WEB_PORT が数値ではありません: '${WEB_PORT}'" >&2
+        exit 1 ;;
+esac
+if [ "$WEB_PORT" -lt 1 ] || [ "$WEB_PORT" -gt 65535 ]; then
+    echo "❌ WEB_PORT が範囲外です: ${WEB_PORT}" >&2
+    exit 1
+fi
 
 # ── 色付き出力 ──
 GREEN=$'\e[32m'
@@ -49,15 +73,14 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # Docker nginx が起動しているか
-cd "$SCRIPT_DIR"
 if ! docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --status running 2>/dev/null | grep -q web; then
     fail "Docker nginx (web) が起動していません。先に doDeploy.sh を実行してください"
 fi
 
-# Docker nginx (8081) に接続できるか
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/ --connect-timeout 3 --max-time 5 2>/dev/null)
+# Docker nginx (WEB_PORT) に接続できるか
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${WEB_PORT}/" --connect-timeout 3 --max-time 5 2>/dev/null)
 if [ "$HTTP_CODE" != "200" ]; then
-    fail "Docker nginx (8081) に接続できません (HTTP $HTTP_CODE)"
+    fail "Docker nginx (${WEB_PORT}) に接続できません (HTTP $HTTP_CODE)"
 fi
 
 # ── 1. ホスト nginx インストール ──
@@ -119,7 +142,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8081;
+        proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -173,7 +196,7 @@ echo ""
 echo "  URL: https://$DOMAIN"
 echo ""
 echo "構成:"
-echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (8081/HTTP) → Nakama"
+echo "  ブラウザ → ホスト nginx (443/HTTPS) → Docker nginx (${WEB_PORT}/HTTP) → Nakama"
 echo ""
 echo "確認:"
 echo "  curl -I https://$DOMAIN"
