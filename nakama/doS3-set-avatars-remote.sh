@@ -6,7 +6,7 @@
 #
 # パス解決はローカルで行い、PNG 本体を rsync で VPS の一時ディレクトリに転送、
 # SSH 経由で VPS 上の minio コンテナに投入する（VPS 側 jq/curl 不要）。
-SCRIPT_VERSION="2026-04-11c"
+SCRIPT_VERSION="2026-04-11d"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
@@ -202,10 +202,31 @@ done
 REMOTE_EOF
 echo "  ✅ 投入完了"
 
+# ── 3. 投入結果の確認 ──
+step "3. 投入結果の確認 (mc ls local/avatars/)"
+EXPECTED=${#RESOLVED[@]}
+LS_OUTPUT=$(ssh "${SSH_TARGET}" bash <<REMOTE_EOF
+set -eu
+cd ${REMOTE_DIR}/nakama
+COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+\$COMPOSE exec -T minio sh -c '
+    mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
+    mc ls local/avatars/
+' </dev/null
+REMOTE_EOF
+)
+echo "$LS_OUTPUT"
+ACTUAL=$(echo "$LS_OUTPUT" | grep -c '\.png$' || true)
+echo ""
+echo "  期待: ${EXPECTED} ファイル"
+echo "  実際: ${ACTUAL} ファイル"
+if [ "$ACTUAL" -lt "$EXPECTED" ]; then
+    fail "投入されたファイル数が期待より少ないです (${ACTUAL}/${EXPECTED})"
+fi
+echo "  ✅ 確認完了"
+
 echo ""
 echo "${GREEN}=========================================${RESET}"
 echo "${GREEN}  MinIO アバター投入完了 (${VPS_HOST})${RESET}"
+echo "${GREEN}  投入ファイル数: ${ACTUAL}${RESET}"
 echo "${GREEN}=========================================${RESET}"
-echo ""
-echo "確認:"
-echo "  ssh ${SSH_TARGET} 'cd ${REMOTE_DIR}/nakama && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T minio mc ls local/avatars/'"
