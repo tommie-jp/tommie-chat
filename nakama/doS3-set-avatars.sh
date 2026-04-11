@@ -44,8 +44,25 @@ JSON_FILE="$SCRIPT_DIR/avatars.json"
 command -v jq >/dev/null 2>&1 || fail "jq が必要です。apt install jq を実行してください"
 
 # ── JSON 検証 & パス抽出 ──
+# avatars.json はサイト単位のエントリを並べた配列。
+# 各エントリの png_paths を連結して 1 本のリストにする。
+# enable == false のエントリ（規約上使用不可）は除外する。
+# 旧形式（単一オブジェクト）との互換も残す。
 jq empty "$JSON_FILE" 2>/dev/null || fail "avatars.json の JSON 形式が不正です"
-mapfile -t PATHS < <(jq -r '.png_paths[]?' "$JSON_FILE")
+mapfile -t PATHS < <(jq -r '
+    if type == "array" then .[] | select(.enable != false) | .png_paths[]?
+    else select(.enable != false) | .png_paths[]?
+    end
+' "$JSON_FILE")
+# enable == false で除外されたエントリを警告表示
+mapfile -t DISABLED < <(jq -r '
+    if type == "array" then .[] | select(.enable == false) | .title // .site_url // "(no title)"
+    else if .enable == false then (.title // .site_url // "(no title)") else empty end
+    end
+' "$JSON_FILE")
+for d in "${DISABLED[@]}"; do
+    warn "規約上利用不可のためスキップ: $d"
+done
 
 # パスを解決（絶対化）し、プレースホルダと存在しないファイルを除外する
 # グロブ（*, ?, [...]）を含む場合は展開して複数ファイルに展開する
@@ -86,12 +103,23 @@ for p in "${PATHS[@]}"; do
     RESOLVED+=("$abs")
 done
 shopt -u nullglob
+# 重複パスを除去（複数サイトで同じファイルを参照した場合の保険）
+if [ ${#RESOLVED[@]} -gt 0 ]; then
+    mapfile -t RESOLVED < <(printf '%s\n' "${RESOLVED[@]}" | awk '!seen[$0]++')
+fi
 if [ ${#RESOLVED[@]} -eq 0 ]; then
     fail "avatars.json の png_paths に有効な PNG がありません（プレースホルダのままでは?）"
 fi
 
-SITE_URL=$(jq -r '.site_url // ""' "$JSON_FILE")
-echo "  source:    ${SITE_URL:-(none)}"
+SITE_URLS=$(jq -r '
+    if type == "array" then .[] | select(.enable != false) | .site_url // empty
+    else select(.enable != false) | .site_url // empty
+    end
+' "$JSON_FILE")
+if [ -n "$SITE_URLS" ]; then
+    echo "  sources:"
+    echo "$SITE_URLS" | sed 's/^/    - /'
+fi
 echo "  PNG count: ${#RESOLVED[@]}"
 
 # ── 起動中の compose 環境を判定 ──

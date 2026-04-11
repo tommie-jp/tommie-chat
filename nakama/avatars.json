@@ -1,16 +1,37 @@
-{
-  "title": "ぴぽや (Pipoya)",
-  "author": "ぴぽや (Pipoya)",
-  "author_url": "https://pipoya.net/",
-  "site_url": "https://pipoya.itch.io/pipoya-free-rpg-character-sprites-nekonin",
-  "terms_url": "https://pipoya.net/sozai/terms-of-use/",
-  "license": "ぴぽや倉庫 素材利用規約 (https://pipoya.net/sozai/terms-of-use/) / itch.io: For commercial or personal use. Not redistribute or resell this assets.",
-  "credit": "ぴぽや https://pipoya.net/",
-  "commercial_use": true,
-  "modification": true,
-  "redistribution": false,
-  "credit_required": false,
-  "png_paths": [
-    "./avatars/01-pipoya/*.png"
-  ]
-}
+[
+  {
+    "title": "ぴぽや (Pipoya)",
+    "author": "ぴぽや (Pipoya)",
+    "author_url": "https://pipoya.net/",
+    "site_url": "https://pipoya.itch.io/pipoya-free-rpg-character-sprites-nekonin",
+    "terms_url": "https://pipoya.net/sozai/terms-of-use/",
+    "license": "ぴぽや倉庫 素材利用規約 (https://pipoya.net/sozai/terms-of-use/) / itch.io: For commercial or personal use. Not redistribute or resell this assets.",
+    "credit": "ぴぽや https://pipoya.net/",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "enable": true,
+    "png_paths": [
+      "./avatars/01-pipoya/*.png"
+    ]
+  },
+  {
+    "title": "てきとーツクール素材",
+    "author": "mine",
+    "author_url": "http://tkool.kagati.com/",
+    "site_url": "http://tkool.kagati.com/",
+    "terms_url": "http://tkool.kagati.com/kiyaku",
+    "license": "てきとーツクール素材 利用規約 (http://tkool.kagati.com/kiyaku) / 規約範囲: RPGツクール MV/VX/VXAce の正規ユーザーがツクールシリーズで利用可。オリジナル素材はどなたでも利用可。/ 禁止: ツクール作品以外での使用（オリジナル素材を除く）、素材の未加工での再配布、素材単体での販売。",
+    "credit": "サイト名: てきとーツクール素材 / URL: http://tkool.kagati.com / 管理人: mine",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "usage_restriction": "RPGツクール作品での利用に限定（オリジナル素材を除く）。Webアプリ等のツクール以外での利用は規約違反の可能性あり。オリジナル素材のみ誰でも利用可。",
+    "enable": false,
+    "png_paths": [
+      "./avatars/02-tkool.kagati.com/*.png"
+    ]
+  }
+]
