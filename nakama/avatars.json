@@ -1,5 +1,6 @@
 [
   {
+    "no": "001",
     "enable": true,
     "title": "ぴぽや (Pipoya)",
     "author": "ぴぽや (Pipoya)",
@@ -17,6 +18,7 @@
     ]
   },
   {
+    "no": "002",
     "enable": false,
     "title": "てきとーツクール素材",
     "author": "mine",
@@ -35,6 +37,7 @@
     ]
   },
   {
+    "no": "003",
     "enable": false,
     "title": "ぴぽや倉庫 キャラクターチップ２",
     "author": "ぴぽや (Pipoya)",
@@ -53,6 +56,7 @@
     ]
   },
   {
+    "no": "004",
     "enable": false,
     "title": "OpenGameArt 32x32 RPG Character Sprites",
     "author": "Eldiran",
@@ -71,6 +75,7 @@
     ]
   },
   {
+    "no": "005",
     "enable": false,
     "title": "OpenGameArt CC0 Walk Cycles",
     "author": "Technopeasant",
@@ -89,6 +94,7 @@
     ]
   },
   {
+    "no": "006",
     "enable": false,
     "title": "ドット絵世界 (Pixel Art World)",
     "author": "yms",
@@ -107,6 +113,7 @@
     ]
   },
   {
+    "no": "007",
     "enable": false,
     "title": "DOT ILLUST (ドットイラスト)",
     "author": "nko",
@@ -126,6 +133,7 @@
     ]
   },
   {
+    "no": "008",
     "enable": false,
     "title": "BOUGAINVILLEA 素材置き場",
     "author": "BOUGAINVILLEA",
@@ -145,6 +153,7 @@
     ]
   },
   {
+    "no": "009",
     "enable": false,
     "title": "Kenney Roguelike Characters",
     "author": "Kenney",
@@ -163,6 +172,7 @@
     ]
   },
   {
+    "no": "010",
     "enable": false,
     "title": "DOTOWN",
     "author": "前田デザイン室 (Maeda Design Room)",
@@ -182,6 +192,7 @@
     ]
   },
   {
+    "no": "011",
     "enable": false,
     "title": "Liberated Pixel Cup (LPC) Base Assets",
     "author": "Lanea Zimmerman (Sharm), Stephen Challener (Redshrike), 他",
@@ -201,7 +212,8 @@
     ]
   },
   {
-    "enable": false,
+    "no": "012",
+    "enable": true,
     "title": "PIPOYA FREE RPG Character Sprites 32x32 (base pack)",
     "author": "ぴぽや (Pipoya)",
     "author_url": "https://pipoya.itch.io/",
@@ -219,7 +231,8 @@
     ]
   },
   {
-    "enable": false,
+    "no": "013",
+    "enable": true,
     "title": "アイストマトバズーカの素材置き場 (テントウムシ歩行グラフィック)",
     "author": "アイストマトバズーカ",
     "author_url": "https://icedtomatobazooka.site/sozai",
@@ -238,6 +251,7 @@
     ]
   },
   {
+    "no": "014",
     "enable": false,
     "title": "おにかしま 女性のRPG職業キャラチップ",
     "author": "おにかしま (@kamooni8)",
@@ -257,6 +271,7 @@
     ]
   },
   {
+    "no": "015",
     "enable": false,
     "title": "ゆるドラシル RPGツクール素材提供サイト",
     "author": "クローバーラボ株式会社",
@@ -274,6 +289,7 @@
     "png_paths": []
   },
   {
+    "no": "016",
     "enable": false,
     "title": "KOMODO Plaza MV用 無料アニマル素材集",
     "author": "KOMODO / Gotcha Gotcha Games",
@@ -291,6 +307,7 @@
     "png_paths": []
   },
   {
+    "no": "017",
     "enable": false,
     "title": "明日には忘れる RPGツクールMV用キャラチップ",
     "author": "明日には忘れる",
@@ -308,6 +325,7 @@
     "png_paths": []
   },
   {
+    "no": "018",
     "enable": false,
     "title": "梅子のお店 RPGツクールMZ,MV向け 兵士キャラチップ",
     "author": "梅子のお店",
@@ -325,6 +343,7 @@
     "png_paths": []
   },
   {
+    "no": "019",
     "enable": false,
     "title": "RPGツクール公式 製品同梱素材 (RTP)",
     "author": "Gotcha Gotcha Games (GGG)",
@@ -342,6 +361,7 @@
     "png_paths": []
   },
   {
+    "no": "020",
     "enable": false,
     "title": "エタナラ庫 (エタナラのツクールMZ・MV画像素材置き場)",
     "author": "エタナラ",
@@ -359,6 +379,7 @@
     "png_paths": []
   },
   {
+    "no": "021",
     "enable": false,
     "title": "Seliel the Shaper - Mana Seed Character Base / NPC Pack",
     "author": "Seliel the Shaper",
@@ -376,6 +397,7 @@
     "png_paths": []
   },
   {
+    "no": "022",
     "enable": false,
     "title": "Lanto RPG Maker MV Free Characters",
     "author": "Lanto",
@@ -393,6 +415,7 @@
     "png_paths": []
   },
   {
+    "no": "023",
     "enable": false,
     "title": "Matseb's Resources",
     "author": "Matseb2611",
@@ -410,6 +433,7 @@
     "png_paths": []
   },
   {
+    "no": "024",
     "enable": false,
     "title": "Despair Party Works M&! RPG Maker Spritefaces",
     "author": "Despair Party Works",
@@ -427,6 +451,7 @@
     "png_paths": []
   },
   {
+    "no": "025",
     "enable": false,
     "title": "LimeZu Modern Interiors / Exteriors",
     "author": "LimeZu",

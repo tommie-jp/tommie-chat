@@ -467,6 +467,7 @@ export class GameScene {
         // innerHTML をクリアするとキャッシュ済みの _elCdWorld / _elCdPos は
         // デタッチされるため、同時に参照も null 化しないと再構築ブランチが
         // スキップされ左下の部屋名・座標表示が消えたままになる。
+        this._elCoordDisplay = null;
         const cd = document.getElementById("coord-display");
         if (cd) cd.innerHTML = "";
         this._elCdWorld = null;
