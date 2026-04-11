@@ -464,8 +464,13 @@ export class GameScene {
         this.remoteSpeeches.clear();
         this.remoteNameUpdaters.clear();
         // 座標ツールチップをリセット（次フレームでワールドサイズに応じて再構築）
+        // innerHTML をクリアするとキャッシュ済みの _elCdWorld / _elCdPos は
+        // デタッチされるため、同時に参照も null 化しないと再構築ブランチが
+        // スキップされ左下の部屋名・座標表示が消えたままになる。
         const cd = document.getElementById("coord-display");
         if (cd) cd.innerHTML = "";
+        this._elCdWorld = null;
+        this._elCdPos = null;
     }
 
     /** 地面メッシュを現在のワールドサイズで再作成 */
