@@ -166,7 +166,7 @@ if command -v docker &>/dev/null; then
     echo "Docker 既にインストール済み: $(docker --version)"
 else
     sudo apt-get update
-    sudo apt-get install -y ca-certificates curl gnupg lsb-release
+    sudo apt-get install -y ca-certificates curl gnupg lsb-release jq
 
     sudo install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -184,7 +184,16 @@ else
     warn "docker グループの反映には再ログインが必要です"
 fi
 
-# ── 4. (予約: 将来の拡張用) ──
+# ── 4. jq インストール（doS3-set-avatars-remote.sh 等で使用） ──
+step "4. jq インストール"
+if command -v jq &>/dev/null; then
+    echo "jq 既にインストール済み: $(jq --version)"
+else
+    sudo apt-get update
+    sudo apt-get install -y jq
+    echo "✅ jq インストール完了"
+fi
+
 
 # ── 5. 環境変数の設定 ──
 step "5. 環境変数の設定"

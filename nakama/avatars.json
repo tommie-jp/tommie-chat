@@ -1,0 +1,16 @@
+{
+  "title": "ぴぽや (Pipoya)",
+  "author": "ぴぽや (Pipoya)",
+  "author_url": "https://pipoya.net/",
+  "site_url": "https://pipoya.itch.io/pipoya-free-rpg-character-sprites-nekonin",
+  "terms_url": "https://pipoya.net/sozai/terms-of-use/",
+  "license": "ぴぽや倉庫 素材利用規約 (https://pipoya.net/sozai/terms-of-use/) / itch.io: For commercial or personal use. Not redistribute or resell this assets.",
+  "credit": "ぴぽや https://pipoya.net/",
+  "commercial_use": true,
+  "modification": true,
+  "redistribution": false,
+  "credit_required": false,
+  "png_paths": [
+    "./avatars/01-pipoya/*.png"
+  ]
+}
