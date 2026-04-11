@@ -31,6 +31,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# ── 既存 .env の事前読み込み ──
+# docker compose は cwd の .env を自動で読むが、シェル側でも COMPOSE_PROJECT_NAME
+# 等を参照したいので明示的に読み込む。まだ存在しない場合は step 5 で生成する。
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
 # ── 色付き出力 ──
 GREEN=$'\e[32m'
 RED=$'\e[31m'
@@ -48,18 +58,21 @@ fi
 
 # ── 既存コンテナの停止（ポート競合防止） ──
 # Bind mount（./data/）を使用するため、データはコンテナ削除後も保持される
+# 複数環境が同一 VPS で動くため、COMPOSE_PROJECT_NAME に紐づくコンテナのみを対象にする。
 cd "$SCRIPT_DIR"
 
+# docker compose は cwd の .env を自動で読むので、COMPOSE_PROJECT_NAME は yml の name 解決で使用される
+CURRENT_PROJECT="${COMPOSE_PROJECT_NAME:-tommchat-prod}"
+echo "  project name: ${CURRENT_PROJECT}"
 if [ -f docker-compose.prod.yml ]; then
     docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
 fi
 docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
 docker compose down 2>/dev/null || true
-# 名前ベースでも残留コンテナを削除
-EXISTING=$(docker ps -aq --filter "name=nakama" 2>/dev/null; docker ps -aq --filter "name=tommchat-prod" 2>/dev/null)
-EXISTING=$(echo "$EXISTING" | sort -u | grep -v '^$' || true)
+# 名前ベースでも残留コンテナを削除（当該プロジェクトのみ）
+EXISTING=$(docker ps -aq --filter "name=${CURRENT_PROJECT}-" 2>/dev/null | sort -u | grep -v '^$' || true)
 if [ -n "$EXISTING" ]; then
-    warn "残留コンテナを削除します"
+    warn "残留コンテナを削除します (project=${CURRENT_PROJECT})"
     echo "$EXISTING" | xargs -r docker rm -f
 fi
 
@@ -149,6 +162,34 @@ EOV
     echo "✅ .env 生成完了（初回生成）"
 fi
 
+# ── DEPLOY_HOSTNAME 解決 ──
+# nginx.conf の Origin/Referer 検査で使用する公開ホスト名。
+# 解決順: 環境変数 > .env(DEPLOY_HOSTNAME) > `hostname -f`
+# 初回に確定した値は .env へ追記し、以降のデプロイで再利用する。
+if [ -z "${DEPLOY_HOSTNAME:-}" ]; then
+    DETECTED=$(hostname -f 2>/dev/null || true)
+    case "$DETECTED" in
+        ""|localhost|localhost.*)
+            fail "DEPLOY_HOSTNAME が未設定で hostname -f も有効な値を返しません。
+   DEPLOY_HOSTNAME=<公開ホスト名> bash doDeploy.sh の形式で指定するか、
+   nakama/.env に DEPLOY_HOSTNAME=mmo.tommie.jp 等を追記してください" ;;
+    esac
+    DEPLOY_HOSTNAME="$DETECTED"
+    warn "DEPLOY_HOSTNAME 未指定 — hostname -f から '${DEPLOY_HOSTNAME}' を使用"
+fi
+
+# 公開ホスト名は英数字・ドット・ハイフンのみ許可（nginx 設定への注入防止）
+case "$DEPLOY_HOSTNAME" in
+    *[!a-zA-Z0-9.-]*|""|.|..)
+        fail "DEPLOY_HOSTNAME が不正です: '${DEPLOY_HOSTNAME}'" ;;
+esac
+
+if ! grep -q '^DEPLOY_HOSTNAME=' "$ENV_FILE" 2>/dev/null; then
+    echo "DEPLOY_HOSTNAME=$DEPLOY_HOSTNAME" >> "$ENV_FILE"
+    echo "  .env に DEPLOY_HOSTNAME=$DEPLOY_HOSTNAME を追記"
+fi
+echo "  公開ホスト名: $DEPLOY_HOSTNAME"
+
 SERVER_KEY="${NAKAMA_SERVER_KEY}"
 CONSOLE_PASS="${NAKAMA_CONSOLE_PASS}"
 MINIO_USER="${MINIO_ROOT_USER}"
@@ -168,6 +209,8 @@ NGINX_CONF="$SCRIPT_DIR/nginx.conf"
 if [ ! -f "$NGINX_CONF.dev" ]; then
     cp "$NGINX_CONF" "$NGINX_CONF.dev"
 fi
+# Origin/Referer 正規表現用にホスト名のドットをエスケープ
+HOST_REGEX=$(echo "$DEPLOY_HOSTNAME" | sed 's/\./\\./g')
 cat > "$NGINX_CONF" <<'NGINX_EOF'
 server {
     listen 80;
@@ -231,8 +274,8 @@ server {
         # Origin or Referer が自サイト or localhost なら許可
         set $origin_ok "N";
         if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $origin_ok "Y"; }
-        if ($http_origin ~* "^https?://mmo\.tommie\.jp(:[0-9]+)?$") { set $origin_ok "Y"; }
-        if ($http_referer ~* "^https?://mmo\.tommie\.jp/") { set $origin_ok "Y"; }
+        if ($http_origin ~* "^https?://@@HOST_REGEX@@(:[0-9]+)?$") { set $origin_ok "Y"; }
+        if ($http_referer ~* "^https?://@@HOST_REGEX@@/") { set $origin_ok "Y"; }
         if ($origin_ok = "N") { return 403; }
 
         proxy_pass http://nakama:7350;
@@ -246,7 +289,7 @@ server {
     location /ws {
         set $origin_ok "N";
         if ($http_origin ~* "^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$") { set $origin_ok "Y"; }
-        if ($http_origin ~* "^https?://mmo\.tommie\.jp(:[0-9]+)?$") { set $origin_ok "Y"; }
+        if ($http_origin ~* "^https?://@@HOST_REGEX@@(:[0-9]+)?$") { set $origin_ok "Y"; }
         if ($origin_ok = "N") { return 403; }
 
         proxy_pass http://nakama:7350;
@@ -260,7 +303,12 @@ server {
     }
 }
 NGINX_EOF
-echo "✅ 本番用 nginx.conf 生成完了（/s3/ → MinIO プロキシ含む）"
+# プレースホルダをデプロイ対象ホスト名で置換
+sed -i "s|@@HOST_REGEX@@|${HOST_REGEX}|g" "$NGINX_CONF"
+if grep -q '@@HOST_REGEX@@' "$NGINX_CONF"; then
+    fail "nginx.conf のホスト名置換に失敗しました"
+fi
+echo "✅ 本番用 nginx.conf 生成完了（ホスト: ${DEPLOY_HOSTNAME} / /s3/ → MinIO プロキシ含む）"
 
 # ── 7. フロントエンド配置 ──
 step "7. フロントエンド配置"

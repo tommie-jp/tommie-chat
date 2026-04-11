@@ -4,7 +4,7 @@
 #
 # 開発環境（WSL2 Ubuntu 24.04）から実行する。
 # フロントエンドビルド → git clone → dist/ 転送 → doDeploy.sh を一括で行う。
-SCRIPT_VERSION="2026-04-11b"
+SCRIPT_VERSION="2026-04-11c"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 # 形式は doc/40-デプロイ手順.md 参照:
@@ -345,7 +345,9 @@ echo "✅ dist/ 転送完了"
 
 # ── 4. VPS で doDeploy.sh 実行 ──
 step "4. VPS で doDeploy.sh 実行（SSH 経由）"
-ssh -t "${SSH_TARGET}" "cd ${REMOTE_DIR}/nakama && bash doDeploy.sh"
+# DEPLOY_HOSTNAME を伝達し、リモート側 nginx.conf の Origin 検査を
+# デプロイ先ホスト名に合わせて生成させる（本番/ステージングで共通スクリプトを使うため）
+ssh -t "${SSH_TARGET}" "cd ${REMOTE_DIR}/nakama && DEPLOY_HOSTNAME=${VPS_HOST} bash doDeploy.sh"
 
 echo ""
 echo "${GREEN}=========================================${RESET}"

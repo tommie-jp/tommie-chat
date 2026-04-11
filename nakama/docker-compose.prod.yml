@@ -3,7 +3,20 @@
 # 使い方:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-name: tommchat-prod
+# 同一 VPS に複数環境（prod + staging 等）を並列運用する場合は、
+# nakama/.env で COMPOSE_PROJECT_NAME とポート番号を上書きする（doc/40 §4.3 参照）:
+#   COMPOSE_PROJECT_NAME=tommchat-test
+#   POSTGRES_PORT=5433
+#   NAKAMA_PPROF_PORT=6160
+#   NAKAMA_GRPC_PORT=7449
+#   NAKAMA_API_PORT=7450
+#   NAKAMA_CONSOLE_PORT=7451
+#   WEB_PORT=8082
+#   PROMETHEUS_PORT=9091
+#   MINIO_S3_PORT=9002
+#   MINIO_CONSOLE_PORT=9003
+#
+name: ${COMPOSE_PROJECT_NAME:-tommchat-prod}
 # 開発用の docker-compose.yml を変更せずに、本番向けの設定を上書きします。
 # - ポートを 127.0.0.1 バインド（nginx 以外は外部非公開）
 # - restart: unless-stopped（自動再起動）
@@ -13,7 +26,7 @@ services:
   postgres:
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - ./data/postgres-prod:/var/lib/postgresql/data # 本番用（dev とは別ディレクトリ）
     logging:
@@ -35,10 +48,10 @@ services:
         max-size: "50m"
         max-file: "3"
     ports:
-      - "127.0.0.1:6060:6060"
-      - "127.0.0.1:7349:7349"
-      - "127.0.0.1:7350:7350"
-      - "127.0.0.1:7351:7351"
+      - "127.0.0.1:${NAKAMA_PPROF_PORT:-6060}:6060"
+      - "127.0.0.1:${NAKAMA_GRPC_PORT:-7349}:7349"
+      - "127.0.0.1:${NAKAMA_API_PORT:-7350}:7350"
+      - "127.0.0.1:${NAKAMA_CONSOLE_PORT:-7351}:7351"
     entrypoint:
       - "/bin/sh"
       - "-ecx"
@@ -83,7 +96,7 @@ services:
   web:
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8081:80"
+      - "127.0.0.1:${WEB_PORT:-8081}:80"
     logging:
       driver: json-file
       options:
@@ -93,7 +106,7 @@ services:
   prometheus:
     restart: unless-stopped
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     logging:
       driver: json-file
       options:
@@ -103,8 +116,8 @@ services:
   minio:
     restart: unless-stopped
     ports:
-      - "127.0.0.1:9000:9000"  # S3 API（内部のみ）
-      - "127.0.0.1:9001:9001"  # Web管理コンソール（内部のみ）
+      - "127.0.0.1:${MINIO_S3_PORT:-9000}:9000"          # S3 API（内部のみ）
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"     # Web管理コンソール（内部のみ）
     logging:
       driver: json-file
       options:
