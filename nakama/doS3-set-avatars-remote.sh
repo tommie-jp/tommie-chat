@@ -6,7 +6,7 @@
 #
 # パス解決はローカルで行い、PNG 本体を rsync で VPS の一時ディレクトリに転送、
 # SSH 経由で VPS 上の minio コンテナに投入する（VPS 側 jq/curl 不要）。
-SCRIPT_VERSION="2026-04-11d"
+SCRIPT_VERSION="2026-04-11e"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
@@ -24,7 +24,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help)
             cat <<'EOF'
-Usage: ./nakama/doS3-set-avatars-remote.sh <VPSホスト> [SSHユーザー]
+Usage: ./nakama/doS3-set-avatars-remote.sh [-d <REMOTE_DIR>] <VPSホスト> [SSHユーザー]
 
 nakama/avatars.json の png_paths に列挙されたローカル PNG ファイルを
 VPS の MinIO の local/avatars/ バケットに投入する。
@@ -34,6 +34,10 @@ VPS の MinIO の local/avatars/ バケットに投入する。
                nakama/.env.deploy の DEPLOY_SSH_HOST で省略可
   SSHユーザー  SSHユーザー名
                解決順: 引数 > .env.deploy > "deploy"
+
+オプション:
+  -d, --dir <PATH>  VPS 上のインストール先ディレクトリ
+                    解決順: 引数 > .env.deploy(DEPLOY_REMOTE_DIR) > "~/<VPSホスト>"
 
 リモートディレクトリ:
   ~/<VPSホスト> をデフォルトとする（doDeploy-remote.sh と同じ規約）
@@ -56,6 +60,19 @@ EOF
         -v|--version)
             echo "doS3-set-avatars-remote.sh  version: ${SCRIPT_VERSION}"
             exit 0 ;;
+        -d|--dir)
+            if [ $# -lt 2 ] || [ -z "$2" ]; then
+                echo "❌ -d/--dir にはディレクトリパスが必要です" >&2
+                exit 1
+            fi
+            REMOTE_DIR="$2"
+            shift 2 ;;
+        --dir=*)
+            REMOTE_DIR="${1#--dir=}"
+            shift ;;
+        -d*)
+            REMOTE_DIR="${1#-d}"
+            shift ;;
         -*)
             echo "❌ 不明なオプション: $1" >&2
             exit 1 ;;
