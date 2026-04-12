@@ -1,6 +1,6 @@
 // アプリバージョン・更新日の定数（ここだけ変更する）
-var APP_VERSION = "0.1.25";
-var APP_DATE    = "2026/04/11";
+var APP_VERSION = "0.1.26";
+var APP_DATE    = "2026/04/12";
 
 document.title = "tommieChat " + APP_VERSION;
 
