@@ -265,7 +265,7 @@ else
     warn "docker グループの反映には再ログインが必要です"
 fi
 
-# ── 4. jq インストール（doS3-set-avatars-remote.sh 等で使用） ──
+# ── 4. jq インストール（doS3-set-avatars.sh 等で使用） ──
 step "4. jq インストール"
 if command -v jq &>/dev/null; then
     echo "jq 既にインストール済み: $(jq --version)"

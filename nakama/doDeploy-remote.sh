@@ -377,9 +377,9 @@ ssh -t "${SSH_TARGET}" "cd ${REMOTE_DIR}/nakama && DEPLOY_HOSTNAME=${VPS_HOST} b
 # avatars.json がプレースホルダのままや PNG ファイルが不在の場合は
 # スクリプトが失敗するが、デプロイ全体は継続する（best-effort）。
 step "5. アバター PNG を MinIO に投入"
-S3_SCRIPT="$SCRIPT_DIR/doS3-set-avatars-remote.sh"
+S3_SCRIPT="$SCRIPT_DIR/doS3-set-avatars.sh"
 if [ ! -x "$S3_SCRIPT" ]; then
-    warn "doS3-set-avatars-remote.sh が見つかりません（スキップ）"
+    warn "doS3-set-avatars.sh が見つかりません（スキップ）"
 else
     if ! "$S3_SCRIPT" -d "$REMOTE_DIR" "$VPS_HOST" "$SSH_USER"; then
         warn "アバター PNG の投入に失敗しました（デプロイは継続）"
