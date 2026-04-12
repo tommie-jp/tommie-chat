@@ -141,6 +141,7 @@ export function analyzeSheet(w: number, h: number): SheetInfo {
     '288x384': [96, 96, 1, 1],    // $ large single
     '192x256': [64, 64, 1, 1],    // $ medium single
     '96x128': [32, 32, 1, 1],     // $ small single
+    '144x256': [48, 64, 1, 1],    // $ single 48x64 (tall)
     // ── RPG Maker XP ───────────────────────────────────
     // 1-char, 4 frames x 4 dirs, frame 48x64
     // Note: 192x256 is already mapped above (MV takes priority in the map)
