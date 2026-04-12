@@ -11,7 +11,10 @@
 # 引数なし: ローカルの docker compose 環境に直接投入する。
 # 引数あり: パス解決はローカルで行い、PNG 本体を rsync で VPS に転送、
 # SSH 経由で VPS 上の minio コンテナに投入する（VPS 側 jq/curl 不要）。
-SCRIPT_VERSION="2026-04-12b"
+SCRIPT_VERSION="2026-04-13a"
+
+# 対応する画像拡張子
+IMG_EXTS="png jpg jpeg"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
@@ -185,15 +188,15 @@ for p in "${PATHS[@]}"; do
                 continue
             fi
             for m in "${matched[@]}"; do
-                case "$(basename -- "$m")" in
-                    *.png) [ -f "$m" ] && RESOLVED+=("$m") ;;
+                case "${m,,}" in
+                    *.png|*.jpg|*.jpeg) [ -f "$m" ] && RESOLVED+=("$m") ;;
                 esac
             done
             continue ;;
     esac
-    case "$(basename -- "$abs")" in
-        *.png) ;;
-        *) warn "PNG 拡張子ではないパスをスキップ: $p"; continue ;;
+    case "${abs,,}" in
+        *.png|*.jpg|*.jpeg) ;;
+        *) warn "対応外の拡張子をスキップ: $p"; continue ;;
     esac
     if [ ! -f "$abs" ]; then
         warn "ファイルが存在しません: $abs"
@@ -206,9 +209,9 @@ if [ ${#RESOLVED[@]} -gt 0 ]; then
     mapfile -t RESOLVED < <(printf '%s\n' "${RESOLVED[@]}" | awk '!seen[$0]++')
 fi
 if [ ${#RESOLVED[@]} -eq 0 ]; then
-    fail "avatars.json の png_paths に有効な PNG がありません（プレースホルダのまま?）"
+    fail "avatars.json の png_paths に有効な画像がありません（プレースホルダのまま?）"
 fi
-echo "  PNG count: ${#RESOLVED[@]}"
+echo "  image count: ${#RESOLVED[@]}"
 
 # enable != true 側のパスを解決して basename を集める（S3 からの削除候補）
 DISABLED_BASENAMES=()
@@ -226,14 +229,14 @@ for p in "${DISABLED_PATHS[@]}"; do
         *'*'*|*'?'*|*'['*)
             matched=($abs)
             for m in "${matched[@]}"; do
-                case "$(basename -- "$m")" in
-                    *.png) [ -f "$m" ] && DISABLED_BASENAMES+=("$(basename -- "$m")") ;;
+                case "${m,,}" in
+                    *.png|*.jpg|*.jpeg) [ -f "$m" ] && DISABLED_BASENAMES+=("$(basename -- "$m")") ;;
                 esac
             done
             continue ;;
     esac
-    case "$(basename -- "$abs")" in
-        *.png) DISABLED_BASENAMES+=("$(basename -- "$abs")") ;;
+    case "${abs,,}" in
+        *.png|*.jpg|*.jpeg) DISABLED_BASENAMES+=("$(basename -- "$abs")") ;;
     esac
 done
 shopt -u nullglob
@@ -268,7 +271,7 @@ if [ "$LOCAL_MODE" = true ]; then
     fi
 
     # ── 1. minio コンテナへ転送 & 投入 ──
-    $COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png'
+    $COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png /tmp/avatars-restore/*.jpg /tmp/avatars-restore/*.jpeg'
     n=0
     for f in "${RESOLVED[@]}"; do
         n=$((n + 1))
@@ -280,7 +283,11 @@ if [ "$LOCAL_MODE" = true ]; then
     $COMPOSE exec -T minio sh -c '
         mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
         mc mb --ignore-existing local/avatars >/dev/null
-        mc cp /tmp/avatars-restore/*.png local/avatars/ >/dev/null
+        for ext in png jpg jpeg; do
+            for f in /tmp/avatars-restore/*.$ext; do
+                [ -f "$f" ] && mc cp "$f" local/avatars/ >/dev/null
+            done
+        done
         rm -rf /tmp/avatars-restore
     '
 
@@ -314,7 +321,7 @@ if [ "$LOCAL_MODE" = true ]; then
         mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
         mc ls local/avatars/
     ')
-    ACTUAL=$(echo "$LS_OUTPUT" | grep -c '\.png$' || true)
+    ACTUAL=$(echo "$LS_OUTPUT" | grep -cE '\.(png|jpg|jpeg)$' || true)
     if [ "$ACTUAL" -lt "$EXPECTED" ]; then
         fail "投入されたファイル数が期待より少ないです (S3: ${ACTUAL} / enable: ${EXPECTED})"
     fi
@@ -364,10 +371,11 @@ if ! \$COMPOSE ps --status running 2>/dev/null | grep -q minio; then
     echo "❌ ${VPS_HOST} の MinIO コンテナが起動していません" >&2
     exit 1
 fi
-\$COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png' </dev/null
+\$COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png /tmp/avatars-restore/*.jpg /tmp/avatars-restore/*.jpeg' </dev/null
 n=0
 total=${EXPECTED}
-for f in ${REMOTE_TMP}/*.png; do
+for f in ${REMOTE_TMP}/*.png ${REMOTE_TMP}/*.jpg ${REMOTE_TMP}/*.jpeg; do
+    [ -f "\$f" ] || continue
     n=\$((n + 1))
     pct=\$((n * 100 / total))
     printf '\r\033[K  %2d%% %03d/%03d %s' "\$pct" "\$n" "\$total" "\$(basename -- "\$f")" >&2
@@ -377,7 +385,11 @@ printf '\r\033[K' >&2
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
     mc mb --ignore-existing local/avatars >/dev/null
-    mc cp /tmp/avatars-restore/*.png local/avatars/ >/dev/null
+    for ext in png jpg jpeg; do
+        for f in /tmp/avatars-restore/*.\$ext; do
+            [ -f "\$f" ] && mc cp "\$f" local/avatars/ >/dev/null
+        done
+    done
     rm -rf /tmp/avatars-restore
 ' </dev/null
 
@@ -421,7 +433,7 @@ COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 ' </dev/null
 REMOTE_EOF
 )
-ACTUAL=$(echo "$LS_OUTPUT" | grep -c '\.png$' || true)
+ACTUAL=$(echo "$LS_OUTPUT" | grep -cE '\.(png|jpg|jpeg)$' || true)
 if [ "$ACTUAL" -lt "$EXPECTED" ]; then
     fail "投入されたファイル数が期待より少ないです (S3: ${ACTUAL} / enable: ${EXPECTED})"
 fi
