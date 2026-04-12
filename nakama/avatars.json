@@ -467,5 +467,62 @@
     "exclusion_reason": "【除外】無料版は『私的プロジェクトのみ』に制限されており商用利用不可。有料版なら商用可だが、形式は 16×16 ベースの独自レイアウトでツクール形式ではない。",
     "note": "16×16 モダン設定のRPGタイルセット＋キャラクター。有料版は $14.99～。",
     "png_paths": []
+  },
+  {
+    "no": "026",
+    "enable": true,
+    "title": "AntumDeluge RPG Maker スプライト集 (OGA)",
+    "author": "Jordan Irwin (AntumDeluge), isaiah658, Tuomo Untinen, Sollision 他",
+    "author_url": "https://github.com/AntumDeluge/game-resources",
+    "site_url": "https://opengameart.org/users/antumdeluge",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 (Skeletons, Gnomes, Mages) / CC-BY 3.0 (Orcs, credit not required と記載)。パックにより異なるが大半が CC0。",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "note": "48×64 ピクセル・3コマ×4方向（S/W/E/N = RPG Maker 形式のシートを明示的に同梱）。Skeletons (複数バリエーション), Gnomes (帽子色違い), Orcs (戦士/槍兵/狩人/首長/商人/シャーマン等6種), Mages (明暗2バリエーション)。GitHub (AntumDeluge/game-resources) で一括 DL 可。N/E/S/W (Stendhal用) と S/W/E/N (RPG Maker用) の両フォーマットを提供。",
+    "png_paths": [
+      "./avatars/26-oga-antumdeluge-48x64/*.png"
+    ]
+  },
+  {
+    "no": "027",
+    "enable": false,
+    "title": "Eredah RPG Character Base 48x64 (OGA)",
+    "author": "kcilds (Rocetti / Eredah)",
+    "author_url": "https://opengameart.org/users/kcilds",
+    "site_url": "https://opengameart.org/content/eredah-rpg-character-base-48x64-ongoing",
+    "terms_url": "https://creativecommons.org/licenses/by/4.0/",
+    "license": "CC-BY 4.0 (Creative Commons Attribution 4.0)。クレジット表記: 'Eredah RPG Character Base by Rocetti'。",
+    "credit": "Eredah RPG Character Base by Rocetti",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": true,
+    "note": "48×64 ピクセルのキャラ生成用レイヤーベース。肌色バリエーション (黒/白/ペール/紅/緑/青/紫)、男女、エルフ耳、髪型サンプルを同梱。レイヤー合成でオリジナルキャラ生成が可能。プロジェクト進行中（髪型・服・帽子・動物特徴を追加予定）。",
+    "png_paths": [
+      "./avatars/27-oga-eredah-base-48x64/*.png"
+    ]
+  },
+  {
+    "no": "028",
+    "enable": false,
+    "title": "Agusstt Top-Down RPG Character Sprite (itch.io)",
+    "author": "Agusstt",
+    "author_url": "https://agusstt.itch.io/",
+    "site_url": "https://agusstt.itch.io/top-down-rpg-character-sprite-walk-idle-animation",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)。商用・個人利用とも自由。",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "note": "CC0 の4方向歩行＋アイドルアニメーション付きキャラクタースプライトシート。RPG Maker, Godot, Unity, GameMaker Studio 対応と明記されており、ツクール形式互換。無料。ファイルサイズが小さい（キャラ1体分のベース素材）。",
+    "png_paths": [
+      "./avatars/28-agusstt-topdown-rpg/*.png"
+    ]
   }
 ]

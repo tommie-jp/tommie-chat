@@ -139,13 +139,13 @@ mapfile -t PATHS < <(jq -r '
     else select(.enable == true) | .png_paths[]?
     end
 ' "$JSON_FILE")
-mapfile -t SKIPPED < <(jq -r '
-    if type == "array" then .[] | select(.enable != true) | .title // .site_url // "(no title)"
-    else if .enable != true then (.title // .site_url // "(no title)") else empty end
+mapfile -t ENABLED_TITLES < <(jq -r '
+    if type == "array" then .[] | select(.enable == true) | .title // .site_url // "(no title)"
+    else select(.enable == true) | (.title // .site_url // "(no title)")
     end
 ' "$JSON_FILE")
-for s in "${SKIPPED[@]}"; do
-    warn "enable != true のためスキップ: $s"
+for t in "${ENABLED_TITLES[@]}"; do
+    echo "  ✔ $t"
 done
 
 # enable != true エントリの png_paths（S3 から削除する候補）
@@ -268,6 +268,8 @@ if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
     rsync -az "$LOCAL_DEL_LIST" "${SSH_TARGET}:${REMOTE_TMP}/disabled.txt"
 fi
 
+EXPECTED=${#RESOLVED[@]}
+
 # ── 2. VPS の minio コンテナに投入 ──
 # heredoc の \$ はリモート bash に渡り、その先の sh -c '...' 内の $VAR は
 # minio コンテナの環境変数を参照する。
@@ -282,9 +284,15 @@ if ! \$COMPOSE ps --status running 2>/dev/null | grep -q minio; then
     exit 1
 fi
 \$COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png' </dev/null
+n=0
+total=${EXPECTED}
 for f in ${REMOTE_TMP}/*.png; do
-    \$COMPOSE cp "\$f" minio:/tmp/avatars-restore/ </dev/null
+    n=\$((n + 1))
+    pct=\$((n * 100 / total))
+    printf '\r\033[K  %2d%% %03d/%03d %s' "\$pct" "\$n" "\$total" "\$(basename -- "\$f")" >&2
+    \$COMPOSE cp "\$f" minio:/tmp/avatars-restore/ </dev/null >/dev/null 2>&1
 done
+printf '\r\033[K' >&2
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
     mc mb --ignore-existing local/avatars >/dev/null
@@ -292,25 +300,36 @@ done
     rm -rf /tmp/avatars-restore
 ' </dev/null
 
-# enable != true のエントリを S3 から削除
-if [ -f "${REMOTE_TMP}/disabled.txt" ]; then
-    \$COMPOSE cp "${REMOTE_TMP}/disabled.txt" minio:/tmp/avatars-disabled.txt </dev/null
-    \$COMPOSE exec -T minio sh -c '
-        mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
-        while IFS= read -r name; do
-            [ -z "\$name" ] && continue
-            case "\$name" in */*|*..*) continue ;; esac
-            if mc stat "local/avatars/\$name" >/dev/null 2>&1; then
-                mc rm "local/avatars/\$name" >/dev/null
-            fi
-        done < /tmp/avatars-disabled.txt
-        rm -f /tmp/avatars-disabled.txt
-    ' </dev/null
-fi
 REMOTE_EOF
 
-# ── 3. 投入結果の確認（件数のみ） ──
-EXPECTED=${#RESOLVED[@]}
+# ── 2b. enable != true のエントリを S3 から削除 ──
+ACTUALLY_DELETED=0
+if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
+    ACTUALLY_DELETED=$(ssh "${SSH_TARGET}" bash <<REMOTE_EOF2
+set -eu
+cd ${REMOTE_DIR}/nakama
+COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+\$COMPOSE cp "${REMOTE_TMP}/disabled.txt" minio:/tmp/avatars-disabled.txt </dev/null >/dev/null 2>&1
+\$COMPOSE exec -T minio sh -c '
+    mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
+    removed=0
+    while IFS= read -r name; do
+        [ -z "\$name" ] && continue
+        case "\$name" in */*|*..*) continue ;; esac
+        if mc stat "local/avatars/\$name" >/dev/null 2>&1; then
+            mc rm "local/avatars/\$name" >/dev/null && removed=\$((removed + 1))
+        fi
+    done < /tmp/avatars-disabled.txt
+    rm -f /tmp/avatars-disabled.txt
+    echo "\$removed"
+' </dev/null
+REMOTE_EOF2
+)
+    ACTUALLY_DELETED=$(echo "$ACTUALLY_DELETED" | tr -dc '0-9')
+    : "${ACTUALLY_DELETED:=0}"
+fi
+
+# ── 3. 投入結果の確認 ──
 LS_OUTPUT=$(ssh "${SSH_TARGET}" bash <<REMOTE_EOF
 set -eu
 cd ${REMOTE_DIR}/nakama
@@ -323,6 +342,10 @@ REMOTE_EOF
 )
 ACTUAL=$(echo "$LS_OUTPUT" | grep -c '\.png$' || true)
 if [ "$ACTUAL" -lt "$EXPECTED" ]; then
-    fail "投入されたファイル数が期待より少ないです (${ACTUAL}/${EXPECTED})"
+    fail "投入されたファイル数が期待より少ないです (S3: ${ACTUAL} / enable: ${EXPECTED})"
 fi
-echo "  ✅ MinIO アバター投入完了 (${ACTUAL}/${EXPECTED})"
+if [ "$ACTUALLY_DELETED" -gt 0 ]; then
+    echo "  ✅ MinIO アバター: enable ${ACTUAL}/${EXPECTED}, disable ${ACTUALLY_DELETED} 削除"
+else
+    echo "  ✅ MinIO アバター: ${ACTUAL}/${EXPECTED}"
+fi
