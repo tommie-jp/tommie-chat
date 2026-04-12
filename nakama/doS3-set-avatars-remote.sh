@@ -240,9 +240,6 @@ if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
         } | awk '$1=="E"{skip[$2]=1; next} $1=="D" && !skip[$2] && !seen[$2]++ {print $2}'
     )
 fi
-if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
-    echo "  disable count: ${#DISABLED_BASENAMES[@]}"
-fi
 
 # ── 0. SSH 接続テスト ──
 if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "${SSH_TARGET}" "echo ok" >/dev/null 2>&1; then
