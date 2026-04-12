@@ -39,7 +39,8 @@ nakama/log
 nakama/backup/
 # アバター PNG 素材（配布元のライセンスで再配布不可のため git 管理外）
 nakama/avatars/
-
+# ドット絵素材（配布元のライセンスで再配布不可のため git 管理外）
+nakama/dot/
 # --- Temporary / Work ---
 *.tmp
 *.bak
