@@ -13,6 +13,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "32x32",
+    "total": 10,
     "png_paths": [
       "./avatars/01-pipoya/*.png"
     ]
@@ -31,6 +33,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "32x32",
+    "total": null,
     "usage_restriction": "RPGツクール作品での利用に限定（オリジナル素材を除く）。Webアプリ等のツクール以外での利用は規約違反の可能性あり。オリジナル素材のみ誰でも利用可。",
     "png_paths": [
       "./avatars/02-tkool.kagati.com/*.png"
@@ -50,6 +54,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "32x32",
+    "total": null,
     "note": "32×32 PNG、4方向3パターン歩行アニメ。出力画像＋α セット、猫にんセット、男女/老人/子供基本パーツ等を含む。",
     "png_paths": [
       "./avatars/03-pipoya-charachip2/*.png"
@@ -69,6 +75,8 @@
     "modification": true,
     "redistribution": true,
     "credit_required": false,
+    "size": "32x32",
+    "total": 20,
     "note": "32×32 ピクセル、20種前後のキャラクター（walking / standing / charging）。CC0 のため無制限。",
     "png_paths": [
       "./avatars/04-oga-eldiran-32x32/*.png"
@@ -88,6 +96,8 @@
     "modification": true,
     "redistribution": true,
     "credit_required": false,
+    "size": "32x32",
+    "total": null,
     "note": "CC0 ライセンスの4方向歩行キャラクター集。クレジット任意だが慣例として記載推奨。",
     "png_paths": [
       "./avatars/05-oga-cc0-walk-cycles/*.png"
@@ -107,6 +117,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": true,
+    "size": "32x32",
+    "total": null,
     "note": "ドットが小さい。ツクール/ウディタ等あらゆるゲーム制作ツールで利用可。Webアプリ配布時はスタッフロール等1か所にサイト名とURLの表示が必要。",
     "png_paths": [
       "./avatars/06-dotartworld/*.png"
@@ -126,6 +138,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "32x32",
+    "total": null,
     "usage_restriction": "1制作物あたり30点まで無料。重複使用は1点としてカウント。31点以上使う場合は作者へ有償対応の相談が必要。",
     "note": "Webゲーム/Webアプリでの利用を明示的に許可。5000点以上の素材を公開。",
     "png_paths": [
@@ -146,6 +160,8 @@
     "modification": false,
     "redistribution": false,
     "credit_required": false,
+    "size": "48x48",
+    "total": null,
     "usage_restriction": "素材の加工（分解して一部のみ抜き出す等）は不可。位置調整や色調変更の範囲に留める必要あり。",
     "note": "RPGツクールMV/MZ用キャラチップ素材を中心に配布。ツクール以外のゲーム制作ツールでの利用も明示的に許可されている。",
     "png_paths": [
@@ -166,6 +182,8 @@
     "modification": true,
     "redistribution": true,
     "credit_required": false,
+    "size": "16x16",
+    "total": 450,
     "note": "形式が違うので使えない。450 種類のキャラクタースプライトをスプライトシート形式で配布。CC0 のため無制限に利用可能。Kenney は CC0 ゲーム素材の老舗サイト。",
     "png_paths": [
       "./avatars/09-kenney-roguelike-characters/*.png"
@@ -185,6 +203,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "32x32",
+    "total": null,
     "usage_restriction": "NFT化不可、Scratch プラットフォームでの使用不可、直リンク不可、素材を含むロゴの商標登録不可。",
     "note": "ドットが小さすぎて使えない。前田デザイン室運営のドット絵フリー素材サイト。人物・動物・モンスター等のキャラクター素材が多数。",
     "png_paths": [
@@ -205,6 +225,8 @@
     "modification": true,
     "redistribution": true,
     "credit_required": true,
+    "size": "32x32",
+    "total": null,
     "usage_restriction": "CC-BY-SA の継承条項により、改変・派生したスプライト画像自体は CC-BY-SA 3.0 (または互換ライセンス) で配布する必要がある。ゲームコード本体は対象外だが、改変版スプライトを配布・公開する場合は同じライセンスを付与すること。CREDITS.TXT に記載された全作者をクレジットする必要あり。",
     "note": "2012年 Liberated Pixel Cup コンペの成果物。32×32 ベースのトップダウン RPG 用スプライトシート。多様な体型・装備バリエーションあり。Universal LPC Spritesheet Generator で組み合わせ生成が可能。",
     "png_paths": [
@@ -225,6 +247,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "32x32",
+    "total": 64,
     "note": "64 キャラクター・32×32 ピクセル・3コマ×4方向歩行アニメーション（ツクール形式）。基本 64 キャラのベースパック（既存の 01 nekonin とは別のパック）。作者が『PNGが読み込めるツールなら何でも使える』と明言しておりツクール以外のエンジン/Webゲームでも利用可。",
     "png_paths": [
       "./avatars/12-pipoya-32x32-base/*.png"
@@ -244,6 +268,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": true,
+    "size": "48x48",
+    "total": 1,
     "usage_restriction": "原型が無くなる程の改変は禁止（AI学習素材としての使用も含む）。Web等に掲載時はクレジット表記必須。",
     "note": "透明の処理が上手くいかない。小さい。48×48 ピクセル・3コマ×4方向（RPGツクールMZ 規格）のテントウムシ歩行キャラチップ。無料。『RPGツクール以外にも使用して頂けます』と明記されている貴重なMZ規格素材。",
     "png_paths": [
@@ -264,6 +290,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "48x48",
+    "total": null,
     "usage_restriction": "企業利用時はクレジット表記必須。原型がわからなくなるほどの切り取り・改変は不可。",
     "note": "¥400 の有料素材。RPGツクールMV/MZ 対応（48×48 3コマ×4方向形式）。女性のRPG職業キャラチップ。3頭身・2頭身の2バリエーション。『ゲーム・漫画・動画・アイコン、なんでもご利用ください』と明記されツクール以外での利用を明確に許可。",
     "png_paths": [
@@ -284,6 +312,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "32x32",
+    "total": null,
     "exclusion_reason": "【除外】商用利用が禁止されているため、本プロジェクト（商用Web MMO）では使用不可。素材提供も 2025-01-08 に終了済み。",
     "note": "1000種類以上のキャラチップ素材があったが、規約で商用利用禁止。",
     "png_paths": []
@@ -302,6 +332,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "48x48",
+    "total": null,
     "exclusion_reason": "【除外】ツクール以外での利用不可・ツクール以外での商用不可が EULA で明示されており、Web MMO では使用不可。",
     "note": "RPGツクールMV規格のアニマル（動物/モンスター）キャラチップ素材。ツクール内限定。",
     "png_paths": []
@@ -320,6 +352,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "48x48",
+    "total": null,
     "exclusion_reason": "【除外】無料・48×48のツクール形式素材だが、商品ページに商用利用の可否および RPGツクール以外での利用可否が明記されていない。リスク回避のため採用せず。",
     "note": "青年/子どもの2サイズ、耳違いバージョンあり。無料。",
     "png_paths": []
@@ -338,6 +372,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "48x48",
+    "total": null,
     "exclusion_reason": "【除外】無料・48×48・商用可と表記されているが、RPGツクール以外での利用可否が明記されていない。ツクール MZ/MV 向けと銘打たれているため、非ツクールエンジンでの利用は規約外のリスクあり。",
     "note": "無料の48×48兵士キャラチップ。",
     "png_paths": []
@@ -356,6 +392,8 @@
     "modification": false,
     "redistribution": false,
     "credit_required": true,
+    "size": "48x48",
+    "total": null,
     "exclusion_reason": "【除外】正規ユーザー条件（RPGツクール製品を公式購入済みであること）が前提。さらに改変素材の商用利用禁止の縛りがあり、Webアプリでキャラカスタマイズ機能を提供する本プロジェクトとは相性が悪い。原形保持でキャラチップをそのまま使うなら利用可能だが、運用負荷が高い。",
     "note": "2023-05 規約改訂で『一部素材を除き、製品本体同梱素材を弊社製品以外でも利用可能』となった。ただし正規購入者限定。",
     "png_paths": []
@@ -374,6 +412,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": true,
+    "size": "48x48",
+    "total": null,
     "exclusion_reason": "【除外】規約で『ツクール関連製品以外には利用できません』と明示されており、Web MMO では使用不可。",
     "note": "RPGツクールMV/MZ 専用。商用・改変・クレジット必須。",
     "png_paths": []
@@ -392,6 +432,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "64x64",
+    "total": null,
     "exclusion_reason": "【除外】規約自体は非常にクリアで Web ゲーム利用可能だが、スプライト形式が 64×64 セル内に約 32px 高のキャラを配置する『paper doll レイヤー構成』で、3コマ×4方向のツクール形式ではない。ツクール形式を要件とする本プロジェクトには不適合。",
     "note": "Mana Seed シリーズ。一部有料 (1購入 = 1ゲーム)。無料作品は制限なし。Web3利用不可。",
     "png_paths": []
@@ -410,6 +452,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": false,
+    "size": "48x48",
+    "total": null,
     "exclusion_reason": "【除外】規約に『any RPG Maker MV project』と明示的に制限されている。作者本人は『Unity でも使える』とコメントしているが、コメント欄で『Enterbrain 著作権で RPG Maker 用途に限定される』との指摘もあり、法的に不確実。採用不可。",
     "note": "48×48 キャラチップ（顔・歩行・ダメージ・バトラー含む）を無料配布。",
     "png_paths": []
@@ -428,6 +472,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": true,
+    "size": "32x32",
+    "total": null,
     "exclusion_reason": "【除外】タイル・キャラスプライトの多くが RPGツクールVX/Ace の RTP 素材を改変・拡張したもので、RTP の利用条件を継承する。結果としてツクール正規ユーザー限定となり、本プロジェクトでは採用不可。",
     "note": "RPG Maker VX/Ace 向け素材。MVでもスケーリングで利用可。",
     "png_paths": []
@@ -446,6 +492,8 @@
     "modification": true,
     "redistribution": true,
     "credit_required": true,
+    "size": "48x48",
+    "total": null,
     "exclusion_reason": "【除外】RPGツクールMV/MZ のキャラクタージェネレータ用パーツが中心で、利用にはツクール MV/MZ 本体の所有が前提。事前組み立て済みスプライトを非ツクールで使う場合も、派生元のジェネレータ素材がツクール限定のため、法的に不確実。",
     "note": "45パーツの MV/MZ ジェネレータ拡張素材。事前組み立て済みスプライトも同梱。",
     "png_paths": []
@@ -464,6 +512,8 @@
     "modification": true,
     "redistribution": false,
     "credit_required": true,
+    "size": "16x16",
+    "total": null,
     "exclusion_reason": "【除外】無料版は『私的プロジェクトのみ』に制限されており商用利用不可。有料版なら商用可だが、形式は 16×16 ベースの独自レイアウトでツクール形式ではない。",
     "note": "16×16 モダン設定のRPGタイルセット＋キャラクター。有料版は $14.99～。",
     "png_paths": []
@@ -482,6 +532,8 @@
     "modification": true,
     "redistribution": true,
     "credit_required": false,
+    "size": "48x64",
+    "total": 68,
     "note": "48×64 ピクセル・3コマ×4方向（S/W/E/N = RPG Maker 形式のシートを明示的に同梱）。Skeletons (複数バリエーション), Gnomes (帽子色違い), Orcs (戦士/槍兵/狩人/首長/商人/シャーマン等6種), Mages (明暗2バリエーション)。GitHub (AntumDeluge/game-resources) で一括 DL 可。N/E/S/W (Stendhal用) と S/W/E/N (RPG Maker用) の両フォーマットを提供。",
     "png_paths": [
       "./avatars/26-oga-antumdeluge-48x64/*.png"
@@ -501,6 +553,8 @@
     "modification": true,
     "redistribution": true,
     "credit_required": true,
+    "size": "48x64",
+    "total": null,
     "note": "48×64 ピクセルのキャラ生成用レイヤーベース。肌色バリエーション (黒/白/ペール/紅/緑/青/紫)、男女、エルフ耳、髪型サンプルを同梱。レイヤー合成でオリジナルキャラ生成が可能。プロジェクト進行中（髪型・服・帽子・動物特徴を追加予定）。",
     "png_paths": [
       "./avatars/27-oga-eredah-base-48x64/*.png"
@@ -520,9 +574,68 @@
     "modification": true,
     "redistribution": true,
     "credit_required": false,
+    "size": "48x48",
+    "total": 1,
     "note": "CC0 の4方向歩行＋アイドルアニメーション付きキャラクタースプライトシート。RPG Maker, Godot, Unity, GameMaker Studio 対応と明記されており、ツクール形式互換。無料。ファイルサイズが小さい（キャラ1体分のベース素材）。",
     "png_paths": [
       "./avatars/28-agusstt-topdown-rpg/*.png"
     ]
+  },
+  {
+    "no": "029",
+    "enable": false,
+    "title": "Eldiran 32x32 RPG Character Sprites (OGA)",
+    "author": "Eldiran",
+    "author_url": "https://opengameart.org/users/eldiran",
+    "site_url": "https://opengameart.org/content/32x32-rpg-character-sprites",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)。完全自由利用。",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "size": "32x32",
+    "total": 20,
+    "note": "NG:ツクール形式ではなかった。32×32 ピクセルの RPG キャラクタースプライト 20 体。歩行・立ち・チャージポーズ収録。兵士キャラはジャンプ・45度方向アニメ付き。半数のみ東西歩行フレームあり。Stendhal ゲームでも採用実績あり。",
+    "png_paths": []
+  },
+  {
+    "no": "030",
+    "enable": false,
+    "title": "CraftPix Free Top-Down Character Packs",
+    "author": "CraftPix.net",
+    "author_url": "https://craftpix.net/",
+    "site_url": "https://craftpix.net/freebies/",
+    "terms_url": "https://craftpix.net/file-licenses/",
+    "license": "CraftPix Royalty-Free License。商用・個人プロジェクトで利用可。ウェブサイト・アプリケーション利用を明示的に許可。クレジット不要。素材ファイル単体の再配布・再販禁止。",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "size": "48x48",
+    "total": null,
+    "note": "NG:ツクール形式ではなさそう。無料パック複数あり（Swordsman, Orc, Warrior 等）。トップダウン4方向の歩行・アイドル・攻撃・死亡アニメ付き。PSD+PNG 形式。ツクール標準の 3×4 グリッドではなく独自レイアウトのため、変換が必要。ライセンスで「game projects, elements for websites, applications」と Web アプリ利用を明記。",
+    "png_paths": []
+  },
+  {
+    "no": "031",
+    "enable": false,
+    "title": "Piepzeru 48x48 Top-Down Walking Spritesheet",
+    "author": "Piepzeru Studios",
+    "author_url": "https://piepzeru.itch.io/",
+    "site_url": "https://piepzeru.itch.io/48x48-top-down-pixel-art-free-walking",
+    "terms_url": "https://piepzeru.itch.io/48x48-top-down-pixel-art-free-walking",
+    "license": "作者独自ライセンス。「個人・商用プロジェクトで自由に利用可」と明記。エンジン制限なし。",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "size": "48x48",
+    "total": 1,
+    "note": "NG:ツクール形式ではない。位置を変換すれば使えそうではある。48×48 ピクセルのトップダウン歩行スプライトシート。無料（Name Your Own Price, $0 最低額）。4方向歩行アニメ対応。作者初の公開素材。キャラ数は限定的。グリッドレイアウトの詳細は要確認。",
+    "png_paths": []
   }
 ]
