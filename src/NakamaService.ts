@@ -524,7 +524,23 @@ export class NakamaService {
 
             // サーバ発行トークンからセッションを復元
             this.session = Session.restore(token, "");
-            console.log("snd switchToGoogleAccount: restored session as", this.session.username);
+            const newUsername = this.session.username ?? "";
+            console.log("snd switchToGoogleAccount: restored session as", newUsername);
+
+            // このデバイスを Google アカウントにリンク（リロード後も同じアカウントに戻れるようにする）
+            const newDeviceId = this.getOrCreateDeviceId(newUsername);
+            try {
+                await this.client.linkDevice(this.session, { id: newDeviceId });
+                console.log("snd switchToGoogleAccount: linked device for", newUsername);
+            } catch (e) {
+                // "already in use" は既にリンク済み → 問題なし
+                const msg = e instanceof Error ? e.message : String(e);
+                if (!msg.includes("already")) {
+                    console.warn("switchToGoogleAccount: linkDevice failed:", e);
+                }
+            }
+            // loginName を更新（Cookie 更新は UIPanel 側で行う）
+            this.loginName = newUsername;
 
             // WebSocket 再接続
             const useSSL = location.protocol === "https:";

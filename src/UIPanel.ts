@@ -584,6 +584,14 @@ export function setupHtmlUI(game: GameScene): void {
                             const dnInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
                             if (dnInput) dnInput.value = result.displayName;
                         }
+                        // loginName Cookie とログイン入力を切り替え先のユーザー名に更新
+                        // （リロード後も同じアカウントに戻れるようにする）
+                        const newUsername = game.nakama.getSession()?.username ?? "";
+                        if (newUsername) {
+                            setCookie("loginName", newUsername);
+                            if (loginNameInput) loginNameInput.value = newUsername;
+                            game.updatePlayerNameTag(newUsername);
+                        }
                         setLinkResult("✅ Google 認証済みアカウントに切り替えました");
                         await renderAccountStatus();
                         return;
