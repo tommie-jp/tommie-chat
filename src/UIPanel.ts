@@ -484,6 +484,10 @@ export function setupHtmlUI(game: GameScene): void {
             const savedEl  = document.getElementById("account-info-saved");
             const googleEl = document.getElementById("account-info-google");
             const deviceEl = document.getElementById("account-info-device");
+            const googleRow = document.getElementById("account-info-google-row");
+            const unlinkRow = document.getElementById("account-info-unlink-row");
+            const deviceRow = document.getElementById("account-info-device-row");
+            const linkRow  = document.getElementById("account-info-link-row");
             const linkBtn  = document.getElementById("googleLinkBtn") as HTMLButtonElement | null;
             const unlinkBtn = document.getElementById("googleUnlinkBtn") as HTMLButtonElement | null;
             const refreshBtn = document.getElementById("accountRefreshBtn") as HTMLButtonElement | null;
@@ -499,38 +503,46 @@ export function setupHtmlUI(game: GameScene): void {
                 }
                 try {
                     const st = await game.nakama.getAccountStatus();
-                    savedEl.textContent  = st.saved ? "✅ 保存済み" : "⚠️ 仮アカウント（未保存）";
-                    googleEl.textContent = st.hasGoogle
-                        ? (st.email ? `✅ ${st.email}` : "✅ リンク済み")
-                        : "未リンク";
-                    // デバイス一覧を表示（現在のブラウザを明示）
-                    if (deviceEl) {
+                    // 状態行: 認証方式を表示
+                    savedEl.textContent = st.hasGoogle
+                        ? "✅Googleアカウント認証"
+                        : st.hasDevice ? "✅デバイス認証" : "⚠️ 仮アカウント（未保存）";
+                    // Google認証済み: Googleアカウント行・解除行・デバイス行を表示、認証ボタン行を非表示
+                    // 未リンク: 認証ボタン行のみ表示
+                    const linked = st.hasGoogle;
+                    if (googleRow) googleRow.style.display = linked ? "flex" : "none";
+                    if (linked) {
+                        googleEl.textContent = st.email ? `✅ ${st.email}` : "✅ リンク済み";
+                    }
+                    if (unlinkRow) unlinkRow.style.display = linked && st.hasDevice ? "" : "none";
+                    if (deviceRow) deviceRow.style.display = linked ? "" : "none";
+                    if (linkRow) linkRow.style.display = linked ? "none" : "";
+                    if (deviceEl && st.hasGoogle) {
                         const myDeviceId = game.nakama.getCurrentDeviceId();
                         const devs = st.devices;
+                        // デバイス一覧のサブリストをクリア（再描画時にゴミが残らないように）
+                        const parent = deviceEl.parentElement;
+                        const oldList = parent?.querySelector(".device-list");
+                        if (oldList) oldList.remove();
+
                         if (devs.length === 0) {
-                            deviceEl.textContent = "なし";
+                            deviceEl.textContent = st.hasDevice ? "1台" : "なし";
                         } else {
                             const short = (id: string) => id.length > 8 ? id.slice(0, 4) + "…" + id.slice(-4) : id;
                             const lines = devs.map(id =>
                                 id === myDeviceId ? `📱 ${short(id)} ← このブラウザ` : `📱 ${short(id)}`
                             );
                             deviceEl.textContent = `${devs.length}台`;
-                            // 既存の子ノードをクリアして一覧を挿入
-                            const parent = deviceEl.parentElement;
                             if (parent) {
-                                let listEl = parent.querySelector(".device-list") as HTMLDivElement | null;
-                                if (!listEl) {
-                                    listEl = document.createElement("div");
-                                    listEl.className = "device-list";
-                                    listEl.style.cssText = "font-size:10px;color:#666;margin-top:2px;padding-left:12px;line-height:1.5;";
-                                    parent.appendChild(listEl);
-                                }
-                                listEl.textContent = "";
+                                const listEl = document.createElement("div");
+                                listEl.className = "device-list";
+                                listEl.style.cssText = "font-size:10px;color:#666;margin-top:2px;padding-left:12px;line-height:1.5;";
                                 for (const line of lines) {
                                     const d = document.createElement("div");
                                     d.textContent = line;
                                     listEl.appendChild(d);
                                 }
+                                parent.appendChild(listEl);
                             }
                         }
                     }
@@ -544,20 +556,8 @@ export function setupHtmlUI(game: GameScene): void {
                             linkResultEl.textContent = `サーバ：設定エラー:${String(oauthErr).padStart(3, "0")}`;
                             linkResultEl.style.color = "#c00";
                         }
-                    } else if (linkBtn) {
-                        linkBtn.disabled = st.hasGoogle;
-                        if (!st.hasGoogle) {
-                            linkBtn.style.opacity = "";
-                            linkBtn.style.cursor = "";
-                        }
-                        if (st.hasGoogle) linkBtn.textContent = "🅖 Google 認証済み";
-                        if (linkResultEl && !st.hasGoogle && oauthErr === 0) {
-                            linkResultEl.textContent = "";
-                        }
-                    }
-                    // 紐付け解除ボタン: Google リンク済みかつ他の認証手段がある場合のみ表示
-                    if (unlinkBtn) {
-                        unlinkBtn.style.display = st.hasGoogle && st.hasDevice ? "" : "none";
+                    } else if (linkResultEl && !linked && oauthErr === 0) {
+                        linkResultEl.textContent = "";
                     }
                 } catch (e) {
                     console.warn("getAccountStatus failed:", e);
@@ -571,7 +571,18 @@ export function setupHtmlUI(game: GameScene): void {
             game.nakama.onMatchReconnect = ((prev) => () => { prev?.(); void renderAccountStatus(); })(game.nakama.onMatchReconnect);
 
             if (refreshBtn) {
-                refreshBtn.addEventListener("click", () => { void renderAccountStatus(); });
+                refreshBtn.addEventListener("click", async () => {
+                    refreshBtn.disabled = true;
+                    refreshBtn.style.opacity = "0.5";
+                    refreshBtn.textContent = "⏳";
+                    try {
+                        await renderAccountStatus();
+                    } finally {
+                        refreshBtn.textContent = "↻";
+                        refreshBtn.disabled = false;
+                        refreshBtn.style.opacity = "";
+                    }
+                });
             }
             // メニューからサーバ設定パネルを開いたときにも最新化
             const srvMenuBtn = document.getElementById("menu-serversettings");
@@ -685,7 +696,7 @@ export function setupHtmlUI(game: GameScene): void {
                     setLinkResult("紐付け解除中...");
                     try {
                         await game.nakama.unlinkGoogle();
-                        setLinkResult("✅ Google 紐付けを解除しました");
+                        setLinkResult("✅ Google 連携を解除しました");
                         await renderAccountStatus();
                     } catch (e) {
                         console.warn("unlinkGoogle failed:", e);
