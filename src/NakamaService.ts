@@ -652,14 +652,14 @@ export class NakamaService {
     }
 
     /** ワールド一覧を取得 */
-    async getWorldList(): Promise<{ worlds: { id: number; name: string; chunkCountX: number; chunkCountZ: number; ownerUid: string; ownerName: string; playerCount: number }[]; adminUids: string[] }> {
-        if (!this.socket) return { worlds: [], adminUids: [] };
+    async getWorldList(): Promise<{ worlds: { id: number; name: string; chunkCountX: number; chunkCountZ: number; ownerUid: string; ownerName: string; playerCount: number }[]; isAdmin: boolean }> {
+        if (!this.socket) return { worlds: [], isAdmin: false };
         const r = await this.socket.rpc("getWorldList");
         if (r?.payload) {
-            const data = JSON.parse(r.payload) as { worlds?: { id: number; name: string; chunkCountX: number; chunkCountZ: number; ownerUid: string; ownerName: string; playerCount: number }[]; adminUids?: string[] };
-            return { worlds: data.worlds ?? [], adminUids: data.adminUids ?? [] };
+            const data = JSON.parse(r.payload) as { worlds?: { id: number; name: string; chunkCountX: number; chunkCountZ: number; ownerUid: string; ownerName: string; playerCount: number }[]; isAdmin?: boolean };
+            return { worlds: data.worlds ?? [], isAdmin: data.isAdmin ?? false };
         }
-        return { worlds: [], adminUids: [] };
+        return { worlds: [], isAdmin: false };
     }
 
     /** 部屋を作成 */

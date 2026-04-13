@@ -1195,9 +1195,35 @@ func initValidationConfig(ctx context.Context) {
 		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID, maxDisplayNameLen, maxTextureUrlLen, maxArraySize, len(adminUIDs), len(adminEmails))
 }
 
-// isAdmin は管理者UIDかどうかを返す
-func isAdmin(uid string) bool {
+// isAdminByUID は ADMIN_UIDS による管理者判定（Google未設定環境用フォールバック）
+func isAdminByUID(uid string) bool {
 	return adminUIDs[uid]
+}
+
+// isAdminByEmail は Google 認証済みかつ ADMIN_EMAILS に一致するかを判定する（サーバ権威）
+// ctx, nk を必要とするため RPC ハンドラ内でのみ使用可能
+func isAdminByEmail(ctx context.Context, nk runtime.NakamaModule, uid string) bool {
+	if len(adminEmails) == 0 {
+		return false
+	}
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "account_ext", Key: "google", UserID: uid,
+	}})
+	if err != nil || len(objs) == 0 {
+		return false
+	}
+	var ge struct {
+		Email string `json:"email"`
+	}
+	if jErr := json.Unmarshal([]byte(objs[0].Value), &ge); jErr != nil || ge.Email == "" {
+		return false
+	}
+	return adminEmails[strings.ToLower(ge.Email)]
+}
+
+// isAdmin は管理者かどうかを判定する（ADMIN_UIDS || ADMIN_EMAILS）
+func isAdmin(ctx context.Context, nk runtime.NakamaModule, uid string) bool {
+	return isAdminByUID(uid) || isAdminByEmail(ctx, nk, uid)
 }
 
 // pendingLeaveMsg は遅延送信中の leave システムメッセージ
@@ -2653,12 +2679,11 @@ func rpcGetWorldList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 			list[i].PlayerCount = v.(int)
 		}
 	}
-	// 管理者UIDリスト
-	admins := make([]string, 0, len(adminUIDs))
-	for uid := range adminUIDs {
-		admins = append(admins, uid)
-	}
-	b, _ := json.Marshal(map[string]interface{}{"worlds": list, "adminUids": admins})
+	// 呼び出し元ユーザーの管理者判定（サーバ権威）
+	callerUID, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	callerIsAdmin := isAdmin(ctx, nk, callerUID)
+
+	b, _ := json.Marshal(map[string]interface{}{"worlds": list, "isAdmin": callerIsAdmin})
 	return string(b), nil
 }
 
@@ -2724,7 +2749,7 @@ func rpcDeleteRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 		return "", runtime.NewError("world not found", 5)
 	}
 	// 権限チェック: 管理者 or 作成者のみ削除可
-	if !isAdmin(uid) && w.OwnerUID != uid {
+	if !isAdmin(ctx, nk, uid) && w.OwnerUID != uid {
 		return "", runtime.NewError("permission denied", 7)
 	}
 	// プレイヤーがいる部屋は削除不可
@@ -2928,13 +2953,6 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 					logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
 				}
 			}
-			// 管理者メール判定: ADMIN_EMAILS に一致すれば adminUIDs に追加
-			if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Email != "" {
-				if adminEmails[strings.ToLower(claims.Email)] {
-					adminUIDs[existingUID] = true
-					logger.Info("rpcLinkGoogleByCode: admin email detected, added uid=%s email=%s", existingUID, claims.Email)
-				}
-			}
 			logger.Info("rpcLinkGoogleByCode: already linked, switching uid=%s → %s (%s) displayName=%q", uid, existingUID, existingUsername, googleName)
 			out, _ := json.Marshal(map[string]interface{}{
 				"linked":        false,
@@ -2945,14 +2963,6 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 			return string(out), nil
 		}
 		return "", runtime.NewError("link failed", 9)
-	}
-
-	// 管理者メール判定: ADMIN_EMAILS に一致すれば adminUIDs に追加
-	if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Email != "" {
-		if adminEmails[strings.ToLower(claims.Email)] {
-			adminUIDs[uid] = true
-			logger.Info("rpcLinkGoogleByCode: admin email detected, added uid=%s email=%s", uid, claims.Email)
-		}
 	}
 
 	// Google プロフィールの表示名・メールアドレスを保存
