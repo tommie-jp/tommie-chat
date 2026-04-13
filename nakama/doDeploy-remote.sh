@@ -299,7 +299,7 @@ echo "✅ リポジトリ準備完了"
 
 # ── 3. dist/ を VPS に転送 ──
 step "3. dist/ を VPS に転送（rsync）"
-rsync -avz --delete "$ROOT_DIR/dist/" "${SSH_TARGET}:${REMOTE_DIR}/dist/" | show_progress
+rsync -avz --outbuf=L --delete "$ROOT_DIR/dist/" "${SSH_TARGET}:${REMOTE_DIR}/dist/" | show_progress
 echo "✅ dist/ 転送完了"
 
 # ── 4. VPS で doDeploy.sh 実行 ──
