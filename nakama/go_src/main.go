@@ -2930,12 +2930,19 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		return "", runtime.NewError("link failed", 9)
 	}
 
-	// Google プロフィール名で表示名を更新
-	if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Name != "" {
-		if updateErr := nk.AccountUpdateId(ctx, uid, "", nil, claims.Name, "", "", "", ""); updateErr != nil {
-			logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
-		} else {
-			logger.Info("rpcLinkGoogleByCode: updated displayName=%q uid=%s", claims.Name, uid)
+	// Google プロフィールの表示名・メールアドレスを保存
+	if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil {
+		if claims.Name != "" {
+			if updateErr := nk.AccountUpdateId(ctx, uid, "", nil, claims.Name, "", "", "", ""); updateErr != nil {
+				logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
+			} else {
+				logger.Info("rpcLinkGoogleByCode: updated displayName=%q uid=%s", claims.Name, uid)
+			}
+		}
+		if claims.Email != "" {
+			if _, dbErr := db.ExecContext(ctx, "UPDATE users SET email = $1 WHERE id = $2", claims.Email, uid); dbErr != nil {
+				logger.Warn("rpcLinkGoogleByCode: save email failed: %v", dbErr)
+			}
 		}
 	}
 
