@@ -482,6 +482,7 @@ export function setupHtmlUI(game: GameScene): void {
             const googleEl = document.getElementById("account-info-google");
             const deviceEl = document.getElementById("account-info-device");
             const linkBtn  = document.getElementById("googleLinkBtn") as HTMLButtonElement | null;
+            const unlinkBtn = document.getElementById("googleUnlinkBtn") as HTMLButtonElement | null;
             const refreshBtn = document.getElementById("accountRefreshBtn") as HTMLButtonElement | null;
             const linkResultEl = document.getElementById("googleLinkResult");
 
@@ -520,6 +521,10 @@ export function setupHtmlUI(game: GameScene): void {
                         if (linkResultEl && !st.hasGoogle && oauthErr === 0) {
                             linkResultEl.textContent = "";
                         }
+                    }
+                    // 紐付け解除ボタン: Google リンク済みかつ他の認証手段がある場合のみ表示
+                    if (unlinkBtn) {
+                        unlinkBtn.style.display = st.hasGoogle && st.hasDevice ? "" : "none";
                     }
                 } catch (e) {
                     console.warn("getAccountStatus failed:", e);
@@ -623,6 +628,25 @@ export function setupHtmlUI(game: GameScene): void {
                             setLinkResult("認証中断: " + (err instanceof Error ? err.message : String(err)), true);
                         }
                     );
+                });
+            }
+
+            // ─── Google 紐付け解除ボタン ───
+            if (unlinkBtn) {
+                unlinkBtn.addEventListener("click", async () => {
+                    if (!confirm("Google アカウントの紐付けを解除しますか？\n（デバイス認証は残ります）")) return;
+                    setLinkResult("紐付け解除中...");
+                    try {
+                        await game.nakama.unlinkGoogle();
+                        setLinkResult("✅ Google 紐付けを解除しました");
+                        await renderAccountStatus();
+                    } catch (e) {
+                        console.warn("unlinkGoogle failed:", e);
+                        const msg = e instanceof Error ? e.message
+                            : (e && typeof e === "object" && "message" in e) ? String((e as { message: unknown }).message)
+                            : JSON.stringify(e);
+                        setLinkResult("解除失敗: " + msg, true);
+                    }
                 });
             }
 

@@ -494,6 +494,16 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    /** Google アカウントの紐付けを解除する。 */
+    async unlinkGoogle(): Promise<void> {
+        const _end = prof("NakamaService.unlinkGoogle");
+        try {
+            console.log("snd unlinkGoogle");
+            if (!this.socket) throw new Error("no socket");
+            await this.socket.rpc("unlinkGoogle");
+        } finally { _end(); }
+    }
+
     /**
      * サーバが発行したセッショントークンを使って既存アカウントに切り替える。
      * 現在のセッション（デバイス認証）を破棄し、Google 紐付き済みユーザーとして再接続する。

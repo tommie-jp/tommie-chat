@@ -2973,6 +2973,36 @@ func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB,
 	return string(out), nil
 }
 
+// rpcUnlinkGoogle は現在のユーザーから Google アカウントの紐付けを解除する。
+// デバイス認証が残っていない場合はロックアウト防止のため拒否する。
+func rpcUnlinkGoogle(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcUnlinkGoogle")()
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("not authenticated", 16)
+	}
+	acc, err := nk.AccountGetId(ctx, uid)
+	if err != nil {
+		return "", runtime.NewError("account fetch failed", 13)
+	}
+	user := acc.GetUser()
+	if user == nil || user.GetGoogleId() == "" {
+		return "", runtime.NewError("no google account linked", 9)
+	}
+	// ロックアウト防止: 他に認証手段がなければ解除不可
+	if len(acc.GetDevices()) == 0 && acc.GetEmail() == "" && (user.GetAppleId() == "") {
+		return "", runtime.NewError("cannot unlink: no other auth method", 9)
+	}
+	// google_id を直接クリア（nk.UnlinkGoogle は Google ID token が必要なため SQL で実施）
+	if _, err := db.ExecContext(ctx, "UPDATE users SET google_id = '' WHERE id = $1 AND google_id != ''", uid); err != nil {
+		logger.Warn("rpcUnlinkGoogle: SQL failed uid=%s: %v", uid, err)
+		return "", runtime.NewError("unlink failed", 13)
+	}
+	logger.Info("rpcUnlinkGoogle: unlinked google from uid=%s", uid)
+	out, _ := json.Marshal(map[string]interface{}{"unlinked": true})
+	return string(out), nil
+}
+
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// バリデーション設定の読み込み（runtime.env から）
@@ -3123,6 +3153,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"deleteRoom", rpcDeleteRoom},
 		{"listOnlinePlayers", rpcListOnlinePlayers},
 		{"linkGoogleByCode", rpcLinkGoogleByCode},
+		{"unlinkGoogle", rpcUnlinkGoogle},
 		{"getAccountStatus", rpcGetAccountStatus},
 	}
 	for _, r := range rpcs {
