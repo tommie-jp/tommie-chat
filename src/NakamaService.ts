@@ -611,10 +611,10 @@ export class NakamaService {
     /**
      * 現在のアカウントが「保存済み」(Google/Apple/Email のいずれかにリンク済み) かを取得する。
      */
-    async getAccountStatus(): Promise<{ saved: boolean; hasGoogle: boolean; hasApple: boolean; hasEmail: boolean; hasDevice: boolean; email: string; devices: string[]; devicePlatforms: Record<string, string> }> {
+    async getAccountStatus(): Promise<{ saved: boolean; hasGoogle: boolean; hasApple: boolean; hasEmail: boolean; hasDevice: boolean; email: string; devices: string[]; devicePlatforms: Record<string, string>; isAdmin: boolean }> {
         const _end = prof("NakamaService.getAccountStatus");
         try {
-            const empty = { saved: false, hasGoogle: false, hasApple: false, hasEmail: false, hasDevice: false, email: "", devices: [] as string[], devicePlatforms: {} as Record<string, string> };
+            const empty = { saved: false, hasGoogle: false, hasApple: false, hasEmail: false, hasDevice: false, email: "", devices: [] as string[], devicePlatforms: {} as Record<string, string>, isAdmin: false };
             if (!this.socket) return empty;
             const r = await this.socket.rpc("getAccountStatus");
             if (r?.payload) {
@@ -629,6 +629,7 @@ export class NakamaService {
                     email:     d.email     ?? "",
                     devices:   Array.isArray(d.devices) ? d.devices : [],
                     devicePlatforms: (dp && typeof dp === "object" && !Array.isArray(dp)) ? dp : {},
+                    isAdmin:   d.isAdmin   ?? false,
                 };
             }
             return empty;

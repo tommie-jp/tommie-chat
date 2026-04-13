@@ -506,9 +506,13 @@ export function setupHtmlUI(game: GameScene): void {
                 try {
                     const st = await game.nakama.getAccountStatus();
                     // 状態行: 認証方式を表示
-                    savedEl.textContent = st.hasGoogle
-                        ? "✅Googleアカウント認証"
-                        : st.hasDevice ? "✅デバイス認証" : "⚠️ 仮アカウント（未保存）";
+                    if (st.hasGoogle && st.isAdmin) {
+                        savedEl.innerHTML = '✅Googleアカウント認証（<span style="color:#c00;font-weight:bold;">管理者</span>）';
+                    } else {
+                        savedEl.textContent = st.hasGoogle
+                            ? "✅Googleアカウント認証"
+                            : st.hasDevice ? "✅デバイス認証" : "⚠️ 仮アカウント（未保存）";
+                    }
                     // Google認証済み: Googleアカウント行・解除行・デバイス行を表示、認証ボタン行を非表示
                     // 未リンク: 認証ボタン行のみ表示
                     const linked = st.hasGoogle;

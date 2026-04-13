@@ -3131,6 +3131,7 @@ func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		"email":           googleEmail,
 		"devices":         deviceIDs,
 		"devicePlatforms": devicePlatforms,
+		"isAdmin":         isAdmin(ctx, nk, uid),
 	})
 	return string(out), nil
 }
