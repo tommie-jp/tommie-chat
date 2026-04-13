@@ -2886,13 +2886,29 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 	// aud 検証は BeforeLinkGoogle フックで行うので、ここでは直接呼び出す。
 	if err := nk.LinkGoogle(ctx, uid, tok.IDToken); err != nil {
 		logger.Warn("rpcLinkGoogleByCode: LinkGoogle uid=%s: %v", uid, err)
-		// エラーメッセージに内部情報が含まれる可能性があるので generic に。
-		// 重複リンクだけはクライアントに分かるよう判別する。
-		msg := "link failed"
+		// 重複リンク（別ユーザーが既に同じ Google アカウントをリンク済み）の場合、
+		// サーバ側で既存アカウントのセッショントークンを発行し、
+		// クライアントがそのアカウントに切り替えられるようにする。
 		if strings.Contains(err.Error(), "already") {
-			msg = "this google account is already linked to another user"
+			existingUID, existingUsername, _, authErr := nk.AuthenticateGoogle(ctx, tok.IDToken, "", false)
+			if authErr != nil {
+				logger.Warn("rpcLinkGoogleByCode: AuthenticateGoogle for switch failed: %v", authErr)
+				return "", runtime.NewError("account switch failed", 13)
+			}
+			token, _, tokenErr := nk.AuthenticateTokenGenerate(existingUID, existingUsername, 0, nil)
+			if tokenErr != nil {
+				logger.Warn("rpcLinkGoogleByCode: AuthenticateTokenGenerate failed: %v", tokenErr)
+				return "", runtime.NewError("token generation failed", 13)
+			}
+			logger.Info("rpcLinkGoogleByCode: already linked, switching uid=%s → %s (%s)", uid, existingUID, existingUsername)
+			out, _ := json.Marshal(map[string]interface{}{
+				"linked":        false,
+				"alreadyLinked": true,
+				"token":         token,
+			})
+			return string(out), nil
 		}
-		return "", runtime.NewError(msg, 9)
+		return "", runtime.NewError("link failed", 9)
 	}
 
 	logger.Info("rpcLinkGoogleByCode: linked uid=%s", uid)

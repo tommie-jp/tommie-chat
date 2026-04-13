@@ -475,17 +475,65 @@ export class NakamaService {
      * doc/53-設計-認証システム.md §13 参照。
      * @param code         クライアント側で取得した OAuth2 認可コード
      * @param redirectUri  認可リクエストで使用した redirect_uri と完全一致させる
+     * @returns linked=true なら紐付け成功、alreadyLinked=true なら別ユーザーが既にリンク済み
      */
-    async linkGoogleByCode(code: string, redirectUri: string): Promise<void> {
+    async linkGoogleByCode(code: string, redirectUri: string): Promise<{ linked: boolean; alreadyLinked?: boolean; token?: string }> {
         const _end = prof("NakamaService.linkGoogleByCode");
         try {
             console.log("snd linkGoogleByCode");
             if (!this.socket) throw new Error("no socket");
             const r = await this.socket.rpc("linkGoogleByCode", JSON.stringify({ code, redirectUri }));
             if (r?.payload) {
-                const data = JSON.parse(r.payload) as { linked?: boolean };
+                const data = JSON.parse(r.payload) as { linked?: boolean; alreadyLinked?: boolean; token?: string };
+                if (data.alreadyLinked && data.token) {
+                    return { linked: false, alreadyLinked: true, token: data.token };
+                }
                 if (!data.linked) throw new Error("link failed");
             }
+            return { linked: true };
+        } finally { _end(); }
+    }
+
+    /**
+     * サーバが発行したセッショントークンを使って既存アカウントに切り替える。
+     * 現在のセッション（デバイス認証）を破棄し、Google 紐付き済みユーザーとして再接続する。
+     * @param token サーバ側 AuthenticateTokenGenerate で生成されたセッション JWT
+     */
+    async switchToGoogleAccount(token: string): Promise<void> {
+        const _end = prof("NakamaService.switchToGoogleAccount");
+        try {
+            console.log("snd switchToGoogleAccount");
+            // 現在のソケットを切断（再接続ループを防止）
+            this.reconnecting = true;
+            if (this.socket) {
+                this.socket.disconnect(true);
+                this.socket = null;
+            }
+            this.matchId = null;
+            this.selfSessionId = null;
+
+            // サーバ発行トークンからセッションを復元
+            this.session = Session.restore(token, "");
+            console.log("snd switchToGoogleAccount: restored session as", this.session.username);
+
+            // WebSocket 再接続
+            const useSSL = location.protocol === "https:";
+            this.socket = this.client.createSocket(useSSL, false);
+            this.socket.setHeartbeatTimeoutMs(60000);
+            await this.socket.connect(this.session, true);
+            this.setupSocketHandlers();
+
+            this.selfSessionId = (this.session as unknown as { session_id?: string }).session_id ?? "";
+            this.reconnecting = false;
+
+            // マッチ再参加
+            const meta = this.getReconnectMeta?.() ?? {};
+            await this.joinWorldMatch(meta);
+            console.log("snd switchToGoogleAccount: rejoined match");
+            this.onMatchReconnect?.();
+        } catch (e) {
+            this.reconnecting = false;
+            throw e;
         } finally { _end(); }
     }
 

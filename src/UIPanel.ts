@@ -557,7 +557,16 @@ export function setupHtmlUI(game: GameScene): void {
                 setLinkResult("認可完了 → サーバ側でリンク処理中...");
                 try {
                     const redirectUri = location.origin + "/oauth-callback.html";
-                    await game.nakama.linkGoogleByCode(code, redirectUri);
+                    const result = await game.nakama.linkGoogleByCode(code, redirectUri);
+                    if (result.alreadyLinked && result.token) {
+                        // 別ユーザーが既にこの Google アカウントをリンク済み
+                        // → サーバ発行トークンでそのアカウントに切り替え
+                        setLinkResult("既存アカウントに切り替え中...");
+                        await game.nakama.switchToGoogleAccount(result.token);
+                        setLinkResult("✅ Google 認証済みアカウントに切り替えました");
+                        await renderAccountStatus();
+                        return;
+                    }
                     setLinkResult("✅ Google アカウントを紐付けました");
                     await renderAccountStatus();
                 } catch (e) {
