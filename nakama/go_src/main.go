@@ -1152,6 +1152,7 @@ var (
 	maxBlockID     = 255 // 有効ブロックID上限 (MAX_BLOCK_ID)
 	maxChatLen     = 200 // チャット文字数上限 (MAX_CHAT_LEN)
 	adminUIDs      = map[string]bool{} // 管理者UIDセット (ADMIN_UIDS, カンマ区切り)
+	adminEmails    = map[string]bool{} // 管理者メールセット (ADMIN_EMAILS, カンマ区切り)
 )
 
 func initValidationConfig(ctx context.Context) {
@@ -1181,8 +1182,17 @@ func initValidationConfig(ctx context.Context) {
 			}
 		}
 	}
-	logf("validationConfig: MAX_CHAT_LEN=%d RATE_LIMIT_CHAT=%d RATE_LIMIT_BLOCK=%d RATE_LIMIT_MOVE=%d MAX_BLOCK_ID=%d MAX_DISPLAY_NAME_LEN=%d MAX_TEXTURE_URL_LEN=%d MAX_ARRAY_SIZE=%d ADMIN_UIDS=%d人\n",
-		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID, maxDisplayNameLen, maxTextureUrlLen, maxArraySize, len(adminUIDs))
+	// 管理者メール読込（カンマ区切り）
+	if v, ok := env["ADMIN_EMAILS"]; ok && v != "" {
+		for _, email := range strings.Split(v, ",") {
+			email = strings.TrimSpace(email)
+			if email != "" {
+				adminEmails[strings.ToLower(email)] = true
+			}
+		}
+	}
+	logf("validationConfig: MAX_CHAT_LEN=%d RATE_LIMIT_CHAT=%d RATE_LIMIT_BLOCK=%d RATE_LIMIT_MOVE=%d MAX_BLOCK_ID=%d MAX_DISPLAY_NAME_LEN=%d MAX_TEXTURE_URL_LEN=%d MAX_ARRAY_SIZE=%d ADMIN_UIDS=%d人 ADMIN_EMAILS=%d件\n",
+		maxChatLen, rateLimitChat, rateLimitBlock, rateLimitMove, maxBlockID, maxDisplayNameLen, maxTextureUrlLen, maxArraySize, len(adminUIDs), len(adminEmails))
 }
 
 // isAdmin は管理者UIDかどうかを返す
@@ -2918,6 +2928,13 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 					logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
 				}
 			}
+			// 管理者メール判定: ADMIN_EMAILS に一致すれば adminUIDs に追加
+			if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Email != "" {
+				if adminEmails[strings.ToLower(claims.Email)] {
+					adminUIDs[existingUID] = true
+					logger.Info("rpcLinkGoogleByCode: admin email detected, added uid=%s email=%s", existingUID, claims.Email)
+				}
+			}
 			logger.Info("rpcLinkGoogleByCode: already linked, switching uid=%s → %s (%s) displayName=%q", uid, existingUID, existingUsername, googleName)
 			out, _ := json.Marshal(map[string]interface{}{
 				"linked":        false,
@@ -2928,6 +2945,14 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 			return string(out), nil
 		}
 		return "", runtime.NewError("link failed", 9)
+	}
+
+	// 管理者メール判定: ADMIN_EMAILS に一致すれば adminUIDs に追加
+	if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Email != "" {
+		if adminEmails[strings.ToLower(claims.Email)] {
+			adminUIDs[uid] = true
+			logger.Info("rpcLinkGoogleByCode: admin email detected, added uid=%s email=%s", uid, claims.Email)
+		}
 	}
 
 	// Google プロフィールの表示名・メールアドレスを保存
