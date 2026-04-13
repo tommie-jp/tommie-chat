@@ -9,6 +9,9 @@ import { escapeHtml, sanitizeColor } from "./utils";
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
 
+    // アカウント情報の再描画関数（ブロックスコープを超えて doLogin 等から呼ぶため関数スコープに配置）
+    let refreshAccountStatus: (() => void) | null = null;
+
     // --- i18n 言語セレクター ---
     const langSelect = document.getElementById("langSelect") as HTMLSelectElement | null;
     const onLangChangeCallbacks: (() => void)[] = [];
@@ -533,11 +536,17 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             // 初回 & ログイン後に取得
+            refreshAccountStatus = () => void renderAccountStatus();
             void renderAccountStatus();
             game.nakama.onMatchReconnect = ((prev) => () => { prev?.(); void renderAccountStatus(); })(game.nakama.onMatchReconnect);
 
             if (refreshBtn) {
                 refreshBtn.addEventListener("click", () => { void renderAccountStatus(); });
+            }
+            // メニューからサーバ設定パネルを開いたときにも最新化
+            const srvMenuBtn = document.getElementById("menu-serversettings");
+            if (srvMenuBtn) {
+                srvMenuBtn.addEventListener("click", () => { void renderAccountStatus(); });
             }
 
             // window.tommieGoogleOAuth は public/js/google-oauth.js が defer で読み込む
@@ -1824,6 +1833,8 @@ export function setupHtmlUI(game: GameScene): void {
                     }
                 }
             }
+            // アカウント情報（Google リンク状態等）を最新化
+            refreshAccountStatus?.();
             if (loginStatus) {
                 loginStatus.style.color = "#00dd55";
                 loginStatus.style.fontWeight = "bold";
