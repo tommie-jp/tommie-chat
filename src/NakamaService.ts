@@ -533,6 +533,16 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    /** このデバイスをアカウントからアンリンクする（サーバ側デバイス情報も削除） */
+    async detachDevice(): Promise<void> {
+        const _end = prof("NakamaService.detachDevice");
+        try {
+            const deviceId = this.getCurrentDeviceId();
+            if (!this.socket) throw new Error("no socket");
+            await this.socket.rpc("detachDevice", JSON.stringify({ deviceId }));
+        } finally { _end(); }
+    }
+
     /**
      * サーバが発行したセッショントークンを使って既存アカウントに切り替える。
      * 現在のセッション（デバイス認証）を破棄し、Google 紐付き済みユーザーとして再接続する。

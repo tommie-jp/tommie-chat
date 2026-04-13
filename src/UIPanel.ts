@@ -729,12 +729,19 @@ export function setupHtmlUI(game: GameScene): void {
 
             // ─── このデバイスを切り離すボタン ───
             if (detachBtn) {
-                detachBtn.addEventListener("click", () => {
+                detachBtn.addEventListener("click", async () => {
                     if (!confirm(
                         "このデバイスのアカウント情報をリセットします。\n" +
                         "次回起動時に新しい匿名アカウントとして開始します。\n" +
                         "（他のデバイスには影響しません）\n\nよろしいですか？"
                     )) return;
+                    try {
+                        // サーバ側でこのデバイスIDをアカウントからアンリンク
+                        await game.nakama.detachDevice();
+                    } catch (e) {
+                        console.warn("detachDevice failed:", e);
+                        // サーバ側の切り離しに失敗してもクライアント側はリセットする
+                    }
                     // loginName クッキーのみ削除（他の UI 設定は残す）
                     document.cookie = "loginName=; max-age=0; path=/";
                     location.reload();

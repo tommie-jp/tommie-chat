@@ -3140,6 +3140,76 @@ func rpcUnlinkGoogle(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	return string(out), nil
 }
 
+// rpcDetachDevice は現在のデバイス ID をアカウントからアンリンクし、
+// device_info Storage からも削除する。
+// Google 認証が残っているため、他のデバイスには影響しない。
+func rpcDetachDevice(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcDetachDevice")()
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("not authenticated", 16)
+	}
+	var req struct {
+		DeviceID string `json:"deviceId"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.DeviceID == "" {
+		return "", runtime.NewError("invalid payload", 3)
+	}
+
+	// アカウント取得 → デバイスが実在するか確認
+	acc, err := nk.AccountGetId(ctx, uid)
+	if err != nil {
+		return "", runtime.NewError("account fetch failed", 13)
+	}
+	found := false
+	for _, d := range acc.GetDevices() {
+		if d.GetId() == req.DeviceID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", runtime.NewError("device not found on this account", 5)
+	}
+
+	// ロックアウト防止: Google 連携がないとデバイスを外せない
+	user := acc.GetUser()
+	if user == nil || user.GetGoogleId() == "" {
+		return "", runtime.NewError("cannot detach: no google account linked", 9)
+	}
+
+	// デバイスをアンリンク
+	if err := nk.UnlinkDevice(ctx, uid, req.DeviceID); err != nil {
+		logger.Warn("rpcDetachDevice: UnlinkDevice failed uid=%s device=%s: %v", uid, req.DeviceID, err)
+		return "", runtime.NewError("unlink device failed: "+err.Error(), 13)
+	}
+
+	// device_info Storage からこのデバイスのプラットフォーム情報を削除
+	if objs, rErr := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "account_ext", Key: "device_info", UserID: uid,
+	}}); rErr == nil && len(objs) > 0 {
+		var stored struct {
+			Devices map[string]string `json:"devices"`
+		}
+		if jErr := json.Unmarshal([]byte(objs[0].Value), &stored); jErr == nil && stored.Devices != nil {
+			delete(stored.Devices, req.DeviceID)
+			val, _ := json.Marshal(map[string]interface{}{"devices": stored.Devices})
+			nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+				Collection:      "account_ext",
+				Key:             "device_info",
+				UserID:          uid,
+				Value:           string(val),
+				PermissionRead:  1,
+				PermissionWrite: 0,
+			}})
+		}
+	}
+
+	logger.Info("rpcDetachDevice: detached device=%s from uid=%s", req.DeviceID, uid)
+	out, _ := json.Marshal(map[string]interface{}{"detached": true})
+	return string(out), nil
+}
+
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// バリデーション設定の読み込み（runtime.env から）
@@ -3311,6 +3381,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"listOnlinePlayers", rpcListOnlinePlayers},
 		{"linkGoogleByCode", rpcLinkGoogleByCode},
 		{"unlinkGoogle", rpcUnlinkGoogle},
+		{"detachDevice", rpcDetachDevice},
 		{"registerDeviceInfo", rpcRegisterDeviceInfo},
 		{"getAccountStatus", rpcGetAccountStatus},
 	}
