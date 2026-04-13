@@ -653,16 +653,19 @@
             z-index: 100;
             overflow: hidden;
             font-family: "Courier New", Courier, monospace;
-            font-size: 12px;
+            font-size: 11px;
             color: #000;
             resize: both;
             display: flex;
             flex-direction: column;
         }
+        #server-settings-panel button {
+            font-family: inherit;
+            font-size: inherit;
+        }
         #server-settings-header {
             padding: 4px 8px;
             font-weight: bold;
-            font-size: 13px;
             border-bottom: 1px solid rgba(0,0,0,0.15);
             background: rgba(255,255,255,0.4);
             cursor: grab;
@@ -696,7 +699,6 @@
         }
         .srv-row label {
             white-space: nowrap;
-            font-size: 11px;
             width: 72px;
             flex-shrink: 0;
             user-select: none;
@@ -705,7 +707,8 @@
         .srv-row input, .srv-row select {
             flex: 1;
             min-width: 0;
-            font-size: 11px;
+            font-family: inherit;
+            font-size: inherit;
             padding: 2px 4px;
             border: 1px solid #888;
             border-radius: 4px;
@@ -714,7 +717,6 @@
         }
 
         .srv-desc {
-            font-size: 11px;
             color: #444;
             margin-bottom: 2px;
         }
@@ -1725,18 +1727,15 @@
             }
             .srv-row label {
                 color: #222 !important;
-                font-size: 13px !important;
                 margin-right: 8px !important;
             }
             .srv-row input {
                 color: #222 !important;
                 background: #fff !important;
                 border-color: rgba(100,100,200,0.3) !important;
-                font-size: 13px !important;
             }
             .srv-desc {
                 color: #333 !important;
-                font-size: 13px !important;
             }
             #srvPingResult {
                 color: #222 !important;
@@ -1746,17 +1745,11 @@
             }
             #serverKeyDisplay {
                 color: #555 !important;
-                font-size: 13px !important;
-            }
-            #serverKeyDisplay:is(span) {
-                /* 親.srv-rowのinline font-size:10pxを上書き */
             }
             .srv-row:has(#serverKeyDisplay) {
-                font-size: 13px !important;
                 color: #555 !important;
             }
             #srvPingBtn, #srvNakamaPingBtn {
-                font-size: 13px !important;
                 padding: 6px 14px !important;
             }
 
@@ -2748,31 +2741,31 @@
         </div>
         <div id="server-settings-body">
             <div class="srv-desc" data-i18n="server.info" title="サーバ情報&#10;──────────&#10;接続先サーバのURL・ポート番号・Server Keyを表示します。&#10;Server KeyはNakama公式の仕様上、安全に公開可能な値です。">サーバ情報</div>
-            <div class="srv-row" style="font-size:11px;color:#666;word-break:break-all;" title="Server Key（Nakamaサーバ）&#10;──────────&#10;クライアントがNakamaサーバに接続する際に使用する識別キーです。&#10;サーバの nakama/config.yml の socket.server_key で設定します。&#10;&#10;デフォルト値:&#10;  開発環境: defaultkey&#10;  本番環境: tommie-chat（nakama/.env で設定）&#10;&#10;【重要】&#10;Server Keyはパスワードではありません。&#10;Nakama公式: &quot;The server key is not a security mechanism&#10;and can be safely exposed.&quot;&#10;（Server Keyはセキュリティ機構ではなく安全に公開できます）&#10;&#10;認証はデバイスID等の認証APIで行われるため、&#10;Server Keyが公開されても不正アクセスにはなりません。">
+            <div class="srv-row" style="color:#666;word-break:break-all;" title="Server Key（Nakamaサーバ）&#10;──────────&#10;クライアントがNakamaサーバに接続する際に使用する識別キーです。&#10;サーバの nakama/config.yml の socket.server_key で設定します。&#10;&#10;デフォルト値:&#10;  開発環境: defaultkey&#10;  本番環境: tommie-chat（nakama/.env で設定）&#10;&#10;【重要】&#10;Server Keyはパスワードではありません。&#10;Nakama公式: &quot;The server key is not a security mechanism&#10;and can be safely exposed.&quot;&#10;（Server Keyはセキュリティ機構ではなく安全に公開できます）&#10;&#10;認証はデバイスID等の認証APIで行われるため、&#10;Server Keyが公開されても不正アクセスにはなりません。">
                 <span style="flex-shrink:0;">Server Key:</span>
                 <span id="serverKeyDisplay" style="flex:1;min-width:0;"></span>
             </div>
             <div class="srv-row" style="margin-top:8px;gap:6px;">
-                <button id="srvPingBtn" class="ui-btn" data-i18n="server.http_ping" style="font-size:11px;padding:3px 10px;background:#4a90d9;color:#fff;border:1px solid #3570b0;" title="サーバURLへHTTPリクエストを送信し応答時間を計測します">HTTP応答</button>
-                <button id="srvNakamaPingBtn" class="ui-btn" data-i18n="server.rpc_ping" style="font-size:11px;padding:3px 10px;background:#d98a4a;color:#fff;border:1px solid #b07035;" title="NakamaサーバへWebSocket RPCでpingを送信します（ログイン後に使用可能）">RPC応答</button>
+                <button id="srvPingBtn" class="ui-btn" data-i18n="server.http_ping" style="padding:3px 10px;background:#4a90d9;color:#fff;border:1px solid #3570b0;" title="サーバURLへHTTPリクエストを送信し応答時間を計測します">HTTP応答</button>
+                <button id="srvNakamaPingBtn" class="ui-btn" data-i18n="server.rpc_ping" style="padding:3px 10px;background:#d98a4a;color:#fff;border:1px solid #b07035;" title="NakamaサーバへWebSocket RPCでpingを送信します（ログイン後に使用可能）">RPC応答</button>
             </div>
             <div id="srvPingResult"></div>
 
             <!-- アカウント情報（doc/53 §8 最小実装） -->
             <hr style="margin:10px 0;border:none;border-top:1px solid rgba(0,0,0,0.15);">
             <div class="srv-desc" title="アカウント情報&#10;──────────&#10;現在のユーザーがどの認証方式と紐付いているかを表示します。&#10;Google アカウントを紐付けると、デバイスを変えても同じアカウントで遊べます。">アカウント情報</div>
-            <div id="account-info-status" style="font-size:11px;color:#444;margin-top:4px;line-height:1.7;">
+            <div id="account-info-status" style="color:#444;margin-top:4px;line-height:1.7;">
                 <div>状態: <span id="account-info-saved">未取得</span></div>
                 <div id="account-info-google-row" style="display:none;flex-wrap:wrap;align-items:center;gap:6px;">Googleメールアカウント: <span id="account-info-google">―</span></div>
-                <div id="account-info-unlink-row" style="display:none;padding-left:12px;"><button id="googleUnlinkBtn" class="ui-btn" style="font-size:11px;padding:1px 6px;background:#fff;color:#c00;border:1px solid #c00;white-space:nowrap;width:100%;box-sizing:border-box;" title="すべてのデバイスの Google 連携を解除します&#10;（全デバイスで Google 認証が無効になります）">すべての連携解除</button></div>
-                <div id="account-info-detach-row" style="display:none;padding-left:12px;"><button id="deviceDetachBtn" class="ui-btn" style="font-size:11px;padding:1px 6px;background:#fff;color:#e68a00;border:1px solid #e68a00;white-space:nowrap;width:100%;box-sizing:border-box;" title="このデバイスだけアカウントから切り離します&#10;（他のデバイスには影響しません）&#10;次回起動時に新しい匿名アカウントとして開始します">このデバイスだけ切り離す</button></div>
+                <div id="account-info-unlink-row" style="display:none;padding-left:12px;"><button id="googleUnlinkBtn" class="ui-btn" style="padding:1px 6px;background:#fff;color:#c00;border:1px solid #c00;white-space:nowrap;width:100%;box-sizing:border-box;" title="すべてのデバイスの Google 連携を解除します&#10;（全デバイスで Google 認証が無効になります）">すべての連携解除</button></div>
+                <div id="account-info-detach-row" style="display:none;padding-left:12px;"><button id="deviceDetachBtn" class="ui-btn" style="padding:1px 6px;background:#fff;color:#e68a00;border:1px solid #e68a00;white-space:nowrap;width:100%;box-sizing:border-box;" title="このデバイスだけアカウントから切り離します&#10;（他のデバイスには影響しません）&#10;次回起動時に新しい匿名アカウントとして開始します">このデバイスだけ切り離す</button></div>
                 <div id="account-info-device-row" style="display:none;">登録デバイス: <span id="account-info-device">―</span></div>
-                <div id="account-info-link-row" style="display:flex;align-items:center;gap:6px;"><button id="googleLinkBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#4a90d9;color:#fff;border:1px solid #3570b0;font-weight:bold;white-space:nowrap;" title="Google アカウントを紐付けてアカウントを永続化します&#10;（ブラウザを消してもログインできるようになります）">Google認証</button></div>
+                <div id="account-info-link-row" style="display:flex;align-items:center;gap:6px;"><button id="googleLinkBtn" class="ui-btn" style="padding:3px 10px;background:#4a90d9;color:#fff;border:1px solid #3570b0;font-weight:bold;white-space:nowrap;" title="Google アカウントを紐付けてアカウントを永続化します&#10;（ブラウザを消してもログインできるようになります）">Google認証</button></div>
             </div>
             <div class="srv-row" style="margin-top:6px;gap:6px;flex-wrap:wrap;">
-                <button id="accountRefreshBtn" class="ui-btn" style="font-size:11px;padding:3px 10px;background:#666;color:#fff;border:1px solid #444;" title="アカウント情報を再取得">↻</button>
+                <button id="accountRefreshBtn" class="ui-btn" style="padding:3px 10px;background:#666;color:#fff;border:1px solid #444;" title="アカウント情報を再取得">↻</button>
             </div>
-            <div id="googleLinkResult" style="font-size:11px;color:#666;margin-top:4px;min-height:14px;"></div>
+            <div id="googleLinkResult" style="color:#666;margin-top:4px;min-height:14px;"></div>
         </div>
     </div>
 

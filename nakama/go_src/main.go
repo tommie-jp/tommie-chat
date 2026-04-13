@@ -3288,13 +3288,13 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	// デフォルトワールドが未作成なら作成
 	if getWorld(defaultWorldID) == nil {
 		w := createWorld(defaultWorldID, defaultChunkCount, defaultChunkCount)
-		w.Name = "メイン"
+		w.Name = "main"
 		if nextWorldID <= defaultWorldID { nextWorldID = defaultWorldID + 1 }
 		saveWorldsMeta(ctx, nk)
 	}
 	// デフォルトワールドの名前を常に最新に更新
-	if w := getWorld(defaultWorldID); w != nil && w.Name != "メイン" {
-		w.Name = "メイン"
+	if w := getWorld(defaultWorldID); w != nil && w.Name != "main" {
+		w.Name = "main"
 		saveWorldsMeta(ctx, nk)
 	}
 	defaultWorld = getWorld(defaultWorldID)
