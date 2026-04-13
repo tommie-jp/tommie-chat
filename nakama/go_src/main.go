@@ -2942,7 +2942,11 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		if claims.Email != "" {
 			if _, dbErr := db.ExecContext(ctx, "UPDATE users SET email = $1 WHERE id = $2::uuid", claims.Email, uid); dbErr != nil {
 				logger.Warn("rpcLinkGoogleByCode: save email failed: %v", dbErr)
+			} else {
+				logger.Info("rpcLinkGoogleByCode: saved email=%q uid=%s", claims.Email, uid)
 			}
+		} else {
+			logger.Warn("rpcLinkGoogleByCode: google id_token has no email claim uid=%s", uid)
 		}
 	}
 
@@ -3025,20 +3029,26 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		}
 	}()
 
-	// google_id の UNIQUE 制約を部分インデックスに変換（Nakama 初期マイグレーションとの互換）
-	// 空文字の重複を許可しないと google_id = '' への UPDATE（紐付け解除）が SQLSTATE 23505 で失敗する
+	// google_id / email の UNIQUE 制約を部分インデックスに変換（Nakama 初期マイグレーションとの互換）
+	// 空文字の重複を許可しないと google_id = '' / email = '' への UPDATE が SQLSTATE 23505 で失敗する
 	// 初期マイグレーションではテーブル制約として作られるため ALTER TABLE で落とす
-	if _, err := db.ExecContext(ctx,
-		"ALTER TABLE users DROP CONSTRAINT IF EXISTS users_google_id_key"); err != nil {
-		logger.Warn("InitModule: drop google_id constraint: %v", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		"DROP INDEX IF EXISTS users_google_id_key"); err != nil {
-		logger.Warn("InitModule: drop google_id index: %v", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		"CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_key ON users (google_id) WHERE google_id != ''"); err != nil {
-		logger.Warn("InitModule: create partial google_id index: %v", err)
+	for _, col := range []struct{ name, constraint string }{
+		{"google_id", "users_google_id_key"},
+		{"email", "users_email_key"},
+	} {
+		if _, err := db.ExecContext(ctx,
+			"ALTER TABLE users DROP CONSTRAINT IF EXISTS "+col.constraint); err != nil {
+			logger.Warn("InitModule: drop %s constraint: %v", col.name, err)
+		}
+		if _, err := db.ExecContext(ctx,
+			"DROP INDEX IF EXISTS "+col.constraint); err != nil {
+			logger.Warn("InitModule: drop %s index: %v", col.name, err)
+		}
+		if _, err := db.ExecContext(ctx,
+			"CREATE UNIQUE INDEX IF NOT EXISTS "+col.constraint+
+				" ON users ("+col.name+") WHERE "+col.name+" != ''"); err != nil {
+			logger.Warn("InitModule: create partial %s index: %v", col.name, err)
+		}
 	}
 
 	// グローバル NakamaModule 参照を設定（World.getChunk の遅延ロード用）
