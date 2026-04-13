@@ -86,6 +86,8 @@ services:
             --runtime.env MAX_DISPLAY_NAME_LEN=30 \
             --runtime.env MAX_TEXTURE_URL_LEN=128 \
             --runtime.env MAX_ARRAY_SIZE=100 \
+            --runtime.env ADMIN_UIDS=${ADMIN_UIDS:-} \
+            --runtime.env ADMIN_EMAILS=${ADMIN_EMAILS:-} \
             --runtime.env GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-} \
             --runtime.env GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-} \
             --runtime.env ENABLE_TEST_RPC=false \
