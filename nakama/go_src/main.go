@@ -2940,13 +2940,19 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 			}
 		}
 		if claims.Email != "" {
-			if _, dbErr := db.ExecContext(ctx, "UPDATE users SET email = $1 WHERE id = $2::uuid", claims.Email, uid); dbErr != nil {
-				logger.Warn("rpcLinkGoogleByCode: save email failed: %v", dbErr)
+			// Nakama Storage に保存（users.email カラムは UNIQUE 制約の問題があるため避ける）
+			if acks, wErr := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+				Collection:      "account_ext",
+				Key:             "google",
+				UserID:          uid,
+				Value:           fmt.Sprintf(`{"email":%q}`, claims.Email),
+				PermissionRead:  1,
+				PermissionWrite: 0,
+			}}); wErr != nil {
+				logger.Warn("rpcLinkGoogleByCode: storage write email failed: %v", wErr)
 			} else {
-				logger.Info("rpcLinkGoogleByCode: saved email=%q uid=%s", claims.Email, uid)
+				logger.Info("rpcLinkGoogleByCode: saved google email=%q uid=%s acks=%d", claims.Email, uid, len(acks))
 			}
-		} else {
-			logger.Warn("rpcLinkGoogleByCode: google id_token has no email claim uid=%s", uid)
 		}
 	}
 
@@ -2973,13 +2979,31 @@ func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB,
 	hasEmail := acc.GetEmail() != ""
 	hasDevice := len(acc.GetDevices()) > 0
 	saved := hasGoogle || hasApple || hasEmail
+
+	// Google メールアドレスを Storage から取得
+	googleEmail := ""
+	if hasGoogle {
+		if objs, rErr := nk.StorageRead(ctx, []*runtime.StorageRead{{
+			Collection: "account_ext",
+			Key:        "google",
+			UserID:     uid,
+		}}); rErr == nil && len(objs) > 0 {
+			var ge struct {
+				Email string `json:"email"`
+			}
+			if jErr := json.Unmarshal([]byte(objs[0].Value), &ge); jErr == nil {
+				googleEmail = ge.Email
+			}
+		}
+	}
+
 	out, _ := json.Marshal(map[string]interface{}{
 		"saved":     saved,
 		"hasGoogle": hasGoogle,
 		"hasApple":  hasApple,
 		"hasEmail":  hasEmail,
 		"hasDevice": hasDevice,
-		"email":     acc.GetEmail(),
+		"email":     googleEmail,
 	})
 	return string(out), nil
 }
@@ -3004,12 +3028,20 @@ func rpcUnlinkGoogle(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	if len(acc.GetDevices()) == 0 && acc.GetEmail() == "" && (user.GetAppleId() == "") {
 		return "", runtime.NewError("cannot unlink: no other auth method", 9)
 	}
-	// google_id とメールアドレスをクリア（nk.UnlinkGoogle は Google ID token が必要なため SQL で実施）
+	// google_id をクリア（nk.UnlinkGoogle は Google ID token が必要なため SQL で実施）
 	if _, err := db.ExecContext(ctx,
-		"UPDATE users SET google_id = '', email = '' WHERE id = $1::uuid AND google_id != ''",
+		"UPDATE users SET google_id = '' WHERE id = $1::uuid AND google_id != ''",
 		uid); err != nil {
 		logger.Warn("rpcUnlinkGoogle: SQL failed uid=%s: %v", uid, err)
 		return "", runtime.NewError("unlink failed: "+err.Error(), 13)
+	}
+	// Storage の Google メール情報も削除
+	if err := nk.StorageDelete(ctx, []*runtime.StorageDelete{{
+		Collection: "account_ext",
+		Key:        "google",
+		UserID:     uid,
+	}}); err != nil {
+		logger.Warn("rpcUnlinkGoogle: storage delete failed uid=%s: %v", uid, err)
 	}
 	logger.Info("rpcUnlinkGoogle: unlinked google from uid=%s", uid)
 	out, _ := json.Marshal(map[string]interface{}{"unlinked": true})
@@ -3029,25 +3061,23 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		}
 	}()
 
-	// google_id / email の UNIQUE 制約を部分インデックスに変換（Nakama 初期マイグレーションとの互換）
-	// 空文字の重複を許可しないと google_id = '' / email = '' への UPDATE が SQLSTATE 23505 で失敗する
+	// google_id の UNIQUE 制約を部分インデックスに変換（Nakama 初期マイグレーションとの互換）
+	// 空文字の重複を許可しないと google_id = '' への UPDATE（紐付け解除）が SQLSTATE 23505 で失敗する
 	// 初期マイグレーションではテーブル制約として作られるため ALTER TABLE で落とす
-	for _, col := range []struct{ name, constraint string }{
-		{"google_id", "users_google_id_key"},
-		{"email", "users_email_key"},
-	} {
+	{
+		const constraint = "users_google_id_key"
 		if _, err := db.ExecContext(ctx,
-			"ALTER TABLE users DROP CONSTRAINT IF EXISTS "+col.constraint); err != nil {
-			logger.Warn("InitModule: drop %s constraint: %v", col.name, err)
+			"ALTER TABLE users DROP CONSTRAINT IF EXISTS "+constraint); err != nil {
+			logger.Warn("InitModule: drop google_id constraint: %v", err)
 		}
 		if _, err := db.ExecContext(ctx,
-			"DROP INDEX IF EXISTS "+col.constraint); err != nil {
-			logger.Warn("InitModule: drop %s index: %v", col.name, err)
+			"DROP INDEX IF EXISTS "+constraint); err != nil {
+			logger.Warn("InitModule: drop google_id index: %v", err)
 		}
 		if _, err := db.ExecContext(ctx,
-			"CREATE UNIQUE INDEX IF NOT EXISTS "+col.constraint+
-				" ON users ("+col.name+") WHERE "+col.name+" != ''"); err != nil {
-			logger.Warn("InitModule: create partial %s index: %v", col.name, err)
+			"CREATE UNIQUE INDEX IF NOT EXISTS "+constraint+
+				" ON users (google_id) WHERE google_id != ''"); err != nil {
+			logger.Warn("InitModule: create partial google_id index: %v", err)
 		}
 	}
 
