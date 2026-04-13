@@ -48,6 +48,16 @@
     // state は使い捨て
     try { sessionStorage.removeItem("oauth_state"); } catch (e) { console.warn(e); }
 
+    // コードを sessionStorage に保存（親ウィンドウのポーリングが検知する）
+    // COOP により window.opener が null になるケースがあるため、
+    // postMessage 方式と sessionStorage 方式の両方を試みる。
+    try {
+        sessionStorage.setItem("oauth_pending_code", code);
+    } catch (e) {
+        showError("sessionStorage 書き込み失敗: " + (e && e.message ? e.message : String(e)));
+        return;
+    }
+
     if (window.opener && !window.opener.closed) {
         // ─── ポップアップ方式: 親ウィンドウへ postMessage ───
         try {
@@ -55,20 +65,15 @@
                 { type: "google-oauth-code", code: code },
                 location.origin
             );
-            if (msgEl) msgEl.textContent = "認証完了";
-            setTimeout(function () { window.close(); }, 300);
-        } catch (e) {
-            showError("親ウィンドウへの通知に失敗: " + (e && e.message ? e.message : String(e)));
-        }
+        } catch (e) { void e; }
+        if (msgEl) msgEl.textContent = "認証完了";
+        setTimeout(function () { try { window.close(); } catch (e) { void e; } }, 300);
     } else {
-        // ─── リダイレクト方式: コードを sessionStorage に退避してアプリへ戻る ───
-        try {
-            sessionStorage.setItem("oauth_pending_code", code);
-        } catch (e) {
-            showError("sessionStorage 書き込み失敗: " + (e && e.message ? e.message : String(e)));
-            return;
-        }
-        if (msgEl) msgEl.textContent = "アプリに戻ります...";
-        location.replace("/");
+        // ─── COOP / リダイレクト方式: sessionStorage に保存済み ───
+        // ポップアップとして開かれた場合: 親のポーリングが sessionStorage を検知する
+        // リダイレクト方式の場合: アプリ本体へ戻る
+        if (msgEl) msgEl.textContent = "認証完了 — このタブを閉じてください";
+        // ポップアップ内なら自動で閉じる試行、無理ならユーザーに閉じてもらう
+        setTimeout(function () { try { window.close(); } catch (e) { void e; } }, 1000);
     }
 })();

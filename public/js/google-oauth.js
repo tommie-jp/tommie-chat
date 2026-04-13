@@ -112,10 +112,21 @@
             };
         }
 
-        // ─── ポップアップ方式: postMessage 待ち ───
+        // ─── ポップアップ方式: postMessage 待ち + sessionStorage フォールバック ───
+        // Google が COOP: same-origin を設定するため window.opener が切断され、
+        // postMessage / popup.closed が使えない場合がある。
+        // コールバックページはリダイレクトフォールバックで sessionStorage に
+        // コードを書き込むので、それもポーリングで検知する。
         var promise = new Promise(function (resolve, reject) {
             var done = false;
             var pollTimer = null;
+            var TIMEOUT_MS = 5 * 60 * 1000; // 5分でタイムアウト
+            var startTime = Date.now();
+
+            // Google が COOP: same-origin を設定するため、ポップアップが Google に
+            // 遷移した時点で popup.closed / popup.close() はブラウザ警告を出す。
+            // 親からのポップアップ操作は一切行わず、sessionStorage ポーリングのみで
+            // 認可コードを受け取る。ポップアップはコールバックページ自身が閉じる。
 
             function cleanup() {
                 window.removeEventListener("message", onMessage);
@@ -127,18 +138,31 @@
                 if (!e.data || e.data.type !== "google-oauth-code") return;
                 done = true;
                 cleanup();
-                try { popup.close(); } catch (err) { void err; }
                 resolve(String(e.data.code));
             }
 
             window.addEventListener("message", onMessage);
 
-            // ポップアップが手動で閉じられた場合の検知
             pollTimer = setInterval(function () {
                 if (done) return;
-                if (popup.closed) {
+
+                // sessionStorage フォールバック: COOP で postMessage が効かない場合、
+                // コールバックページが sessionStorage にコードを退避している
+                try {
+                    var pendingCode = sessionStorage.getItem("oauth_pending_code");
+                    if (pendingCode) {
+                        sessionStorage.removeItem("oauth_pending_code");
+                        done = true;
+                        cleanup();
+                        resolve(pendingCode);
+                        return;
+                    }
+                } catch (e) { void e; }
+
+                // タイムアウト
+                if (Date.now() - startTime > TIMEOUT_MS) {
                     cleanup();
-                    reject(new Error("ポップアップが閉じられました"));
+                    reject(new Error("認証がタイムアウトしました"));
                 }
             }, 500);
         });

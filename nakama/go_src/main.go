@@ -2819,8 +2819,9 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		return "", runtime.NewError("code and redirectUri required", 3)
 	}
 
-	clientID := os.Getenv("GOOGLE_CLIENT_ID")
-	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
+	env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
+	clientID := env["GOOGLE_CLIENT_ID"]
+	clientSecret := env["GOOGLE_CLIENT_SECRET"]
 	if clientID == "" || clientSecret == "" {
 		logger.Warn("rpcLinkGoogleByCode: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET 未設定")
 		return "", runtime.NewError("google oauth not configured on server", 13)
@@ -3090,7 +3091,8 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	// 発行されたトークンでリンクされる攻撃を防ぐための防御層。
 	// GOOGLE_CLIENT_ID 未設定時は素通り（dev 用）。
 	if err := initializer.RegisterBeforeLinkGoogle(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, in *api.AccountGoogle) (*api.AccountGoogle, error) {
-		expectedAud := os.Getenv("GOOGLE_CLIENT_ID")
+		env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
+		expectedAud := env["GOOGLE_CLIENT_ID"]
 		if expectedAud == "" {
 			return in, nil
 		}
