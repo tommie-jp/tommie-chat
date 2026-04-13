@@ -2789,14 +2789,15 @@ type googleIDTokenClaims struct {
 	Iss   string `json:"iss"`
 	Email string `json:"email"`
 	Sub   string `json:"sub"`
+	Name  string `json:"name"`
 }
 
-// parseGoogleIDTokenAud は ID token (JWT) のペイロード部分をデコードして aud を取り出す。
+// parseGoogleIDTokenClaims は ID token (JWT) のペイロード部分をデコードして claims を取り出す。
 // 署名検証はしない（呼び出し側で Nakama に委ねるか別途検証する）。
-func parseGoogleIDTokenAud(idToken string) (string, error) {
+func parseGoogleIDTokenClaims(idToken string) (*googleIDTokenClaims, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) != 3 {
-		return "", fmt.Errorf("invalid jwt format")
+		return nil, fmt.Errorf("invalid jwt format")
 	}
 	// JWT は base64url (padding なし) エンコード
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -2804,12 +2805,21 @@ func parseGoogleIDTokenAud(idToken string) (string, error) {
 		// パディング付きの場合にも対応
 		payload, err = base64.URLEncoding.DecodeString(parts[1])
 		if err != nil {
-			return "", fmt.Errorf("payload base64 decode: %w", err)
+			return nil, fmt.Errorf("payload base64 decode: %w", err)
 		}
 	}
 	var claims googleIDTokenClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return "", fmt.Errorf("payload json parse: %w", err)
+		return nil, fmt.Errorf("payload json parse: %w", err)
+	}
+	return &claims, nil
+}
+
+// parseGoogleIDTokenAud は後方互換ラッパー（aud のみ返す）。
+func parseGoogleIDTokenAud(idToken string) (string, error) {
+	claims, err := parseGoogleIDTokenClaims(idToken)
+	if err != nil {
+		return "", err
 	}
 	return claims.Aud, nil
 }
@@ -2900,15 +2910,33 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 				logger.Warn("rpcLinkGoogleByCode: AuthenticateTokenGenerate failed: %v", tokenErr)
 				return "", runtime.NewError("token generation failed", 13)
 			}
-			logger.Info("rpcLinkGoogleByCode: already linked, switching uid=%s → %s (%s)", uid, existingUID, existingUsername)
+			// Google プロフィール名で表示名を更新
+			googleName := ""
+			if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Name != "" {
+				googleName = claims.Name
+				if updateErr := nk.AccountUpdateId(ctx, existingUID, "", nil, googleName, "", "", "", ""); updateErr != nil {
+					logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
+				}
+			}
+			logger.Info("rpcLinkGoogleByCode: already linked, switching uid=%s → %s (%s) displayName=%q", uid, existingUID, existingUsername, googleName)
 			out, _ := json.Marshal(map[string]interface{}{
 				"linked":        false,
 				"alreadyLinked": true,
 				"token":         token,
+				"displayName":   googleName,
 			})
 			return string(out), nil
 		}
 		return "", runtime.NewError("link failed", 9)
+	}
+
+	// Google プロフィール名で表示名を更新
+	if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Name != "" {
+		if updateErr := nk.AccountUpdateId(ctx, uid, "", nil, claims.Name, "", "", "", ""); updateErr != nil {
+			logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
+		} else {
+			logger.Info("rpcLinkGoogleByCode: updated displayName=%q uid=%s", claims.Name, uid)
+		}
 	}
 
 	logger.Info("rpcLinkGoogleByCode: linked uid=%s", uid)

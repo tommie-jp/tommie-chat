@@ -563,6 +563,13 @@ export function setupHtmlUI(game: GameScene): void {
                         // → サーバ発行トークンでそのアカウントに切り替え
                         setLinkResult("既存アカウントに切り替え中...");
                         await game.nakama.switchToGoogleAccount(result.token);
+                        // Google プロフィール名で表示名を更新（サーバ側で AccountUpdateId 済み）
+                        if (result.displayName) {
+                            game.nakama.selfDisplayName = result.displayName;
+                            game.nakama.sendDisplayName(result.displayName).catch(e => console.warn("sendDisplayName:", e));
+                            const dnInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
+                            if (dnInput) dnInput.value = result.displayName;
+                        }
                         setLinkResult("✅ Google 認証済みアカウントに切り替えました");
                         await renderAccountStatus();
                         return;

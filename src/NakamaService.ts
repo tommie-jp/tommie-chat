@@ -477,16 +477,16 @@ export class NakamaService {
      * @param redirectUri  認可リクエストで使用した redirect_uri と完全一致させる
      * @returns linked=true なら紐付け成功、alreadyLinked=true なら別ユーザーが既にリンク済み
      */
-    async linkGoogleByCode(code: string, redirectUri: string): Promise<{ linked: boolean; alreadyLinked?: boolean; token?: string }> {
+    async linkGoogleByCode(code: string, redirectUri: string): Promise<{ linked: boolean; alreadyLinked?: boolean; token?: string; displayName?: string }> {
         const _end = prof("NakamaService.linkGoogleByCode");
         try {
             console.log("snd linkGoogleByCode");
             if (!this.socket) throw new Error("no socket");
             const r = await this.socket.rpc("linkGoogleByCode", JSON.stringify({ code, redirectUri }));
             if (r?.payload) {
-                const data = JSON.parse(r.payload) as { linked?: boolean; alreadyLinked?: boolean; token?: string };
+                const data = JSON.parse(r.payload) as { linked?: boolean; alreadyLinked?: boolean; token?: string; displayName?: string };
                 if (data.alreadyLinked && data.token) {
-                    return { linked: false, alreadyLinked: true, token: data.token };
+                    return { linked: false, alreadyLinked: true, token: data.token, displayName: data.displayName };
                 }
                 if (!data.linked) throw new Error("link failed");
             }
