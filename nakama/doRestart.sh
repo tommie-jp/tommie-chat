@@ -13,6 +13,32 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     set +a
 fi
 
+# ── PORT_OFFSET → 個別ポート変数の補完 ──
+# .env に PORT_OFFSET が設定されているが個別ポート変数が未設定の場合、
+# base + PORT_OFFSET*100 で算出して export する。
+# doDeploy.sh は .env に書き込むが、手動で PORT_OFFSET のみ設定した場合や
+# .env.example をコピーした場合にも正しく動作するようにする。
+if [ -n "${PORT_OFFSET:-}" ] && [ "$PORT_OFFSET" -gt 0 ] 2>/dev/null; then
+    _ensure_port() {
+        local key="$1" base="$2"
+        local current
+        current=$(eval "printf '%s' \"\${${key}:-}\"")
+        if [ -z "$current" ]; then
+            eval "export ${key}=$((base + PORT_OFFSET * 100))"
+        fi
+    }
+    _ensure_port POSTGRES_PORT        5432
+    _ensure_port NAKAMA_PPROF_PORT    6060
+    _ensure_port NAKAMA_GRPC_PORT     7349
+    _ensure_port NAKAMA_API_PORT      7350
+    _ensure_port NAKAMA_CONSOLE_PORT  7351
+    _ensure_port WEB_PORT             8081
+    _ensure_port PROMETHEUS_PORT      9090
+    _ensure_port MINIO_S3_PORT        9000
+    _ensure_port MINIO_CONSOLE_PORT   9001
+    unset -f _ensure_port
+fi
+
 # 本番判定（優先順位）:
 #   1. 環境変数 TOMMIE_PROD=1
 #   2. マーカーファイル /etc/tommie-chat-prod が存在
