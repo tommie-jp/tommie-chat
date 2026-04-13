@@ -2961,6 +2961,76 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 	return string(out), nil
 }
 
+// rpcRegisterDeviceInfo はクライアントから送られたデバイス情報（プラットフォーム）を Storage に保存する。
+// Storage: collection="account_ext", key="device_info", value={"devices":{"<deviceId>":"<platform>",...}}
+func rpcRegisterDeviceInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcRegisterDeviceInfo")()
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("not authenticated", 16)
+	}
+	var req struct {
+		DeviceID string `json:"deviceId"`
+		Platform string `json:"platform"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.DeviceID == "" {
+		return "", runtime.NewError("invalid payload", 3)
+	}
+	// 許可されたプラットフォーム値のみ受け付ける
+	validPlatforms := map[string]bool{
+		"Windows": true, "Mac": true, "iPhone": true, "iPad": true, "Android": true, "その他": true,
+	}
+	if !validPlatforms[req.Platform] {
+		req.Platform = "その他"
+	}
+
+	// 既存のデバイス情報を読み取り
+	devMap := make(map[string]string)
+	if objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "account_ext", Key: "device_info", UserID: uid,
+	}}); err == nil && len(objs) > 0 {
+		var stored struct {
+			Devices map[string]string `json:"devices"`
+		}
+		if jErr := json.Unmarshal([]byte(objs[0].Value), &stored); jErr == nil && stored.Devices != nil {
+			devMap = stored.Devices
+		}
+	}
+
+	// アカウントに実在するデバイス ID だけ残す（古いデバイスを自動削除）
+	acc, err := nk.AccountGetId(ctx, uid)
+	if err != nil {
+		return "", runtime.NewError("account fetch failed", 13)
+	}
+	activeIDs := make(map[string]bool, len(acc.GetDevices()))
+	for _, d := range acc.GetDevices() {
+		activeIDs[d.GetId()] = true
+	}
+	for id := range devMap {
+		if !activeIDs[id] {
+			delete(devMap, id)
+		}
+	}
+
+	// 現在のデバイスを追加/更新
+	devMap[req.DeviceID] = req.Platform
+
+	val, _ := json.Marshal(map[string]interface{}{"devices": devMap})
+	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+		Collection:      "account_ext",
+		Key:             "device_info",
+		UserID:          uid,
+		Value:           string(val),
+		PermissionRead:  1,
+		PermissionWrite: 0,
+	}}); err != nil {
+		logger.Warn("rpcRegisterDeviceInfo: storage write failed uid=%s: %v", uid, err)
+		return "", runtime.NewError("storage write failed", 13)
+	}
+
+	return "{}", nil
+}
+
 // rpcGetAccountStatus は「保存済みアカウントか」フラグを返す
 // （フレンド機能の前提チェック用 — doc/53 §8）
 func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
@@ -3004,14 +3074,28 @@ func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		deviceIDs = append(deviceIDs, d.GetId())
 	}
 
+	// デバイスごとのプラットフォーム情報を Storage から取得
+	devicePlatforms := make(map[string]string)
+	if objs, rErr := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "account_ext", Key: "device_info", UserID: uid,
+	}}); rErr == nil && len(objs) > 0 {
+		var stored struct {
+			Devices map[string]string `json:"devices"`
+		}
+		if jErr := json.Unmarshal([]byte(objs[0].Value), &stored); jErr == nil && stored.Devices != nil {
+			devicePlatforms = stored.Devices
+		}
+	}
+
 	out, _ := json.Marshal(map[string]interface{}{
-		"saved":     saved,
-		"hasGoogle": hasGoogle,
-		"hasApple":  hasApple,
-		"hasEmail":  hasEmail,
-		"hasDevice": hasDevice,
-		"email":     googleEmail,
-		"devices":   deviceIDs,
+		"saved":           saved,
+		"hasGoogle":       hasGoogle,
+		"hasApple":        hasApple,
+		"hasEmail":        hasEmail,
+		"hasDevice":       hasDevice,
+		"email":           googleEmail,
+		"devices":         deviceIDs,
+		"devicePlatforms": devicePlatforms,
 	})
 	return string(out), nil
 }
@@ -3227,6 +3311,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"listOnlinePlayers", rpcListOnlinePlayers},
 		{"linkGoogleByCode", rpcLinkGoogleByCode},
 		{"unlinkGoogle", rpcUnlinkGoogle},
+		{"registerDeviceInfo", rpcRegisterDeviceInfo},
 		{"getAccountStatus", rpcGetAccountStatus},
 	}
 	for _, r := range rpcs {

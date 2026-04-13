@@ -163,6 +163,19 @@ export class NakamaService {
                 (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16));
     }
 
+    /** User-Agent からプラットフォームを判定する */
+    static detectPlatform(): string {
+        const ua = navigator.userAgent;
+        if (/iPhone/.test(ua)) return "iPhone";
+        if (/iPad/.test(ua)) return "iPad";
+        // iPadOS 13+ は Mac と同じ UA を返すが maxTouchPoints で推定
+        if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return "iPad";
+        if (/Android/.test(ua)) return "Android";
+        if (/Windows NT/.test(ua)) return "Windows";
+        if (/Macintosh/.test(ua)) return "Mac";
+        return "その他";
+    }
+
     /** 現在のセッションで使用中のデバイス ID を返す（未ログインなら空文字） */
     getCurrentDeviceId(): string {
         if (!this.loginName) return "";
@@ -230,6 +243,12 @@ export class NakamaService {
 
         this.selfSessionId = this.session.user_id ? (this.session as unknown as { session_id?: string }).session_id ?? "" : "";
         this.loginTimeISO = new Date().toISOString();
+
+        // デバイスのプラットフォーム情報をサーバに送信（非同期・失敗しても続行）
+        this.socket.rpc("registerDeviceInfo", JSON.stringify({
+            deviceId,
+            platform: NakamaService.detectPlatform(),
+        })).catch(e => console.warn("registerDeviceInfo failed:", e));
 
         return this.session;
         } finally { _end(); }
@@ -572,14 +591,15 @@ export class NakamaService {
     /**
      * 現在のアカウントが「保存済み」(Google/Apple/Email のいずれかにリンク済み) かを取得する。
      */
-    async getAccountStatus(): Promise<{ saved: boolean; hasGoogle: boolean; hasApple: boolean; hasEmail: boolean; hasDevice: boolean; email: string; devices: string[] }> {
+    async getAccountStatus(): Promise<{ saved: boolean; hasGoogle: boolean; hasApple: boolean; hasEmail: boolean; hasDevice: boolean; email: string; devices: string[]; devicePlatforms: Record<string, string> }> {
         const _end = prof("NakamaService.getAccountStatus");
         try {
-            const empty = { saved: false, hasGoogle: false, hasApple: false, hasEmail: false, hasDevice: false, email: "", devices: [] as string[] };
+            const empty = { saved: false, hasGoogle: false, hasApple: false, hasEmail: false, hasDevice: false, email: "", devices: [] as string[], devicePlatforms: {} as Record<string, string> };
             if (!this.socket) return empty;
             const r = await this.socket.rpc("getAccountStatus");
             if (r?.payload) {
                 const d = JSON.parse(r.payload) as Partial<typeof empty>;
+                const dp = d.devicePlatforms;
                 return {
                     saved:     d.saved     ?? false,
                     hasGoogle: d.hasGoogle ?? false,
@@ -588,6 +608,7 @@ export class NakamaService {
                     hasDevice: d.hasDevice ?? false,
                     email:     d.email     ?? "",
                     devices:   Array.isArray(d.devices) ? d.devices : [],
+                    devicePlatforms: (dp && typeof dp === "object" && !Array.isArray(dp)) ? dp : {},
                 };
             }
             return empty;

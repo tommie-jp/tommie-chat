@@ -520,6 +520,7 @@ export function setupHtmlUI(game: GameScene): void {
                     if (deviceEl && st.hasGoogle) {
                         const myDeviceId = game.nakama.getCurrentDeviceId();
                         const devs = st.devices;
+                        const plat = st.devicePlatforms;
                         // デバイス一覧のサブリストをクリア（再描画時にゴミが残らないように）
                         const parent = deviceEl.parentElement;
                         const oldList = parent?.querySelector(".device-list");
@@ -528,15 +529,28 @@ export function setupHtmlUI(game: GameScene): void {
                         if (devs.length === 0) {
                             deviceEl.textContent = st.hasDevice ? "1台" : "なし";
                         } else {
+                            const platformIcon = (p: string) => {
+                                switch (p) {
+                                    case "Windows": return "🖥️";
+                                    case "Mac":     return "💻";
+                                    case "iPhone":  return "📱";
+                                    case "iPad":    return "📱";
+                                    case "Android": return "📱";
+                                    default:        return "📱";
+                                }
+                            };
                             const short = (id: string) => id.length > 8 ? id.slice(0, 4) + "…" + id.slice(-4) : id;
-                            const lines = devs.map(id =>
-                                id === myDeviceId ? `📱 ${short(id)} ← このブラウザ` : `📱 ${short(id)}`
-                            );
+                            const lines = devs.map(id => {
+                                const p = plat[id] ?? "";
+                                const icon = platformIcon(p);
+                                const label = p ? `${icon} ${p}` : `📱 ${short(id)}`;
+                                return id === myDeviceId ? `${label} ← このブラウザ` : label;
+                            });
                             deviceEl.textContent = `${devs.length}台`;
                             if (parent) {
                                 const listEl = document.createElement("div");
                                 listEl.className = "device-list";
-                                listEl.style.cssText = "font-size:10px;color:#666;margin-top:2px;padding-left:12px;line-height:1.5;";
+                                listEl.style.cssText = "font-size:11px;color:#666;margin-top:2px;padding-left:12px;line-height:1.5;";
                                 for (const line of lines) {
                                     const d = document.createElement("div");
                                     d.textContent = line;
