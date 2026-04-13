@@ -163,6 +163,12 @@ export class NakamaService {
                 (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16));
     }
 
+    /** 現在のセッションで使用中のデバイス ID を返す（未ログインなら空文字） */
+    getCurrentDeviceId(): string {
+        if (!this.loginName) return "";
+        return localStorage.getItem(`nakama_device_id_${this.loginName}`) ?? "";
+    }
+
     private getOrCreateDeviceId(loginName: string): string {
         const key = `nakama_device_id_${loginName}`;
         // 1. localStorage（同一コンテキスト内で最速）
@@ -566,10 +572,10 @@ export class NakamaService {
     /**
      * 現在のアカウントが「保存済み」(Google/Apple/Email のいずれかにリンク済み) かを取得する。
      */
-    async getAccountStatus(): Promise<{ saved: boolean; hasGoogle: boolean; hasApple: boolean; hasEmail: boolean; hasDevice: boolean; email: string }> {
+    async getAccountStatus(): Promise<{ saved: boolean; hasGoogle: boolean; hasApple: boolean; hasEmail: boolean; hasDevice: boolean; email: string; devices: string[] }> {
         const _end = prof("NakamaService.getAccountStatus");
         try {
-            const empty = { saved: false, hasGoogle: false, hasApple: false, hasEmail: false, hasDevice: false, email: "" };
+            const empty = { saved: false, hasGoogle: false, hasApple: false, hasEmail: false, hasDevice: false, email: "", devices: [] as string[] };
             if (!this.socket) return empty;
             const r = await this.socket.rpc("getAccountStatus");
             if (r?.payload) {
@@ -581,6 +587,7 @@ export class NakamaService {
                     hasEmail:  d.hasEmail  ?? false,
                     hasDevice: d.hasDevice ?? false,
                     email:     d.email     ?? "",
+                    devices:   Array.isArray(d.devices) ? d.devices : [],
                 };
             }
             return empty;

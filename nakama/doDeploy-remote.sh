@@ -185,19 +185,7 @@ show_progress() {
         printf '\r\e[K  %s' "$line"
     done
     printf '\r\e[K'
-    echo "  ${count} 件転送"
-}
-
-# ファイル名の連続出力を同一行に上書き表示する
-# Usage: some_command | show_progress
-show_progress() {
-    local count=0
-    while IFS= read -r line; do
-        count=$((count + 1))
-        printf '\r\e[K  %s' "$line"
-    done
-    printf '\r\e[K'
-    echo "  ${count} 件転送"
+    echo "  ${count} 行"
 }
 
 # ── 前提チェック ──
@@ -227,11 +215,10 @@ VITE_DEFAULT_PORT=443
 EOF
 
 npm install --silent
-npm run build
+npm run build 2>&1 | show_progress
 rm -f .env
 
-DIST_FILES=$(find dist -type f | wc -l)
-echo "✅ ビルド完了（${DIST_FILES} ファイル）"
+echo "✅ ビルド完了"
 
 # ── 2. VPS に git clone ──
 step "2. VPS に git clone"

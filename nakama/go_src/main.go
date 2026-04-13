@@ -2977,7 +2977,8 @@ func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB,
 	hasGoogle := user != nil && user.GetGoogleId() != ""
 	hasApple := user != nil && user.GetAppleId() != ""
 	hasEmail := acc.GetEmail() != ""
-	hasDevice := len(acc.GetDevices()) > 0
+	devices := acc.GetDevices()
+	hasDevice := len(devices) > 0
 	saved := hasGoogle || hasApple || hasEmail
 
 	// Google メールアドレスを Storage から取得
@@ -2997,6 +2998,12 @@ func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		}
 	}
 
+	// デバイス ID 一覧
+	deviceIDs := make([]string, 0, len(devices))
+	for _, d := range devices {
+		deviceIDs = append(deviceIDs, d.GetId())
+	}
+
 	out, _ := json.Marshal(map[string]interface{}{
 		"saved":     saved,
 		"hasGoogle": hasGoogle,
@@ -3004,6 +3011,7 @@ func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		"hasEmail":  hasEmail,
 		"hasDevice": hasDevice,
 		"email":     googleEmail,
+		"devices":   deviceIDs,
 	})
 	return string(out), nil
 }

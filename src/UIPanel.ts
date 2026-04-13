@@ -503,7 +503,37 @@ export function setupHtmlUI(game: GameScene): void {
                     googleEl.textContent = st.hasGoogle
                         ? (st.email ? `✅ ${st.email}` : "✅ リンク済み")
                         : "未リンク";
-                    deviceEl.textContent = st.hasDevice ? "✅ このブラウザに紐付け" : "なし";
+                    // デバイス一覧を表示（現在のブラウザを明示）
+                    if (deviceEl) {
+                        const myDeviceId = game.nakama.getCurrentDeviceId();
+                        const devs = st.devices;
+                        if (devs.length === 0) {
+                            deviceEl.textContent = "なし";
+                        } else {
+                            const short = (id: string) => id.length > 8 ? id.slice(0, 4) + "…" + id.slice(-4) : id;
+                            const lines = devs.map(id =>
+                                id === myDeviceId ? `📱 ${short(id)} ← このブラウザ` : `📱 ${short(id)}`
+                            );
+                            deviceEl.textContent = `${devs.length}台`;
+                            // 既存の子ノードをクリアして一覧を挿入
+                            const parent = deviceEl.parentElement;
+                            if (parent) {
+                                let listEl = parent.querySelector(".device-list") as HTMLDivElement | null;
+                                if (!listEl) {
+                                    listEl = document.createElement("div");
+                                    listEl.className = "device-list";
+                                    listEl.style.cssText = "font-size:10px;color:#666;margin-top:2px;padding-left:12px;line-height:1.5;";
+                                    parent.appendChild(listEl);
+                                }
+                                listEl.textContent = "";
+                                for (const line of lines) {
+                                    const d = document.createElement("div");
+                                    d.textContent = line;
+                                    listEl.appendChild(d);
+                                }
+                            }
+                        }
+                    }
                     // サーバ側 Google OAuth 未設定 → ボタン無効化 + エラーコード表示
                     const oauthErr = game.nakama.googleOAuthErr;
                     if (linkBtn && oauthErr && oauthErr > 0) {
@@ -651,7 +681,7 @@ export function setupHtmlUI(game: GameScene): void {
             // ─── Google 紐付け解除ボタン ───
             if (unlinkBtn) {
                 unlinkBtn.addEventListener("click", async () => {
-                    if (!confirm("Google アカウントの紐付けを解除しますか？\n（デバイス認証は残ります）")) return;
+                    if (!confirm("このアカウントから Google 連携を解除しますか？\n\n※ すべてのデバイスで Google 認証が無効になります\n※ デバイス認証は残るためログインは引き続き可能です")) return;
                     setLinkResult("紐付け解除中...");
                     try {
                         await game.nakama.unlinkGoogle();
@@ -663,6 +693,8 @@ export function setupHtmlUI(game: GameScene): void {
                             : (e && typeof e === "object" && "message" in e) ? String((e as { message: unknown }).message)
                             : JSON.stringify(e);
                         setLinkResult("解除失敗: " + msg, true);
+                        // 別デバイスで解除済みの場合があるので最新状態に更新
+                        await renderAccountStatus();
                     }
                 });
             }
