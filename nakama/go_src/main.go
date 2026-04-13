@@ -3027,9 +3027,14 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 
 	// google_id の UNIQUE 制約を部分インデックスに変換（Nakama 初期マイグレーションとの互換）
 	// 空文字の重複を許可しないと google_id = '' への UPDATE（紐付け解除）が SQLSTATE 23505 で失敗する
+	// 初期マイグレーションではテーブル制約として作られるため ALTER TABLE で落とす
+	if _, err := db.ExecContext(ctx,
+		"ALTER TABLE users DROP CONSTRAINT IF EXISTS users_google_id_key"); err != nil {
+		logger.Warn("InitModule: drop google_id constraint: %v", err)
+	}
 	if _, err := db.ExecContext(ctx,
 		"DROP INDEX IF EXISTS users_google_id_key"); err != nil {
-		logger.Warn("InitModule: drop old google_id index: %v", err)
+		logger.Warn("InitModule: drop google_id index: %v", err)
 	}
 	if _, err := db.ExecContext(ctx,
 		"CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_key ON users (google_id) WHERE google_id != ''"); err != nil {
