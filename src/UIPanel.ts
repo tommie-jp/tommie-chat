@@ -3078,7 +3078,6 @@ export function setupHtmlUI(game: GameScene): void {
                 { id: "room_park",    name: "公園",           worldId: 0 },
                 { id: "room_beach",   name: "ビーチ",         worldId: 0 },
                 { id: "room_night",   name: "夜の街",         worldId: 0 },
-                { id: "sub_world",    name: "サブワールド",    worldId: 1 },
             ];
             // ユーザー定義ブックマーク（サーバーから読み込み）
             let userBookmarks: { name: string; x: number; z: number; ry: number; worldId: number }[] = [];
