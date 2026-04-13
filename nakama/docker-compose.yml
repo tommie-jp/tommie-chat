@@ -36,6 +36,9 @@ services:
   # --- Nakama ゲームサーバ ---
   nakama:
     image: registry.heroiclabs.com/heroiclabs/nakama:3.35.0
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     entrypoint:
       - "/bin/sh"
       - "-ecx"
