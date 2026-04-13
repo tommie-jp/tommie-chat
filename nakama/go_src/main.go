@@ -2940,7 +2940,7 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 			}
 		}
 		if claims.Email != "" {
-			if _, dbErr := db.ExecContext(ctx, "UPDATE users SET email = $1 WHERE id = $2", claims.Email, uid); dbErr != nil {
+			if _, dbErr := db.ExecContext(ctx, "UPDATE users SET email = $1 WHERE id = $2::uuid", claims.Email, uid); dbErr != nil {
 				logger.Warn("rpcLinkGoogleByCode: save email failed: %v", dbErr)
 			}
 		}
@@ -3000,10 +3000,12 @@ func rpcUnlinkGoogle(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	if len(acc.GetDevices()) == 0 && acc.GetEmail() == "" && (user.GetAppleId() == "") {
 		return "", runtime.NewError("cannot unlink: no other auth method", 9)
 	}
-	// google_id を直接クリア（nk.UnlinkGoogle は Google ID token が必要なため SQL で実施）
-	if _, err := db.ExecContext(ctx, "UPDATE users SET google_id = '' WHERE id = $1 AND google_id != ''", uid); err != nil {
+	// google_id とメールアドレスをクリア（nk.UnlinkGoogle は Google ID token が必要なため SQL で実施）
+	if _, err := db.ExecContext(ctx,
+		"UPDATE users SET google_id = '', email = '' WHERE id = $1::uuid AND google_id != ''",
+		uid); err != nil {
 		logger.Warn("rpcUnlinkGoogle: SQL failed uid=%s: %v", uid, err)
-		return "", runtime.NewError("unlink failed", 13)
+		return "", runtime.NewError("unlink failed: "+err.Error(), 13)
 	}
 	logger.Info("rpcUnlinkGoogle: unlinked google from uid=%s", uid)
 	out, _ := json.Marshal(map[string]interface{}{"unlinked": true})
