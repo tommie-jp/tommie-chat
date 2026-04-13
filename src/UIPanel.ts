@@ -500,8 +500,27 @@ export function setupHtmlUI(game: GameScene): void {
                         ? (st.email ? `✅ ${st.email}` : "✅ リンク済み")
                         : "未リンク";
                     deviceEl.textContent = st.hasDevice ? "✅ このブラウザに紐付け" : "なし";
-                    if (linkBtn) linkBtn.disabled = st.hasGoogle;
-                    if (linkBtn && st.hasGoogle) linkBtn.textContent = "🅖 Google リンク済み";
+                    // サーバ側 Google OAuth 未設定 → ボタン無効化 + エラーコード表示
+                    const oauthErr = game.nakama.googleOAuthErr;
+                    if (linkBtn && oauthErr && oauthErr > 0) {
+                        linkBtn.disabled = true;
+                        linkBtn.style.opacity = "0.4";
+                        linkBtn.style.cursor = "not-allowed";
+                        if (linkResultEl) {
+                            linkResultEl.textContent = `サーバ：設定エラー:${String(oauthErr).padStart(3, "0")}`;
+                            linkResultEl.style.color = "#c00";
+                        }
+                    } else if (linkBtn) {
+                        linkBtn.disabled = st.hasGoogle;
+                        if (!st.hasGoogle) {
+                            linkBtn.style.opacity = "";
+                            linkBtn.style.cursor = "";
+                        }
+                        if (st.hasGoogle) linkBtn.textContent = "🅖 Google 認証済み";
+                        if (linkResultEl && !st.hasGoogle && oauthErr === 0) {
+                            linkResultEl.textContent = "";
+                        }
+                    }
                 } catch (e) {
                     console.warn("getAccountStatus failed:", e);
                     savedEl.textContent = "取得失敗";
@@ -1738,6 +1757,21 @@ export function setupHtmlUI(game: GameScene): void {
             const srvInfo = await game.nakama.getServerInfo();
             game.connectionState = "connected";
             addServerLog(t("log.login_success"), srvInfo);
+            // getServerInfo で googleOAuthErr が確定した後、ボタン状態を反映
+            {
+                const oauthErr = game.nakama.googleOAuthErr;
+                const gBtn = document.getElementById("googleLinkBtn") as HTMLButtonElement | null;
+                const gRes = document.getElementById("googleLinkResult");
+                if (gBtn && oauthErr && oauthErr > 0) {
+                    gBtn.disabled = true;
+                    gBtn.style.opacity = "0.4";
+                    gBtn.style.cursor = "not-allowed";
+                    if (gRes) {
+                        gRes.textContent = `サーバ：設定エラー:${String(oauthErr).padStart(3, "0")}`;
+                        gRes.style.color = "#c00";
+                    }
+                }
+            }
             if (loginStatus) {
                 loginStatus.style.color = "#00dd55";
                 loginStatus.style.fontWeight = "bold";

@@ -881,14 +881,23 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		version = v
 	}
 
+	// Google OAuth 設定状態: 0=OK, 1=CLIENT_ID未設定, 2=CLIENT_SECRET未設定
+	googleOAuthErr := 0
+	if env["GOOGLE_CLIENT_ID"] == "" {
+		googleOAuthErr = 1
+	} else if env["GOOGLE_CLIENT_SECRET"] == "" {
+		googleOAuthErr = 2
+	}
+
 	info := map[string]interface{}{
-		"name":         node,
-		"version":      version,
-		"pluginDate":   buildDate,
-		"pluginCommit": buildCommit,
-		"worldSize":    defaultWorld.worldSize(),
-		"chunkSize":    chunkSize,
-		"chunkCount":   defaultWorld.ChunkCountX,
+		"name":           node,
+		"version":        version,
+		"pluginDate":     buildDate,
+		"pluginCommit":   buildCommit,
+		"worldSize":      defaultWorld.worldSize(),
+		"chunkSize":      chunkSize,
+		"chunkCount":     defaultWorld.ChunkCountX,
+		"googleOAuthErr": googleOAuthErr,
 	}
 	b, err := json.Marshal(info)
 	if err != nil {

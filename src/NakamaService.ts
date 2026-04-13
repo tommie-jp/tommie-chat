@@ -30,6 +30,8 @@ export class NakamaService {
     private host = location.hostname;
     private port = location.port || (location.protocol === "https:" ? "443" : "80");
     selfSessionId: string | null = null;
+    /** サーバ側 Google OAuth エラーコード（0=OK, 1=CLIENT_ID未設定, 2=SECRET未設定, null=未取得） */
+    googleOAuthErr: number | null = null;
     /** 現在のマッチに参加中の session ID 一覧 */
     currentPresenceIds: string[] = [];
 
@@ -584,7 +586,8 @@ export class NakamaService {
         try {
             const result = await this.socket.rpc("getServerInfo");
             if (result?.payload) {
-                const data = JSON.parse(result.payload) as { name?: string; version?: string; pluginDate?: string; pluginCommit?: string };
+                const data = JSON.parse(result.payload) as { name?: string; version?: string; pluginDate?: string; pluginCommit?: string; googleOAuthErr?: number };
+                if (typeof data.googleOAuthErr === "number") this.googleOAuthErr = data.googleOAuthErr;
                 const parts: string[] = [];
                 if (data.name || data.version)
                     parts.push(`NakamaServerName="${[data.name, data.version ? `v${data.version}` : ""].filter(Boolean).join(" ")}"`);
