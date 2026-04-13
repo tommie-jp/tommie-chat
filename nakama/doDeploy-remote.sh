@@ -188,6 +188,18 @@ show_progress() {
     echo "  ${count} 件転送"
 }
 
+# ファイル名の連続出力を同一行に上書き表示する
+# Usage: some_command | show_progress
+show_progress() {
+    local count=0
+    while IFS= read -r line; do
+        count=$((count + 1))
+        printf '\r\e[K  %s' "$line"
+    done
+    printf '\r\e[K'
+    echo "  ${count} 件転送"
+}
+
 # ── 前提チェック ──
 step "0. 前提チェック"
 
@@ -224,59 +236,62 @@ echo "✅ ビルド完了（${DIST_FILES} ファイル）"
 # ── 2. VPS に git clone ──
 step "2. VPS に git clone"
 
-# 既存ディレクトリの確認
+# 既存ディレクトリの確認（-y 指定時は常に削除して再クローン）
+DO_DELETE=false
 if ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
     echo "  ${REMOTE_DIR} が既に存在します"
-    ans="n"
     if [ "$FORCE_YES" = true ]; then
-        ans="y"
+        DO_DELETE=true
         echo "  -y 指定: 自動削除"
     else
         read -p "  削除して再クローンしますか？ (y/N): " ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            DO_DELETE=true
+        fi
     fi
-    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-        echo "  既存コンテナを停止・削除中..."
-        ssh "${SSH_TARGET}" bash -c "'
-            cd ${REMOTE_DIR}/nakama 2>/dev/null && {
-                docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
-                docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
-                docker compose down 2>/dev/null || true
-            } || true
-            # 残留コンテナの強制削除は当該プロジェクトのみを対象にする。
-            # プロジェクト名の解決順:
-            #   1. .env の COMPOSE_PROJECT_NAME（既存環境との後方互換）
-            #   2. VPS ホスト名のドットをダッシュに置換した値（新規環境の既定）
-            # 過去に \"name=nakama\" や \"name=tommchat-prod-\" を使っていたが、
-            # 前者は部分一致、後者はハードコードのため、逆向きのデプロイで
-            # 他プロジェクト (test → prod, prod → test) を巻き込んで停止させた実績がある。
-            CURRENT_PROJECT=\"\"
-            if [ -f .env ]; then
-                CURRENT_PROJECT=\$(sed -n \"s/^COMPOSE_PROJECT_NAME=//p\" .env | tail -n1)
+fi
+if [ "$DO_DELETE" = true ]; then
+    echo "  既存コンテナを停止・削除中..."
+    ssh "${SSH_TARGET}" bash -c "'
+        cd ${REMOTE_DIR}/nakama 2>/dev/null && {
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
+            docker compose down 2>/dev/null || true
+        } || true
+        # 残留コンテナの強制削除は当該プロジェクトのみを対象にする。
+        # プロジェクト名の解決順:
+        #   1. .env の COMPOSE_PROJECT_NAME（既存環境との後方互換）
+        #   2. VPS ホスト名のドットをダッシュに置換した値（新規環境の既定）
+        # 過去に \"name=nakama\" や \"name=tommchat-prod-\" を使っていたが、
+        # 前者は部分一致、後者はハードコードのため、逆向きのデプロイで
+        # 他プロジェクト (test → prod, prod → test) を巻き込んで停止させた実績がある。
+        CURRENT_PROJECT=\"\"
+        if [ -f .env ]; then
+            CURRENT_PROJECT=\$(sed -n \"s/^COMPOSE_PROJECT_NAME=//p\" .env | tail -n1)
+        fi
+        if [ -z \"\$CURRENT_PROJECT\" ]; then
+            CURRENT_PROJECT=\"${EXPECTED_PROJECT}\"
+        fi
+        if [ -n \"\$CURRENT_PROJECT\" ]; then
+            REMAINING=\$(docker ps -aq --filter \"name=\${CURRENT_PROJECT}-\" 2>/dev/null | sort -u | grep -v \"^\$\" || true)
+            if [ -n \"\$REMAINING\" ]; then
+                echo \"残留コンテナを削除: project=\$CURRENT_PROJECT\"
+                echo \"\$REMAINING\" | xargs -r docker rm -f
             fi
-            if [ -z \"\$CURRENT_PROJECT\" ]; then
-                CURRENT_PROJECT=\"${EXPECTED_PROJECT}\"
-            fi
-            if [ -n \"\$CURRENT_PROJECT\" ]; then
-                REMAINING=\$(docker ps -aq --filter \"name=\${CURRENT_PROJECT}-\" 2>/dev/null | sort -u | grep -v \"^\$\" || true)
-                if [ -n \"\$REMAINING\" ]; then
-                    echo \"残留コンテナを削除: project=\$CURRENT_PROJECT\"
-                    echo \"\$REMAINING\" | xargs -r docker rm -f
-                fi
-            fi
-            # data/ と .env は保持し、それ以外を削除して再クローン
-            if [ -d ${REMOTE_DIR}/nakama/data ]; then
-                mv ${REMOTE_DIR}/nakama/data /tmp/_tommie_data_bak
-            fi
-            if [ -f ${REMOTE_DIR}/nakama/.env ]; then
-                cp ${REMOTE_DIR}/nakama/.env /tmp/_tommie_env_bak
-            fi
-            rm -rf ${REMOTE_DIR}
-        '"
-        echo "  削除しました"
-    else
-        echo "  既存ディレクトリを使用します（git pull）"
-        ssh "${SSH_TARGET}" "cd ${REMOTE_DIR} && git pull"
-    fi
+        fi
+        # data/ と .env は保持し、それ以外を削除して再クローン
+        if [ -d ${REMOTE_DIR}/nakama/data ]; then
+            mv ${REMOTE_DIR}/nakama/data /tmp/_tommie_data_bak
+        fi
+        if [ -f ${REMOTE_DIR}/nakama/.env ]; then
+            cp ${REMOTE_DIR}/nakama/.env /tmp/_tommie_env_bak
+        fi
+        rm -rf ${REMOTE_DIR}
+    '"
+    echo "  削除しました"
+elif ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
+    echo "  既存ディレクトリを使用します（git pull）"
+    ssh "${SSH_TARGET}" "cd ${REMOTE_DIR} && git pull"
 fi
 
 # clone（ディレクトリがない場合のみ）
