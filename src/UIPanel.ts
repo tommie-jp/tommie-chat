@@ -557,7 +557,7 @@ export function setupHtmlUI(game: GameScene): void {
                             if (parent) {
                                 const listEl = document.createElement("div");
                                 listEl.className = "device-list";
-                                listEl.style.cssText = "font-size:11px;color:#666;margin-top:2px;padding-left:12px;line-height:1.5;";
+                                listEl.style.cssText = "color:#666;margin-top:2px;padding-left:12px;line-height:1.5;";
                                 for (const line of lines) {
                                     const d = document.createElement("div");
                                     d.textContent = line;

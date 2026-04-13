@@ -2945,12 +2945,26 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 				logger.Warn("rpcLinkGoogleByCode: AuthenticateTokenGenerate failed: %v", tokenErr)
 				return "", runtime.NewError("token generation failed", 13)
 			}
-			// Google プロフィール名で表示名を更新
+			// Google プロフィール名・メールアドレスを更新
 			googleName := ""
-			if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil && claims.Name != "" {
-				googleName = claims.Name
-				if updateErr := nk.AccountUpdateId(ctx, existingUID, "", nil, googleName, "", "", "", ""); updateErr != nil {
-					logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
+			if claims, parseErr := parseGoogleIDTokenClaims(tok.IDToken); parseErr == nil {
+				if claims.Name != "" {
+					googleName = claims.Name
+					if updateErr := nk.AccountUpdateId(ctx, existingUID, "", nil, googleName, "", "", "", ""); updateErr != nil {
+						logger.Warn("rpcLinkGoogleByCode: AccountUpdateId displayName failed: %v", updateErr)
+					}
+				}
+				if claims.Email != "" {
+					if _, wErr := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+						Collection:      "account_ext",
+						Key:             "google",
+						UserID:          existingUID,
+						Value:           fmt.Sprintf(`{"email":%q}`, claims.Email),
+						PermissionRead:  1,
+						PermissionWrite: 0,
+					}}); wErr != nil {
+						logger.Warn("rpcLinkGoogleByCode: storage write email (switch) failed: %v", wErr)
+					}
 				}
 			}
 			logger.Info("rpcLinkGoogleByCode: already linked, switching uid=%s → %s (%s) displayName=%q", uid, existingUID, existingUsername, googleName)
