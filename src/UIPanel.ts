@@ -538,6 +538,7 @@ export function setupHtmlUI(game: GameScene): void {
             // window.tommieGoogleOAuth は public/js/google-oauth.js が defer で読み込む
             type OAuthApi = {
                 getClientId: () => string | null;
+                setClientId: (id: string) => void;
                 startLink: (opts?: { captureState?: () => unknown }) => { popup: Window | null; promise: Promise<string> };
                 resumeFromRedirect: () => { code: string; resumeState: unknown | null } | null;
             };
@@ -1757,6 +1758,14 @@ export function setupHtmlUI(game: GameScene): void {
             const srvInfo = await game.nakama.getServerInfo();
             game.connectionState = "connected";
             addServerLog(t("log.login_success"), srvInfo);
+            // getServerInfo で取得した Google Client ID をクライアント OAuth に設定
+            {
+                const cid = game.nakama.googleClientId;
+                if (cid) {
+                    const api = (window as unknown as { tommieGoogleOAuth?: { setClientId: (id: string) => void } }).tommieGoogleOAuth;
+                    api?.setClientId(cid);
+                }
+            }
             // getServerInfo で googleOAuthErr が確定した後、ボタン状態を反映
             {
                 const oauthErr = game.nakama.googleOAuthErr;

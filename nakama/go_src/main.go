@@ -898,6 +898,7 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		"chunkSize":      chunkSize,
 		"chunkCount":     defaultWorld.ChunkCountX,
 		"googleOAuthErr": googleOAuthErr,
+		"googleClientId": env["GOOGLE_CLIENT_ID"],
 	}
 	b, err := json.Marshal(info)
 	if err != nil {

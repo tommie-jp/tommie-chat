@@ -21,12 +21,20 @@
     var GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
     var SCOPE = "openid email profile";
 
-    // Client ID は <meta name="google-oauth-client-id" content="..."> から取得
+    // Client ID は setClientId() で設定された値を優先し、
+    // フォールバックとして <meta name="google-oauth-client-id" content="..."> から取得
+    var _clientIdOverride = null;
+
     function getClientId() {
+        if (_clientIdOverride) return _clientIdOverride;
         var meta = document.querySelector('meta[name="google-oauth-client-id"]');
         var id = meta && meta.getAttribute("content");
         if (id && id.trim() && id.indexOf("YOUR_") !== 0) return id.trim();
         return null;
+    }
+
+    function setClientId(id) {
+        _clientIdOverride = (id && typeof id === "string" && id.trim()) ? id.trim() : null;
     }
 
     function randomState() {
@@ -196,6 +204,7 @@
 
     window.tommieGoogleOAuth = {
         getClientId: getClientId,
+        setClientId: setClientId,
         startLink: startLink,
         resumeFromRedirect: resumeFromRedirect
     };

@@ -32,6 +32,8 @@ export class NakamaService {
     selfSessionId: string | null = null;
     /** サーバ側 Google OAuth エラーコード（0=OK, 1=CLIENT_ID未設定, 2=SECRET未設定, null=未取得） */
     googleOAuthErr: number | null = null;
+    /** サーバから取得した Google OAuth Client ID */
+    googleClientId: string | null = null;
     /** 現在のマッチに参加中の session ID 一覧 */
     currentPresenceIds: string[] = [];
 
@@ -586,8 +588,9 @@ export class NakamaService {
         try {
             const result = await this.socket.rpc("getServerInfo");
             if (result?.payload) {
-                const data = JSON.parse(result.payload) as { name?: string; version?: string; pluginDate?: string; pluginCommit?: string; googleOAuthErr?: number };
+                const data = JSON.parse(result.payload) as { name?: string; version?: string; pluginDate?: string; pluginCommit?: string; googleOAuthErr?: number; googleClientId?: string };
                 if (typeof data.googleOAuthErr === "number") this.googleOAuthErr = data.googleOAuthErr;
+                if (data.googleClientId) this.googleClientId = data.googleClientId;
                 const parts: string[] = [];
                 if (data.name || data.version)
                     parts.push(`NakamaServerName="${[data.name, data.version ? `v${data.version}` : ""].filter(Boolean).join(" ")}"`);
