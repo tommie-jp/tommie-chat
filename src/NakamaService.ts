@@ -577,6 +577,12 @@ export class NakamaService {
             this.selfSessionId = (this.session as unknown as { session_id?: string }).session_id ?? "";
             this.reconnecting = false;
 
+            // デバイスのプラットフォーム情報をサーバに送信（非同期・失敗しても続行）
+            this.socket.rpc("registerDeviceInfo", JSON.stringify({
+                deviceId: newDeviceId,
+                platform: NakamaService.detectPlatform(),
+            })).catch(e => console.warn("registerDeviceInfo failed (switchToGoogleAccount):", e));
+
             // マッチ再参加
             const meta = this.getReconnectMeta?.() ?? {};
             await this.joinWorldMatch(meta);
