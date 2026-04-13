@@ -562,7 +562,10 @@ export function setupHtmlUI(game: GameScene): void {
                     await renderAccountStatus();
                 } catch (e) {
                     console.warn("linkGoogleByCode failed:", e);
-                    setLinkResult("リンク失敗: " + (e instanceof Error ? e.message : String(e)), true);
+                    const msg = e instanceof Error ? e.message
+                        : (e && typeof e === "object" && "message" in e) ? String((e as { message: unknown }).message)
+                        : JSON.stringify(e);
+                    setLinkResult("リンク失敗: " + msg, true);
                 }
             };
 
