@@ -168,8 +168,12 @@ export class NakamaService {
         const ua = navigator.userAgent;
         if (/iPhone/.test(ua)) return "iPhone";
         if (/iPad/.test(ua)) return "iPad";
-        // iPadOS 13+ は Mac と同じ UA を返すが maxTouchPoints で推定
-        if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return "iPad";
+        // iPadOS 13+ / 将来の iOS はタッチデバイスでも Mac と同じ UA を返す
+        // maxTouchPoints で iOS 端末と判定し、画面の短辺 < 600px なら iPhone、それ以上なら iPad
+        if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) {
+            const minDim = Math.min(screen.width, screen.height);
+            return minDim < 600 ? "iPhone" : "iPad";
+        }
         if (/Android/.test(ua)) return "Android";
         if (/Windows NT/.test(ua)) return "Windows";
         if (/Macintosh/.test(ua)) return "Mac";
