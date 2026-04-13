@@ -486,10 +486,12 @@ export function setupHtmlUI(game: GameScene): void {
             const deviceEl = document.getElementById("account-info-device");
             const googleRow = document.getElementById("account-info-google-row");
             const unlinkRow = document.getElementById("account-info-unlink-row");
+            const detachRow = document.getElementById("account-info-detach-row");
             const deviceRow = document.getElementById("account-info-device-row");
             const linkRow  = document.getElementById("account-info-link-row");
             const linkBtn  = document.getElementById("googleLinkBtn") as HTMLButtonElement | null;
             const unlinkBtn = document.getElementById("googleUnlinkBtn") as HTMLButtonElement | null;
+            const detachBtn = document.getElementById("deviceDetachBtn") as HTMLButtonElement | null;
             const refreshBtn = document.getElementById("accountRefreshBtn") as HTMLButtonElement | null;
             const linkResultEl = document.getElementById("googleLinkResult");
 
@@ -515,6 +517,7 @@ export function setupHtmlUI(game: GameScene): void {
                         googleEl.textContent = st.email ? `✅ ${st.email}` : "✅ リンク済み";
                     }
                     if (unlinkRow) unlinkRow.style.display = linked && st.hasDevice ? "" : "none";
+                    if (detachRow) detachRow.style.display = linked && st.hasDevice ? "" : "none";
                     if (deviceRow) deviceRow.style.display = linked ? "" : "none";
                     if (linkRow) linkRow.style.display = linked ? "none" : "";
                     if (deviceEl && st.hasGoogle) {
@@ -721,6 +724,20 @@ export function setupHtmlUI(game: GameScene): void {
                         // 別デバイスで解除済みの場合があるので最新状態に更新
                         await renderAccountStatus();
                     }
+                });
+            }
+
+            // ─── このデバイスを切り離すボタン ───
+            if (detachBtn) {
+                detachBtn.addEventListener("click", () => {
+                    if (!confirm(
+                        "このデバイスのアカウント情報をリセットします。\n" +
+                        "次回起動時に新しい匿名アカウントとして開始します。\n" +
+                        "（他のデバイスには影響しません）\n\nよろしいですか？"
+                    )) return;
+                    // loginName クッキーのみ削除（他の UI 設定は残す）
+                    document.cookie = "loginName=; max-age=0; path=/";
+                    location.reload();
                 });
             }
 
