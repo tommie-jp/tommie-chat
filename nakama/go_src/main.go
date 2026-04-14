@@ -1026,6 +1026,45 @@ func gplUpdate(sid string, displayName, loginTime, nameColor string) {
 	gplMu.Unlock()
 }
 
+// dnSaveState は displayName の DB 永続化デバウンス用状態
+type dnSaveState struct {
+	mu      sync.Mutex
+	pending string
+	timer   *time.Timer
+}
+
+var dnSaveStates sync.Map // uid → *dnSaveState
+
+// saveDisplayNameAsync は指定 uid の DisplayName を 2 秒デバウンスで users.display_name に保存する。
+// 同 uid で連続呼び出された場合は最新値のみ保存される。マッチループをブロックしないよう非同期。
+func saveDisplayNameAsync(logger runtime.Logger, nk runtime.NakamaModule, uid, name string) {
+	if uid == "" || name == "" {
+		return
+	}
+	v, _ := dnSaveStates.LoadOrStore(uid, &dnSaveState{})
+	st := v.(*dnSaveState)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.pending = name
+	if st.timer != nil {
+		return // 既にタイマーが走っているので pending 更新だけで済む
+	}
+	st.timer = time.AfterFunc(2*time.Second, func() {
+		st.mu.Lock()
+		toSave := st.pending
+		st.timer = nil
+		st.mu.Unlock()
+		if toSave == "" {
+			return
+		}
+		if err := nk.AccountUpdateId(context.Background(), uid, "", nil, toSave, "", "", "", ""); err != nil {
+			logger.Warn("saveDisplayNameAsync AccountUpdateId uid=%s: %v", uid, err)
+		} else {
+			logger.Info("saveDisplayNameAsync saved uid=%s name=%q", uid, toSave)
+		}
+	})
+}
+
 func gplSnapshot() ([]byte, uint64) {
 	ver := atomic.LoadUint64(&gplVer)
 	gplMu.RLock()
@@ -1054,13 +1093,15 @@ func gplSnapshot() ([]byte, uint64) {
 
 const worldMatchCacheTTL = 10 * time.Second
 
-// buildWorldMatchResponse は matchId とワールド情報を含むレスポンスを構築する
-func buildWorldMatchResponse(matchId string, w *World) map[string]interface{} {
+// buildWorldMatchResponse は matchId とワールド情報を含むレスポンスを構築する。
+// displayName には users.display_name（DB 値）を入れ、クライアントが別デバイスでも同名を引き継げるようにする。
+func buildWorldMatchResponse(matchId string, w *World, displayName string) map[string]interface{} {
 	return map[string]interface{}{
 		"matchId":     matchId,
 		"worldId":     w.ID,
 		"chunkCountX": w.ChunkCountX,
 		"chunkCountZ": w.ChunkCountZ,
+		"displayName": displayName,
 	}
 }
 
@@ -1070,6 +1111,12 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 	sid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
 	cacheDN(ctx, nk, uid)
+	savedDN := ""
+	if v, ok := displayNameCache.Load(uid); ok {
+		if s, ok := v.(string); ok {
+			savedDN = s
+		}
+	}
 
 	var req struct {
 		WorldID int `json:"worldId"`
@@ -1091,7 +1138,7 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	// キャッシュを最優先で確認
 	if mid, ok := worldMatchIDs[wid]; ok && mid != "" && time.Since(worldMatchCachedAt[wid]) < worldMatchCacheTTL {
 		logger.Info("Returning cached world match: %s (worldId=%d)", mid, wid)
-		b, _ := json.Marshal(buildWorldMatchResponse(mid, w))
+		b, _ := json.Marshal(buildWorldMatchResponse(mid, w, savedDN))
 		return string(b), nil
 	}
 
@@ -1104,7 +1151,7 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		worldMatchIDs[wid] = mid
 		worldMatchCachedAt[wid] = time.Now()
 		logger.Info("Found active world match: %s (worldId=%d)", mid, wid)
-		b, _ := json.Marshal(buildWorldMatchResponse(mid, w))
+		b, _ := json.Marshal(buildWorldMatchResponse(mid, w, savedDN))
 		return string(b), nil
 	}
 
@@ -1116,7 +1163,7 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	worldMatchIDs[wid] = mid
 	worldMatchCachedAt[wid] = time.Now()
 	logger.Info("Created world match: %s (worldId=%d)", mid, wid)
-	b, _ := json.Marshal(buildWorldMatchResponse(mid, w))
+	b, _ := json.Marshal(buildWorldMatchResponse(mid, w, savedDN))
 	return string(b), nil
 }
 
@@ -2181,6 +2228,17 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					if dn.NameColor != "" { p.NameColor = dn.NameColor }
 					// グローバルプレイヤーリスト更新
 					gplUpdate(sid, p.DisplayName, p.LoginTime, p.NameColor)
+				}
+				// DB 永続化（users.display_name）。別デバイス・別セッションでも引き継ぐため。
+				// デバウンス付き非同期保存でマッチループをブロックしない。
+				if dn.DisplayName != "" {
+					if pres, ok := ms.Presences[sid]; ok {
+						if uid := pres.GetUserId(); uid != "" {
+							saveDisplayNameAsync(logger, nk, uid, dn.DisplayName)
+							// displayNameCache も即時更新（同一プロセス内の表示整合のため）
+							displayNameCache.Store(uid, dn.DisplayName)
+						}
+					}
 				}
 			}
 			// 表示名はユーザリスト全体に影響するため全員にブロードキャスト（AOIフィルタなし）

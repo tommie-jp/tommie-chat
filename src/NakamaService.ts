@@ -315,9 +315,14 @@ export class NakamaService {
         if (!this.session || !this.socket) throw new Error("no session/socket");
         const result = await this.socket.rpc("getWorldMatch", JSON.stringify({ worldId }));
         if (!result?.payload) throw new Error("getWorldMatch: no payload");
-        const data = JSON.parse(result.payload) as { matchId?: string; worldId?: number; chunkCountX?: number; chunkCountZ?: number };
+        const data = JSON.parse(result.payload) as { matchId?: string; worldId?: number; chunkCountX?: number; chunkCountZ?: number; displayName?: string };
         if (!data.matchId) throw new Error("getWorldMatch: no matchId");
         this.matchId = data.matchId;
+        // サーバ DB の display_name を優先採用（別デバイスでも同じ Google UID なら引き継がれる）
+        if (data.displayName && data.displayName !== this.selfDisplayName) {
+            console.log(`joinWorldMatch: adopting server displayName=${data.displayName} (was ${this.selfDisplayName})`);
+            this.selfDisplayName = data.displayName;
+        }
         const worldInfo = { worldId: data.worldId ?? 0, chunkCountX: data.chunkCountX ?? 64, chunkCountZ: data.chunkCountZ ?? 64 };
 
         // joinMatch() より前にハンドラを登録する（MatchJoin直後のサーバー通知を取りこぼさないため）
