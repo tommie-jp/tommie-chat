@@ -18,6 +18,7 @@ const OP_PLAYERS_AOI_REQ   = 11; // C→S     全プレイヤーAOI情報要求
 const OP_PLAYERS_AOI_RESP  = 12; // S→C     全プレイヤーAOI情報応答（要求者のみ）
 const OP_CHAT              = 13; // C→S→C   チャットメッセージ（全員ブロードキャスト）
 const OP_SYSTEM_MSG        = 14; // S→C     システムメッセージ（ログイン/ログアウト通知）
+const OP_JUMP              = 15; // C→S→C   アバタージャンプ演出（AOI内ブロードキャスト、ペイロード {}）
 const OP_PLAYER_LIST_SUB   = 16; // C→S     プレイヤーリスト購読（{subscribe:true/false}）
 const OP_PLAYER_LIST_DATA  = 17; // S→C     全プレイヤーリスト（プッシュ配信）
 
@@ -46,6 +47,7 @@ export class NakamaService {
     onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => void;
     onAvatarMoveTarget?: (sessionId: string, x: number, z: number) => void;
     onAvatarChange?:     (sessionId: string, textureUrl: string, charCol: number, charRow: number) => void;
+    onAvatarJump?:       (sessionId: string) => void;
     onBlockUpdate?:      (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => void;
     onAOIEnter?:         (sessionId: string, x: number, z: number, ry: number) => void;
     onAOILeave?:         (sessionId: string) => void;
@@ -128,6 +130,10 @@ export class NakamaService {
             if (!sid) return;
             const av = p as { textureUrl: string; cc?: number; cr?: number };
             this.onAvatarChange?.(sid, av.textureUrl, av.cc ?? 0, av.cr ?? 0);
+        }},
+        [OP_JUMP]: { name: "JUMP", silent: true, fn: (_p, sid) => {
+            if (!sid) return;
+            this.onAvatarJump?.(sid);
         }},
     };
 
@@ -430,6 +436,13 @@ export class NakamaService {
         this.selfNameColor = nameColor;
         try {
             await this.socket.sendMatchState(this.matchId, OP_DISPLAY_NAME, this._encoder.encode(JSON.stringify({ displayName: this.selfDisplayName, nc: nameColor })));
+        } catch (e) { console.warn("NakamaService:", e); }
+    }
+
+    async sendJump(): Promise<void> {
+        if (!this.socket || !this.matchId) return;
+        try {
+            await this.socket.sendMatchState(this.matchId, OP_JUMP, JSON.stringify({}));
         } catch (e) { console.warn("NakamaService:", e); }
     }
 

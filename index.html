@@ -317,6 +317,16 @@
         }
         .avPanel-btn:hover { background: #3570b0; }
         .avPanel-btn:active { background: #285a90; }
+        /* アバタープレビュー: タップで決定。ジャンプアニメーション */
+        #avPanel-preview.jumping {
+            animation: avPanel-jump 0.5s ease-out;
+        }
+        @keyframes avPanel-jump {
+            0%   { transform: translateY(0); }
+            35%  { transform: translateY(-28px); }
+            55%  { transform: translateY(-28px); }
+            100% { transform: translateY(0); }
+        }
         /* サムネ水平スクロールバーを若干大きめに */
         #avPanel-thumbScroll::-webkit-scrollbar { height: 12px; }
         #avPanel-thumbScroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 6px; }
@@ -2682,6 +2692,9 @@
             <tr><td class="label" title="28i.雲の表示&#10;雲メッシュの表示/非表示を切り替え&#10;デフォルト: ON">28i.Cloud</td><td class="value">
                 <button id="cloudToggleBtn" class="debug-btn">On</button>
             </td></tr>
+            <tr><td class="label" title="28j.五角形の表示&#10;アバター足元の五角形（standBase）の表示/非表示を切り替え&#10;デフォルト: OFF">28j.StandBase</td><td class="value">
+                <button id="standBaseToggleBtn" class="debug-btn off">Off</button>
+            </td></tr>
             <tr><td class="label" title="29.Cam Info&#10;カメラのα（水平回転角）, β（垂直仰角）, r（プレイヤーからの距離）&#10;初期値: α=90°, β=67°, r=10&#10;典型的なMMO: β=45〜80°, r=5〜20&#10;Minecraft: F3でFacing方向（N/S/E/W）と回転角（Yaw/Pitch）表示">29.Cam Info</td><td class="value" id="val-cam-info" style="font-size: 11px;">0°, 0°, 0.0</td></tr>
             <tr><td class="label" title="29b.MaxZoom&#10;マウスホイールでズームアウトできる最大距離（upperRadiusLimit）&#10;初期値: 200&#10;大きいほど遠くまで引ける">29b.MaxZoom</td><td class="value">
                 <select id="maxZoomSelect" class="debug-select">
@@ -3071,15 +3084,12 @@
             <select id="avPanel-spriteUrlSelect" style="display:none;"></select>
             <div id="avPanel-thumbScroll" style="display:flex;gap:4px;overflow-x:auto;overflow-y:hidden;min-width:0;min-height:52px;flex-shrink:0;scroll-behavior:smooth;padding:2px 0;"></div>
             <div style="display:flex;justify-content:center;">
-                <canvas id="avPanel-preview" width="192" height="192" style="width:192px;height:192px;image-rendering:pixelated;background:rgba(0,0,0,0.05);border-radius:4px;flex-shrink:0;" title="現在選択中のアバター（正面・歩行アニメーション）"></canvas>
+                <canvas id="avPanel-preview" width="192" height="192" style="width:192px;height:192px;image-rendering:pixelated;background:rgba(0,0,0,0.05);border-radius:4px;flex-shrink:0;cursor:pointer;" title="タップで決定（このアバターに変更）"></canvas>
             </div>
             <div style="display:flex;justify-content:center;gap:6px;">
                 <button id="avPanel-prevBtn" class="avPanel-btn" style="padding:4px 12px;" title="前のアバター">&lt;</button>
                 <button id="avPanel-playBtn" class="avPanel-btn" style="padding:4px 12px;" title="歩行アニメーション ON/OFF">▶️</button>
                 <button id="avPanel-nextBtn" class="avPanel-btn" style="padding:4px 12px;" title="次のアバター">&gt;</button>
-            </div>
-            <div style="display:flex;justify-content:flex-end;">
-                <button id="avPanel-spriteApplyBtn" class="avPanel-btn" style="padding:4px 12px;">決定</button>
             </div>
             <div id="avPanel-infoBox" style="display:flex;flex-direction:column;gap:2px;font-family:inherit;font-size:11px;color:#333;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;margin-top:2px;">
                 <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">タイトル：</span><span id="avPanel-info-title"></span></div>

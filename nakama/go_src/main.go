@@ -335,6 +335,7 @@ const (
 	opPlayersAOIResp   int64 = 12 // S→C     全プレイヤーAOI情報応答（要求者のみ）
 	opChat             int64 = 13 // C→S→C   チャットメッセージ（全員ブロードキャスト）
 	opSystemMsg        int64 = 14 // S→C     システムメッセージ（ログイン/ログアウト通知）
+	opJump             int64 = 15 // C→S→C   アバタージャンプ演出（AOI内ブロードキャスト、ペイロード {}）
 	opPlayerListSub    int64 = 16 // C→S     プレイヤーリスト購読（{subscribe:true/false}）
 	opPlayerListData   int64 = 17 // S→C     全プレイヤーリスト（プッシュ配信）
 )
@@ -2026,6 +2027,17 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
 				if len(targets) > 0 {
 					logf("snd avatarChange sid=%s targets=%d\n", shortSID(sid), len(targets))
+					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
+				}
+			}
+			continue
+		}
+
+		if op == opJump {
+			// ジャンプ演出: ペイロードは {} 固定。送信者を除く AOI 内プレイヤーへブロードキャスト
+			if p, ok := ms.Positions[sid]; ok {
+				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
+				if len(targets) > 0 {
 					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
 				}
 			}

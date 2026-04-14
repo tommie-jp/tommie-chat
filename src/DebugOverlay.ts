@@ -1250,6 +1250,31 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
+    const standBaseToggleBtn = document.getElementById("standBaseToggleBtn") as HTMLButtonElement;
+    if (standBaseToggleBtn) {
+        const savedStand = dbgGetCookie("dbgStandBase");
+        // デフォルト: OFF（五角形を非表示）。Cookie="1" のときのみ ON
+        const initVisible = savedStand === "1";
+        game.spriteAvatarSystem.setStandBaseVisible(initVisible);
+        standBaseToggleBtn.innerText = initVisible ? "On" : "Off";
+        if (initVisible) standBaseToggleBtn.classList.remove("off");
+        else standBaseToggleBtn.classList.add("off");
+        markNonDefault(standBaseToggleBtn, "Off", standBaseToggleBtn.innerText, () => {
+            game.spriteAvatarSystem.setStandBaseVisible(false);
+            standBaseToggleBtn.innerText = "Off"; standBaseToggleBtn.classList.add("off");
+            dbgSetCookie("dbgStandBase", "0"); markNonDefault(standBaseToggleBtn, "Off", "Off");
+        });
+        standBaseToggleBtn.addEventListener("click", () => {
+            const next = !game.spriteAvatarSystem.getStandBaseVisible();
+            game.spriteAvatarSystem.setStandBaseVisible(next);
+            standBaseToggleBtn.innerText = next ? "On" : "Off";
+            if (next) standBaseToggleBtn.classList.remove("off");
+            else standBaseToggleBtn.classList.add("off");
+            dbgSetCookie("dbgStandBase", next ? "1" : "0");
+            markNonDefault(standBaseToggleBtn, "Off", standBaseToggleBtn.innerText);
+        });
+    }
+
     const remoteAoiBtn = document.getElementById("remoteAoiBtn") as HTMLButtonElement;
     if (remoteAoiBtn) {
         if (dbgGetCookie("dbgRemoteAoi") === "1") {
@@ -1879,6 +1904,9 @@ export function setupDebugOverlay(game: GameScene): void {
                 game.playerBox.getChildMeshes().forEach(m => m.isVisible = false);
                 // 表示名タグを再設定（セッションIDサフィックス含む）
                 game.refreshSelfNameTag?.();
+                // アバター変更時のジャンプ演出（自分 & 他クライアントへ通知）
+                game.spriteAvatarSystem.jump(selfId);
+                game.nakama.sendJump().catch((e) => console.warn("DebugOverlay:", e));
             });
             game.nakama.sendAvatarChange(url, cc, cr).catch((e) => console.warn("DebugOverlay:", e));
         });
@@ -1888,7 +1916,6 @@ export function setupDebugOverlay(game: GameScene): void {
     // デバッグツールの avatarSelect / spriteUrlSelect / spriteCharCol / spriteCharRow / spriteApplyBtn に委譲
     {
         const avSpriteSel = document.getElementById("avPanel-spriteUrlSelect") as HTMLSelectElement | null;
-        const avApply = document.getElementById("avPanel-spriteApplyBtn") as HTMLButtonElement | null;
         const avSearchInput = document.getElementById("avPanel-searchInput") as HTMLInputElement | null;
         const avSearchBtn = document.getElementById("avPanel-searchBtn") as HTMLButtonElement | null;
         const avPreview = document.getElementById("avPanel-preview") as HTMLCanvasElement | null;
@@ -2178,11 +2205,16 @@ export function setupDebugOverlay(game: GameScene): void {
                 }
             });
         }
-        // Apply: debug 側 spriteApplyBtn にフォワード（選択中 variant の col/row を渡す）
-        if (avApply && spriteApplyBtn) {
-            avApply.addEventListener("click", () => {
+        // Apply: プレビューキャンバスをタップで決定（ジャンプ演出付き）
+        if (avPreview && spriteApplyBtn) {
+            avPreview.addEventListener("click", () => {
                 const v = getCurrentVariant();
                 if (!v) return;
+                // ジャンプ演出（CSS アニメーション、1回再生）
+                avPreview.classList.remove("jumping");
+                void avPreview.offsetWidth; // リフロー強制でアニメーション再実行
+                avPreview.classList.add("jumping");
+                // 3Dシーンの自分のアバターのジャンプは spriteApplyBtn → createAvatar().then() で発火
                 const dbgUrl = document.getElementById("spriteUrlSelect") as HTMLSelectElement | null;
                 const dbgCol = document.getElementById("spriteCharCol") as HTMLInputElement | null;
                 const dbgRow = document.getElementById("spriteCharRow") as HTMLInputElement | null;

@@ -1831,6 +1831,11 @@ export function setupHtmlUI(game: GameScene): void {
             if (upd) upd(chgLbl.text, chgLbl.color, chgLbl.suffix);
         });
     };
+    game.nakama.onAvatarJump = (sessionId: string) => {
+        if (sessionId === game.nakama.selfSessionId) return;
+        // アバター再作成中でも jump() 側で保留され、作成完了時に反映される
+        game.spriteAvatarSystem.jump(sessionId);
+    };
     // --- プロフィールキャッシュ & debounced matchデータ要求 ---
     const profileCache = new Map<string, { displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string }>();
     const pendingProfileSids = new Set<string>();

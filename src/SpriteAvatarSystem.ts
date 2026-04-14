@@ -27,6 +27,10 @@ interface SpriteAvatarData {
     isMoving: boolean;
     prevX: number;
     prevZ: number;
+    spriteBaseY: number;  // sprite.position.y の基準値（ジャンプ演出用）
+    jumpStart: number;    // performance.now() 時点、0 なら非ジャンプ中
+    jumpDuration: number; // ms
+    jumpHeight: number;   // world units
 }
 
 interface ManagerEntry {
@@ -41,6 +45,11 @@ export class SpriteAvatarSystem {
     private processing = new Map<string, Promise<ManagerEntry>>();
     private creating = new Set<string>();
     private disposed = new Set<string>();  // creating中にdisposeされたIDを記録
+    // アバター再作成中に jump が来た場合、作成完了後に適用するため保留
+    private pendingJumps = new Map<string, { ts: number; height: number; duration: number }>();
+    private readonly PENDING_JUMP_TTL_MS = 3000;
+    // 足元の五角形（standBase）の表示状態（デバッグ用、デフォルト OFF）
+    private standBaseVisible = false;
 
     constructor(private scene: Scene) {}
 
@@ -125,6 +134,7 @@ export class SpriteAvatarSystem {
 
         // stand base
         const standBase = this.createStandBase(id, root, baseColor);
+        standBase.setEnabled(this.standBaseVisible);
 
         // name tag
         const { plane: namePlane, update: nameUpdate } = this.createNameTag(root, name, s.height);
@@ -171,9 +181,19 @@ export class SpriteAvatarSystem {
             sheetInfo: info, charCol, charRow,
             currentDir: 0, isMoving: false,
             prevX: x, prevZ: z,
+            spriteBaseY: s.height / 2, jumpStart: 0, jumpDuration: 0, jumpHeight: 0,
         };
         this.avatars.set(id, data);
         this.creating.delete(id);
+
+        // 再作成中に保留された jump を適用（TTL 内のみ）
+        const pending = this.pendingJumps.get(id);
+        if (pending && performance.now() - pending.ts < this.PENDING_JUMP_TTL_MS) {
+            data.jumpHeight = pending.height;
+            data.jumpDuration = pending.duration;
+            data.jumpStart = performance.now();
+        }
+        this.pendingJumps.delete(id);
 
         _end();
         return root;
@@ -191,6 +211,23 @@ export class SpriteAvatarSystem {
 
         sprite.position.x = root.position.x;
         sprite.position.z = root.position.z;
+
+        // ジャンプ演出: 放物線オフセット（4t(1-t) は t=0.5 でピーク 1.0）
+        // root は動かし名前タグ等は一緒に跳ね、足元の五角形(standBase)は逆補正で地面に固定
+        if (data.jumpStart > 0) {
+            const t = (performance.now() - data.jumpStart) / data.jumpDuration;
+            if (t >= 1) {
+                data.jumpStart = 0;
+                root.position.y = 0;
+                sprite.position.y = data.spriteBaseY;
+                data.standBase.position.y = 0.025 + 0.01;
+            } else {
+                const offset = 4 * t * (1 - t) * data.jumpHeight;
+                root.position.y = offset;
+                sprite.position.y = data.spriteBaseY + offset;
+                data.standBase.position.y = 0.025 + 0.01 - offset;
+            }
+        }
 
         const moving = dx * dx + dz * dz > 0.0001;
 
@@ -227,11 +264,38 @@ export class SpriteAvatarSystem {
         }
     }
 
+    /** 指定アバターをジャンプさせる（放物線で上下に跳ねる）
+     *  アバター再作成中の場合は保留し、createAvatar 完了時に適用 */
+    jump(id: string, height: number = 1.5, durationMs: number = 500): void {
+        const data = this.avatars.get(id);
+        if (data) {
+            data.jumpHeight = height;
+            data.jumpDuration = durationMs;
+            data.jumpStart = performance.now();
+        }
+        // 再作成中 or 未作成 なら保留（新スプライト作成時に反映）
+        if (!data || this.creating.has(id)) {
+            this.pendingJumps.set(id, { ts: performance.now(), height, duration: durationMs });
+        }
+    }
+
     setEnabled(id: string, enabled: boolean): void {
         const data = this.avatars.get(id);
         if (!data) return;
         data.sprite.isVisible = enabled;
         data.root.setEnabled(enabled);
+    }
+
+    /** 足元の五角形（standBase）の表示状態を全アバターに一括適用（新規作成分にも反映） */
+    setStandBaseVisible(visible: boolean): void {
+        this.standBaseVisible = visible;
+        for (const data of this.avatars.values()) {
+            data.standBase.setEnabled(visible);
+        }
+    }
+
+    getStandBaseVisible(): boolean {
+        return this.standBaseVisible;
     }
 
     setPosition(id: string, x: number, z: number): void {
