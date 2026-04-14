@@ -840,6 +840,29 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    // 指定ワールドの最新チャット履歴（最大 20 件）を取得
+    async getRecentChat(worldId: number): Promise<{ username: string; text: string; userId: string; sessionId: string; ts: number }[]> {
+        const _end = prof("NakamaService.getRecentChat");
+        try {
+            if (!this.socket) return [];
+            try {
+                const result = await this.socket.rpc("getRecentChat", JSON.stringify({ worldId }));
+                if (!result?.payload) return [];
+                const data = JSON.parse(result.payload) as { messages?: { username?: string; text?: string; userId?: string; sessionId?: string; ts?: number }[] };
+                return (data.messages ?? []).map(m => ({
+                    username: m.username ?? "",
+                    text: m.text ?? "",
+                    userId: m.userId ?? "",
+                    sessionId: m.sessionId ?? "",
+                    ts: m.ts ?? 0,
+                }));
+            } catch (e) {
+                console.warn("NakamaService.getRecentChat:", e);
+                return [];
+            }
+        } finally { _end(); }
+    }
+
     // プレイヤーリストのプッシュ配信を購読/解除
     async subscribePlayerList(subscribe: boolean, mode: "count" | "full" = "full"): Promise<void> {
         if (!this.socket || !this.matchId) return;

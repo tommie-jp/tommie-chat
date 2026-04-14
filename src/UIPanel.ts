@@ -227,6 +227,9 @@ export function setupHtmlUI(game: GameScene): void {
 
     if (!textarea || !sendBtn) return;
 
+    // チャット履歴の遅延フェッチ（addChatHistory 定義後に代入）
+    const chatLoader: { fn: (() => void) | null } = { fn: null };
+
     const historyPanel = document.getElementById("chat-history-panel") as HTMLElement;
     const historyHeader = document.getElementById("chat-history-header") as HTMLElement;
     if (historyPanel && historyHeader) {
@@ -298,6 +301,7 @@ export function setupHtmlUI(game: GameScene): void {
                 const nowInactive = historyPanel.style.display === "none" || historyPanel.classList.contains("minimized");
                 if (wasInactive && !nowInactive) {
                     requestAnimationFrame(() => { histList.scrollTop = histList.scrollHeight; });
+                    chatLoader.fn?.();
                 }
                 wasInactive = nowInactive;
             }).observe(historyPanel, { attributes: true, attributeFilter: ["style", "class"] });
@@ -1002,7 +1006,7 @@ export function setupHtmlUI(game: GameScene): void {
 
     trimOlVisibility();
 
-    const addChatOverlay = (avatarName: string, text: string, timeStr: string, nameColor?: string, senderId?: string) => {
+    const addChatOverlay = (avatarName: string, text: string, timeStr: string, nameColor?: string, senderId?: string, prepend = false, deferTrim = false) => {
         if (!chatOverlay || !text || chatOverlayMax === 0) return;
         const isSystem = avatarName === "[system]";
         const line = document.createElement("div");
@@ -1019,8 +1023,9 @@ export function setupHtmlUI(game: GameScene): void {
                 `<span class="chat-ol-name"${colorStyle}>${escapeHtml(avatarName)}:</span> ${escapeHtml(text)}`;
         }
         if (senderId) line.dataset.sender = senderId;
-        chatOverlay.appendChild(line);
-        trimOlVisibility();
+        if (prepend) chatOverlay.insertBefore(line, chatOverlay.firstChild);
+        else chatOverlay.appendChild(line);
+        if (!deferTrim) trimOlVisibility();
         // メモリ節約: 非表示要素が多すぎたら古い行を削除
         const keepMax = Math.max(chatOverlayMax * 3, 20);
         while (chatOverlay.children.length > keepMax) {
@@ -1039,13 +1044,18 @@ export function setupHtmlUI(game: GameScene): void {
         }
     };
 
-    const addChatHistory = (avatarName: string, text: string, nameColor?: string, senderId?: string, serverTs = 0) => {
+    // 履歴フェッチの重複排除用（ts_userId）
+    const seenChatKeys = new Set<string>();
+
+    const addChatHistory = (avatarName: string, text: string, nameColor?: string, senderId?: string, serverTs = 0, prepend = false) => {
         const _end = prof("UIPanel.addChatHistory");
         if (!text) { _end(); return; }
         const list = document.getElementById("chat-history-list");
         if (!list) { _end(); return; }
         const panel = document.getElementById("chat-history-panel");
         const inactive = !panel || panel.style.display === "none" || panel.classList.contains("minimized");
+
+        if (serverTs > 0 && senderId) seenChatKeys.add(`${serverTs}_${senderId}`);
 
         const now = serverTs > 0 ? new Date(serverTs) : new Date();
         const hh = String(now.getHours()).padStart(2, "0");
@@ -1062,15 +1072,20 @@ export function setupHtmlUI(game: GameScene): void {
             `<span class="chat-history-time">${escapeHtml(timeStr)}</span>` +
             `<span class="${nameClass}"${nameStyle}>${escapeHtml(avatarName)}</span>` +
             `<span class="chat-history-text">${isSystem ? text : escapeHtml(text)}</span>`;
-        list.appendChild(entry);
+        if (prepend) list.insertBefore(entry, list.firstChild);
+        else list.appendChild(entry);
         // エントリ数上限（メモリ抑制 + 再スクロールコスト軽減）
         const MAX_CHAT_ENTRIES = 500;
         while (list.childElementCount > MAX_CHAT_ENTRIES) list.firstElementChild?.remove();
-        // パネルが非表示/最小化中は強制レイアウトを引き起こす scrollIntoView をスキップ
-        if (!inactive) entry.scrollIntoView({ block: "end", behavior: "instant" });
-
-        // チャットオーバーレイにも追加
-        addChatOverlay(avatarName, text, timeStr, nameColor, senderId);
+        if (prepend) {
+            // 履歴フェッチ: scroll/吹き出しはスキップし、オーバーレイには先頭挿入（trim は呼び出し元で一括）
+            addChatOverlay(avatarName, text, timeStr, nameColor, senderId, /*prepend=*/true, /*deferTrim=*/true);
+        } else {
+            // パネルが非表示/最小化中は強制レイアウトを引き起こす scrollIntoView をスキップ
+            if (!inactive) entry.scrollIntoView({ block: "end", behavior: "instant" });
+            // チャットオーバーレイにも追加
+            addChatOverlay(avatarName, text, timeStr, nameColor, senderId);
+        }
 
         _end();
     };
@@ -1102,6 +1117,45 @@ export function setupHtmlUI(game: GameScene): void {
         if (displayName) return { text: displayName, color: "white", suffix };
         return { text: "@" + username, color, suffix };
     };
+
+    // ---- チャット履歴の遅延フェッチ（部屋ごと）----
+    // オーバレイには常に最新ログを表示したいので、パネル表示状態に依存しない
+    let loadedChatForWorld: number | null = null;
+    chatLoader.fn = () => {
+        const wid = game.currentWorldId;
+        if (loadedChatForWorld === wid) return;
+        if (!game.nakama.selfMatchId) return;
+        loadedChatForWorld = wid;
+        game.nakama.getRecentChat(wid).then((msgs) => {
+            // サーバーからは古い順。新しい順に prepend すると最終的に古い→新しい順でリスト先頭に入る
+            let added = 0;
+            for (let i = msgs.length - 1; i >= 0; i--) {
+                const m = msgs[i];
+                const key = `${m.ts}_${m.userId}`;
+                if (seenChatKeys.has(key)) continue;
+                const entry = userMap.get(m.sessionId);
+                const lbl = entry ? resolveDisplayLabel(entry.displayName, entry.username, m.sessionId) : null;
+                const chatName = lbl ? lbl.text + lbl.suffix : m.username;
+                const chatNameColor = entry?.nameColor;
+                addChatHistory(chatName, m.text, chatNameColor, m.userId, m.ts, /*prepend=*/true);
+                added++;
+            }
+            // バッチ挿入後に一括で表示トリム（layout thrashing 回避）
+            if (added > 0) trimOlVisibility();
+        }).catch((e) => {
+            console.warn("getRecentChat:", e);
+            loadedChatForWorld = null;
+        });
+    };
+
+    // 部屋切替時は履歴をクリアし、パネル表示中なら再フェッチ
+    game.onWorldChanged.push(() => {
+        const list = document.getElementById("chat-history-list");
+        if (list) while (list.firstChild) list.removeChild(list.firstChild);
+        seenChatKeys.clear();
+        loadedChatForWorld = null;
+        chatLoader.fn?.();
+    });
 
     const loginNameInput = document.getElementById("loginName") as HTMLInputElement;
     const loginBtn = document.getElementById("loginBtn") as HTMLButtonElement;
@@ -1969,6 +2023,8 @@ export function setupHtmlUI(game: GameScene): void {
             const srvInfo = await game.nakama.getServerInfo();
             game.connectionState = "connected";
             addServerLog(t("log.login_success"), srvInfo);
+            // 部屋のチャット履歴を遅延フェッチ（パネル表示中のみ実行）
+            chatLoader.fn?.();
             // getServerInfo で取得した Google Client ID をクライアント OAuth に設定
             {
                 const cid = game.nakama.googleClientId;

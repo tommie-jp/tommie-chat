@@ -1274,6 +1274,42 @@ type pendingLeaveMsg struct {
 	targets []runtime.Presence
 }
 
+// 部屋ごとのチャット履歴（最新 chatHistoryMax 件）
+const chatHistoryMax = 20
+
+type chatHistoryRing struct {
+	mu   sync.Mutex
+	buf  [][]byte // 各要素は enriched JSON（opChat ブロードキャストと同じ形式）
+}
+
+// worldID -> *chatHistoryRing
+var chatHistoryByWorld sync.Map
+
+func chatHistoryGet(worldID int) *chatHistoryRing {
+	v, _ := chatHistoryByWorld.LoadOrStore(worldID, &chatHistoryRing{})
+	return v.(*chatHistoryRing)
+}
+
+func (r *chatHistoryRing) append(msg []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// 元 slice が再利用される可能性があるためコピー
+	cp := make([]byte, len(msg))
+	copy(cp, msg)
+	r.buf = append(r.buf, cp)
+	if len(r.buf) > chatHistoryMax {
+		r.buf = r.buf[len(r.buf)-chatHistoryMax:]
+	}
+}
+
+func (r *chatHistoryRing) snapshot() [][]byte {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([][]byte, len(r.buf))
+	copy(out, r.buf)
+	return out
+}
+
 // matchState はマッチの状態（プレイヤーごとのAOI管理）
 type matchState struct {
 	WorldID          int                                  // このマッチのワールドID
@@ -2174,6 +2210,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				if err := dispatcher.BroadcastMessage(opChat, enriched, nil, nil, true); err != nil {
 					logger.Warn("opChat BroadcastMessage error: %v", err)
 				}
+				chatHistoryGet(ms.WorldID).append(enriched)
 			}
 			continue
 		}
@@ -2308,6 +2345,26 @@ func (m *worldMatch) MatchSignal(_ context.Context, _ runtime.Logger, _ *sql.DB,
 func rpcPing(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ string) (string, error) {
 	defer prof("rpcPing")()
 	return "{}", nil
+}
+
+// rpcGetRecentChat は指定ワールドの最新チャット履歴（最大 chatHistoryMax 件）を返す
+// payload: {"worldId": N}
+func rpcGetRecentChat(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcGetRecentChat")()
+	var req struct {
+		WorldID int `json:"worldId"`
+	}
+	if payload != "" {
+		_ = json.Unmarshal([]byte(payload), &req)
+	}
+	msgs := chatHistoryGet(req.WorldID).snapshot()
+	// 各要素は JSON バイト列なので json.RawMessage として組み立てる
+	raws := make([]json.RawMessage, len(msgs))
+	for i, m := range msgs {
+		raws[i] = m
+	}
+	out, _ := json.Marshal(map[string]interface{}{"messages": raws})
+	return string(out), nil
 }
 
 // rpcGetPlayerCount は現在の同接数を返す RPC
@@ -3514,6 +3571,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"registerDeviceInfo", rpcRegisterDeviceInfo},
 		{"getAccountStatus", rpcGetAccountStatus},
 		{"getInitialAvatarIndex", rpcGetInitialAvatarIndex},
+		{"getRecentChat", rpcGetRecentChat},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {
