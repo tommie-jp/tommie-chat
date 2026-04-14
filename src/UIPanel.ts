@@ -1484,11 +1484,21 @@ export function setupHtmlUI(game: GameScene): void {
                 const key = `${m.ts}_${m.userId}`;
                 if (seenChatKeys.has(key)) continue;
                 const entry = userMap.get(m.sessionId);
-                const lbl = entry ? resolveDisplayLabel(entry.displayName, entry.username, m.sessionId) : null;
-                // オフライン送信者（userMap 未登録）はチャット履歴の hg/ad から直接アイコンを付与
-                const iconSuffix = (!entry && (m.isAdmin || m.hasGoogle)) ? (m.isAdmin ? " \u{1F451}" : " \u2705") : "";
-                const chatName = lbl ? lbl.text + lbl.suffix : (m.username + iconSuffix);
-                const chatNameColor = entry?.nameColor;
+                // メッセージ自身の dn/hg/ad を優先（履歴描画時点で userMap に未到達でもアイコン・表示名が付く）
+                const effDn = (m.displayName && m.displayName !== "") ? m.displayName : (entry?.displayName ?? "");
+                const effUname = entry?.username ?? m.username;
+                const msgIcon = m.isAdmin ? " \u{1F451}" : (m.hasGoogle ? " \u2705" : "");
+                // 履歴メッセージのフラグを userMap / profileCache にも反映（以後のレース回避）
+                if (m.sessionId && (m.isAdmin !== undefined || m.hasGoogle !== undefined)) {
+                    const pc = profileCache.get(m.sessionId);
+                    if (pc) { pc.hasGoogle = m.hasGoogle ?? pc.hasGoogle; pc.isAdmin = m.isAdmin ?? pc.isAdmin; }
+                    if (entry) userMap.set(m.sessionId, { ...entry, hasGoogle: m.hasGoogle ?? entry.hasGoogle, isAdmin: m.isAdmin ?? entry.isAdmin });
+                }
+                const lbl = resolveDisplayLabel(effDn, effUname, m.sessionId);
+                // resolveDisplayLabel が付けた icon を剥がしてメッセージ側 icon に置き換え（一貫性のため）
+                const stripped = lbl.suffix.replace(/ [\u2705\u{1F451}]$/u, "");
+                const chatName = lbl.text + stripped + msgIcon;
+                const chatNameColor = m.nameColor ?? entry?.nameColor;
                 addChatHistory(chatName, m.text, chatNameColor, m.userId, m.ts, /*prepend=*/true);
                 added++;
             }
@@ -1807,20 +1817,40 @@ export function setupHtmlUI(game: GameScene): void {
         }
     });
 
-    game.nakama.onChatMessage = (username, text, userId, senderSid, ts, hasGoogle, isAdmin) => {
-        // 認証フラグを userMap / profileCache に反映（チャットが profileResponse より早く届く場合のレース回避）
-        if (senderSid && (hasGoogle !== undefined || isAdmin !== undefined)) {
+    game.nakama.onChatMessage = (username, text, userId, senderSid, ts, hasGoogle, isAdmin, displayName, nameColor) => {
+        // 認証フラグ・表示名を userMap / profileCache に反映（チャットが profileResponse より早く届く場合のレース回避）
+        if (senderSid) {
             const pc = profileCache.get(senderSid);
-            if (pc) { pc.hasGoogle = hasGoogle ?? pc.hasGoogle; pc.isAdmin = isAdmin ?? pc.isAdmin; }
+            if (pc) {
+                if (hasGoogle !== undefined) pc.hasGoogle = hasGoogle;
+                if (isAdmin !== undefined) pc.isAdmin = isAdmin;
+                if (displayName) pc.displayName = displayName;
+            }
             const ue = userMap.get(senderSid);
-            if (ue) userMap.set(senderSid, { ...ue, hasGoogle: hasGoogle ?? ue.hasGoogle, isAdmin: isAdmin ?? ue.isAdmin });
+            if (ue) {
+                userMap.set(senderSid, {
+                    ...ue,
+                    hasGoogle: hasGoogle ?? ue.hasGoogle,
+                    isAdmin: isAdmin ?? ue.isAdmin,
+                    displayName: displayName || ue.displayName,
+                    nameColor: nameColor || ue.nameColor,
+                });
+            }
         }
-        // 表示名を優先（なければ @ユーザID）— sessionId でサフィックス解決
+        // 表示名はメッセージ側を優先、なければ userMap
         const entry = senderSid ? userMap.get(senderSid) : undefined;
-        const chatName = entry
-            ? resolveDisplayLabel(entry.displayName, entry.username, senderSid).text + resolveDisplayLabel(entry.displayName, entry.username, senderSid).suffix
-            : username;
-        const chatNameColor = entry?.nameColor;
+        const effDn = (displayName && displayName !== "") ? displayName : (entry?.displayName ?? "");
+        const effUname = entry?.username ?? username;
+        const msgIcon = isAdmin ? " \u{1F451}" : (hasGoogle ? " \u2705" : "");
+        let chatName: string;
+        if (senderSid) {
+            const lbl = resolveDisplayLabel(effDn, effUname, senderSid);
+            const stripped = lbl.suffix.replace(/ [\u2705\u{1F451}]$/u, "");
+            chatName = lbl.text + stripped + msgIcon;
+        } else {
+            chatName = username + msgIcon;
+        }
+        const chatNameColor = nameColor ?? entry?.nameColor;
         addChatHistory(chatName, text, chatNameColor, userId, ts);
         // 吹き出しは送信元セッションのアバターのみに表示
         if (senderSid === game.nakama.selfSessionId) {

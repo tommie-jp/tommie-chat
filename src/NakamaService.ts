@@ -40,7 +40,7 @@ export class NakamaService {
 
     get selfMatchId(): string | null { return this.matchId; }
 
-    onChatMessage?: (username: string, text: string, userId: string, sessionId: string, ts: number, hasGoogle?: boolean, isAdmin?: boolean) => void;
+    onChatMessage?: (username: string, text: string, userId: string, sessionId: string, ts: number, hasGoogle?: boolean, isAdmin?: boolean, displayName?: string, nameColor?: string) => void;
     onSystemMessage?: (type: string, username: string, userId: string, sessionId: string, uidCount: number, nameColor: string, ts: number) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
@@ -102,8 +102,8 @@ export class NakamaService {
             this.onPlayersAOIResponse?.(players);
         }},
         [OP_CHAT]: { name: "CHAT", fn: (p) => {
-            const chat = p as { text: string; username: string; userId: string; sessionId: string; ts?: number; hg?: boolean; ad?: boolean };
-            this.onChatMessage?.(chat.username ?? "", chat.text ?? "", chat.userId ?? "", chat.sessionId ?? "", chat.ts ?? 0, chat.hg, chat.ad);
+            const chat = p as { text: string; username: string; userId: string; sessionId: string; ts?: number; hg?: boolean; ad?: boolean; dn?: string; nc?: string };
+            this.onChatMessage?.(chat.username ?? "", chat.text ?? "", chat.userId ?? "", chat.sessionId ?? "", chat.ts ?? 0, chat.hg, chat.ad, chat.dn, chat.nc);
         }},
         [OP_SYSTEM_MSG]: { name: "SYS_MSG", fn: (p) => {
             const sys = p as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number; nameColor?: string; ts?: number };
@@ -862,14 +862,14 @@ export class NakamaService {
     }
 
     // 指定ワールドの最新チャット履歴（最大 20 件）を取得
-    async getRecentChat(worldId: number): Promise<{ username: string; text: string; userId: string; sessionId: string; ts: number; hasGoogle?: boolean; isAdmin?: boolean }[]> {
+    async getRecentChat(worldId: number): Promise<{ username: string; text: string; userId: string; sessionId: string; ts: number; hasGoogle?: boolean; isAdmin?: boolean; displayName?: string; nameColor?: string }[]> {
         const _end = prof("NakamaService.getRecentChat");
         try {
             if (!this.socket) return [];
             try {
                 const result = await this.socket.rpc("getRecentChat", JSON.stringify({ worldId }));
                 if (!result?.payload) return [];
-                const data = JSON.parse(result.payload) as { messages?: { username?: string; text?: string; userId?: string; sessionId?: string; ts?: number; hg?: boolean; ad?: boolean }[] };
+                const data = JSON.parse(result.payload) as { messages?: { username?: string; text?: string; userId?: string; sessionId?: string; ts?: number; hg?: boolean; ad?: boolean; dn?: string; nc?: string }[] };
                 return (data.messages ?? []).map(m => ({
                     username: m.username ?? "",
                     text: m.text ?? "",
@@ -878,6 +878,8 @@ export class NakamaService {
                     ts: m.ts ?? 0,
                     hasGoogle: m.hg,
                     isAdmin: m.ad,
+                    displayName: m.dn,
+                    nameColor: m.nc,
                 }));
             } catch (e) {
                 console.warn("NakamaService.getRecentChat:", e);

@@ -2321,6 +2321,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				chatMsg["sessionId"] = sid
 				chatMsg["ts"] = time.Now().UnixMilli()
 				if pos, ok := ms.Positions[sid]; ok {
+					if pos.DisplayName != "" { chatMsg["dn"] = pos.DisplayName }
+					if pos.NameColor != "" { chatMsg["nc"] = pos.NameColor }
 					if pos.HasGoogle { chatMsg["hg"] = true }
 					if pos.IsAdmin { chatMsg["ad"] = true }
 				}
