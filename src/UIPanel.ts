@@ -523,6 +523,19 @@ export function setupHtmlUI(game: GameScene): void {
                 }
                 try {
                     const st = await game.nakama.getAccountStatus();
+                    game.nakama.selfHasGoogle = st.hasGoogle;
+                    game.nakama.selfIsAdmin = st.isAdmin;
+                    // 自分のアバター名タグを再描画（アイコン付加）
+                    {
+                        const selfSid = game.nakama.selfSessionId;
+                        const selfUname = (document.getElementById("loginName") as HTMLInputElement | null)?.value ?? "";
+                        const lbl = resolveDisplayLabel(game.nakama.selfDisplayName, selfUname, selfSid ?? undefined);
+                        game.updatePlayerNameTag(lbl.text, lbl.color, lbl.suffix);
+                        if (selfSid) {
+                            const me = userMap.get(selfSid);
+                            if (me) { userMap.set(selfSid, { ...me, hasGoogle: st.hasGoogle, isAdmin: st.isAdmin }); scheduleRenderUserList(); }
+                        }
+                    }
                     // 状態行: 認証方式を表示
                     if (st.hasGoogle && st.isAdmin) {
                         savedEl.innerHTML = '✅Googleアカウント認証（<span style="color:#c00;font-weight:bold;">管理者</span>）';
@@ -1432,6 +1445,18 @@ export function setupHtmlUI(game: GameScene): void {
                 if (count >= 2) suffix = "#" + sessionId.slice(0, 4);
             }
         }
+        // 認証アイコン（管理者 👑 > Google ✅）。自分は NakamaService の self フラグを優先。
+        let hasGoogle = false;
+        let isAdmin = false;
+        if (sessionId && sessionId === game.nakama.selfSessionId) {
+            hasGoogle = game.nakama.selfHasGoogle;
+            isAdmin = game.nakama.selfIsAdmin;
+        } else if (sessionId) {
+            const entry = userMap.get(sessionId);
+            if (entry) { hasGoogle = entry.hasGoogle ?? false; isAdmin = entry.isAdmin ?? false; }
+        }
+        if (isAdmin) suffix += " \u{1F451}";
+        else if (hasGoogle) suffix += " \u2705";
         if (displayName) return { text: displayName, color: "white", suffix };
         return { text: "@" + username, color, suffix };
     };
@@ -1508,7 +1533,7 @@ export function setupHtmlUI(game: GameScene): void {
         });
     };
 
-    const userMap = new Map<string, { username: string; displayName: string; uuid: string; sessionId: string; loginTimestamp: number; loginTime: string; channel: "chat" | "match" | "chat+match"; nameColor?: string }>();
+    const userMap = new Map<string, { username: string; displayName: string; uuid: string; sessionId: string; loginTimestamp: number; loginTime: string; channel: "chat" | "match" | "chat+match"; nameColor?: string; hasGoogle?: boolean; isAdmin?: boolean }>();
     type UlSortKey = "username" | "displayName" | "uuid" | "sessionId" | "loginTime" | "loginTimestamp" | "channel";
     let ulSortKey: UlSortKey = "username";
     let ulSortAsc = true;
@@ -1912,6 +1937,8 @@ export function setupHtmlUI(game: GameScene): void {
                     updates.loginTime = formatTimestamp(d);
                     updates.loginTimestamp = d.getTime();
                 }
+                updates.hasGoogle = prof.hasGoogle ?? false;
+                updates.isAdmin = prof.isAdmin ?? false;
                 if (Object.keys(updates).length > 0) {
                     userMap.set(sid, { ...existing, ...updates } as typeof existing);
                 }
@@ -2229,7 +2256,8 @@ export function setupHtmlUI(game: GameScene): void {
                 const displayNameInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
                 try {
                     const names = await game.nakama.getDisplayNames([game.currentUserId]);
-                    const dname = names.get(game.currentUserId!) ?? "";
+                    const entry = names.get(game.currentUserId!);
+                    const dname = entry?.displayName ?? "";
                     {
                         const lbl = resolveDisplayLabel(dname, name, game.nakama.selfSessionId ?? undefined);
                         game.updatePlayerNameTag(lbl.text, lbl.color, lbl.suffix);

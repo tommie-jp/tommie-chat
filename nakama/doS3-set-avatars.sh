@@ -11,7 +11,7 @@
 # 引数なし: ローカルの docker compose 環境に直接投入する。
 # 引数あり: パス解決はローカルで行い、PNG 本体を rsync で VPS に転送、
 # SSH 経由で VPS 上の minio コンテナに投入する（VPS 側 jq/curl 不要）。
-SCRIPT_VERSION="2026-04-15f"
+SCRIPT_VERSION="2026-04-15g"
 
 # 対応する画像拡張子
 IMG_EXTS="png jpg jpeg"
@@ -309,6 +309,66 @@ fi
 
 EXPECTED=${#STAGED_FILES[@]}
 
+# ── ステージ済みファイルの MD5 を一括計算（差分検出用） ──
+# S3 の ETag と比較し、未変更ファイルはアップロードをスキップする。
+# 単一パートアップロードでは ETag = MD5 なので、アバター PNG のような
+# 小さいファイルでは厳密に一致する。
+declare -A LOCAL_MD5_BY_NAME
+while IFS= read -r line; do
+    hash="${line%%  *}"
+    rest="${line#*  }"
+    name="${rest#./}"
+    [ -n "$name" ] && [ -n "$hash" ] && LOCAL_MD5_BY_NAME["$name"]="$hash"
+done < <(cd "$STAGE_DIR" && md5sum -- ./*)
+
+# S3 の ETag を取り込んで、アップロード対象（差分あり）と集計ハッシュを算出する共通ロジック。
+# $1: S3 JSON 行（mc ls --json local/avatars/ の生出力）
+# 入力→設定変数:
+#   S3_ETAG_BY_NAME[name] = etag
+#   S3_NAMES = S3 上の全オブジェクト名（配列）
+parse_s3_ls_json() {
+    local json="$1"
+    S3_ETAG_BY_NAME=()
+    S3_NAMES=()
+    while IFS=$'\t' read -r etag key; do
+        [ -z "$key" ] && continue
+        S3_ETAG_BY_NAME["$key"]="$etag"
+        S3_NAMES+=("$key")
+    done < <(printf '%s\n' "$json" | jq -r 'select(.key != null and ((.type // "file") == "file")) | "\(.etag // "")\t\(.key)"')
+}
+
+# STAGED_FILES と S3_ETAG_BY_NAME を比較して UPLOAD_FILES を決定する。
+# SKIP_COUNT（未変更件数）を設定。
+compute_upload_files() {
+    UPLOAD_FILES=()
+    SKIP_COUNT=0
+    local f name local_h s3_h
+    for f in "${STAGED_FILES[@]}"; do
+        name=$(basename -- "$f")
+        local_h="${LOCAL_MD5_BY_NAME[$name]:-}"
+        s3_h="${S3_ETAG_BY_NAME[$name]:-}"
+        if [ -n "$s3_h" ] && [ "$s3_h" = "$local_h" ]; then
+            SKIP_COUNT=$((SKIP_COUNT + 1))
+        else
+            UPLOAD_FILES+=("$f")
+        fi
+    done
+}
+
+# ENABLED_BASENAMES を元に「hash\tname」の全体ハッシュを計算して標準出力に返す。
+# $1: ハッシュを取り出す連想配列名（LOCAL_MD5_BY_NAME または S3_ETAG_BY_NAME）
+compute_aggregate_hash() {
+    local -n hmap=$1
+    local n h
+    for n in "${ENABLED_BASENAMES[@]}"; do
+        h="${hmap[$n]:-}"
+        [ -n "$h" ] && printf '%s\t%s\n' "$h" "$n"
+    done | LC_ALL=C sort | sha256sum | awk '{print $1}'
+}
+
+declare -A S3_ETAG_BY_NAME
+S3_NAMES=()
+
 # ============================================================
 #  ローカルモード
 # ============================================================
@@ -324,49 +384,54 @@ if [ "$LOCAL_MODE" = true ]; then
         fail "ローカル MinIO が起動していません。doRestart.sh で起動してから再実行してください"
     fi
 
-    # ── 1. minio コンテナへ転送 & 投入 ──
-    $COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png /tmp/avatars-restore/*.jpg /tmp/avatars-restore/*.jpeg'
-    n=0
-    for f in "${STAGED_FILES[@]}"; do
-        n=$((n + 1))
-        pct=$((n * 100 / EXPECTED))
-        printf '\r\033[K  %2d%% %03d/%03d %s' "$pct" "$n" "$EXPECTED" "$(basename -- "$f")"
-        $COMPOSE cp "$f" minio:/tmp/avatars-restore/ >/dev/null 2>&1
-    done
-    printf '\r\033[K'
-    $COMPOSE exec -T minio sh -c '
+    # ── 1a. S3 の既存 ETag を取得して差分検出 ──
+    S3_LS_RAW=$($COMPOSE exec -T minio sh -c '
         mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
         mc mb --ignore-existing local/avatars >/dev/null
-        total='"$EXPECTED"'
-        n=0
-        for ext in png jpg jpeg; do
-            for f in /tmp/avatars-restore/*.$ext; do
-                [ -f "$f" ] || continue
-                n=$((n + 1))
-                pct=$((n * 100 / total))
-                printf "\r\033[K  MinIO投入 %2d%% %03d/%03d" "$pct" "$n" "$total" >&2
-                mc cp "$f" local/avatars/ >/dev/null
-            done
-        done
-        printf "\r\033[K" >&2
-        rm -rf /tmp/avatars-restore
-    '
+        mc ls --json local/avatars/ 2>/dev/null || true
+    ')
+    parse_s3_ls_json "$S3_LS_RAW"
+    compute_upload_files
+    echo "  差分検出: スキップ ${SKIP_COUNT} / アップロード ${#UPLOAD_FILES[@]} / 合計 ${EXPECTED}"
 
-    # ── 2a. prune: S3 側の全オブジェクトから enable 分を引いた差分を削除対象にする ──
-    # MinIO コンテナには awk/grep/jq が無いので mc ls --json の生出力をホスト側でパースする。
-    # ファイル名にスペースが含まれる場合があるため $NF では壊れる → jq でキー抽出。
+    # ── 1b. prune: S3 側の全オブジェクトから enable 分を引いた差分を削除対象にする ──
     if [ "$PRUNE" = true ]; then
-        S3_LS_RAW=$($COMPOSE exec -T minio sh -c '
-            mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-            mc ls --json local/avatars/
-        ')
-        S3_NAMES=$(echo "$S3_LS_RAW" | jq -r 'select(.key != null and (.type // "file") == "file") | .key' 2>/dev/null | grep -E '\.(png|jpg|jpeg)$' || true)
         mapfile -t DISABLED_BASENAMES < <(
             {
                 printf 'E\t%s\n' "${ENABLED_BASENAMES[@]}"
-                printf '%s\n' "$S3_NAMES" | awk 'NF {print "S\t"$0}'
-            } | awk -F'\t' '$1=="E" {skip[$2]=1; next} $1=="S" && !skip[$2] && !seen[$2]++ {print $2}'
+                printf 'S\t%s\n' "${S3_NAMES[@]}"
+            } | awk -F'\t' '$1=="E" {skip[$2]=1; next} $1=="S" && !skip[$2] && !seen[$2]++ && $2 ~ /\.(png|jpg|jpeg)$/ {print $2}'
         )
+    fi
+
+    # ── 1c. 差分があるファイルだけ minio コンテナへ転送 & 投入 ──
+    if [ ${#UPLOAD_FILES[@]} -gt 0 ]; then
+        UPLOAD_TOTAL=${#UPLOAD_FILES[@]}
+        $COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png /tmp/avatars-restore/*.jpg /tmp/avatars-restore/*.jpeg'
+        n=0
+        for f in "${UPLOAD_FILES[@]}"; do
+            n=$((n + 1))
+            pct=$((n * 100 / UPLOAD_TOTAL))
+            printf '\r\033[K  %2d%% %03d/%03d %s' "$pct" "$n" "$UPLOAD_TOTAL" "$(basename -- "$f")"
+            $COMPOSE cp "$f" minio:/tmp/avatars-restore/ >/dev/null 2>&1
+        done
+        printf '\r\033[K'
+        $COMPOSE exec -T minio sh -c '
+            mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
+            total='"$UPLOAD_TOTAL"'
+            n=0
+            for ext in png jpg jpeg; do
+                for f in /tmp/avatars-restore/*.$ext; do
+                    [ -f "$f" ] || continue
+                    n=$((n + 1))
+                    pct=$((n * 100 / total))
+                    printf "\r\033[K  MinIO投入 %2d%% %03d/%03d" "$pct" "$n" "$total" >&2
+                    mc cp "$f" local/avatars/ >/dev/null
+                done
+            done
+            printf "\r\033[K" >&2
+            rm -rf /tmp/avatars-restore
+        '
     fi
 
     # ── 2b. enable != true のエントリを S3 から削除 ──
@@ -403,19 +468,28 @@ if [ "$LOCAL_MODE" = true ]; then
         echo "  削除完了: ${ACTUALLY_DELETED}/${DEL_TOTAL} 件"
     fi
 
-    # ── 3. 投入結果の確認 ──
-    LS_OUTPUT=$($COMPOSE exec -T minio sh -c '
+    # ── 3. 投入結果を全体ハッシュで検証 ──
+    S3_LS_RAW_AFTER=$($COMPOSE exec -T minio sh -c '
         mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-        mc ls local/avatars/
+        mc ls --json local/avatars/ 2>/dev/null || true
     ')
-    ACTUAL=$(echo "$LS_OUTPUT" | grep -cE '\.(png|jpg|jpeg)$' || true)
+    parse_s3_ls_json "$S3_LS_RAW_AFTER"
+    ACTUAL=0
+    for n in "${ENABLED_BASENAMES[@]}"; do
+        [ -n "${S3_ETAG_BY_NAME[$n]:-}" ] && ACTUAL=$((ACTUAL + 1))
+    done
     if [ "$ACTUAL" -lt "$EXPECTED" ]; then
         fail "投入されたファイル数が期待より少ないです (S3: ${ACTUAL} / enable: ${EXPECTED})"
     fi
+    LOCAL_AGG=$(compute_aggregate_hash LOCAL_MD5_BY_NAME)
+    S3_AGG=$(compute_aggregate_hash S3_ETAG_BY_NAME)
+    if [ "$LOCAL_AGG" != "$S3_AGG" ]; then
+        fail "全体ハッシュ不一致: local=${LOCAL_AGG:0:16}... s3=${S3_AGG:0:16}..."
+    fi
     if [ "$ACTUALLY_DELETED" -gt 0 ]; then
-        echo "  ✅ MinIO アバター: enable ${ACTUAL}/${EXPECTED}, disable ${ACTUALLY_DELETED} 削除"
+        echo "  ✅ MinIO アバター: enable ${ACTUAL}/${EXPECTED}, disable ${ACTUALLY_DELETED} 削除  hash: ${LOCAL_AGG:0:16}..."
     else
-        echo "  ✅ MinIO アバター: ${ACTUAL}/${EXPECTED}"
+        echo "  ✅ MinIO アバター: ${ACTUAL}/${EXPECTED}  hash: ${LOCAL_AGG:0:16}..."
     fi
     exit 0
 fi
@@ -429,10 +503,10 @@ if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "${SSH_TARGET}" "echo ok" >/dev/nu
     fail "SSH 接続に失敗しました: ${SSH_TARGET}"
 fi
 
-# ── 0b. prune: リモート S3 から現状のオブジェクト一覧を取得して削除対象を算出 ──
+# ── 0b. リモート S3 から現状のオブジェクト一覧と ETag を取得 ──
 # MinIO コンテナには awk/grep が無いので mc ls の生出力を受け取ってホスト側でパースする。
-if [ "$PRUNE" = true ]; then
-    S3_LS_RAW=$(ssh "${SSH_TARGET}" bash <<REMOTE_LS_EOF
+# 差分検出（未変更ファイルのアップロード省略）と prune 対象算出の両方に使う。
+S3_LS_RAW=$(ssh "${SSH_TARGET}" bash <<REMOTE_LS_EOF
 set -eu
 cd ${REMOTE_DIR}/nakama
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
@@ -442,32 +516,45 @@ if ! \$COMPOSE ps --status running 2>/dev/null | grep -q minio; then
 fi
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null 2>&1 || exit 0
+    mc mb --ignore-existing local/avatars >/dev/null 2>&1 || true
     mc ls --json local/avatars/ 2>/dev/null || true
 ' </dev/null
 REMOTE_LS_EOF
 )
-    if [ "$S3_LS_RAW" = "__NO_MINIO__" ]; then
-        fail "${VPS_HOST} の MinIO コンテナが起動していません"
-    fi
-    S3_NAMES=$(echo "$S3_LS_RAW" | jq -r 'select(.key != null and (.type // "file") == "file") | .key' 2>/dev/null | grep -E '\.(png|jpg|jpeg)$' || true)
+if [ "$S3_LS_RAW" = "__NO_MINIO__" ]; then
+    fail "${VPS_HOST} の MinIO コンテナが起動していません"
+fi
+parse_s3_ls_json "$S3_LS_RAW"
+compute_upload_files
+echo "  差分検出: スキップ ${SKIP_COUNT} / アップロード ${#UPLOAD_FILES[@]} / 合計 ${EXPECTED}"
+
+if [ "$PRUNE" = true ]; then
     mapfile -t DISABLED_BASENAMES < <(
         {
             printf 'E\t%s\n' "${ENABLED_BASENAMES[@]}"
-            printf '%s\n' "$S3_NAMES" | awk 'NF {print "S\t"$0}'
-        } | awk -F'\t' '$1=="E" {skip[$2]=1; next} $1=="S" && !skip[$2] && !seen[$2]++ {print $2}'
+            printf 'S\t%s\n' "${S3_NAMES[@]}"
+        } | awk -F'\t' '$1=="E" {skip[$2]=1; next} $1=="S" && !skip[$2] && !seen[$2]++ && $2 ~ /\.(png|jpg|jpeg)$/ {print $2}'
     )
 fi
 
-# ── 1. VPS に rsync ──
+# ── 1. VPS に rsync（差分ありのファイルだけ） ──
 REMOTE_TMP=$(ssh "${SSH_TARGET}" "mktemp -d")
 case "$REMOTE_TMP" in
     /tmp/*) : ;;
     *) fail "リモート mktemp が想定外のパスを返しました: ${REMOTE_TMP}" ;;
 esac
 trap 'rm -rf "$STAGE_DIR"; ssh "${SSH_TARGET}" "rm -rf ${REMOTE_TMP}" 2>/dev/null || true' EXIT
-# STAGE_DIR 直下に prefix 付き名前のファイル/ハードリンクが並んでいる。
-# ハードリンクでも rsync は実体を送るため追加フラグ不要。
-rsync -az "${STAGE_DIR}/" "${SSH_TARGET}:${REMOTE_TMP}/"
+UPLOAD_TOTAL=${#UPLOAD_FILES[@]}
+if [ "$UPLOAD_TOTAL" -gt 0 ]; then
+    RSYNC_LIST=$(mktemp)
+    # shellcheck disable=SC2064
+    trap "rm -f '$RSYNC_LIST'; rm -rf '$STAGE_DIR'; ssh '${SSH_TARGET}' 'rm -rf ${REMOTE_TMP}' 2>/dev/null || true" EXIT
+    for f in "${UPLOAD_FILES[@]}"; do
+        basename -- "$f"
+    done > "$RSYNC_LIST"
+    rsync -az --files-from="$RSYNC_LIST" "${STAGE_DIR}/" "${SSH_TARGET}:${REMOTE_TMP}/"
+    rm -f "$RSYNC_LIST"
+fi
 
 # 削除対象 basename 一覧をリモートに転送
 if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
@@ -478,10 +565,11 @@ if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
     rsync -az "$LOCAL_DEL_LIST" "${SSH_TARGET}:${REMOTE_TMP}/disabled.txt"
 fi
 
-# ── 2. VPS の minio コンテナに投入 ──
+# ── 2. VPS の minio コンテナに投入（差分ありのみ） ──
 # heredoc の \$ はリモート bash に渡り、sh -c '...' 内の $VAR は minio コンテナの環境変数を参照。
 # docker compose exec -T は STDIN を継承するため、</dev/null で切り離す。
-ssh "${SSH_TARGET}" bash <<REMOTE_EOF >/dev/null
+if [ "$UPLOAD_TOTAL" -gt 0 ]; then
+    ssh "${SSH_TARGET}" bash <<REMOTE_EOF >/dev/null
 set -eu
 cd ${REMOTE_DIR}/nakama
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
@@ -491,7 +579,7 @@ if ! \$COMPOSE ps --status running 2>/dev/null | grep -q minio; then
 fi
 \$COMPOSE exec -T minio sh -c 'mkdir -p /tmp/avatars-restore && rm -f /tmp/avatars-restore/*.png /tmp/avatars-restore/*.jpg /tmp/avatars-restore/*.jpeg' </dev/null
 n=0
-total=${EXPECTED}
+total=${UPLOAD_TOTAL}
 for f in ${REMOTE_TMP}/*.png ${REMOTE_TMP}/*.jpg ${REMOTE_TMP}/*.jpeg; do
     [ -f "\$f" ] || continue
     n=\$((n + 1))
@@ -503,7 +591,7 @@ printf '\r\033[K' >&2
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
     mc mb --ignore-existing local/avatars >/dev/null
-    total='"${EXPECTED}"'
+    total='"${UPLOAD_TOTAL}"'
     n=0
     for ext in png jpg jpeg; do
         for f in /tmp/avatars-restore/*.\$ext; do
@@ -519,6 +607,7 @@ printf '\r\033[K' >&2
 ' </dev/null
 
 REMOTE_EOF
+fi
 
 # ── 2b. enable != true のエントリを S3 から削除 ──
 ACTUALLY_DELETED=0
@@ -556,23 +645,32 @@ REMOTE_EOF2
     echo "  削除完了: ${ACTUALLY_DELETED}/${DEL_TOTAL} 件"
 fi
 
-# ── 3. 投入結果の確認 ──
-LS_OUTPUT=$(ssh "${SSH_TARGET}" bash <<REMOTE_EOF
+# ── 3. 投入結果を全体ハッシュで検証 ──
+S3_LS_RAW_AFTER=$(ssh "${SSH_TARGET}" bash <<REMOTE_EOF
 set -eu
 cd ${REMOTE_DIR}/nakama
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
-    mc ls local/avatars/
+    mc ls --json local/avatars/ 2>/dev/null || true
 ' </dev/null
 REMOTE_EOF
 )
-ACTUAL=$(echo "$LS_OUTPUT" | grep -cE '\.(png|jpg|jpeg)$' || true)
+parse_s3_ls_json "$S3_LS_RAW_AFTER"
+ACTUAL=0
+for n in "${ENABLED_BASENAMES[@]}"; do
+    [ -n "${S3_ETAG_BY_NAME[$n]:-}" ] && ACTUAL=$((ACTUAL + 1))
+done
 if [ "$ACTUAL" -lt "$EXPECTED" ]; then
     fail "投入されたファイル数が期待より少ないです (S3: ${ACTUAL} / enable: ${EXPECTED})"
 fi
+LOCAL_AGG=$(compute_aggregate_hash LOCAL_MD5_BY_NAME)
+S3_AGG=$(compute_aggregate_hash S3_ETAG_BY_NAME)
+if [ "$LOCAL_AGG" != "$S3_AGG" ]; then
+    fail "全体ハッシュ不一致: local=${LOCAL_AGG:0:16}... s3=${S3_AGG:0:16}..."
+fi
 if [ "$ACTUALLY_DELETED" -gt 0 ]; then
-    echo "  ✅ MinIO アバター: enable ${ACTUAL}/${EXPECTED}, disable ${ACTUALLY_DELETED} 削除"
+    echo "  ✅ MinIO アバター: enable ${ACTUAL}/${EXPECTED}, disable ${ACTUALLY_DELETED} 削除  hash: ${LOCAL_AGG:0:16}..."
 else
-    echo "  ✅ MinIO アバター: ${ACTUAL}/${EXPECTED}"
+    echo "  ✅ MinIO アバター: ${ACTUAL}/${EXPECTED}  hash: ${LOCAL_AGG:0:16}..."
 fi

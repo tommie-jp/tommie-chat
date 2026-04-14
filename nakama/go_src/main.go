@@ -1216,6 +1216,38 @@ type playerPos struct {
 	DisplayName string  // 表示名
 	LoginTime   string  // ログイン時刻(ISO8601)
 	NameColor   string  // 名前色（#RRGGBB）
+	HasGoogle   bool    // Google 認証済み
+	IsAdmin     bool    // 管理者（ADMIN_UIDS || ADMIN_EMAILS）
+}
+
+// authFlagsCache は uid → (hasGoogle, isAdmin) のキャッシュ。
+// MatchJoin のたびに DB を叩かないための軽量キャッシュ。
+// 連携解除や管理者昇降格は稀なため、プロセス起動中のみ保持する。
+type authFlags struct {
+	HasGoogle bool
+	IsAdmin   bool
+}
+
+var authFlagsCache sync.Map // uid -> authFlags
+
+// computeAuthFlags は uid の認証フラグを算出する（キャッシュあり）。
+// MatchJoin から呼ばれるため、エラー時はゼロ値を返す（非 fatal）。
+func computeAuthFlags(ctx context.Context, nk runtime.NakamaModule, uid string) authFlags {
+	if uid == "" {
+		return authFlags{}
+	}
+	if v, ok := authFlagsCache.Load(uid); ok {
+		return v.(authFlags)
+	}
+	f := authFlags{}
+	if acc, err := nk.AccountGetId(ctx, uid); err == nil {
+		if u := acc.GetUser(); u != nil {
+			f.HasGoogle = u.GetGoogleId() != ""
+		}
+	}
+	f.IsAdmin = isAdmin(ctx, nk, uid)
+	authFlagsCache.Store(uid, f)
+	return f
 }
 
 // セッション単位のレートリミッター（1秒ごとにリセット）
@@ -1525,6 +1557,9 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 		ms.AOIs[sid] = &playerAOI{-1, -1, -1, -1}
 		ms.Presences[sid] = p
 
+		// 認証フラグを算出（クライアントへアイコン表示するため）
+		af := computeAuthFlags(ctx, nk, uid)
+
 		// PendingInit があれば初期位置を即座に登録（joinMatch 1回で完結）
 		if init, ok := ms.PendingInit[sid]; ok {
 			cx := int((init.X + half) / chunkSize)
@@ -1535,6 +1570,8 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 			if cz >= w.ChunkCountZ { cz = w.ChunkCountZ - 1 }
 			init.CX = cx
 			init.CZ = cz
+			init.HasGoogle = af.HasGoogle
+			init.IsAdmin = af.IsAdmin
 			ms.Positions[sid] = init
 			delete(ms.PendingInit, sid)
 			logger.Info("MatchJoin with init pos: uid=%s sid=%s x=%.1f z=%.1f", uid, shortSID(sid), init.X, init.Z)
@@ -1560,7 +1597,7 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 				NameColor: init.NameColor, WorldID: ms.WorldID, MatchID: mid,
 			})
 		} else {
-			ms.Positions[sid] = &playerPos{CX: -1, CZ: -1, X: 0, Z: 0, RY: 0, TextureUrl: ""}
+			ms.Positions[sid] = &playerPos{CX: -1, CZ: -1, X: 0, Z: 0, RY: 0, TextureUrl: "", HasGoogle: af.HasGoogle, IsAdmin: af.IsAdmin}
 			// グローバルプレイヤーリスト登録（initPos 未受信なので最小限）
 			worldMatchMu.Lock()
 			mid := worldMatchIDs[ms.WorldID]
@@ -1903,7 +1940,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					if pos.LoginTime != "" { p.LoginTime = pos.LoginTime }
 					if pos.NameColor != "" { p.NameColor = pos.NameColor }
 				} else {
-					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, CharCol: pos.CharCol, CharRow: pos.CharRow, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime, NameColor: pos.NameColor}
+					var af2 authFlags
+					if pres, ok := ms.Presences[sid]; ok {
+						af2 = computeAuthFlags(ctx, nk, pres.GetUserId())
+					}
+					ms.Positions[sid] = &playerPos{CX: cx, CZ: cz, X: pos.X, Z: pos.Z, RY: pos.RY, TextureUrl: pos.TextureUrl, CharCol: pos.CharCol, CharRow: pos.CharRow, DisplayName: pos.DisplayName, LoginTime: pos.LoginTime, NameColor: pos.NameColor, HasGoogle: af2.HasGoogle, IsAdmin: af2.IsAdmin}
 				}
 				// グローバルプレイヤーリスト更新
 				gplUpdate(sid, pos.DisplayName, pos.LoginTime, pos.NameColor)
@@ -2188,6 +2229,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					CharRow     int    `json:"cr"`
 					LoginTime   string `json:"loginTime"`
 					NameColor   string `json:"nameColor,omitempty"`
+					HasGoogle   bool   `json:"hg,omitempty"`
+					IsAdmin     bool   `json:"ad,omitempty"`
 				}
 				profiles := make([]profileEntry, 0, len(req.SessionIds))
 				for _, reqSid := range req.SessionIds {
@@ -2203,6 +2246,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 						CharRow:     pos.CharRow,
 						LoginTime:   pos.LoginTime,
 						NameColor:   pos.NameColor,
+						HasGoogle:   pos.HasGoogle,
+						IsAdmin:     pos.IsAdmin,
 					})
 				}
 				respData, _ := json.Marshal(map[string]interface{}{"profiles": profiles})
@@ -2686,10 +2731,13 @@ func rpcGetDisplayNames(ctx context.Context, logger runtime.Logger, db *sql.DB, 
 	type userResult struct {
 		ID          string `json:"id"`
 		DisplayName string `json:"displayName"`
+		HasGoogle   bool   `json:"hg,omitempty"`
+		IsAdmin     bool   `json:"ad,omitempty"`
 	}
 	results := make([]userResult, 0, len(users))
 	for _, u := range users {
-		results = append(results, userResult{ID: u.Id, DisplayName: u.DisplayName})
+		af := computeAuthFlags(ctx, nk, u.Id)
+		results = append(results, userResult{ID: u.Id, DisplayName: u.DisplayName, HasGoogle: af.HasGoogle, IsAdmin: af.IsAdmin})
 	}
 	b, err := json.Marshal(map[string]interface{}{"users": results})
 	if err != nil {

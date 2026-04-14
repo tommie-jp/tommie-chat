@@ -51,7 +51,7 @@ export class NakamaService {
     onBlockUpdate?:      (gx: number, gz: number, blockId: number, r: number, g: number, b: number, a: number) => void;
     onAOIEnter?:         (sessionId: string, x: number, z: number, ry: number) => void;
     onAOILeave?:         (sessionId: string) => void;
-    onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string }[]) => void;
+    onProfileResponse?:  (profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string; hasGoogle?: boolean; isAdmin?: boolean }[]) => void;
     onPlayersAOIResponse?: (players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[]) => void;
     onDisplayName?:      (sessionId: string, displayName: string, nameColor?: string) => void;
     onPlayerListData?:   (players: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[]) => void;
@@ -66,6 +66,8 @@ export class NakamaService {
     private loginTimeISO: string = "";
     selfDisplayName: string = "";
     selfNameColor: string = "";
+    selfHasGoogle: boolean = false;
+    selfIsAdmin: boolean = false;
     private readonly _decoder = new TextDecoder();
     private readonly _encoder = new TextEncoder();
 
@@ -89,8 +91,9 @@ export class NakamaService {
             this.onAOILeave?.((p as { sessionId: string }).sessionId);
         }},
         [OP_PROFILE_RESPONSE]: { name: "PROFILE_RESP", silent: true, fn: (p) => {
-            const resp = p as { profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string }[] };
-            this.onProfileResponse?.(resp.profiles ?? []);
+            const resp = p as { profiles: { sessionId: string; displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; nameColor?: string; hg?: boolean; ad?: boolean }[] };
+            const mapped = (resp.profiles ?? []).map(pr => ({ ...pr, hasGoogle: pr.hg ?? false, isAdmin: pr.ad ?? false }));
+            this.onProfileResponse?.(mapped);
         }},
         [OP_PLAYERS_AOI_RESP]: { name: "AOI_RESP", fn: (p) => {
             const resp = p as { players: { sessionId: string; username: string; minCX: number; minCZ: number; maxCX: number; maxCZ: number; x: number; z: number }[] };
@@ -670,16 +673,16 @@ export class NakamaService {
         return null;
     }
 
-    async getDisplayNames(userIds: string[]): Promise<Map<string, string>> {
+    async getDisplayNames(userIds: string[]): Promise<Map<string, { displayName: string; hasGoogle: boolean; isAdmin: boolean }>> {
         const _end = prof("NakamaService.getDisplayNames");
         try {
-        const result = new Map<string, string>();
+        const result = new Map<string, { displayName: string; hasGoogle: boolean; isAdmin: boolean }>();
         if (!this.socket || userIds.length === 0) return result;
         const rpcResult = await this.socket.rpc("getDisplayNames", JSON.stringify({ userIds }));
         if (rpcResult?.payload) {
-            const data = JSON.parse(rpcResult.payload) as { users?: { id: string; displayName: string }[] };
+            const data = JSON.parse(rpcResult.payload) as { users?: { id: string; displayName: string; hg?: boolean; ad?: boolean }[] };
             for (const u of data.users ?? []) {
-                result.set(u.id, u.displayName);
+                result.set(u.id, { displayName: u.displayName, hasGoogle: u.hg ?? false, isAdmin: u.ad ?? false });
             }
         }
         return result;
