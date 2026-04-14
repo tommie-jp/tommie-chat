@@ -12,7 +12,13 @@ export class CloudSystem {
 
     setEnabled(on: boolean): void {
         this._enabled = on;
-        if (on && !this.cloudMesh) this.create();
+        if (on && !this.cloudMesh) {
+            // DOM 初期描画をブロックしないよう遅延生成（ユーザが OFF に戻した場合は生成をスキップ）
+            const schedule = (window as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback
+                ?? ((cb: () => void) => setTimeout(cb, 0));
+            schedule(() => { if (this._enabled) this.create(); }, { timeout: 2000 });
+            return;
+        }
         if (this.cloudMesh) this.cloudMesh.setEnabled(on);
     }
 

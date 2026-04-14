@@ -1517,7 +1517,7 @@ export function setupDebugOverlay(game: GameScene): void {
             markNonDefault(npcVisBtn, "Off", "Off");
         });
         npcVisBtn.addEventListener("click", () => {
-            const visible = !game.npcSystem.npc001.isEnabled();
+            const visible = !game.npcSystem.isVisible;
             game.npcSystem.setEnabled(visible);
             npcVisBtn.textContent = visible ? "On" : "Off";
             if (visible) npcVisBtn.classList.remove("off");

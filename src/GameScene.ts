@@ -535,7 +535,8 @@ export class GameScene {
 
         // NPCシステム
         this.npcSystem = new NPCSystem(this.avatarSystem);
-        this.npcSystem.create(this.avatarDepth);
+        this.npcSystem.setAvatarDepth(this.avatarDepth);
+        // NPC メッシュ・タイマーは setEnabled(true) で遅延生成
 
         // AOIマネージャー
         this.aoiManager = new AOIManager(
@@ -1070,8 +1071,10 @@ export class GameScene {
 
     applyAvatarDepth(): void {
         const _end = prof("GameScene.applyAvatarDepth");
-        const avatars = [this.playerBox, this.npcSystem.npc001, this.npcSystem.npc002, this.npcSystem.npc003,
-                         ...this.remoteAvatars.values()];
+        this.npcSystem.setAvatarDepth(this.avatarDepth);
+        const npcs = [this.npcSystem.npc001, this.npcSystem.npc002, this.npcSystem.npc003]
+            .filter((m): m is import("@babylonjs/core").Mesh => !!m);
+        const avatars = [this.playerBox, ...npcs, ...this.remoteAvatars.values()];
         this.avatarSystem.applyAvatarDepth(avatars, this.avatarDepth);
         _end();
     }

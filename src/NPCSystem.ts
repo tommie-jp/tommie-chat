@@ -4,10 +4,11 @@ import { prof } from "./Profiler";
 import { escapeHtml } from "./utils";
 
 export class NPCSystem {
-    npc001!: Mesh;
-    npc002!: Mesh;
-    npc003!: Mesh;
+    npc001?: Mesh;
+    npc002?: Mesh;
+    npc003?: Mesh;
     isNpcChatOn = false;
+    isVisible = false;
 
     private npc001BaseX = 0;
     private npc002BaseX = 1.5;
@@ -16,27 +17,27 @@ export class NPCSystem {
     private npc003BaseZ = 3;
     private time = 0;
     private intervals: ReturnType<typeof setInterval>[] = [];
+    private _avatarDepth = 0;
+    private u1?: (t: string) => void;
+    private u2?: (t: string) => void;
+    private u3?: (t: string) => void;
 
     constructor(private avatarSystem: AvatarSystem) {}
 
-    create(avatarDepth: number): void {
-        const _end = prof("NPCSystem.create");
-        this.npc001 = this.avatarSystem.createAvatar("npc001", "/textures/pic2.ktx2", 0, 3, avatarDepth);
-        this.npc002 = this.avatarSystem.createAvatar("npc002", "/textures/pic2.ktx2", 1.5, 3, avatarDepth);
-        this.npc003 = this.avatarSystem.createAvatar("npc003", "/textures/pic2.ktx2", 3, 3, avatarDepth);
-        this.npc001.setEnabled(false);
-        this.npc002.setEnabled(false);
-        this.npc003.setEnabled(false);
+    setAvatarDepth(d: number): void { this._avatarDepth = d; }
 
+    private ensureCreated(): void {
+        if (this.npc001) return;
+        const _end = prof("NPCSystem.create");
+        this.npc001 = this.avatarSystem.createAvatar("npc001", "/textures/pic2.ktx2", 0, 3, this._avatarDepth);
+        this.npc002 = this.avatarSystem.createAvatar("npc002", "/textures/pic2.ktx2", 1.5, 3, this._avatarDepth);
+        this.npc003 = this.avatarSystem.createAvatar("npc003", "/textures/pic2.ktx2", 3, 3, this._avatarDepth);
         const npc001Tag = this.avatarSystem.createNameTag(this.npc001, "npc001");
         const npc002Tag = this.avatarSystem.createNameTag(this.npc002, "npc002");
         const npc003Tag = this.avatarSystem.createNameTag(this.npc003, "npc003");
-
-        const update001 = this.avatarSystem.createSpeechBubble(npc001Tag.plane, "キタちゃん１です。");
-        const update002 = this.avatarSystem.createSpeechBubble(npc002Tag.plane, "キターちゃん２です");
-        const update003 = this.avatarSystem.createSpeechBubble(npc003Tag.plane, "キタちゃん３です");
-
-        this.startIntervals(update001, update002, update003);
+        this.u1 = this.avatarSystem.createSpeechBubble(npc001Tag.plane, "キタちゃん１です。");
+        this.u2 = this.avatarSystem.createSpeechBubble(npc002Tag.plane, "キターちゃん２です");
+        this.u3 = this.avatarSystem.createSpeechBubble(npc003Tag.plane, "キタちゃん３です");
         _end();
     }
 
@@ -64,7 +65,10 @@ export class NPCSystem {
         return `${label}時刻の分秒は${mm}:${ss}です！`;
     }
 
-    private startIntervals(u1: (t: string) => void, u2: (t: string) => void, u3: (t: string) => void): void {
+    private startIntervals(): void {
+        if (this.intervals.length > 0) return;
+        const u1 = this.u1, u2 = this.u2, u3 = this.u3;
+        if (!u1 || !u2 || !u3) return;
         this.intervals.push(setInterval(() => {
             const msg = this.getNpcMessage("わーい。キタちゃん１です。");
             u1(msg);
@@ -82,7 +86,13 @@ export class NPCSystem {
         }, 8000));
     }
 
+    private stopIntervals(): void {
+        for (const id of this.intervals) clearInterval(id);
+        this.intervals.length = 0;
+    }
+
     update(deltaTime: number): void {
+        if (!this.isVisible || !this.npc001 || !this.npc002 || !this.npc003) return;
         const _end = prof("NPCSystem.update");
         this.time += deltaTime;
 
@@ -132,8 +142,18 @@ export class NPCSystem {
     }
 
     setEnabled(visible: boolean): void {
-        this.npc001.setEnabled(visible);
-        this.npc002.setEnabled(visible);
-        this.npc003.setEnabled(visible);
+        this.isVisible = visible;
+        if (visible) {
+            this.ensureCreated();
+            this.npc001?.setEnabled(true);
+            this.npc002?.setEnabled(true);
+            this.npc003?.setEnabled(true);
+            this.startIntervals();
+        } else {
+            this.npc001?.setEnabled(false);
+            this.npc002?.setEnabled(false);
+            this.npc003?.setEnabled(false);
+            this.stopIntervals();
+        }
     }
 }
