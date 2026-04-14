@@ -2320,6 +2320,10 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				chatMsg["userId"] = p.GetUserId()
 				chatMsg["sessionId"] = sid
 				chatMsg["ts"] = time.Now().UnixMilli()
+				if pos, ok := ms.Positions[sid]; ok {
+					if pos.HasGoogle { chatMsg["hg"] = true }
+					if pos.IsAdmin { chatMsg["ad"] = true }
+				}
 				enriched, _ := json.Marshal(chatMsg)
 				logger.Info("opChat broadcast sid=%s len=%d text=%v", sid, len(enriched), chatMsg["text"])
 				if err := dispatcher.BroadcastMessage(opChat, enriched, nil, nil, true); err != nil {

@@ -1446,6 +1446,7 @@ export function setupHtmlUI(game: GameScene): void {
             }
         }
         // 認証アイコン（管理者 👑 > Google ✅）。自分は NakamaService の self フラグを優先。
+        // userMap に未登録でも profileCache にあれば使用（AOI enter 直後のレース回避）。
         let hasGoogle = false;
         let isAdmin = false;
         if (sessionId && sessionId === game.nakama.selfSessionId) {
@@ -1453,7 +1454,13 @@ export function setupHtmlUI(game: GameScene): void {
             isAdmin = game.nakama.selfIsAdmin;
         } else if (sessionId) {
             const entry = userMap.get(sessionId);
-            if (entry) { hasGoogle = entry.hasGoogle ?? false; isAdmin = entry.isAdmin ?? false; }
+            if (entry && (entry.hasGoogle !== undefined || entry.isAdmin !== undefined)) {
+                hasGoogle = entry.hasGoogle ?? false;
+                isAdmin = entry.isAdmin ?? false;
+            } else {
+                const pc = profileCache.get(sessionId);
+                if (pc) { hasGoogle = pc.hasGoogle ?? false; isAdmin = pc.isAdmin ?? false; }
+            }
         }
         if (isAdmin) suffix += " \u{1F451}";
         else if (hasGoogle) suffix += " \u2705";
@@ -1478,7 +1485,9 @@ export function setupHtmlUI(game: GameScene): void {
                 if (seenChatKeys.has(key)) continue;
                 const entry = userMap.get(m.sessionId);
                 const lbl = entry ? resolveDisplayLabel(entry.displayName, entry.username, m.sessionId) : null;
-                const chatName = lbl ? lbl.text + lbl.suffix : m.username;
+                // オフライン送信者（userMap 未登録）はチャット履歴の hg/ad から直接アイコンを付与
+                const iconSuffix = (!entry && (m.isAdmin || m.hasGoogle)) ? (m.isAdmin ? " \u{1F451}" : " \u2705") : "";
+                const chatName = lbl ? lbl.text + lbl.suffix : (m.username + iconSuffix);
                 const chatNameColor = entry?.nameColor;
                 addChatHistory(chatName, m.text, chatNameColor, m.userId, m.ts, /*prepend=*/true);
                 added++;
@@ -1798,7 +1807,14 @@ export function setupHtmlUI(game: GameScene): void {
         }
     });
 
-    game.nakama.onChatMessage = (username, text, userId, senderSid, ts) => {
+    game.nakama.onChatMessage = (username, text, userId, senderSid, ts, hasGoogle, isAdmin) => {
+        // 認証フラグを userMap / profileCache に反映（チャットが profileResponse より早く届く場合のレース回避）
+        if (senderSid && (hasGoogle !== undefined || isAdmin !== undefined)) {
+            const pc = profileCache.get(senderSid);
+            if (pc) { pc.hasGoogle = hasGoogle ?? pc.hasGoogle; pc.isAdmin = isAdmin ?? pc.isAdmin; }
+            const ue = userMap.get(senderSid);
+            if (ue) userMap.set(senderSid, { ...ue, hasGoogle: hasGoogle ?? ue.hasGoogle, isAdmin: isAdmin ?? ue.isAdmin });
+        }
         // 表示名を優先（なければ @ユーザID）— sessionId でサフィックス解決
         const entry = senderSid ? userMap.get(senderSid) : undefined;
         const chatName = entry
@@ -1905,7 +1921,7 @@ export function setupHtmlUI(game: GameScene): void {
         game.spriteAvatarSystem.jump(sessionId);
     };
     // --- プロフィールキャッシュ & debounced matchデータ要求 ---
-    const profileCache = new Map<string, { displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string }>();
+    const profileCache = new Map<string, { displayName: string; textureUrl: string; charCol: number; charRow: number; loginTime: string; hasGoogle?: boolean; isAdmin?: boolean }>();
     const pendingProfileSids = new Set<string>();
     let profileFetchTimer: ReturnType<typeof setTimeout> | null = null;
     const PROFILE_DEBOUNCE_MS = 50;
