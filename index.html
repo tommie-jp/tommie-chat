@@ -223,7 +223,8 @@
         }
 
         /* ===== ユーザーリスト ===== */
-        #displayname-panel {
+        #displayname-panel,
+        #avatar-panel {
             position: fixed;
             top: 80px;
             left: 15px;
@@ -239,7 +240,33 @@
             display: flex;
             flex-direction: column;
         }
-        #displayname-header {
+        /* アバターパネルはリサイズ可能（最低サイズ: サムネ5枚分） */
+        #avatar-panel {
+            width: 340px;
+            min-width: 340px;
+            min-height: 400px;
+            resize: both;
+        }
+        /* アバターパネルのボタン（青背景・白文字） */
+        .avPanel-btn {
+            background: #4a90d9;
+            color: #fff;
+            border: 1px solid #3570b0;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: inherit;
+            cursor: pointer;
+        }
+        .avPanel-btn:hover { background: #3570b0; }
+        .avPanel-btn:active { background: #285a90; }
+        /* サムネ水平スクロールバーを若干大きめに */
+        #avPanel-thumbScroll::-webkit-scrollbar { height: 12px; }
+        #avPanel-thumbScroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 6px; }
+        #avPanel-thumbScroll::-webkit-scrollbar-thumb { background: rgba(74,144,217,0.6); border-radius: 6px; }
+        #avPanel-thumbScroll::-webkit-scrollbar-thumb:hover { background: rgba(74,144,217,0.9); }
+        #avPanel-thumbScroll { scrollbar-color: rgba(74,144,217,0.6) rgba(0,0,0,0.05); scrollbar-width: auto; }
+        #displayname-header,
+        #avatar-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -252,13 +279,16 @@
             user-select: none;
             -webkit-user-select: none;
         }
-        #displayname-header:active { cursor: grabbing; }
-        #displayname-close {
+        #displayname-header:active,
+        #avatar-header:active { cursor: grabbing; }
+        #displayname-close,
+        #avatar-close {
             cursor: pointer;
             opacity: 0.6;
             font-size: 14px;
         }
-        #displayname-close:hover { opacity: 1; }
+        #displayname-close:hover,
+        #avatar-close:hover { opacity: 1; }
 
         #user-list-panel {
             position: fixed;
@@ -1655,7 +1685,8 @@
             #room-list-panel,
             #debug-overlay,
             #about-panel,
-            #displayname-panel {
+            #displayname-panel,
+            #avatar-panel {
                 font-size: 16px;
                 left: 0 !important;
                 right: 0 !important;
@@ -1684,7 +1715,8 @@
             #room-list-header,
             #debug-title-bar,
             #about-panel-header,
-            #displayname-header {
+            #displayname-header,
+            #avatar-header {
                 display: flex !important;
                 align-items: center !important;
                 justify-content: space-between !important;
@@ -1709,7 +1741,8 @@
             #ccu-close,
             #bookmark-close,
             #about-panel-close,
-            #displayname-close {
+            #displayname-close,
+            #avatar-close {
                 font-size: 15px;
                 padding: 6px 8px;
                 color: #fff !important;
@@ -1909,13 +1942,18 @@
             }
 
             /* 表示名パネル: デバッグツールとフォント統一 */
-            #displayname-body {
+            #displayname-body,
+            #avatar-body {
                 padding: 8px 10px !important;
             }
             #displayname-body label,
             #displayname-body span,
             #displayname-body input,
-            #displayname-body button {
+            #displayname-body button,
+            #avatar-body label,
+            #avatar-body span,
+            #avatar-body input,
+            #avatar-body button {
                 font-size: 15px !important;
             }
 
@@ -2024,11 +2062,13 @@
             #room-list-panel,
             #debug-overlay,
             #about-panel,
-            #displayname-panel {
+            #displayname-panel,
+            #avatar-panel {
                 bottom: var(--pt-panel-bottom, 90px) !important;
             }
-            /* ポートレート: 表示名パネルは内容に合わせた高さ、底部をセリフ上に */
-            #displayname-panel {
+            /* ポートレート: 表示名パネル・アバター選択は内容に合わせた高さ、底部をセリフ上に */
+            #displayname-panel,
+            #avatar-panel {
                 top: auto !important;
             }
             /* ポートレート: パネル表示中はデバイダーを隠す */
@@ -2191,7 +2231,8 @@
             #room-list-panel,
             #debug-overlay,
             #about-panel,
-            #displayname-panel {
+            #displayname-panel,
+            #avatar-panel {
                 left: calc(var(--ls-divider, 60%) + 12px) !important;
                 right: 0 !important;
                 top: 0 !important;
@@ -2213,7 +2254,8 @@
             #room-list-header > span:first-child,
             #debug-title-text,
             #about-panel-header > span:first-child,
-            #displayname-header > span:first-child {
+            #displayname-header > span:first-child,
+            #avatar-header > span:first-child {
                 flex: 1 !important;
             }
             /* Xボタンだけsafe-area分内側にずらす */
@@ -2227,6 +2269,7 @@
             #room-list-close,
             #about-panel-close,
             #displayname-close,
+            #avatar-close,
             #debug-minimize-btn,
             #debug-restore-btn {
                 margin-right: env(safe-area-inset-right, 0px) !important;
@@ -2257,7 +2300,8 @@
             #room-list-panel,
             #debug-overlay,
             #about-panel,
-            #displayname-panel {
+            #displayname-panel,
+            #avatar-panel {
                 top: 20px !important;
             }
         }
@@ -2275,7 +2319,8 @@
         body.theme-dark #room-list-panel,
         body.theme-dark #debug-overlay,
         body.theme-dark #about-panel,
-        body.theme-dark #displayname-panel {
+        body.theme-dark #displayname-panel,
+        body.theme-dark #avatar-panel {
             background: #2c2c2e !important;
             color: #eee !important;
             backdrop-filter: none !important;
@@ -2291,7 +2336,8 @@
         body.theme-dark #room-list-header,
         body.theme-dark #debug-title-bar,
         body.theme-dark #about-panel-header,
-        body.theme-dark #displayname-header {
+        body.theme-dark #displayname-header,
+        body.theme-dark #avatar-header {
             background: #3a3a3c !important;
             border-bottom: 1px solid rgba(255,255,255,0.15) !important;
         }
@@ -2828,6 +2874,7 @@
         <button class="menu-item" id="menu-about" data-i18n-prefix="menu.about">　 tommieChatについて</button>
         <button class="menu-item" id="menu-debug" data-i18n-prefix="menu.debug">✓ デバッグツール</button>
         <button class="menu-item dev-only" id="menu-cookie-reset" data-i18n="menu.cookie_reset">全パネル非表示（クッキー初期化）</button>
+        <button class="menu-item" id="menu-avatar" style="display:none;" data-i18n-prefix="menu.avatar">　 アバター選択</button>
         <button class="menu-item" id="menu-login" style="display:none;" data-i18n-prefix="menu.displayname">　 表示名設定</button>
         <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;" data-i18n="logout">ログアウト</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
@@ -2933,6 +2980,47 @@
                 </div>
             </td></tr>
         </table>
+        </div>
+    </div>
+
+    <div id="avatar-panel" style="display:none;">
+        <div id="avatar-header">
+            <span data-i18n="avatar.title" title="アバター選択&#10;──────────&#10;表示するアバターの見た目を選択します。">アバター選択</span>
+            <span id="avatar-close">❌️</span>
+        </div>
+        <div id="avatar-body" style="padding:10px 10px 20px;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                <label style="font-size:12px;white-space:nowrap;" title="アバター検索&#10;ファイル名に含まれる文字列で絞り込み">検索：</label>
+                <input type="text" id="avPanel-searchInput" class="debug-input" style="flex:1;min-width:0;text-align:left;" placeholder="ファイル名で絞り込み">
+                <button id="avPanel-searchBtn" class="avPanel-btn" style="padding:4px 12px;">検索</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+                <span style="font-size:11px;white-space:nowrap;opacity:0.7;">結果：</span>
+                <span id="avPanel-resultCount" style="font-size:11px;font-variant-numeric:tabular-nums;">0 件</span>
+            </div>
+            <select id="avPanel-spriteUrlSelect" style="display:none;"></select>
+            <div id="avPanel-thumbScroll" style="display:flex;gap:4px;overflow-x:auto;min-width:0;scroll-behavior:smooth;padding:2px 0;"></div>
+            <div style="display:flex;justify-content:center;">
+                <canvas id="avPanel-preview" width="192" height="192" style="width:192px;height:192px;image-rendering:pixelated;background:rgba(0,0,0,0.05);border-radius:4px;flex-shrink:0;" title="現在選択中のアバター（正面・歩行アニメーション）"></canvas>
+            </div>
+            <div style="display:flex;justify-content:center;gap:6px;">
+                <button id="avPanel-prevBtn" class="avPanel-btn" style="padding:4px 12px;" title="前のアバター">&lt;</button>
+                <button id="avPanel-playBtn" class="avPanel-btn" style="padding:4px 12px;" title="歩行アニメーション ON/OFF">▶️</button>
+                <button id="avPanel-nextBtn" class="avPanel-btn" style="padding:4px 12px;" title="次のアバター">&gt;</button>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+                <button id="avPanel-spriteApplyBtn" class="avPanel-btn" style="padding:4px 12px;">Apply</button>
+            </div>
+            <div id="avPanel-infoBox" style="display:flex;flex-direction:column;gap:2px;font-size:11px;color:#333;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;margin-top:2px;">
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">タイトル：</span><span id="avPanel-info-title"></span></div>
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">ファイル：</span><span id="avPanel-info-filename" style="word-break:break-all;font-family:monospace;"></span></div>
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">data-char-col：</span><span id="avPanel-info-datacol" style="font-family:monospace;"></span></div>
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">data-char-row：</span><span id="avPanel-info-datarow" style="font-family:monospace;"></span></div>
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">作者：</span><span id="avPanel-info-author"></span></div>
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">URL：</span><a id="avPanel-info-siteurl" href="#" target="_blank" rel="noopener noreferrer" style="word-break:break-all;color:#2060b0;"></a></div>
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">ライセンス：</span><span id="avPanel-info-license" style="word-break:break-word;"></span></div>
+                <div style="display:flex;gap:6px;"><span style="opacity:0.6;flex-shrink:0;">サイズ：</span><span id="avPanel-info-size"></span></div>
+            </div>
         </div>
     </div>
 

@@ -40,7 +40,7 @@ export function setupHtmlUI(game: GameScene): void {
     if (isMobileDev) {
         const wrapIds = ["user-list-wrap", "chat-history-wrap", "server-settings-body",
                          "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body", "displayname-body",
-                         "room-list-body", "room-list-scroll"];
+                         "avatar-body", "room-list-body", "room-list-scroll"];
         for (const id of wrapIds) {
             const el = document.getElementById(id);
             if (!el) continue;
@@ -1732,6 +1732,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
         { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
         { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = "none"; }
+        { const mav = document.getElementById("menu-avatar"); if (mav) mav.style.display = "none"; }
         { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = "none"; }
         { const mr2 = document.getElementById("menu-rooms"); if (mr2) mr2.style.display = "none"; }
         { const fv = document.getElementById("app-footer-version"); if (fv) fv.style.display = ""; }
@@ -1967,6 +1968,7 @@ export function setupHtmlUI(game: GameScene): void {
             setLoginRowVisible(false);
             { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
+            { const mav = document.getElementById("menu-avatar"); if (mav) mav.style.display = ""; }
             { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = ""; }
             { const mr2 = document.getElementById("menu-rooms"); if (mr2) mr2.style.display = ""; }
             if (loginNameInput) { loginNameInput.onkeydown = null; loginNameInput.disabled = true; }
@@ -3011,6 +3013,38 @@ export function setupHtmlUI(game: GameScene): void {
                 if (!dragging) return;
                 dnPanel.style.left = Math.max(0, e.clientX - dx) + "px";
                 dnPanel.style.top  = Math.max(0, e.clientY - dy) + "px";
+            });
+            document.addEventListener("pointerup", () => { dragging = false; });
+        }
+    }
+
+    // アバター選択パネル: 閉じるボタン & PCドラッグ
+    {
+        const avPanel = document.getElementById("avatar-panel");
+        const avHeader = document.getElementById("avatar-header");
+        const avClose = document.getElementById("avatar-close");
+        if (avClose && avPanel) {
+            avClose.addEventListener("click", () => {
+                avPanel.style.display = "none";
+                const menuBtn = document.getElementById("menu-avatar");
+                if (menuBtn) menuBtn.textContent = "　 " + t("menu.avatar");
+            });
+        }
+        if (avHeader && avPanel && !isMobileDev) {
+            let dragging = false;
+            let dx = 0, dy = 0;
+            avHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                if ((e.target as HTMLElement).id === "avatar-close") return;
+                dragging = true;
+                dx = e.clientX - avPanel.getBoundingClientRect().left;
+                dy = e.clientY - avPanel.getBoundingClientRect().top;
+                avHeader.setPointerCapture(e.pointerId);
+                e.preventDefault();
+            });
+            document.addEventListener("pointermove", (e: PointerEvent) => {
+                if (!dragging) return;
+                avPanel.style.left = Math.max(0, e.clientX - dx) + "px";
+                avPanel.style.top  = Math.max(0, e.clientY - dy) + "px";
             });
             document.addEventListener("pointerup", () => { dragging = false; });
         }

@@ -33,6 +33,9 @@ export const en: Record<keyof typeof ja, string> = {
     "displayname.need_login": "Please login first",
     "displayname.success": "✓ Display name changed!",
 
+    // --- Avatar ---
+    "avatar.title": "Avatar",
+
     // --- Menu ---
     "menu.serversettings": "Server Settings",
     "menu.serverlog": "Server Log",
@@ -48,6 +51,7 @@ export const en: Record<keyof typeof ja, string> = {
     "menu.debug": "Debug Tools",
     "menu.cookie_reset": "Hide all panels (reset cookies)",
     "menu.displayname": "Display Name",
+    "menu.avatar": "Avatar",
 
     // --- Server Settings ---
     "server.title": "Server Settings",

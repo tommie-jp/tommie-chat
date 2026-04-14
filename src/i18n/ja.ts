@@ -31,6 +31,9 @@ export const ja = {
     "displayname.need_login": "先にログインしてください",
     "displayname.success": "✓ 表示名変更しました！",
 
+    // --- アバター ---
+    "avatar.title": "アバター選択",
+
     // --- メニュー ---
     "menu.serversettings": "サーバ設定",
     "menu.serverlog": "サーバ接続ログ",
@@ -46,6 +49,7 @@ export const ja = {
     "menu.debug": "デバッグツール",
     "menu.cookie_reset": "全パネル非表示（クッキー初期化）",
     "menu.displayname": "表示名設定",
+    "menu.avatar": "アバター選択",
 
     // --- サーバ設定 ---
     "server.title": "サーバ設定",

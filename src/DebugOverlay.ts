@@ -5,6 +5,26 @@ import { profSetEnabled, profReset } from "./Profiler";
 import { t } from "./i18n";
 import { autoChatMessages } from "./AutoChatMessages";
 import { escapeHtml } from "./utils";
+import { cellIndex, buildTransparentPNG, sampleBgColor } from "../lib/babylon-rpgmaker-sprites/src/RpgMakerSpriteSheet";
+import avatarsDb from "../nakama/avatars.json";
+
+type AvatarDbEntry = {
+    no: string;
+    title?: string;
+    author?: string;
+    author_url?: string;
+    site_url?: string;
+    terms_url?: string;
+    license?: string;
+    size?: string;
+};
+const avatarDbMap = new Map<string, AvatarDbEntry>();
+for (const entry of (avatarsDb as AvatarDbEntry[])) avatarDbMap.set(entry.no, entry);
+/** S3 ファイル名（例: "001-pipo-nekonin008.png"）から先頭の番号（"001"）を抽出 */
+const avatarNoFromFilename = (filename: string): string | null => {
+    const m = filename.match(/(?:^|\/)(\d{3})-/);
+    return m ? m[1] : null;
+};
 
 /** コントロール要素の親行からラベルセルを取得し、デフォルト値と異なる場合に * を付ける */
 const _nonDefaultCtrls = new WeakMap<HTMLElement, Set<HTMLElement>>();
@@ -590,6 +610,7 @@ export function setupDebugOverlay(game: GameScene): void {
                         "bookmark-panel":        { w: 260, h: 320, top: 80,  left: window.innerWidth - 260 - pad },
                         "about-panel":           { w: 380, h: 0,   top: -1, left: -1 },  // -1 = CSS中央配置を使用
                         "displayname-panel":     { w: 280, h: 0,   top: 80, left: pad },
+                        "avatar-panel":          { w: 280, h: 0,   top: 80, left: pad },
                     };
                     const d = defaults[targetId];
                     if (d) {
@@ -652,6 +673,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-debug",          "debug-overlay",         "menu.debug",         "showDebug");
         makeToggle("menu-about",          "about-panel",           "menu.about",         "showAbout");
         makeToggle("menu-login",          "displayname-panel",     "menu.displayname",   "showDisplayName");
+        makeToggle("menu-avatar",         "avatar-panel",          "menu.avatar",        "showAvatar");
 
         // 右上クリック: バッジ→サーバーログ、ユーザID→表示名変更、ping→Pingグラフ、FPS→デバッグツール
         const pdEl = document.getElementById("ping-display");
@@ -1857,6 +1879,305 @@ export function setupDebugOverlay(game: GameScene): void {
             });
             game.nakama.sendAvatarChange(url, cc, cr).catch((e) => console.warn("DebugOverlay:", e));
         });
+    }
+
+    // ===== アバター選択パネル（36.Avatar と同機能） =====
+    // デバッグツールの avatarSelect / spriteUrlSelect / spriteCharCol / spriteCharRow / spriteApplyBtn に委譲
+    {
+        const avSpriteSel = document.getElementById("avPanel-spriteUrlSelect") as HTMLSelectElement | null;
+        const avApply = document.getElementById("avPanel-spriteApplyBtn") as HTMLButtonElement | null;
+        const avSearchInput = document.getElementById("avPanel-searchInput") as HTMLInputElement | null;
+        const avSearchBtn = document.getElementById("avPanel-searchBtn") as HTMLButtonElement | null;
+        const avPreview = document.getElementById("avPanel-preview") as HTMLCanvasElement | null;
+        const avPrevBtn = document.getElementById("avPanel-prevBtn") as HTMLButtonElement | null;
+        const avNextBtn = document.getElementById("avPanel-nextBtn") as HTMLButtonElement | null;
+        const avPlayBtn = document.getElementById("avPanel-playBtn") as HTMLButtonElement | null;
+        const avThumbScroll = document.getElementById("avPanel-thumbScroll") as HTMLDivElement | null;
+        const avResultCount = document.getElementById("avPanel-resultCount") as HTMLSpanElement | null;
+        const avInfoTitle = document.getElementById("avPanel-info-title") as HTMLSpanElement | null;
+        const avInfoFilename = document.getElementById("avPanel-info-filename") as HTMLSpanElement | null;
+        const avInfoDataCol = document.getElementById("avPanel-info-datacol") as HTMLSpanElement | null;
+        const avInfoDataRow = document.getElementById("avPanel-info-datarow") as HTMLSpanElement | null;
+        const avInfoAuthor = document.getElementById("avPanel-info-author") as HTMLSpanElement | null;
+        const avInfoSiteUrl = document.getElementById("avPanel-info-siteurl") as HTMLAnchorElement | null;
+        const avInfoLicense = document.getElementById("avPanel-info-license") as HTMLSpanElement | null;
+        const avInfoSize = document.getElementById("avPanel-info-size") as HTMLSpanElement | null;
+        const updateInfoBox = (url: string, charCol: number, charRow: number) => {
+            const filename = url.split("/").pop() ?? "";
+            const no = avatarNoFromFilename(filename);
+            const entry = no ? avatarDbMap.get(no) : undefined;
+            if (avInfoTitle) avInfoTitle.textContent = entry?.title ?? "―";
+            if (avInfoFilename) avInfoFilename.textContent = filename;
+            if (avInfoDataCol) avInfoDataCol.textContent = String(charCol);
+            if (avInfoDataRow) avInfoDataRow.textContent = String(charRow);
+            if (avInfoAuthor) avInfoAuthor.textContent = entry?.author ?? "―";
+            if (avInfoSiteUrl) {
+                const u = entry?.site_url ?? "";
+                avInfoSiteUrl.textContent = u || "―";
+                if (u) { avInfoSiteUrl.href = u; avInfoSiteUrl.style.pointerEvents = ""; }
+                else { avInfoSiteUrl.removeAttribute("href"); avInfoSiteUrl.style.pointerEvents = "none"; }
+            }
+            if (avInfoLicense) avInfoLicense.textContent = entry?.license ?? "―";
+            if (avInfoSize) avInfoSize.textContent = entry?.size ?? "―";
+        };
+        let walkEnabled = true;
+        type CachedSheet = { dataURL: string; fCols: number; frameW: number; frameH: number; charCols: number; charRows: number; scale: number; img: HTMLImageElement };
+
+        // プレビュー描画: SpriteAvatarSystem と同じ透過処理を適用し、正面歩行アニメーションを再生
+        const previewCache = new Map<string, CachedSheet>();
+        let previewReqId = 0;
+        let previewFrameIdx = 0;
+        const FRAME_MS = 150;
+        const DIR_MS = 2000;
+        const DIR_SEQUENCE = [0, 2, 3, 1];  // 前(下)→右→後(上)→左
+        let previewDirStep = 0;
+        let previewTickState: { cached: CachedSheet; variant: { url: string; charCol: number; charRow: number }; reqId: number; lastFrameMs: number; lastDirMs: number } | null = null;
+        let selectedThumb: HTMLCanvasElement | null = null;
+        let pendingRestore: { url: string; charCol: number; charRow: number } | null = null;
+
+        const drawSprite = (canvas: HTMLCanvasElement, cached: CachedSheet, charCol: number, charRow: number, frame: number, dir: number = 0) => {
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+            const info = { format: "MV" as const, frameW: cached.frameW, frameH: cached.frameH, charCols: cached.charCols, charRows: cached.charRows, sheetW: 0, sheetH: 0, fCols: cached.fCols, scale: cached.scale };
+            const idx = cellIndex(info, charCol, charRow, dir, frame);
+            const fw = cached.frameW * cached.scale;
+            const fh = cached.frameH * cached.scale;
+            const sx = (idx % cached.fCols) * fw;
+            const sy = Math.floor(idx / cached.fCols) * fh;
+            const cvW = canvas.width, cvH = canvas.height;
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, cvW, cvH);
+            const k = Math.min(cvW / fw, cvH / fh);
+            const dw = fw * k, dh = fh * k;
+            const dx = (cvW - dw) / 2, dy = (cvH - dh) / 2;
+            ctx.drawImage(cached.img, sx, sy, fw, fh, dx, dy, dw, dh);
+        };
+        const loadCached = async (url: string): Promise<CachedSheet> => {
+            let cached = previewCache.get(url);
+            if (!cached) {
+                const bg = await sampleBgColor(url);
+                const result = await buildTransparentPNG(url, bg.r, bg.g, bg.b, 30);
+                const img = new Image();
+                await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = reject; img.src = result.dataURL; });
+                cached = { dataURL: result.dataURL, fCols: result.info.fCols, frameW: result.info.frameW, frameH: result.info.frameH, charCols: result.info.charCols, charRows: result.info.charRows, scale: result.finalScale, img };
+                previewCache.set(url, cached);
+            }
+            return cached;
+        };
+        const getCurrentVariant = (): { url: string; charCol: number; charRow: number } | null => {
+            if (!selectedThumb) return null;
+            return {
+                url: selectedThumb.dataset.url ?? "",
+                charCol: parseInt(selectedThumb.dataset.charCol ?? "0", 10),
+                charRow: parseInt(selectedThumb.dataset.charRow ?? "0", 10),
+            };
+        };
+        const highlightSelectedThumb = () => {
+            if (!avThumbScroll) return;
+            const items = avThumbScroll.querySelectorAll<HTMLCanvasElement>(".avPanel-thumb-item");
+            items.forEach((el) => {
+                if (el === selectedThumb) {
+                    el.style.outline = "2px solid #4a90e2";
+                    el.style.background = "rgba(74,144,226,0.15)";
+                } else {
+                    el.style.outline = "";
+                    el.style.background = "rgba(0,0,0,0.05)";
+                }
+            });
+            if (selectedThumb && avThumbScroll) {
+                const r = selectedThumb.getBoundingClientRect();
+                const sr = avThumbScroll.getBoundingClientRect();
+                if (r.left < sr.left || r.right > sr.right) {
+                    avThumbScroll.scrollTo({ left: selectedThumb.offsetLeft - avThumbScroll.clientWidth / 2 + selectedThumb.clientWidth / 2, behavior: "smooth" });
+                }
+            }
+        };
+        const updatePreview = async () => {
+            const v = getCurrentVariant();
+            if (!v || !v.url || !avPreview) return;
+            const reqId = ++previewReqId;
+            previewTickState = null;
+            highlightSelectedThumb();
+            updateInfoBox(v.url, v.charCol, v.charRow);
+            try {
+                const cached = await loadCached(v.url);
+                if (reqId !== previewReqId) return;
+                previewFrameIdx = 0;
+                previewDirStep = 0;
+                drawSprite(avPreview, cached, v.charCol, v.charRow, previewFrameIdx, DIR_SEQUENCE[previewDirStep]);
+                previewTickState = { cached, variant: v, reqId, lastFrameMs: performance.now(), lastDirMs: performance.now() };
+            } catch (e) {
+                console.warn("DebugOverlay: sprite preview failed", v.url, e);
+            }
+        };
+        // scene tick でフレーム＆方向を進める（setInterval 不使用）
+        game.scene.onBeforeRenderObservable.add(() => {
+            const st = previewTickState;
+            if (!st || !avPreview) return;
+            if (st.reqId !== previewReqId) return;
+            const now = performance.now();
+            let needRedraw = false;
+            if (walkEnabled && now - st.lastFrameMs >= FRAME_MS) {
+                previewFrameIdx = (previewFrameIdx + 1) % 3;
+                st.lastFrameMs = now;
+                needRedraw = true;
+            }
+            if (now - st.lastDirMs >= DIR_MS) {
+                previewDirStep = (previewDirStep + 1) % DIR_SEQUENCE.length;
+                st.lastDirMs = now;
+                needRedraw = true;
+            }
+            if (needRedraw) {
+                drawSprite(avPreview, st.cached, st.variant.charCol, st.variant.charRow, previewFrameIdx, DIR_SEQUENCE[previewDirStep]);
+            }
+        });
+        const selectThumb = (canvas: HTMLCanvasElement) => {
+            selectedThumb = canvas;
+            pendingRestore = null;
+            updatePreview();
+        };
+        const tryRestoreSelection = () => {
+            if (!avThumbScroll || !pendingRestore) return;
+            const match = avThumbScroll.querySelector<HTMLCanvasElement>(
+                `.avPanel-thumb-item[data-url="${CSS.escape(pendingRestore.url)}"][data-char-col="${pendingRestore.charCol}"][data-char-row="${pendingRestore.charRow}"]`,
+            );
+            if (match) selectThumb(match);
+        };
+
+        // サムネ: URL ごとに charCols×charRows 個の候補を展開。非同期ロードでも URL 順を保つ。
+        let thumbRebuildId = 0;
+        let variantCount = 0;
+        const rebuildThumbs = () => {
+            if (!avSpriteSel || !avThumbScroll) return;
+            const rebuildId = ++thumbRebuildId;
+            avThumbScroll.innerHTML = "";
+            variantCount = 0;
+            if (avResultCount) avResultCount.textContent = `0 体`;
+            // 選択中サムネ参照は再構築で失効する可能性があるのでクリア
+            if (selectedThumb && !selectedThumb.isConnected) {
+                const cur = getCurrentVariant();
+                if (cur) pendingRestore = cur;
+            }
+            selectedThumb = null;
+            const opts = Array.from(avSpriteSel.options);
+            opts.forEach((opt) => {
+                const url = opt.value;
+                // URL ごとに display:contents のグループを作り、非同期完了順に依存せず順序を保つ
+                const group = document.createElement("span");
+                group.style.display = "contents";
+                avThumbScroll.appendChild(group);
+                (async () => {
+                    try {
+                        const cached = await loadCached(url);
+                        if (rebuildId !== thumbRebuildId || !group.isConnected) return;
+                        const nC = Math.max(1, cached.charCols);
+                        const nR = Math.max(1, cached.charRows);
+                        const filename = url.split("/").pop() ?? "";
+                        for (let cr = 0; cr < nR; cr++) {
+                            for (let cc = 0; cc < nC; cc++) {
+                                const canvas = document.createElement("canvas");
+                                canvas.width = 48;
+                                canvas.height = 48;
+                                canvas.className = "avPanel-thumb-item";
+                                canvas.dataset.url = url;
+                                canvas.dataset.charCol = String(cc);
+                                canvas.dataset.charRow = String(cr);
+                                canvas.style.cssText = "width:48px;height:48px;image-rendering:pixelated;background:rgba(0,0,0,0.05);border-radius:3px;flex-shrink:0;cursor:pointer;";
+                                canvas.title = (nC * nR > 1) ? `${filename} [${cc},${cr}]` : filename;
+                                canvas.addEventListener("click", () => selectThumb(canvas));
+                                drawSprite(canvas, cached, cc, cr, 1);  // frame=1 静止
+                                group.appendChild(canvas);
+                                variantCount++;
+                            }
+                        }
+                        if (avResultCount) avResultCount.textContent = `${variantCount} 体`;
+                        tryRestoreSelection();
+                        highlightSelectedThumb();
+                    } catch (e) {
+                        console.warn("DebugOverlay: thumb load failed", url, e);
+                    }
+                })();
+            });
+        };
+
+        // sprite url: debug 側の option を複製し、検索文字列で絞り込み
+        const applyFilter = () => {
+            if (!avSpriteSel || !spriteUrlSelect) return;
+            const q = (avSearchInput?.value ?? "").trim().toLowerCase();
+            const prev = avSpriteSel.value;
+            avSpriteSel.innerHTML = "";
+            const src = spriteUrlSelect.querySelectorAll("option");
+            src.forEach((opt) => {
+                const name = (opt.textContent ?? "").toLowerCase();
+                if (q && !name.includes(q)) return;
+                avSpriteSel.appendChild(opt.cloneNode(true));
+            });
+            if (Array.from(avSpriteSel.options).some((o) => o.value === prev)) {
+                avSpriteSel.value = prev;
+            }
+            // 選択中 variant を保存して再構築後に復元
+            const curV = getCurrentVariant();
+            if (curV) pendingRestore = curV;
+            rebuildThumbs();
+        };
+        if (avSpriteSel && spriteUrlSelect) {
+            // 初期復元対象を game 状態から取得
+            pendingRestore = {
+                url: game.playerTextureUrl || (spriteUrlSelect.value ?? ""),
+                charCol: game.playerCharCol ?? 0,
+                charRow: game.playerCharRow ?? 0,
+            };
+            applyFilter();
+            const obs = new MutationObserver(() => applyFilter());
+            obs.observe(spriteUrlSelect, { childList: true });
+        }
+        if (avSearchBtn) avSearchBtn.addEventListener("click", () => applyFilter());
+        if (avSearchInput) {
+            avSearchInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") { e.preventDefault(); applyFilter(); }
+            });
+        }
+        // 前/次ボタン: サムネを DOM 順で前後移動（ラップアラウンド）
+        const stepSprite = (delta: number) => {
+            if (!avThumbScroll) return;
+            const items = Array.from(avThumbScroll.querySelectorAll<HTMLCanvasElement>(".avPanel-thumb-item"));
+            const n = items.length;
+            if (n === 0) return;
+            const cur = selectedThumb ? items.indexOf(selectedThumb) : -1;
+            const next = (((cur < 0 ? 0 : cur) + delta) % n + n) % n;
+            selectThumb(items[next]);
+        };
+        if (avPrevBtn) avPrevBtn.addEventListener("click", () => stepSprite(-1));
+        if (avNextBtn) avNextBtn.addEventListener("click", () => stepSprite(1));
+        // 歩行アニメーション ON/OFF
+        if (avPlayBtn) {
+            avPlayBtn.addEventListener("click", () => {
+                walkEnabled = !walkEnabled;
+                avPlayBtn.textContent = walkEnabled ? "▶️" : "⏸️";
+                if (!walkEnabled && avPreview && previewTickState) {
+                    // 停止時は frame=1（静止）で再描画
+                    previewFrameIdx = 1;
+                    previewTickState.lastFrameMs = performance.now();
+                    drawSprite(avPreview, previewTickState.cached, previewTickState.variant.charCol, previewTickState.variant.charRow, previewFrameIdx, DIR_SEQUENCE[previewDirStep]);
+                } else if (walkEnabled && previewTickState) {
+                    previewTickState.lastFrameMs = performance.now();
+                }
+            });
+        }
+        // Apply: debug 側 spriteApplyBtn にフォワード（選択中 variant の col/row を渡す）
+        if (avApply && spriteApplyBtn) {
+            avApply.addEventListener("click", () => {
+                const v = getCurrentVariant();
+                if (!v) return;
+                const dbgUrl = document.getElementById("spriteUrlSelect") as HTMLSelectElement | null;
+                const dbgCol = document.getElementById("spriteCharCol") as HTMLInputElement | null;
+                const dbgRow = document.getElementById("spriteCharRow") as HTMLInputElement | null;
+                if (dbgUrl) dbgUrl.value = v.url;
+                if (dbgCol) dbgCol.value = String(v.charCol);
+                if (dbgRow) dbgRow.value = String(v.charRow);
+                spriteApplyBtn.click();
+            });
+        }
     }
 
     const sceneInstrumentation = new SceneInstrumentation(game.scene);
