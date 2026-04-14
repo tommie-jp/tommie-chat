@@ -52,6 +52,7 @@ nakama/dot/
 work/
 ss/*.mp4
 .claude/
+.playwright-mcp/
 01-README.md
 
 # --- 公開しない内部ドキュメント ---

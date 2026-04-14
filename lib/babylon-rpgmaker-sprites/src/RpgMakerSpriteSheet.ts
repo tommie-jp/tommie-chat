@@ -199,8 +199,6 @@ export function analyzeSheet(w: number, h: number): SheetInfo {
   const fCols = cc * N_FRAMES;
   const scale = fw <= 56 ? 2 : 1;
 
-  format = 'MV';
-
   return {
     format,
     frameW: fw,

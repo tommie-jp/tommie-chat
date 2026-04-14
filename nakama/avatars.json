@@ -16,7 +16,7 @@
     "size": "32x32",
     "total": 10,
     "png_paths": [
-      "./avatars/01-pipoya/*.png"
+      "./avatars/001-pipoya/*.png"
     ]
   },
   {
@@ -37,7 +37,7 @@
     "total": null,
     "usage_restriction": "RPGツクール作品での利用に限定（オリジナル素材を除く）。Webアプリ等のツクール以外での利用は規約違反の可能性あり。オリジナル素材のみ誰でも利用可。",
     "png_paths": [
-      "./avatars/02-tkool.kagati.com/*.png"
+      "./avatars/002-tkool.kagati.com/*.png"
     ]
   },
   {
@@ -58,7 +58,7 @@
     "total": null,
     "note": "32×32 PNG、4方向3パターン歩行アニメ。出力画像＋α セット、猫にんセット、男女/老人/子供基本パーツ等を含む。",
     "png_paths": [
-      "./avatars/03-pipoya-charachip2/*.png"
+      "./avatars/003-pipoya-charachip2/*.png"
     ]
   },
   {
@@ -79,7 +79,7 @@
     "total": 20,
     "note": "32×32 ピクセル、20種前後のキャラクター（walking / standing / charging）。CC0 のため無制限。",
     "png_paths": [
-      "./avatars/04-oga-eldiran-32x32/*.png"
+      "./avatars/004-oga-eldiran-32x32/*.png"
     ]
   },
   {
@@ -100,7 +100,7 @@
     "total": null,
     "note": "CC0 ライセンスの4方向歩行キャラクター集。クレジット任意だが慣例として記載推奨。",
     "png_paths": [
-      "./avatars/05-oga-cc0-walk-cycles/*.png"
+      "./avatars/005-oga-cc0-walk-cycles/*.png"
     ]
   },
   {
@@ -121,7 +121,7 @@
     "total": null,
     "note": "ドットが小さい。ツクール/ウディタ等あらゆるゲーム制作ツールで利用可。Webアプリ配布時はスタッフロール等1か所にサイト名とURLの表示が必要。",
     "png_paths": [
-      "./avatars/06-dotartworld/*.png"
+      "./avatars/006-dotartworld/*.png"
     ]
   },
   {
@@ -143,7 +143,7 @@
     "usage_restriction": "1制作物あたり30点まで無料。重複使用は1点としてカウント。31点以上使う場合は作者へ有償対応の相談が必要。",
     "note": "Webゲーム/Webアプリでの利用を明示的に許可。5000点以上の素材を公開。",
     "png_paths": [
-      "./avatars/07-dot-illust/*.png"
+      "./avatars/007-dot-illust/*.png"
     ]
   },
   {
@@ -165,7 +165,7 @@
     "usage_restriction": "素材の加工（分解して一部のみ抜き出す等）は不可。位置調整や色調変更の範囲に留める必要あり。",
     "note": "RPGツクールMV/MZ用キャラチップ素材を中心に配布。ツクール以外のゲーム制作ツールでの利用も明示的に許可されている。",
     "png_paths": [
-      "./avatars/08-bougainvillea/*.png"
+      "./avatars/008-bougainvillea/*.png"
     ]
   },
   {
@@ -186,7 +186,7 @@
     "total": 450,
     "note": "形式が違うので使えない。450 種類のキャラクタースプライトをスプライトシート形式で配布。CC0 のため無制限に利用可能。Kenney は CC0 ゲーム素材の老舗サイト。",
     "png_paths": [
-      "./avatars/09-kenney-roguelike-characters/*.png"
+      "./avatars/009-kenney-roguelike-characters/*.png"
     ]
   },
   {
@@ -208,7 +208,7 @@
     "usage_restriction": "NFT化不可、Scratch プラットフォームでの使用不可、直リンク不可、素材を含むロゴの商標登録不可。",
     "note": "ドットが小さすぎて使えない。前田デザイン室運営のドット絵フリー素材サイト。人物・動物・モンスター等のキャラクター素材が多数。",
     "png_paths": [
-      "./avatars/10-dotown/*.png"
+      "./avatars/010-dotown/*.png"
     ]
   },
   {
@@ -230,7 +230,7 @@
     "usage_restriction": "CC-BY-SA の継承条項により、改変・派生したスプライト画像自体は CC-BY-SA 3.0 (または互換ライセンス) で配布する必要がある。ゲームコード本体は対象外だが、改変版スプライトを配布・公開する場合は同じライセンスを付与すること。CREDITS.TXT に記載された全作者をクレジットする必要あり。",
     "note": "2012年 Liberated Pixel Cup コンペの成果物。32×32 ベースのトップダウン RPG 用スプライトシート。多様な体型・装備バリエーションあり。Universal LPC Spritesheet Generator で組み合わせ生成が可能。",
     "png_paths": [
-      "./avatars/11-lpc-base-assets/*.png"
+      "./avatars/011-lpc-base-assets/*.png"
     ]
   },
   {
@@ -251,7 +251,7 @@
     "total": 64,
     "note": "64 キャラクター・32×32 ピクセル・3コマ×4方向歩行アニメーション（ツクール形式）。基本 64 キャラのベースパック（既存の 01 nekonin とは別のパック）。作者が『PNGが読み込めるツールなら何でも使える』と明言しておりツクール以外のエンジン/Webゲームでも利用可。",
     "png_paths": [
-      "./avatars/12-pipoya-32x32-base/*.png"
+      "./avatars/012-pipoya-32x32-base/*.png"
     ]
   },
   {
@@ -273,7 +273,7 @@
     "usage_restriction": "原型が無くなる程の改変は禁止（AI学習素材としての使用も含む）。Web等に掲載時はクレジット表記必須。",
     "note": "透明の処理が上手くいかない。小さい。48×48 ピクセル・3コマ×4方向（RPGツクールMZ 規格）のテントウムシ歩行キャラチップ。無料。『RPGツクール以外にも使用して頂けます』と明記されている貴重なMZ規格素材。",
     "png_paths": [
-      "./avatars/13-icedtomatobazooka-tentoumushi/*.png"
+      "./avatars/013-icedtomatobazooka-tentoumushi/*.png"
     ]
   },
   {
@@ -295,7 +295,7 @@
     "usage_restriction": "企業利用時はクレジット表記必須。原型がわからなくなるほどの切り取り・改変は不可。",
     "note": "¥400 の有料素材。RPGツクールMV/MZ 対応（48×48 3コマ×4方向形式）。女性のRPG職業キャラチップ。3頭身・2頭身の2バリエーション。『ゲーム・漫画・動画・アイコン、なんでもご利用ください』と明記されツクール以外での利用を明確に許可。",
     "png_paths": [
-      "./avatars/14-onikashima-rpg-jobs/*.png"
+      "./avatars/014-onikashima-rpg-jobs/*.png"
     ]
   },
   {
@@ -536,7 +536,7 @@
     "total": 68,
     "note": "48×64 ピクセル・3コマ×4方向（S/W/E/N = RPG Maker 形式のシートを明示的に同梱）。Skeletons (複数バリエーション), Gnomes (帽子色違い), Orcs (戦士/槍兵/狩人/首長/商人/シャーマン等6種), Mages (明暗2バリエーション)。GitHub (AntumDeluge/game-resources) で一括 DL 可。N/E/S/W (Stendhal用) と S/W/E/N (RPG Maker用) の両フォーマットを提供。",
     "png_paths": [
-      "./avatars/26-oga-antumdeluge-48x64/*.png"
+      "./avatars/026-oga-antumdeluge-48x64/*.png"
     ]
   },
   {
@@ -557,7 +557,7 @@
     "total": null,
     "note": "48×64 ピクセルのキャラ生成用レイヤーベース。肌色バリエーション (黒/白/ペール/紅/緑/青/紫)、男女、エルフ耳、髪型サンプルを同梱。レイヤー合成でオリジナルキャラ生成が可能。プロジェクト進行中（髪型・服・帽子・動物特徴を追加予定）。",
     "png_paths": [
-      "./avatars/27-oga-eredah-base-48x64/*.png"
+      "./avatars/027-oga-eredah-base-48x64/*.png"
     ]
   },
   {
@@ -578,7 +578,7 @@
     "total": 1,
     "note": "CC0 の4方向歩行＋アイドルアニメーション付きキャラクタースプライトシート。RPG Maker, Godot, Unity, GameMaker Studio 対応と明記されており、ツクール形式互換。無料。ファイルサイズが小さい（キャラ1体分のベース素材）。",
     "png_paths": [
-      "./avatars/28-agusstt-topdown-rpg/*.png"
+      "./avatars/028-agusstt-topdown-rpg/*.png"
     ]
   },
   {
@@ -693,6 +693,178 @@
     "size": "32x32",
     "total": null,
     "note": "NG:ツクール形式ではない。CC0のRPGキャラクタースプライト。短髪・長髪キャラ、ドレス付きスプライト、テンプレートキャラを含む。3フレーム歩行サイクル、4方向対応。10,000DL超の人気素材。サイズは要確認（小さい可能性あり）。",
+    "png_paths": []
+  },
+  {
+    "no": "035",
+    "enable": true,
+    "title": "Clockwork Raven FREE Pixel Art Characters - Starter Pack",
+    "author": "Clockwork Raven",
+    "author_url": "https://itch.io/profile/clockworkraven",
+    "site_url": "https://clockworkraven.itch.io/free-pixel-art-characters-starter-pack",
+    "terms_url": "https://clockworkraven.itch.io/free-pixel-art-characters-starter-pack",
+    "license": "独自ライセンス。商用・非商用プロジェクトで使用可。素材単体の再配布・販売は不可。クレジット不要（歓迎）。詳細はGoogle Driveのライセンスドキュメント参照。",
+    "credit": "Clockwork Raven https://clockworkraven.itch.io/",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "size": "48x48",
+    "total": 16,
+    "note": "48x48 RPG Maker MV/MZ互換スプライトシート。16キャラ。完全無料（Name Your Own Price、最低額なし）。任意プロジェクト（ウェブアプリ含む）で使用可。ツクール以外OK。要ダウンロード検証。",
+    "png_paths": ["./avatars/035-Clockwork-Raven-Starter-Pack/*.png"]
+  },
+  {
+    "no": "036",
+    "enable": true,
+    "title": "Clockwork Raven Free Pixel Art Characters - Elves and Orcs Pack",
+    "author": "Clockwork Raven",
+    "author_url": "https://itch.io/profile/clockworkraven",
+    "site_url": "https://clockworkraven.itch.io/free-pixel-art-characters-elves-and-orcs",
+    "terms_url": "https://clockworkraven.itch.io/free-pixel-art-characters-elves-and-orcs",
+    "license": "独自ライセンス。商用含む任意プロジェクトで使用可。素材単体の再配布・販売は作者許可なく不可。クレジット不要（歓迎）。",
+    "credit": "Clockwork Raven https://clockworkraven.itch.io/",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "size": "48x48",
+    "total": 16,
+    "note": "48x48 RPG Maker MV/MZ互換（576x384 スプライトシート）。エルフ・オーク計16キャラ。完全無料。任意プロジェクト（ウェブアプリ含む）で使用可。ツクール以外OK。要ダウンロード検証。",
+    "png_paths": ["./avatars/036-Clockwork-Raven-Elves-and-Orcs-Pack/*.png"]
+  },
+  {
+    "no": "037",
+    "enable": false,
+    "title": "cyanowl 32-Pixel Human Sprites (OGA)",
+    "author": "cyanowl",
+    "author_url": "https://opengameart.org/users/cyanowl",
+    "site_url": "https://opengameart.org/content/32-pixel-human-sprites",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "size": "32x32",
+    "total": null,
+    "note": "NG:ルクール形式ではない。CC0。複数の人間スプライト（髪型・服装カスタマイズ可）。4方向歩行アニメ付き（左右は4フレーム、上下は8フレームとの報告あり）。PNG/GIF形式。53,000DL超。タグに16x32の記載があり実際のキャラサイズは16x32の可能性あり（要確認）。ツクール形式かは要検証。",
+    "png_paths": []
+  },
+  {
+    "no": "038",
+    "enable": false,
+    "title": "rgsdev Hand-Drawn Square Characters 8 Directions Top-Down (OGA)",
+    "author": "rgsdev",
+    "author_url": "https://opengameart.org/users/rgsdev",
+    "site_url": "https://opengameart.org/content/hand-drawn-square-characters-animated-8-directions-top-down-free-cc0",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "size": "128x128",
+    "total": 4,
+    "note": "NG:ツクール形式ではない。CC0。128x128 の大判ハンドドロー系。4キャラ（base, hero, skeleton, monster）、8方向歩行/アイドル、ジャンプ・爆発・銃アセット同梱。PNG形式。要検証：ピクセルアートではないため tommieChat のドット風世界観と合うかはデザイン確認が必要。",
+    "png_paths": []
+  },
+  {
+    "no": "039",
+    "enable": false,
+    "title": "LokiF Just another RPG character base (OGA)",
+    "author": "LokiF",
+    "author_url": "https://opengameart.org/users/lokif",
+    "site_url": "https://opengameart.org/content/just-another-rpg-character-base",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0 1.0 Universal (Public Domain)",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "size": "48x72",
+    "total": 1,
+    "note": "NG:ツクール形式ではない。CC0。48x72 のキャラベース 1体。歩行・武器振り・弓攻撃アニメ付き。GIF形式（base_sprite.gif）。3/4方向スプライトセットコレクション掲載。4方向完全対応かは要確認。ベースのみ（衣装バリエーションなし）。",
+    "png_paths": []
+  },
+  {
+    "no": "040",
+    "enable": false,
+    "title": "Spring Spring 32x64 Female Base Sprite (OGA)",
+    "author": "Spring Spring",
+    "author_url": "https://opengameart.org/users/spring-spring",
+    "site_url": "https://opengameart.org/content/32x64-female-base-sprite-walking-4-directions",
+    "terms_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "マルチライセンス: CC-BY 3.0 / CC-BY-SA 3.0 / OGA-BY 3.0 / CC0 1.0 Universal（いずれか選択可）",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "size": "32x64",
+    "total": 1,
+    "note": "NG:ツクール形式ではない。CC0 選択可（要クレジット不要）。32x64 の女性キャラベース 1体。4方向歩行アニメ（spr_fembase_walk_strip16.png）。PNG形式（4.3KB）。ベースのみで衣装・髪型バリエーションなし。改造して増やす想定。",
+    "png_paths": []
+  },
+  {
+    "no": "041",
+    "enable": true,
+    "title": "Lanto RPG Maker MV Free Characters (itch.io)",
+    "author": "Lanto",
+    "author_url": "https://lanto.itch.io",
+    "site_url": "https://lanto.itch.io/rpg-maker-mv-free-characters",
+    "terms_url": "https://lanto.itch.io/rpg-maker-mv-free-characters",
+    "license": "独自ライセンス（RPG Maker MV プロジェクト内利用を想定、商用・非商用可）",
+    "credit": "",
+    "commercial_use": true,
+    "modification": null,
+    "redistribution": false,
+    "credit_required": false,
+    "size": "48x48",
+    "total": 100,
+    "note": "要検証：作者が『any RPG Maker MV project, commercial and non-commercial』と明記しており、他エンジン（ウェブゲーム含む）での利用は作者コメントで事例ありだが法的にはグレー。tommieChat はブラウザ上の Babylon.js ゲームのため使用前に作者に確認推奨。48x48 ツクールMV形式で100体超、PNG、クレジット任意、寄付歓迎。",
+    "png_paths": ["./avatars/041-lanto/*.png"]
+
+  },
+  {
+    "no": "042",
+    "enable": false,
+    "title": "Zerie Tiny RPG Character Asset Pack v1.03 (itch.io)",
+    "author": "Zerie",
+    "author_url": "https://zerie.itch.io",
+    "site_url": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "terms_url": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "独自ライセンス（個人・商用利用可、改変可、再配布・再販売不可）",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": false,
+    "credit_required": false,
+    "size": "32x32",
+    "total": 2,
+    "note": "NG:ツクール形式ではない。無料版は Soldier と Orc の2体のみ（有料$2.50で20体フルセット）。キャラは約32x32、タイルは100x100。4方向歩行アニメ付き、PNG形式。クレジット任意。ウェブゲームでの利用可、再配布不可。ツクール形式かは要検証（タイルサイズが100x100のため非標準の可能性）。",
+    "png_paths": []
+  },
+  {
+    "no": "043",
+    "enable": false,
+    "title": "ClownBoots Monochrome Character Pack for RPG Maker MV (itch.io)",
+    "author": "ClownBoots",
+    "author_url": "https://clownboots.itch.io",
+    "site_url": "https://clownboots.itch.io/monochrome-character-pack-for-rpg-maker-mv",
+    "terms_url": "https://clownboots.itch.io/monochrome-character-pack-for-rpg-maker-mv",
+    "license": "非常に寛容な独自ライセンス（商用・非商用・改変・再配布・再販売・自作主張・NFT/メタバース/AI 利用すべて可）",
+    "credit": "",
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true,
+    "credit_required": false,
+    "size": "48x48",
+    "total": null,
+    "note": "NG:素材がない。48x48 ツクールMV形式のオーバーワールドスプライト＋144x144 顔グラフィックのキャラクタークリエイターパック。4方向歩行アニメ。モノクロ（1bit風）。ライセンスが極めて寛容で実質 CC0 同等（作者は credit 歓迎と記載のみ）。ウェブゲームで問題なく使える。パック形式のため生成・バリエーション数は要確認。",
     "png_paths": []
   }
 ]

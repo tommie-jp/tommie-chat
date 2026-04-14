@@ -1,0 +1,1 @@
+docker compose -f docker-compose.yml -f docker-compose.dev.yml   exec minio sh -c 'mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc ls local/avatars/ '
