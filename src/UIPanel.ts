@@ -585,6 +585,18 @@ export function setupHtmlUI(game: GameScene): void {
                             }
                         }
                     }
+                    // 表示名パネルのユーザID表示を更新（Google 認証済みなら email、未なら user_xxxxxx）
+                    {
+                        const dnUid = document.getElementById("dn-panel-userid");
+                        if (dnUid) {
+                            if (linked && st.email) {
+                                dnUid.textContent = st.email;
+                            } else {
+                                const li = document.getElementById("loginName") as HTMLInputElement | null;
+                                dnUid.textContent = li?.value ?? "-";
+                            }
+                        }
+                    }
                     // サーバ側 Google OAuth 未設定 → ボタン無効化 + エラーコード表示
                     const oauthErr = game.nakama.googleOAuthErr;
                     if (linkBtn && oauthErr && oauthErr > 0) {
