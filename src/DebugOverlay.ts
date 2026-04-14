@@ -1811,10 +1811,13 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
-    // スプライトアバター: /s3/avatars/ のファイル一覧を取得してドロップダウンに表示
+    // スプライトアバター: /s3/avatars/ のファイル一覧はアバターパネル初回表示時に遅延ロード
     const spriteUrlSelect = document.getElementById("spriteUrlSelect") as HTMLSelectElement | null;
-    if (spriteUrlSelect) {
-        const fetchAvatarList = async () => {
+    let avatarListPromise: Promise<void> | null = null;
+    const ensureAvatarList = (): Promise<void> => {
+        if (!spriteUrlSelect) return Promise.resolve();
+        if (avatarListPromise) return avatarListPromise;
+        avatarListPromise = (async () => {
             try {
                 const res = await fetch("/s3/avatars/");
                 const xml = await res.text();
@@ -1829,19 +1832,20 @@ export function setupDebugOverlay(game: GameScene): void {
                     opt.textContent = name;
                     spriteUrlSelect.appendChild(opt);
                 });
+                // localStorage に保存された URL を復元
+                const savedSpriteUrl = localStorage.getItem("spriteAvatarUrl");
+                if (savedSpriteUrl) spriteUrlSelect.value = savedSpriteUrl;
             } catch (e) {
                 console.warn("Failed to fetch avatar list from /s3/avatars/:", e);
+                avatarListPromise = null;  // 失敗したら再試行を許可
             }
-        };
-        fetchAvatarList();
-
-        // localStorage から復元（GameScene が既に読み込み済みなのでUI同期のみ）
+        })();
+        return avatarListPromise;
+    };
+    if (spriteUrlSelect) {
+        // col/row UI 値は即座に復元（ファイル一覧ロード不要）
         const savedSpriteUrl = localStorage.getItem("spriteAvatarUrl");
         if (savedSpriteUrl) {
-            // GameScene が localStorage から既に読み込み済みなので、ドロップダウンの値を合わせるだけ
-            spriteUrlSelect.value = savedSpriteUrl;
-            // fetchAvatarList完了後に再設定
-            fetchAvatarList().then(() => { spriteUrlSelect.value = savedSpriteUrl; });
             const colInput = document.getElementById("spriteCharCol") as HTMLInputElement | null;
             const rowInput = document.getElementById("spriteCharRow") as HTMLInputElement | null;
             if (colInput) colInput.value = String(game.playerCharCol);
@@ -2127,9 +2131,20 @@ export function setupDebugOverlay(game: GameScene): void {
                 charCol: game.playerCharCol ?? 0,
                 charRow: game.playerCharRow ?? 0,
             };
-            applyFilter();
-            const obs = new MutationObserver(() => applyFilter());
-            obs.observe(spriteUrlSelect, { childList: true });
+            // アバターパネル初回表示時にファイル一覧をロードしてサムネ生成
+            let avatarPanelInited = false;
+            const initAvatarPanel = () => {
+                if (avatarPanelInited) return;
+                avatarPanelInited = true;
+                ensureAvatarList().then(() => applyFilter());
+            };
+            const avPanelEl = document.getElementById("avatar-panel");
+            if (avPanelEl) {
+                if (avPanelEl.style.display !== "none") initAvatarPanel();
+                new MutationObserver(() => {
+                    if (avPanelEl.style.display !== "none") initAvatarPanel();
+                }).observe(avPanelEl, { attributes: true, attributeFilter: ["style"] });
+            }
         }
         if (avSearchBtn) avSearchBtn.addEventListener("click", () => applyFilter());
         if (avSearchInput) {
