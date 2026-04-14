@@ -2001,6 +2001,23 @@ export function setupHtmlUI(game: GameScene): void {
                 break;
             }
         }
+        // 同一 UID の別セッション（別デバイス/別ブラウザ）からの変更は、自分自身にも反映する
+        if (userId && userId === game.currentUserId && sessionId !== game.nakama.selfSessionId) {
+            console.log(`rcv onDisplayName: adopting cross-session change displayName=${displayName}`);
+            game.nakama.selfDisplayName = displayName;
+            if (nameColor) game.nakama.selfNameColor = nameColor;
+            const selfUsername = loginNameInput?.value ?? "";
+            const selfLbl = resolveDisplayLabel(displayName, selfUsername, game.nakama.selfSessionId ?? undefined);
+            game.updatePlayerNameTag(selfLbl.text, selfLbl.color, selfLbl.suffix);
+            const dnInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
+            if (dnInput) dnInput.value = displayName;
+            confirmedDisplayName = displayName;
+            const mySid = game.nakama.selfSessionId;
+            if (mySid) {
+                const me = userMap.get(mySid);
+                if (me) userMap.set(mySid, { ...me, displayName, nameColor: nameColor || me.nameColor });
+            }
+        }
         // 既存オーバーレイメッセージの名前色を一括更新
         if (nameColor && userId) updateOverlayNameColor(userId, nameColor);
         scheduleRenderUserList();
