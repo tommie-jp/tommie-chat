@@ -4,6 +4,37 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+usage() {
+    cat <<EOF
+使い方: $(basename "$0") [オプション]
+
+Nakama/関連コンテナを再起動する。TOMMIE_PROD=1 または /etc/tommie-chat-prod の
+存在で本番 overlay、それ以外は dev overlay を自動選択する。
+
+オプション:
+  -h, --help     この説明を表示して終了
+      --fresh    再起動前に ./doBuild.sh --fresh を実行（Go プラグインをクリーンビルド）
+      --time     処理全体を time コマンドで計測
+EOF
+}
+
+FRESH_BUILD=false
+TIME_MEASURE=false
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        --fresh)   FRESH_BUILD=true ;;
+        --time)    TIME_MEASURE=true ;;
+        *) echo "不明なオプション: $arg" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+run_main() {
+if [ "$FRESH_BUILD" = true ]; then
+    echo "=== ./doBuild.sh --fresh を実行 ==="
+    ./doBuild.sh --fresh
+fi
+
 # nakama/.env を事前に読み込む（COMPOSE_PROJECT_NAME 等）。
 # docker compose は cwd の .env を自動で読むが、シェル側でも参照するため明示的に読み込む。
 if [ -f "$SCRIPT_DIR/.env" ]; then
@@ -98,12 +129,23 @@ done
 
 if [ "$FAILED" -eq 0 ]; then
     echo "✅ 全コンテナ起動成功"
-    exit 0
+    return 0
 else
     echo "❌ 起動失敗（上記を確認してください）"
     echo "--- docker compose ps ---"
     $COMPOSE ps
     echo "--- ログ (最後の30行) ---"
     $COMPOSE logs --tail=30
-    exit 1
+    return 1
 fi
+}
+
+set +e
+if [ "$TIME_MEASURE" = true ]; then
+    time run_main
+    rc=$?
+else
+    run_main
+    rc=$?
+fi
+exit $rc

@@ -1400,7 +1400,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
         initPosGuard.set(sessionId, performance.now());
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
-        const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
+        const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/001-pipo-nekonin008.png";
         if (game.spriteAvatarSystem.has(sessionId) || game.spriteAvatarSystem.isCreating(sessionId)) {
             if (game.spriteAvatarSystem.has(sessionId)) {
                 game.spriteAvatarSystem.setPosition(sessionId, x, z);
@@ -1450,7 +1450,7 @@ export function setupHtmlUI(game: GameScene): void {
     game.nakama.onAvatarChange = (sessionId: string, textureUrl: string, charCol: number, charRow: number) => {
         console.log(`rcv avatarChange sid=${sessionId.slice(0, 8)} textureUrl=${textureUrl} cc=${charCol} cr=${charRow}`);
         if (sessionId === game.nakama.selfSessionId) return;
-        const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/pipo-nekonin008.png";
+        const sheetUrl = (textureUrl && textureUrl.includes("/s3/")) ? textureUrl : "/s3/avatars/001-pipo-nekonin008.png";
         const cached = profileCache.get(sessionId);
         const dn = cached?.displayName ?? userMap.get(sessionId)?.displayName ?? "";
         const uname = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
@@ -1515,7 +1515,7 @@ export function setupHtmlUI(game: GameScene): void {
                 const updater = game.remoteNameUpdaters.get(sid);
                 if (updater) updater(plbl.text, plbl.color, plbl.suffix);
                 // テクスチャURLが変わっていたらアバターを再作成
-                const newSheetUrl = (prof.textureUrl && prof.textureUrl.includes("/s3/")) ? prof.textureUrl : "/s3/avatars/pipo-nekonin008.png";
+                const newSheetUrl = (prof.textureUrl && prof.textureUrl.includes("/s3/")) ? prof.textureUrl : "/s3/avatars/001-pipo-nekonin008.png";
                 const cc = prof.charCol ?? 0;
                 const cr = prof.charRow ?? 0;
                 if (game.spriteAvatarSystem.has(sid)) {
@@ -1549,7 +1549,7 @@ export function setupHtmlUI(game: GameScene): void {
         const username = userMap.get(sessionId)?.username ?? sessionId.slice(0, 8);
         const displayName = cached?.displayName ?? "";
         const aoiLbl = resolveDisplayLabel(displayName, username, sessionId);
-        const sheetUrl = (cached?.textureUrl && cached.textureUrl.includes("/s3/")) ? cached.textureUrl : "/s3/avatars/pipo-nekonin008.png";
+        const sheetUrl = (cached?.textureUrl && cached.textureUrl.includes("/s3/")) ? cached.textureUrl : "/s3/avatars/001-pipo-nekonin008.png";
         if (game.spriteAvatarSystem.has(sessionId)) {
             game.spriteAvatarSystem.setPosition(sessionId, x, z);
             game.spriteAvatarSystem.setRotation(sessionId, ry);
@@ -1815,6 +1815,32 @@ export function setupHtmlUI(game: GameScene): void {
                 } catch (e) { console.warn("UIPanel.getDisplayNames:", e); }
             }
             await game.loadChunksFromDB(game.currentUserId ?? "anonymous");
+            // 初期アバター選択: localStorage に保存済みでなければ、/s3/avatars/ 一覧の先頭を選ぶ
+            if (!localStorage.getItem("spriteAvatarUrl")) {
+                try {
+                    const res = await fetch("/s3/avatars/");
+                    const xml = await res.text();
+                    const doc = new DOMParser().parseFromString(xml, "application/xml");
+                    const keys = Array.from(doc.querySelectorAll("Contents > Key"))
+                        .map(k => k.textContent ?? "")
+                        .filter(n => n && /\.(png|jpg|jpeg)$/i.test(n))
+                        .sort();
+                    if (keys.length > 0) {
+                        const url = "/s3/avatars/" + keys[0];
+                        game.playerTextureUrl = url;
+                        localStorage.setItem("spriteAvatarUrl", url);
+                        const selfId = "__self__";
+                        const p = game.playerBox.position;
+                        await game.spriteAvatarSystem.createAvatar(
+                            selfId, url, game.playerCharCol, game.playerCharRow,
+                            p.x, p.z, "", undefined, game.playerBox.rotation.y,
+                        );
+                        game.spriteAvatarSystem.setPosition(selfId, p.x, p.z);
+                        game.playerBox.getChildMeshes().forEach(m => m.isVisible = false);
+                        game.refreshSelfNameTag?.();
+                    }
+                } catch (e) { console.warn("UIPanel.initialAvatar:", e); }
+            }
             // joinMatch 1回で全て完結（メタデータに初期位置を含める）
             { const p = game.playerBox;
               // タブ固有キーで prevSid を管理（同一ブラウザの複数タブを区別）

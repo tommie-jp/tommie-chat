@@ -704,7 +704,48 @@ const (
 	ccuCollection       = "ccu_data"
 	ccuStorageKey       = "history_1m"
 	systemUserID        = "00000000-0000-0000-0000-000000000000"
+	metaCollection      = "meta"
+	loginCounterKey     = "login_counter"
+	userMetaCollection  = "user_meta"
+	initialAvatarIdxKey = "initial_avatar_idx"
 )
+
+// loginCounter は累計ログインカウンター。
+// 新規ユーザーが初回ログインしたときだけインクリメントされ、ユーザーに割り当てたインデックスを
+// user_meta/initial_avatar_idx として保存する。
+var loginCounter int64
+
+func loadLoginCounter(ctx context.Context, nk runtime.NakamaModule, logger runtime.Logger) {
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: metaCollection,
+		Key:        loginCounterKey,
+		UserID:     systemUserID,
+	}})
+	if err != nil || len(objs) == 0 {
+		return
+	}
+	var v struct {
+		Counter int64 `json:"counter"`
+	}
+	if err := json.Unmarshal([]byte(objs[0].Value), &v); err != nil {
+		return
+	}
+	atomic.StoreInt64(&loginCounter, v.Counter)
+	logger.Info("login counter loaded: %d", v.Counter)
+}
+
+func persistLoginCounter(ctx context.Context, nk runtime.NakamaModule) {
+	v := atomic.LoadInt64(&loginCounter)
+	payload, _ := json.Marshal(map[string]int64{"counter": v})
+	_, _ = nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+		Collection:      metaCollection,
+		Key:             loginCounterKey,
+		UserID:          systemUserID,
+		Value:           string(payload),
+		PermissionRead:  0,
+		PermissionWrite: 0,
+	}})
+}
 
 // marshalCcuHistory1m はccuHistory1mをJSON化して返す（ロック取得・解放込み）
 func marshalCcuHistory1m() ([]byte, int, error) {
@@ -2623,6 +2664,41 @@ func rpcSaveBookmarks(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	return `{}`, nil
 }
 
+// rpcGetInitialAvatarIndex はユーザーに割り当てる初期アバターのインデックスを返す。
+// 既に割り当て済みならそれを返し、未割り当てなら累計ログインカウンターを 1 つ進めて割り当てる。
+// クライアントは 36.Avatar の選択肢を fetch し、index % 選択数 の位置を初期値に使う。
+func rpcGetInitialAvatarIndex(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if uid == "" {
+		return "", runtime.NewError("authentication required", 16)
+	}
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: userMetaCollection,
+		Key:        initialAvatarIdxKey,
+		UserID:     uid,
+	}})
+	if err != nil {
+		return "", err
+	}
+	if len(objs) > 0 {
+		return objs[0].Value, nil
+	}
+	idx := atomic.AddInt64(&loginCounter, 1) - 1
+	result := fmt.Sprintf(`{"index":%d}`, idx)
+	if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+		Collection:      userMetaCollection,
+		Key:             initialAvatarIdxKey,
+		UserID:          uid,
+		Value:           result,
+		PermissionRead:  1,
+		PermissionWrite: 0,
+	}}); err != nil {
+		logger.Warn("save initial_avatar_idx: %v", err)
+	}
+	go persistLoginCounter(context.Background(), nk)
+	return result, nil
+}
+
 // ─── 部屋管理 RPC ───
 
 // rpcGetWorldList はワールド一覧を返す
@@ -3399,6 +3475,9 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	// 同接履歴をDBから復元（過去10日分）
 	loadCcuHistory1m(ctx, nk, logger)
 
+	// 累計ログインカウンターをDBから復元
+	loadLoginCounter(ctx, nk, logger)
+
 	if err := initializer.RegisterMatch("world", func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule) (runtime.Match, error) {
 		return &worldMatch{}, nil
 	}); err != nil {
@@ -3434,6 +3513,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"detachDevice", rpcDetachDevice},
 		{"registerDeviceInfo", rpcRegisterDeviceInfo},
 		{"getAccountStatus", rpcGetAccountStatus},
+		{"getInitialAvatarIndex", rpcGetInitialAvatarIndex},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {

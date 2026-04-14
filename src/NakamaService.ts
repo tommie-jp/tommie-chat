@@ -636,6 +636,22 @@ export class NakamaService {
         } finally { _end(); }
     }
 
+    /** 初回ログイン時の初期アバターインデックスを取得（サーバ側の累計ログインカウンターに基づく）。
+     *  2回目以降は同じ値を返す。取得失敗時は null。 */
+    async getInitialAvatarIndex(): Promise<number | null> {
+        if (!this.socket) return null;
+        try {
+            const r = await this.socket.rpc("getInitialAvatarIndex");
+            if (r?.payload) {
+                const d = JSON.parse(r.payload) as { index?: number };
+                if (typeof d.index === "number") return d.index;
+            }
+        } catch (e) {
+            console.warn("NakamaService.getInitialAvatarIndex:", e);
+        }
+        return null;
+    }
+
     async getDisplayNames(userIds: string[]): Promise<Map<string, string>> {
         const _end = prof("NakamaService.getDisplayNames");
         try {

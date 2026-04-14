@@ -137,7 +137,7 @@ async function loginAndJoin(name: string, x = 0, z = 0): Promise<PlayerConn> {
 
     clog(name, `snd initPos x=${x.toFixed(1)} z=${z.toFixed(1)} dn=${name}`);
     await socket.sendMatchState(wmData.matchId, OP_INIT_POS, JSON.stringify({
-        x, z, ry: 0, lt: new Date().toISOString(), dn: name, tx: '/s3/avatars/pipo-nekonin008.png',
+        x, z, ry: 0, lt: new Date().toISOString(), dn: name, tx: '/s3/avatars/001-pipo-nekonin008.png',
     }));
 
     const aoi = calcAOI(x, z);
@@ -202,7 +202,7 @@ async function reconnect(conn: PlayerConn): Promise<{ oldSessionId: string; newS
     // initPos 再送信
     clog(conn.name, `snd initPos (reconnect) sid=${newSessionId.slice(0, 8)}`);
     await newSocket.sendMatchState(conn.matchId, OP_INIT_POS, JSON.stringify({
-        x: 0, z: 0, ry: 0, lt: new Date().toISOString(), dn: conn.name, tx: '/s3/avatars/pipo-nekonin008.png',
+        x: 0, z: 0, ry: 0, lt: new Date().toISOString(), dn: conn.name, tx: '/s3/avatars/001-pipo-nekonin008.png',
     }));
 
     // AOI 再送信

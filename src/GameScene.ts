@@ -102,7 +102,7 @@ export class GameScene {
     minimapRotate = true;
     /** ツールチップ表示（false で全 title 属性を無効化） */
     tooltipsEnabled = !document.cookie.includes("tooltips=0");
-    playerTextureUrl = localStorage.getItem("spriteAvatarUrl") || "/s3/avatars/pipo-nekonin008.png";
+    playerTextureUrl = localStorage.getItem("spriteAvatarUrl") || "/s3/avatars/001-pipo-nekonin008.png";
     playerCharCol = parseInt(localStorage.getItem("spriteAvatarCol") ?? "0", 10) || 0;
     playerCharRow = parseInt(localStorage.getItem("spriteAvatarRow") ?? "0", 10) || 0;
     avatarDepth = 0.05;
