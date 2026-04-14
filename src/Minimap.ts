@@ -23,30 +23,45 @@ export function setupMinimap(game: GameScene): void {
     // HTML canvas は非表示（DynamicTexture 経由で WebGL 内に描画）
     htmlCanvas.style.display = "none";
 
-    // オフスクリーン canvas（2D 描画用）
+    // WebGL/Canvas リソースは初回表示まで遅延生成
     const MAP_RES = 256;
-    const offCanvas = document.createElement("canvas");
-    offCanvas.width = MAP_RES;
-    offCanvas.height = MAP_RES;
-    const ctx = offCanvas.getContext("2d")!;
     let mapSize = MAP_RES;
+    let offCanvas: HTMLCanvasElement | null = null;
+    let ctx: CanvasRenderingContext2D | null = null;
+    let dt: DynamicTexture | null = null;
+    let mmPlane: import("@babylonjs/core").Mesh | null = null;
+    let chunkCache: HTMLCanvasElement | null = null;
+    let chunkCacheCtx: CanvasRenderingContext2D | null = null;
+    let chunkCacheValid = false;
+    let playerDirty = true;
 
-    // DynamicTexture（WebGL テクスチャとして描画）
-    const dt = new DynamicTexture("minimapDT", MAP_RES, game.scene, false);
-    dt.hasAlpha = true;
-
-    // 平面メッシュ（カメラに parent して HUD 表示）
-    const mmPlane = MeshBuilder.CreatePlane("minimapPlane", { size: 1 }, game.scene);
-    const mmMat = new StandardMaterial("minimapMat", game.scene);
-    mmMat.emissiveTexture = dt;
-    mmMat.opacityTexture = dt;
-    mmMat.disableLighting = true;
-    mmMat.backFaceCulling = false;
-    mmPlane.material = mmMat;
-    mmPlane.renderingGroupId = 3;
-    mmPlane.isPickable = false;
-    mmPlane.parent = game.camera;
-    mmPlane.alphaIndex = 100;
+    const ensureResources = (): boolean => {
+        if (dt) return true;
+        offCanvas = document.createElement("canvas");
+        offCanvas.width = MAP_RES;
+        offCanvas.height = MAP_RES;
+        ctx = offCanvas.getContext("2d")!;
+        dt = new DynamicTexture("minimapDT", MAP_RES, game.scene, false);
+        dt.hasAlpha = true;
+        mmPlane = MeshBuilder.CreatePlane("minimapPlane", { size: 1 }, game.scene);
+        const mmMat = new StandardMaterial("minimapMat", game.scene);
+        mmMat.emissiveTexture = dt;
+        mmMat.opacityTexture = dt;
+        mmMat.disableLighting = true;
+        mmMat.backFaceCulling = false;
+        mmPlane.material = mmMat;
+        mmPlane.renderingGroupId = 3;
+        mmPlane.isPickable = false;
+        mmPlane.parent = game.camera;
+        mmPlane.alphaIndex = 100;
+        chunkCache = document.createElement("canvas");
+        chunkCache.width = mapSize;
+        chunkCache.height = mapSize;
+        chunkCacheCtx = chunkCache.getContext("2d")!;
+        chunkCacheValid = false;
+        playerDirty = true;
+        return true;
+    };
 
     // PC のみツールチップ
     if (!isMobile && game.tooltipsEnabled) {
@@ -55,6 +70,7 @@ export function setupMinimap(game: GameScene): void {
 
     /** 平面メッシュの位置・サイズを HTML container に同期 */
     const syncPlaneToContainer = () => {
+        if (!mmPlane) return;
         if (!mmVisible) {
             mmPlane.setEnabled(false);
             return;
@@ -119,7 +135,7 @@ export function setupMinimap(game: GameScene): void {
         }
         container.style.display = mmVisible ? "" : "none";
         container.style.pointerEvents = mmVisible ? "auto" : "none";
-        mmPlane.setEnabled(mmVisible);
+        mmPlane?.setEnabled(mmVisible);
         if (menuBtn) menuBtn.textContent = (mmVisible ? "✓" : "　") + " " + t("menu.minimap");
         ckSet("mmVisible", mmVisible ? "1" : "0");
         if (mmVisible) {
@@ -477,6 +493,7 @@ export function setupMinimap(game: GameScene): void {
         const ly = cy + Math.cos(ca + backAngle) * baseL;
         const rx = cx + Math.sin(ca - backAngle) * baseL;
         const ry2 = cy + Math.cos(ca - backAngle) * baseL;
+        if (!ctx) return;
         ctx.beginPath();
         ctx.moveTo(tipX, tipY);
         ctx.lineTo(lx, ly);
@@ -520,14 +537,10 @@ export function setupMinimap(game: GameScene): void {
     game.onChunkSync.push(() => { chunkCacheValid = false; playerDirty = true; });
 
     // チャンクキャッシュ
-    let chunkCacheValid = false;
     onVisibilityChanged = () => { chunkCacheValid = false; };
-    const chunkCache = document.createElement("canvas");
-    chunkCache.width = MAP_RES;
-    chunkCache.height = MAP_RES;
-    const chunkCacheCtx = chunkCache.getContext("2d")!;
 
     const redrawChunkCache = () => {
+        if (!chunkCache || !chunkCacheCtx) return;
         chunkCache.width = mapSize;
         chunkCache.height = mapSize;
         drawChunksTo(chunkCacheCtx);
@@ -600,12 +613,13 @@ export function setupMinimap(game: GameScene): void {
     // --- 描画ループ ---
     let prevPlayerX = NaN, prevPlayerZ = NaN, prevPlayerRot = NaN;
     let prevRemoteCount = -1;
-    let playerDirty = true;
     const MM_INTERVAL = 100; // ≈ 10 FPS
     let lastMmUpdate = 0;
 
     game.scene.onAfterRenderObservable.add(() => {
         if (!mmVisible) return;
+        ensureResources();
+        if (!ctx || !dt || !offCanvas || !chunkCache) return;
 
         // 平面メッシュを HTML container の位置に同期（毎フレーム、軽い処理）
         syncPlaneToContainer();
