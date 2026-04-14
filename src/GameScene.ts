@@ -562,8 +562,7 @@ export class GameScene {
             if (sprSpeechUpdate) sprSpeechUpdate(text);
         };
 
-        // 雲
-        this.cloudSystem.create();
+        // 雲: DebugOverlay の dbgCloud Cookie 読み取り時に遅延生成（setEnabled → create）
 
         // 座標ラベル
         this.createCoordinateLabels();

@@ -12,10 +12,12 @@ export class CloudSystem {
 
     setEnabled(on: boolean): void {
         this._enabled = on;
+        if (on && !this.cloudMesh) this.create();
         if (this.cloudMesh) this.cloudMesh.setEnabled(on);
     }
 
     create(): void {
+        if (this.cloudMesh) return;
         const _end = prof("CloudSystem.create");
         const cloudMaterial = new StandardMaterial("roundedMinecraftCloudMat", this.scene);
         cloudMaterial.diffuseColor = new Color3(1, 1, 1);

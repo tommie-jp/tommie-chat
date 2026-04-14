@@ -2177,11 +2177,13 @@ export function setupHtmlUI(game: GameScene): void {
     const drawPingGraph = () => {
         const _end = prof("UIPanel.drawPingGraph");
         try {
-        const canvas = document.getElementById("ping-canvas") as HTMLCanvasElement | null;
-        if (!canvas) return;
         const ppanel  = document.getElementById("ping-panel");
         const pheader = document.getElementById("ping-header");
         if (!ppanel || !pheader) return;
+        // パネル非表示時は Canvas 描画をスキップ（RPC による死活監視は継続）
+        if (ppanel.style.display === "none") return;
+        const canvas = document.getElementById("ping-canvas") as HTMLCanvasElement | null;
+        if (!canvas) return;
         const headerH = pheader.offsetHeight;
         canvas.style.top = headerH + "px";
         const w = ppanel.clientWidth, h = ppanel.clientHeight - headerH;

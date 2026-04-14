@@ -1232,12 +1232,11 @@ export function setupDebugOverlay(game: GameScene): void {
     const cloudToggleBtn = document.getElementById("cloudToggleBtn") as HTMLButtonElement;
     if (cloudToggleBtn) {
         const savedCloud = dbgGetCookie("dbgCloud");
-        if (savedCloud !== null) {
-            game.cloudSystem.setEnabled(savedCloud === "1");
-            cloudToggleBtn.innerText = game.cloudSystem.enabled ? "On" : "Off";
-            if (game.cloudSystem.enabled) cloudToggleBtn.classList.remove("off");
-            else cloudToggleBtn.classList.add("off");
-        }
+        // 初期状態: Cookie="0" ならメッシュ生成をスキップ、それ以外（null/"1"）なら生成
+        game.cloudSystem.setEnabled(savedCloud !== "0");
+        cloudToggleBtn.innerText = game.cloudSystem.enabled ? "On" : "Off";
+        if (game.cloudSystem.enabled) cloudToggleBtn.classList.remove("off");
+        else cloudToggleBtn.classList.add("off");
         markNonDefault(cloudToggleBtn, "On", cloudToggleBtn.innerText, () => {
             game.cloudSystem.setEnabled(true); cloudToggleBtn.innerText = "On"; cloudToggleBtn.classList.remove("off"); dbgSetCookie("dbgCloud", "1"); markNonDefault(cloudToggleBtn, "On", "On");
         });
