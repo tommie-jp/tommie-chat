@@ -848,12 +848,22 @@ export function setupDebugOverlay(game: GameScene): void {
     // --- チャットオーバーレイ行数 ---
     const chatOlMaxSelect = document.getElementById("chatOlMaxSelect") as HTMLSelectElement | null;
     if (chatOlMaxSelect) {
+        // ポートレート/ランドスケープ/デスクトップで別キー
+        const getOlMode = (): "ls" | "pt" | "dt" => {
+            if (!matchMedia("(pointer: coarse) and (min-resolution: 2dppx)").matches) return "dt";
+            return matchMedia("(orientation: landscape)").matches ? "ls" : "pt";
+        };
+        const olKey = (): string => {
+            const m = getOlMode();
+            return m === "dt" ? "chatOlMax" : "chatOlMax" + (m === "ls" ? "Ls" : "Pt");
+        };
         const getChatOlCookie = (): string | null => {
-            const m = document.cookie.match(/(?:^|; )chatOlMax=([^;]*)/);
+            const re = new RegExp("(?:^|; )" + olKey() + "=([^;]*)");
+            const m = document.cookie.match(re);
             return m ? decodeURIComponent(m[1]) : null;
         };
         const setChatOlCookie = (v: string) => {
-            document.cookie = `chatOlMax=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+            document.cookie = `${olKey()}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
         };
         const savedOl = getChatOlCookie() ?? "5";
         chatOlMaxSelect.value = savedOl;
