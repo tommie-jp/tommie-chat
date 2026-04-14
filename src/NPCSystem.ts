@@ -44,6 +44,8 @@ export class NPCSystem {
     private addChatHistory(name: string, text: string): void {
         const list = document.getElementById("chat-history-list");
         if (!list) return;
+        const panel = document.getElementById("chat-history-panel");
+        const inactive = !panel || panel.style.display === "none" || panel.classList.contains("minimized");
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, "0");
         const mm = String(now.getMinutes()).padStart(2, "0");
@@ -55,7 +57,8 @@ export class NPCSystem {
             `<span class="chat-history-name">${escapeHtml(name)}</span>` +
             `<span class="chat-history-text">${escapeHtml(text)}</span>`;
         list.appendChild(entry);
-        entry.scrollIntoView({ block: "end", behavior: "instant" });
+        while (list.childElementCount > 500) list.firstElementChild?.remove();
+        if (!inactive) entry.scrollIntoView({ block: "end", behavior: "instant" });
     }
 
     private getNpcMessage(label: string): string {

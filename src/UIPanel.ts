@@ -289,6 +289,19 @@ export function setupHtmlUI(game: GameScene): void {
                 if (mb) mb.textContent = "　 " + t("menu.chathistory");
             });
         }
+
+        // 表示/最小化解除時に末尾へスクロール（非表示中はスキップしていたため）
+        const histList = document.getElementById("chat-history-list");
+        if (histList) {
+            let wasInactive = historyPanel.style.display === "none" || historyPanel.classList.contains("minimized");
+            new MutationObserver(() => {
+                const nowInactive = historyPanel.style.display === "none" || historyPanel.classList.contains("minimized");
+                if (wasInactive && !nowInactive) {
+                    requestAnimationFrame(() => { histList.scrollTop = histList.scrollHeight; });
+                }
+                wasInactive = nowInactive;
+            }).observe(historyPanel, { attributes: true, attributeFilter: ["style", "class"] });
+        }
     }
 
     // ===== ユーザーリスト ドラッグ & 最小化 =====
@@ -896,6 +909,19 @@ export function setupHtmlUI(game: GameScene): void {
                     if (mb) mb.textContent = "　 " + t("menu.serverlog");
                 });
             }
+
+            // 表示/最小化解除時に末尾へスクロール
+            const slList = document.getElementById("server-log-list");
+            if (slList) {
+                let wasInactive = slPanel.style.display === "none" || slPanel.classList.contains("minimized");
+                new MutationObserver(() => {
+                    const nowInactive = slPanel.style.display === "none" || slPanel.classList.contains("minimized");
+                    if (wasInactive && !nowInactive) {
+                        requestAnimationFrame(() => { slList.scrollTop = slList.scrollHeight; });
+                    }
+                    wasInactive = nowInactive;
+                }).observe(slPanel, { attributes: true, attributeFilter: ["style", "class"] });
+            }
         }
     }
     // ===============================================
@@ -1018,6 +1044,8 @@ export function setupHtmlUI(game: GameScene): void {
         if (!text) { _end(); return; }
         const list = document.getElementById("chat-history-list");
         if (!list) { _end(); return; }
+        const panel = document.getElementById("chat-history-panel");
+        const inactive = !panel || panel.style.display === "none" || panel.classList.contains("minimized");
 
         const now = serverTs > 0 ? new Date(serverTs) : new Date();
         const hh = String(now.getHours()).padStart(2, "0");
@@ -1035,7 +1063,11 @@ export function setupHtmlUI(game: GameScene): void {
             `<span class="${nameClass}"${nameStyle}>${escapeHtml(avatarName)}</span>` +
             `<span class="chat-history-text">${isSystem ? text : escapeHtml(text)}</span>`;
         list.appendChild(entry);
-        entry.scrollIntoView({ block: "end", behavior: "instant" });
+        // エントリ数上限（メモリ抑制 + 再スクロールコスト軽減）
+        const MAX_CHAT_ENTRIES = 500;
+        while (list.childElementCount > MAX_CHAT_ENTRIES) list.firstElementChild?.remove();
+        // パネルが非表示/最小化中は強制レイアウトを引き起こす scrollIntoView をスキップ
+        if (!inactive) entry.scrollIntoView({ block: "end", behavior: "instant" });
 
         // チャットオーバーレイにも追加
         addChatOverlay(avatarName, text, timeStr, nameColor, senderId);
@@ -1752,6 +1784,8 @@ export function setupHtmlUI(game: GameScene): void {
     const addServerLog = (label: string, detail = "", hint = "") => {
         const list = document.getElementById("server-log-list");
         if (!list) return;
+        const panel = document.getElementById("server-log-panel");
+        const inactive = !panel || panel.style.display === "none" || panel.classList.contains("minimized");
         const now = new Date();
         const ts = now.toLocaleString(undefined, {
             year: "numeric", month: "2-digit", day: "2-digit",
@@ -1764,7 +1798,11 @@ export function setupHtmlUI(game: GameScene): void {
             ? `${ts} ${label} : ${hint} URL="${serverUrl}" ${detail}`.trimEnd()
             : `${ts} ${label} URL="${serverUrl}"` + (detail ? ` ${detail}` : "");
         list.appendChild(entry);
-        list.scrollTop = list.scrollHeight;
+        // エントリ数上限
+        const MAX_LOG_ENTRIES = 500;
+        while (list.childElementCount > MAX_LOG_ENTRIES) list.firstElementChild?.remove();
+        // 非表示中は scrollHeight 読み取りによる強制レイアウトをスキップ
+        if (!inactive) list.scrollTop = list.scrollHeight;
     };
     // ===========================
     const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
