@@ -11,7 +11,7 @@
 # 引数なし: ローカルの docker compose 環境に直接投入する。
 # 引数あり: パス解決はローカルで行い、PNG 本体を rsync で VPS に転送、
 # SSH 経由で VPS 上の minio コンテナに投入する（VPS 側 jq/curl 不要）。
-SCRIPT_VERSION="2026-04-14a"
+SCRIPT_VERSION="2026-04-15f"
 
 # 対応する画像拡張子
 IMG_EXTS="png jpg jpeg"
@@ -337,11 +337,18 @@ if [ "$LOCAL_MODE" = true ]; then
     $COMPOSE exec -T minio sh -c '
         mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
         mc mb --ignore-existing local/avatars >/dev/null
+        total='"$EXPECTED"'
+        n=0
         for ext in png jpg jpeg; do
             for f in /tmp/avatars-restore/*.$ext; do
-                [ -f "$f" ] && mc cp "$f" local/avatars/ >/dev/null
+                [ -f "$f" ] || continue
+                n=$((n + 1))
+                pct=$((n * 100 / total))
+                printf "\r\033[K  MinIO投入 %2d%% %03d/%03d" "$pct" "$n" "$total" >&2
+                mc cp "$f" local/avatars/ >/dev/null
             done
         done
+        printf "\r\033[K" >&2
         rm -rf /tmp/avatars-restore
     '
 
@@ -370,21 +377,30 @@ if [ "$LOCAL_MODE" = true ]; then
         printf '%s\n' "${DISABLED_BASENAMES[@]}" > "$DEL_LIST"
         $COMPOSE cp "$DEL_LIST" minio:/tmp/avatars-disabled.txt >/dev/null 2>&1
         rm -f "$DEL_LIST"
-        ACTUALLY_DELETED=$($COMPOSE exec -T minio sh -c '
+        DEL_TOTAL=${#DISABLED_BASENAMES[@]}
+        echo "  削除候補: ${DEL_TOTAL} 件"
+            ACTUALLY_DELETED=$($COMPOSE exec -T minio sh -c '
             mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
             removed=0
+            checked=0
+            total='"$DEL_TOTAL"'
             while IFS= read -r name; do
                 [ -z "$name" ] && continue
                 case "$name" in */*|*..*) continue ;; esac
+                checked=$((checked + 1))
+                pct=$((checked * 100 / total))
+                printf "\r\033[K  削除中 %2d%% %03d/%03d" "$pct" "$checked" "$total" >&2
                 if mc stat "local/avatars/$name" >/dev/null 2>&1; then
                     mc rm "local/avatars/$name" >/dev/null && removed=$((removed + 1))
                 fi
             done < /tmp/avatars-disabled.txt
+            printf "\r\033[K" >&2
             rm -f /tmp/avatars-disabled.txt
             echo "$removed"
         ')
         ACTUALLY_DELETED=$(echo "$ACTUALLY_DELETED" | tr -dc '0-9')
         : "${ACTUALLY_DELETED:=0}"
+        echo "  削除完了: ${ACTUALLY_DELETED}/${DEL_TOTAL} 件"
     fi
 
     # ── 3. 投入結果の確認 ──
@@ -487,11 +503,18 @@ printf '\r\033[K' >&2
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
     mc mb --ignore-existing local/avatars >/dev/null
+    total='"${EXPECTED}"'
+    n=0
     for ext in png jpg jpeg; do
         for f in /tmp/avatars-restore/*.\$ext; do
-            [ -f "\$f" ] && mc cp "\$f" local/avatars/ >/dev/null
+            [ -f "\$f" ] || continue
+            n=\$((n + 1))
+            pct=\$((n * 100 / total))
+            printf "\r\033[K  MinIO投入 %2d%% %03d/%03d" "\$pct" "\$n" "\$total" >&2
+            mc cp "\$f" local/avatars/ >/dev/null
         done
     done
+    printf "\r\033[K" >&2
     rm -rf /tmp/avatars-restore
 ' </dev/null
 
@@ -500,6 +523,8 @@ REMOTE_EOF
 # ── 2b. enable != true のエントリを S3 から削除 ──
 ACTUALLY_DELETED=0
 if [ ${#DISABLED_BASENAMES[@]} -gt 0 ]; then
+    DEL_TOTAL=${#DISABLED_BASENAMES[@]}
+    echo "  削除候補: ${DEL_TOTAL} 件"
     ACTUALLY_DELETED=$(ssh "${SSH_TARGET}" bash <<REMOTE_EOF2
 set -eu
 cd ${REMOTE_DIR}/nakama
@@ -508,13 +533,19 @@ COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 \$COMPOSE exec -T minio sh -c '
     mc alias set local http://localhost:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD" >/dev/null
     removed=0
+    checked=0
+    total='"${DEL_TOTAL}"'
     while IFS= read -r name; do
         [ -z "\$name" ] && continue
         case "\$name" in */*|*..*) continue ;; esac
+        checked=\$((checked + 1))
+        pct=\$((checked * 100 / total))
+        printf "\r\033[K  削除中 %2d%% %03d/%03d" "\$pct" "\$checked" "\$total" >&2
         if mc stat "local/avatars/\$name" >/dev/null 2>&1; then
             mc rm "local/avatars/\$name" >/dev/null && removed=\$((removed + 1))
         fi
     done < /tmp/avatars-disabled.txt
+    printf "\r\033[K" >&2
     rm -f /tmp/avatars-disabled.txt
     echo "\$removed"
 ' </dev/null
@@ -522,6 +553,7 @@ REMOTE_EOF2
 )
     ACTUALLY_DELETED=$(echo "$ACTUALLY_DELETED" | tr -dc '0-9')
     : "${ACTUALLY_DELETED:=0}"
+    echo "  削除完了: ${ACTUALLY_DELETED}/${DEL_TOTAL} 件"
 fi
 
 # ── 3. 投入結果の確認 ──
