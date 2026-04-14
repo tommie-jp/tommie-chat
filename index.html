@@ -135,11 +135,17 @@
             left: 8px;
             width: 50%;
             max-width: 500px;
+            /* 領域全体はクリック透過（下のアバター操作を妨げない）
+               下部タップゾーン／リサイズ記号のみ pointer-events:auto で受け取る */
             pointer-events: none;
             z-index: 50;
             font-family: sans-serif;
             font-size: 13px;
             overflow: hidden;
+            /* 行を下端に寄せる（min-height で枠が伸びても新着メッセージはタップゾーン直上に残る） */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
         }
         .chat-ol-line {
             color: var(--ol-color, #5c5c5c);
@@ -152,6 +158,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            pointer-events: none;
         }
         .chat-ol-wrap .chat-ol-line {
             white-space: normal;
@@ -172,6 +179,57 @@
         .chat-ol-system {
             color: rgba(255,255,255,0.5);
             font-style: italic;
+        }
+        #chat-overlay-resize {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: calc(var(--ol-line-h, 19.5px) * 2);
+            min-height: 40px;
+            pointer-events: auto;
+            cursor: pointer;
+            touch-action: none;
+            z-index: 1;
+        }
+        #chat-overlay-resize-tr,
+        #chat-overlay-resize-br {
+            position: absolute;
+            right: 0;
+            width: 24px;
+            height: 24px;
+            pointer-events: auto;
+            touch-action: none;
+            font-size: 20px;
+            line-height: 24px;
+            text-align: center;
+            color: rgba(255,255,255,0.95);
+            text-shadow: 0 0 2px rgba(0,0,0,0.85), 0 0 4px rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.25);
+            border-radius: 4px;
+            z-index: 2;
+            display: none;
+            user-select: none;
+        }
+        #chat-overlay-resize-tr { top: 0; cursor: nesw-resize; }
+        #chat-overlay-resize-br { bottom: 0; cursor: nwse-resize; }
+        #chat-overlay.handles-visible #chat-overlay-resize-tr,
+        #chat-overlay.handles-visible #chat-overlay-resize-br {
+            display: block;
+        }
+        /* アクティブ時（ハンドル表示中）は領域を薄い青で視認化 */
+        #chat-overlay.handles-visible {
+            background: rgba(100, 160, 255, 0.18);
+            border-radius: 4px;
+        }
+        @media (pointer: coarse) and (min-resolution: 2dppx) {
+            #chat-overlay-resize-tr,
+            #chat-overlay-resize-br {
+                width: 32px !important;
+                height: 32px !important;
+                font-size: 26px !important;
+                line-height: 32px !important;
+            }
         }
 
         /* ===== ミニマップ ===== */
@@ -3055,7 +3113,7 @@
     </div>
 
     <div id="minimap-container"><div id="minimap-resize-handle"></div><canvas id="minimap" width="128" height="128"></canvas></div>
-    <div id="chat-overlay"></div>
+    <div id="chat-overlay"><div id="chat-overlay-resize" title="タップでリサイズ記号を表示／非表示" aria-label="リサイズ記号トグル"></div><div id="chat-overlay-resize-tr" title="ドラッグでサイズ変更" aria-label="右上リサイズ">┓</div><div id="chat-overlay-resize-br" title="ドラッグでサイズ変更" aria-label="右下リサイズ">┛</div></div>
     <div id="landscape-divider"><div id="landscape-divider-knob">⋮</div></div>
     <div id="portrait-divider"><div id="portrait-divider-knob">⋯</div></div>
     <div id="chat-container">

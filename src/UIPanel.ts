@@ -958,7 +958,8 @@ export function setupHtmlUI(game: GameScene): void {
         if (!chatOverlay) return;
         if (chatOverlayMax === 0) { chatOverlay.style.display = "none"; return; }
         chatOverlay.style.display = "";
-        const children = Array.from(chatOverlay.children) as HTMLElement[];
+        // ハンドル類は除外。.chat-ol-line のみ対象
+        const children = Array.from(chatOverlay.querySelectorAll<HTMLElement>(".chat-ol-line"));
         // Phase 1: 全スタイルをリセット（バッチ書込）
         for (const el of children) {
             el.style.display = "";
@@ -998,13 +999,285 @@ export function setupHtmlUI(game: GameScene): void {
             }
         }
     };
+    /** 最大行数分の縦スペースを確保（メッセージが少なくてもリサイズが視覚的に分かるように） */
+    const applyOverlayMinHeight = () => {
+        if (!chatOverlay) return;
+        if (chatOverlayMax === 0) { chatOverlay.style.removeProperty("min-height"); return; }
+        const lineH = getOlTextLineH();
+        const h = Math.round(chatOverlayMax * lineH + 8); // 8px: padding 余裕
+        chatOverlay.style.setProperty("min-height", h + "px", "important");
+    };
     (game as any).setChatOverlayMax = (n: number) => {
         chatOverlayMax = n;
         (game as any).chatOverlayMax = n;
+        olTextLineHCache = 0; // フォントサイズ変更に追随
+        if (chatOverlay) chatOverlay.style.setProperty("--ol-line-h", getOlTextLineH() + "px");
         trimOlVisibility();
+        applyOverlayMinHeight();
     };
 
     trimOlVisibility();
+    if (chatOverlay) chatOverlay.style.setProperty("--ol-line-h", getOlTextLineH() + "px");
+    applyOverlayMinHeight();
+
+    // ===== チャットオーバーレイ: タップでリサイズ記号トグル + 四隅ドラッグで幅・行数変更 =====
+    {
+        const tapZone = document.getElementById("chat-overlay-resize");
+        const hTR = document.getElementById("chat-overlay-resize-tr");
+        const hBR = document.getElementById("chat-overlay-resize-br");
+        if (chatOverlay && tapZone && hTR && hBR) {
+            const OL_MAX_LIMIT = 20;
+            const OL_WIDTH_MIN = 120;
+            const TAP_THRESHOLD = 10;
+            const setCk = (k: string, v: string) => {
+                document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+            };
+            const getCk = (k: string): string | null => {
+                const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                return m ? decodeURIComponent(m[1]) : null;
+            };
+            const syncSelect = (v: number) => {
+                const sel = document.getElementById("chatOlMaxSelect") as HTMLSelectElement | null;
+                if (!sel) return;
+                const opts = Array.from(sel.options).map(o => parseInt(o.value));
+                if (opts.includes(v)) {
+                    sel.value = String(v);
+                } else {
+                    const tmp = sel.querySelector('option[data-temp="1"]') as HTMLOptionElement | null;
+                    if (tmp) { tmp.value = String(v); tmp.textContent = v + "行"; sel.value = String(v); }
+                    else {
+                        const o = document.createElement("option");
+                        o.value = String(v); o.textContent = v + "行"; o.dataset.temp = "1";
+                        sel.appendChild(o); sel.value = String(v);
+                    }
+                }
+            };
+            const getMaxWidth = (): number => {
+                const cvs = document.getElementById("renderCanvas");
+                const w = cvs ? cvs.getBoundingClientRect().width : window.innerWidth;
+                return Math.max(OL_WIDTH_MIN, w - 16);
+            };
+
+            // 位置/サイズを canvas 領域内にクランプ
+            const clampToCanvas = (left: number, top: number): { left: number; top: number } => {
+                const cvs = document.getElementById("renderCanvas");
+                const cr = cvs ? cvs.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight } as DOMRect;
+                const w = chatOverlay.offsetWidth;
+                const h = chatOverlay.offsetHeight;
+                const L = Math.max(cr.left + 4, Math.min(cr.right - w - 4, left));
+                const T = Math.max(cr.top + 4, Math.min(cr.bottom - h - 4, top));
+                return { left: L, top: T };
+            };
+            // 位置を left + bottom で設定（リサイズで高さが上方向に伸びるように bottom 固定）
+            const setOverlayPos = (left: number, top: number) => {
+                const h = chatOverlay.offsetHeight;
+                const bottom = Math.max(0, window.innerHeight - top - h);
+                chatOverlay.style.setProperty("left", left + "px", "important");
+                chatOverlay.style.setProperty("bottom", bottom + "px", "important");
+                chatOverlay.style.setProperty("top", "auto", "important");
+                chatOverlay.style.setProperty("right", "auto", "important");
+            };
+
+            // 起動時: 幅クッキーを復元
+            const savedW = getCk("chatOlWidth");
+            if (savedW) {
+                const px = parseInt(savedW);
+                if (px >= OL_WIDTH_MIN) {
+                    // モバイルCSSの width: 75% !important を上書きするため important で設定
+                    chatOverlay.style.setProperty("width", Math.min(px, getMaxWidth()) + "px", "important");
+                    chatOverlay.style.setProperty("max-width", "none", "important");
+                }
+            }
+            // 起動時: 位置クッキーを復元
+            const savedLeft = getCk("chatOlLeft"), savedTop = getCk("chatOlTop");
+            if (savedLeft !== null && savedTop !== null) {
+                requestAnimationFrame(() => {
+                    const { left, top } = clampToCanvas(parseInt(savedLeft), parseInt(savedTop));
+                    setOverlayPos(left, top);
+                });
+            }
+
+            // --- タップゾーン: 短タップでハンドルをトグル／ドラッグで移動 ---
+            // iOS Safari は pointer events と touch events を両方発火する場合があるので
+            // 最終トグル時刻でガードして二重発火を防ぐ
+            let lastToggleTs = 0;
+            const tryToggle = () => {
+                const now = performance.now();
+                if (now - lastToggleTs < 300) return;
+                lastToggleTs = now;
+                chatOverlay.classList.toggle("handles-visible");
+            };
+            const DRAG_THRESHOLD = 10;
+            let tapStartX = 0, tapStartY = 0, tapPointerId = -1;
+            let tapDragging = false;
+            let tapStartLeft = 0, tapStartTop = 0;
+            // アクティブ状態（ハンドル表示中）のみドラッグ移動可
+            const isActive = () => chatOverlay.classList.contains("handles-visible");
+            tapZone.addEventListener("pointerdown", (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                tapPointerId = e.pointerId;
+                tapStartX = e.clientX; tapStartY = e.clientY;
+                const r = chatOverlay.getBoundingClientRect();
+                tapStartLeft = r.left; tapStartTop = r.top;
+                tapDragging = false;
+                try { tapZone.setPointerCapture(e.pointerId); } catch { /* noop */ }
+            });
+            tapZone.addEventListener("pointermove", (e) => {
+                if (e.pointerId !== tapPointerId) return;
+                if (!isActive()) return; // 非アクティブ時は移動しない
+                const dx = e.clientX - tapStartX, dy = e.clientY - tapStartY;
+                if (!tapDragging && dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) {
+                    tapDragging = true;
+                }
+                if (tapDragging) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const { left, top } = clampToCanvas(tapStartLeft + dx, tapStartTop + dy);
+                    setOverlayPos(left, top);
+                }
+            });
+            tapZone.addEventListener("pointerup", (e) => {
+                e.stopPropagation();
+                if (e.pointerId !== tapPointerId) return;
+                tapPointerId = -1;
+                if (tapDragging) {
+                    const r = chatOverlay.getBoundingClientRect();
+                    setCk("chatOlLeft", String(Math.round(r.left)));
+                    setCk("chatOlTop", String(Math.round(r.top)));
+                    tapDragging = false;
+                    return;
+                }
+                const dx = e.clientX - tapStartX, dy = e.clientY - tapStartY;
+                if (dx * dx + dy * dy < TAP_THRESHOLD * TAP_THRESHOLD) tryToggle();
+            });
+            tapZone.addEventListener("pointercancel", () => { tapPointerId = -1; tapDragging = false; });
+            // iOS Safari 保険: touch events でも判定（pointer events が届かないケース対策）
+            let touchStartX = 0, touchStartY = 0;
+            let touchDragging = false;
+            let touchStartLeft = 0, touchStartTop = 0;
+            tapZone.addEventListener("touchstart", (e) => {
+                e.stopPropagation();
+                if (e.touches.length !== 1) return;
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                const r = chatOverlay.getBoundingClientRect();
+                touchStartLeft = r.left; touchStartTop = r.top;
+                touchDragging = false;
+            }, { passive: true });
+            tapZone.addEventListener("touchmove", (e) => {
+                if (e.touches.length !== 1) return;
+                if (!isActive()) return; // 非アクティブ時は移動しない
+                const t = e.touches[0];
+                const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+                if (!touchDragging && dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) {
+                    touchDragging = true;
+                }
+                if (touchDragging) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const { left, top } = clampToCanvas(touchStartLeft + dx, touchStartTop + dy);
+                    setOverlayPos(left, top);
+                }
+            }, { passive: false });
+            tapZone.addEventListener("touchend", (e) => {
+                e.stopPropagation();
+                if (e.changedTouches.length !== 1) return;
+                if (touchDragging) {
+                    const r = chatOverlay.getBoundingClientRect();
+                    setCk("chatOlLeft", String(Math.round(r.left)));
+                    setCk("chatOlTop", String(Math.round(r.top)));
+                    touchDragging = false;
+                    e.preventDefault();
+                    return;
+                }
+                const t = e.changedTouches[0];
+                const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+                if (dx * dx + dy * dy < TAP_THRESHOLD * TAP_THRESHOLD) {
+                    e.preventDefault();
+                    tryToggle();
+                }
+            }, { passive: false });
+
+            // --- 四隅ハンドル: ドラッグで幅・行数を変更 ---
+            // isBottomHandle=true (BR): 下方向ドラッグ=拡大、top 固定で下方向に伸びる
+            // isBottomHandle=false (TR): 上方向ドラッグ=拡大、bottom 固定で上方向に伸びる
+            const attachResize = (el: HTMLElement, isBottomHandle: boolean) => {
+                let dragging = false;
+                let startX = 0, startY = 0;
+                let startMax = 0, startW = 0;
+                let activeId = -1;
+                el.addEventListener("pointerdown", (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (activeId >= 0 && e.pointerId !== activeId) return;
+                    activeId = e.pointerId;
+                    dragging = true;
+                    startX = e.clientX; startY = e.clientY;
+                    startMax = chatOverlayMax;
+                    startW = chatOverlay.getBoundingClientRect().width;
+                    // ドラッグ中は反対側を固定（ハンドルが指に追従するように）
+                    const r = chatOverlay.getBoundingClientRect();
+                    if (isBottomHandle) {
+                        // BR: top 固定
+                        chatOverlay.style.setProperty("top", r.top + "px", "important");
+                        chatOverlay.style.setProperty("bottom", "auto", "important");
+                    } else {
+                        // TR: bottom 固定
+                        chatOverlay.style.setProperty("bottom", (window.innerHeight - r.bottom) + "px", "important");
+                        chatOverlay.style.setProperty("top", "auto", "important");
+                    }
+                    try { el.setPointerCapture(e.pointerId); } catch (err) { console.warn("setPointerCapture failed:", err); }
+                });
+                el.addEventListener("pointermove", (e) => {
+                    if (!dragging) return;
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const lineH = getOlTextLineH();
+                    if (lineH <= 0) return;
+                    const deltaY = e.clientY - startY;
+                    const deltaX = e.clientX - startX;
+                    // BR: 下方向ドラッグで拡大 / TR: 上方向ドラッグで拡大
+                    const deltaLines = isBottomHandle
+                        ? Math.round(deltaY / lineH)
+                        : -Math.round(deltaY / lineH);
+                    const nextMax = Math.max(0, Math.min(OL_MAX_LIMIT, startMax + deltaLines));
+                    if (nextMax !== chatOverlayMax) {
+                        chatOverlayMax = nextMax;
+                        (game as any).chatOverlayMax = nextMax;
+                        trimOlVisibility();
+                        applyOverlayMinHeight();
+                    }
+                    // 右へドラッグ = 幅増（モバイルCSSの !important を上書き）
+                    const nextW = Math.max(OL_WIDTH_MIN, Math.min(getMaxWidth(), startW + deltaX));
+                    chatOverlay.style.setProperty("width", Math.round(nextW) + "px", "important");
+                    chatOverlay.style.setProperty("max-width", "none", "important");
+                });
+                const endDrag = (e: PointerEvent) => {
+                    if (!dragging) return;
+                    e.stopPropagation();
+                    dragging = false;
+                    activeId = -1;
+                    // ドラッグ終了: left + bottom アンカーに統一し位置を保存
+                    const r = chatOverlay.getBoundingClientRect();
+                    setOverlayPos(r.left, r.top);
+                    setCk("chatOlLeft", String(Math.round(r.left)));
+                    setCk("chatOlTop", String(Math.round(r.top)));
+                    if (chatOverlayMax !== startMax) {
+                        setCk("chatOlMax", String(chatOverlayMax));
+                        syncSelect(chatOverlayMax);
+                        applyOverlayMinHeight();
+                    }
+                    const w = Math.round(chatOverlay.getBoundingClientRect().width);
+                    if (Math.abs(w - Math.round(startW)) >= 1) setCk("chatOlWidth", String(w));
+                };
+                el.addEventListener("pointerup", endDrag);
+                el.addEventListener("pointercancel", endDrag);
+            };
+            attachResize(hTR, false);
+            attachResize(hBR, true);
+        }
+    }
 
     const addChatOverlay = (avatarName: string, text: string, timeStr: string, nameColor?: string, senderId?: string, prepend = false, deferTrim = false) => {
         if (!chatOverlay || !text || chatOverlayMax === 0) return;
@@ -1023,23 +1296,25 @@ export function setupHtmlUI(game: GameScene): void {
                 `<span class="chat-ol-name"${colorStyle}>${escapeHtml(avatarName)}:</span> ${escapeHtml(text)}`;
         }
         if (senderId) line.dataset.sender = senderId;
-        if (prepend) chatOverlay.insertBefore(line, chatOverlay.firstChild);
-        else chatOverlay.appendChild(line);
-        if (!deferTrim) trimOlVisibility();
-        // メモリ節約: 非表示要素が多すぎたら古い行を削除
-        const keepMax = Math.max(chatOverlayMax * 3, 20);
-        while (chatOverlay.children.length > keepMax) {
-            chatOverlay.removeChild(chatOverlay.firstChild!);
+        if (prepend) {
+            const firstLine = chatOverlay.querySelector(".chat-ol-line");
+            chatOverlay.insertBefore(line, firstLine);
+        } else {
+            chatOverlay.appendChild(line);
         }
+        if (!deferTrim) trimOlVisibility();
+        // メモリ節約: 非表示要素が多すぎたら古い行を削除（ハンドル類は除外）
+        const keepMax = Math.max(chatOverlayMax * 3, 20);
+        const lines = chatOverlay.querySelectorAll(".chat-ol-line");
+        for (let i = 0; i < lines.length - keepMax; i++) lines[i].remove();
     };
 
     /** 指定ユーザーの既存オーバーレイメッセージの名前色を一括更新 */
     const updateOverlayNameColor = (userId: string, newColor: string) => {
         if (!chatOverlay) return;
-        for (const el of chatOverlay.children) {
-            const line = el as HTMLElement;
-            if (line.dataset.sender !== userId) continue;
-            const nameEl = line.querySelector(".chat-ol-name") as HTMLElement | null;
+        for (const el of chatOverlay.querySelectorAll<HTMLElement>(".chat-ol-line")) {
+            if (el.dataset.sender !== userId) continue;
+            const nameEl = el.querySelector(".chat-ol-name") as HTMLElement | null;
             if (nameEl) nameEl.style.color = newColor;
         }
     };
