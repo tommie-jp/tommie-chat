@@ -1053,6 +1053,67 @@ export function setupHtmlUI(game: GameScene): void {
     if (chatOverlay) chatOverlay.style.setProperty("--ol-line-h", getOlTextLineH() + "px");
     applyOverlayMinHeight();
 
+    // ===== オーバーレイチャット行タップ → コピーアイコン表示 =====
+    if (chatOverlay) {
+        chatOverlay.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            // コピーボタン自身のクリック
+            const btn = target.closest(".chat-ol-copy-btn") as HTMLElement | null;
+            if (btn) {
+                e.stopPropagation();
+                const line = btn.closest(".chat-ol-line") as HTMLElement | null;
+                if (!line) return;
+                const clone = line.cloneNode(true) as HTMLElement;
+                clone.querySelectorAll(".chat-ol-copy-btn").forEach(b => b.remove());
+                const text = (clone.textContent || "").replace(/\s+/g, " ").trim();
+                const done = () => {
+                    btn.textContent = "\u2705";
+                    window.setTimeout(() => {
+                        if (btn.parentElement) btn.remove();
+                        line.classList.remove("copy-active");
+                    }, 700);
+                };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(done).catch(err => {
+                        console.warn("chat overlay copy failed:", err);
+                    });
+                } else {
+                    try {
+                        const ta = document.createElement("textarea");
+                        ta.value = text;
+                        ta.style.position = "fixed";
+                        ta.style.opacity = "0";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand("copy");
+                        ta.remove();
+                        done();
+                    } catch (err) {
+                        console.warn("chat overlay copy fallback failed:", err);
+                    }
+                }
+                return;
+            }
+            // 行タップ: コピーボタンをトグル
+            const line = target.closest(".chat-ol-line") as HTMLElement | null;
+            if (!line || !chatOverlay.contains(line)) return;
+            const hadActive = line.classList.contains("copy-active");
+            // 他のアクティブ行をクリア
+            chatOverlay.querySelectorAll(".chat-ol-line.copy-active").forEach(l => {
+                l.classList.remove("copy-active");
+                l.querySelectorAll(".chat-ol-copy-btn").forEach(b => b.remove());
+            });
+            if (hadActive) return;
+            line.classList.add("copy-active");
+            const b = document.createElement("span");
+            b.className = "chat-ol-copy-btn";
+            b.textContent = "\u{1F4CB}";
+            b.title = "コピー";
+            b.setAttribute("role", "button");
+            line.appendChild(b);
+        });
+    }
+
     // ===== チャットオーバーレイ: タップでリサイズ記号トグル + 四隅ドラッグで幅・行数変更 =====
     {
         const tapZone = document.getElementById("chat-overlay-resize");
