@@ -1430,7 +1430,7 @@ export function setupHtmlUI(game: GameScene): void {
     };
 
     /** 表示名が空なら @username（@だけ色付き）、あればそのまま（白色）を返す */
-    const resolveDisplayLabel = (displayName: string, username: string, sessionId?: string): { text: string; color: string; suffix: string } => {
+    const resolveDisplayLabel = (displayName: string, username: string, sessionId?: string, flagsOverride?: { hasGoogle?: boolean; isAdmin?: boolean }): { text: string; color: string; suffix: string } => {
         const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
         const color = uidColorInput?.value ?? "#00bbfa";
         // 同一UUIDが複数セッションあればサフィックスを付与
@@ -1446,10 +1446,13 @@ export function setupHtmlUI(game: GameScene): void {
             }
         }
         // 認証アイコン（管理者 👑 > Google ✅）。自分は NakamaService の self フラグを優先。
-        // userMap に未登録でも profileCache にあれば使用（AOI enter 直後のレース回避）。
+        // userMap に未登録でも profileCache / 呼び出し側オーバーライドがあれば使用（レース回避）。
         let hasGoogle = false;
         let isAdmin = false;
-        if (sessionId && sessionId === game.nakama.selfSessionId) {
+        if (flagsOverride && (flagsOverride.hasGoogle !== undefined || flagsOverride.isAdmin !== undefined)) {
+            hasGoogle = flagsOverride.hasGoogle ?? false;
+            isAdmin = flagsOverride.isAdmin ?? false;
+        } else if (sessionId && sessionId === game.nakama.selfSessionId) {
             hasGoogle = game.nakama.selfHasGoogle;
             isAdmin = game.nakama.selfIsAdmin;
         } else if (sessionId) {
@@ -1487,17 +1490,14 @@ export function setupHtmlUI(game: GameScene): void {
                 // メッセージ自身の dn/hg/ad を優先（履歴描画時点で userMap に未到達でもアイコン・表示名が付く）
                 const effDn = (m.displayName && m.displayName !== "") ? m.displayName : (entry?.displayName ?? "");
                 const effUname = entry?.username ?? m.username;
-                const msgIcon = m.isAdmin ? " \u{1F451}" : (m.hasGoogle ? " \u2705" : "");
                 // 履歴メッセージのフラグを userMap / profileCache にも反映（以後のレース回避）
                 if (m.sessionId && (m.isAdmin !== undefined || m.hasGoogle !== undefined)) {
                     const pc = profileCache.get(m.sessionId);
                     if (pc) { pc.hasGoogle = m.hasGoogle ?? pc.hasGoogle; pc.isAdmin = m.isAdmin ?? pc.isAdmin; }
                     if (entry) userMap.set(m.sessionId, { ...entry, hasGoogle: m.hasGoogle ?? entry.hasGoogle, isAdmin: m.isAdmin ?? entry.isAdmin });
                 }
-                const lbl = resolveDisplayLabel(effDn, effUname, m.sessionId);
-                // resolveDisplayLabel が付けた icon を剥がしてメッセージ側 icon に置き換え（一貫性のため）
-                const stripped = lbl.suffix.replace(/ [\u2705\u{1F451}]$/u, "");
-                const chatName = lbl.text + stripped + msgIcon;
+                const lbl = resolveDisplayLabel(effDn, effUname, m.sessionId, { hasGoogle: m.hasGoogle, isAdmin: m.isAdmin });
+                const chatName = lbl.text + lbl.suffix;
                 const chatNameColor = m.nameColor ?? entry?.nameColor;
                 addChatHistory(chatName, m.text, chatNameColor, m.userId, m.ts, /*prepend=*/true);
                 added++;
@@ -1841,15 +1841,9 @@ export function setupHtmlUI(game: GameScene): void {
         const entry = senderSid ? userMap.get(senderSid) : undefined;
         const effDn = (displayName && displayName !== "") ? displayName : (entry?.displayName ?? "");
         const effUname = entry?.username ?? username;
-        const msgIcon = isAdmin ? " \u{1F451}" : (hasGoogle ? " \u2705" : "");
-        let chatName: string;
-        if (senderSid) {
-            const lbl = resolveDisplayLabel(effDn, effUname, senderSid);
-            const stripped = lbl.suffix.replace(/ [\u2705\u{1F451}]$/u, "");
-            chatName = lbl.text + stripped + msgIcon;
-        } else {
-            chatName = username + msgIcon;
-        }
+        // resolveDisplayLabel に flags オーバーライドを渡す（userMap 未反映でもアイコンが出る）
+        const lbl = resolveDisplayLabel(effDn, effUname, senderSid, { hasGoogle, isAdmin });
+        const chatName = lbl.text + lbl.suffix;
         const chatNameColor = nameColor ?? entry?.nameColor;
         addChatHistory(chatName, text, chatNameColor, userId, ts);
         // 吹き出しは送信元セッションのアバターのみに表示
@@ -2186,17 +2180,19 @@ export function setupHtmlUI(game: GameScene): void {
         refreshSelfSuffix();
     };
     // システムメッセージ: サーバーからのログイン/ログアウト通知
-    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount, serverNameColor, ts) => {
+    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount, serverNameColor, ts, msgDisplayName, hasGoogle, isAdmin) => {
         const existing = [...userMap.values()].find(e => e.uuid === userId);
-        const displayName = existing?.displayName ?? "";
+        // 表示名はサーバメッセージを優先（userMap 未登録時もアイコン付きで表示）
+        const displayName = (msgDisplayName && msgDisplayName !== "") ? msgDisplayName : (existing?.displayName ?? "");
         const nameText = displayName || ("@" + username);
         const hashSuffix = sessionId ? "#" + sessionId.slice(0, 4) : "";
+        const icon = isAdmin ? " \u{1F451}" : (hasGoogle ? " \u2705" : "");
         const nameColor = serverNameColor || existing?.nameColor;
         const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;
         const fallbackColor = uidColorInput?.value ?? "#00bbfa";
         const color = sanitizeColor(nameColor || (displayName ? "" : fallbackColor) || "");
         const colorStyle = color ? ` style="color:${color}"` : "";
-        const nameHtml = `<span class="chat-ol-name"${colorStyle}>${escapeHtml(nameText)}${escapeHtml(hashSuffix)}</span>`;
+        const nameHtml = `<span class="chat-ol-name"${colorStyle}>${escapeHtml(nameText)}${escapeHtml(hashSuffix)}${escapeHtml(icon)}</span>`;
         if (type === "join") {
             addChatHistory("[system]", t("system.user_joined").replace("{username}", nameHtml), undefined, userId, ts);
         } else if (type === "world_enter") {

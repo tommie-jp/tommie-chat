@@ -1619,8 +1619,15 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 		uidCount := 0
 		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
 		nc := ""
-		if pos, ok := ms.Positions[sid]; ok { nc = pos.NameColor }
-		sysMsg, _ := json.Marshal(map[string]interface{}{
+		dn2 := ""
+		hg2, ad2 := false, false
+		if pos, ok := ms.Positions[sid]; ok {
+			nc = pos.NameColor
+			dn2 = pos.DisplayName
+			hg2 = pos.HasGoogle
+			ad2 = pos.IsAdmin
+		}
+		sysFields := map[string]interface{}{
 			"type":      joinType,
 			"username":  uname,
 			"userId":    uid,
@@ -1628,7 +1635,11 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 			"uidCount":  uidCount,
 			"nameColor": nc,
 			"ts":        time.Now().UnixMilli(),
-		})
+		}
+		if dn2 != "" { sysFields["displayName"] = dn2 }
+		if hg2 { sysFields["hg"] = true }
+		if ad2 { sysFields["ad"] = true }
+		sysMsg, _ := json.Marshal(sysFields)
 		dispatcher.BroadcastMessage(opSystemMsg, sysMsg, nil, p, true)
 
 		// ワールド人数カウンター更新
@@ -1700,8 +1711,15 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		uidCount := 0
 		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
 		nc := ""
-		if pos, ok := ms.Positions[sid]; ok { nc = pos.NameColor }
-		sysMsg, _ := json.Marshal(map[string]interface{}{
+		dn3 := ""
+		hg3, ad3 := false, false
+		if pos, ok := ms.Positions[sid]; ok {
+			nc = pos.NameColor
+			dn3 = pos.DisplayName
+			hg3 = pos.HasGoogle
+			ad3 = pos.IsAdmin
+		}
+		sysFields := map[string]interface{}{
 			"type":      leaveType,
 			"username":  uname,
 			"userId":    uid,
@@ -1709,7 +1727,11 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 			"uidCount":  uidCount,
 			"nameColor": nc,
 			"ts":        time.Now().UnixMilli(),
-		})
+		}
+		if dn3 != "" { sysFields["displayName"] = dn3 }
+		if hg3 { sysFields["hg"] = true }
+		if ad3 { sysFields["ad"] = true }
+		sysMsg, _ := json.Marshal(sysFields)
 		// 残っている全プレゼンスのスナップショット（退出者自身は除外）
 		targets := make([]runtime.Presence, 0, len(ms.Presences))
 		for otherSID, otherP := range ms.Presences {

@@ -41,7 +41,7 @@ export class NakamaService {
     get selfMatchId(): string | null { return this.matchId; }
 
     onChatMessage?: (username: string, text: string, userId: string, sessionId: string, ts: number, hasGoogle?: boolean, isAdmin?: boolean, displayName?: string, nameColor?: string) => void;
-    onSystemMessage?: (type: string, username: string, userId: string, sessionId: string, uidCount: number, nameColor: string, ts: number) => void;
+    onSystemMessage?: (type: string, username: string, userId: string, sessionId: string, uidCount: number, nameColor: string, ts: number, displayName?: string, hasGoogle?: boolean, isAdmin?: boolean) => void;
     onMatchPresenceJoin?: (sessionId: string, userId: string, username: string) => void;
     onMatchPresenceLeave?: (sessionId: string, userId: string, username: string) => void;
     onAvatarInitPos?:    (sessionId: string, x: number, z: number, ry: number, loginTimeISO: string, displayName: string, textureUrl: string, charCol: number, charRow: number, nameColor?: string) => void;
@@ -106,8 +106,8 @@ export class NakamaService {
             this.onChatMessage?.(chat.username ?? "", chat.text ?? "", chat.userId ?? "", chat.sessionId ?? "", chat.ts ?? 0, chat.hg, chat.ad, chat.dn, chat.nc);
         }},
         [OP_SYSTEM_MSG]: { name: "SYS_MSG", fn: (p) => {
-            const sys = p as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number; nameColor?: string; ts?: number };
-            this.onSystemMessage?.(sys.type, sys.username, sys.userId, sys.sessionId ?? "", sys.uidCount ?? 1, sys.nameColor ?? "", sys.ts ?? 0);
+            const sys = p as { type: string; username: string; userId: string; sessionId?: string; uidCount?: number; nameColor?: string; ts?: number; displayName?: string; hg?: boolean; ad?: boolean };
+            this.onSystemMessage?.(sys.type, sys.username, sys.userId, sys.sessionId ?? "", sys.uidCount ?? 1, sys.nameColor ?? "", sys.ts ?? 0, sys.displayName, sys.hg, sys.ad);
         }},
         [OP_PLAYER_LIST_DATA]: { name: "PL_DATA", fn: (p) => {
             const resp = p as { players?: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[]; count?: number };
