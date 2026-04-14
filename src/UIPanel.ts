@@ -930,7 +930,15 @@ export function setupHtmlUI(game: GameScene): void {
     }
     // ===============================================
 
-    let chatOverlayMax = 5;
+    // 起動時に chatOlMax クッキーを読んで初期値を決定（DebugOverlay 初期化より前に適用するため）
+    const readChatOlMaxCookie = (): number => {
+        const m = document.cookie.match(/(?:^|; )chatOlMax=([^;]*)/);
+        if (!m) return 5;
+        const v = parseInt(decodeURIComponent(m[1]), 10);
+        if (!Number.isFinite(v) || v < 0 || v > 20) return 5;
+        return v;
+    };
+    let chatOverlayMax = readChatOlMaxCookie();
     const chatOverlay = document.getElementById("chat-overlay");
     // GameScene 経由で外部からアクセスできるようにする
     (game as any).chatOverlayMax = chatOverlayMax;
@@ -1072,10 +1080,26 @@ export function setupHtmlUI(game: GameScene): void {
             const setOverlayPos = (left: number, top: number) => {
                 const h = chatOverlay.offsetHeight;
                 const bottom = Math.max(0, window.innerHeight - top - h);
+                setOverlayPosByBottom(left, bottom);
+            };
+            // bottom アンカーで直接設定（高さ変化で位置がずれないため復元時はこちらを使う）
+            const setOverlayPosByBottom = (left: number, bottom: number) => {
                 chatOverlay.style.setProperty("left", left + "px", "important");
                 chatOverlay.style.setProperty("bottom", bottom + "px", "important");
                 chatOverlay.style.setProperty("top", "auto", "important");
                 chatOverlay.style.setProperty("right", "auto", "important");
+            };
+            // bottom 値をクランプ（overlay が画面外にはみ出さないように）
+            const clampBottom = (left: number, bottom: number): { left: number; bottom: number } => {
+                const cvs = document.getElementById("renderCanvas");
+                const cr = cvs ? cvs.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight } as DOMRect;
+                const w = chatOverlay.offsetWidth;
+                const h = chatOverlay.offsetHeight;
+                const L = Math.max(cr.left + 4, Math.min(cr.right - w - 4, left));
+                const minBottom = window.innerHeight - cr.bottom + 4;
+                const maxBottom = window.innerHeight - cr.top - h - 4;
+                const B = Math.max(minBottom, Math.min(maxBottom, bottom));
+                return { left: L, bottom: B };
             };
 
             // 起動時: 幅クッキーを復元
@@ -1088,13 +1112,20 @@ export function setupHtmlUI(game: GameScene): void {
                     chatOverlay.style.setProperty("max-width", "none", "important");
                 }
             }
-            // 起動時: 位置クッキーを復元
-            const savedLeft = getCk("chatOlLeft"), savedTop = getCk("chatOlTop");
-            if (savedLeft !== null && savedTop !== null) {
-                requestAnimationFrame(() => {
-                    const { left, top } = clampToCanvas(parseInt(savedLeft), parseInt(savedTop));
-                    setOverlayPos(left, top);
-                });
+            // 起動時: 位置クッキーを復元（bottom アンカーで保存されているので高さ変化に影響されない）
+            const savedLeft = getCk("chatOlLeft"), savedBottom = getCk("chatOlBottom");
+            if (savedLeft !== null && savedBottom !== null) {
+                const { left, bottom } = clampBottom(parseInt(savedLeft), parseInt(savedBottom));
+                setOverlayPosByBottom(left, bottom);
+            } else {
+                // 旧形式（top保存）からのマイグレーション: 次回保存時に bottom に置き換わる
+                const savedTop = getCk("chatOlTop");
+                if (savedLeft !== null && savedTop !== null) {
+                    requestAnimationFrame(() => {
+                        const { left, top } = clampToCanvas(parseInt(savedLeft), parseInt(savedTop));
+                        setOverlayPos(left, top);
+                    });
+                }
             }
 
             // --- タップゾーン: 短タップでハンドルをトグル／ドラッグで移動 ---
@@ -1144,7 +1175,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (tapDragging) {
                     const r = chatOverlay.getBoundingClientRect();
                     setCk("chatOlLeft", String(Math.round(r.left)));
-                    setCk("chatOlTop", String(Math.round(r.top)));
+                    setCk("chatOlBottom", String(Math.round(window.innerHeight - r.bottom)));
                     tapDragging = false;
                     return;
                 }
@@ -1186,7 +1217,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (touchDragging) {
                     const r = chatOverlay.getBoundingClientRect();
                     setCk("chatOlLeft", String(Math.round(r.left)));
-                    setCk("chatOlTop", String(Math.round(r.top)));
+                    setCk("chatOlBottom", String(Math.round(window.innerHeight - r.bottom)));
                     touchDragging = false;
                     e.preventDefault();
                     return;
@@ -1262,7 +1293,7 @@ export function setupHtmlUI(game: GameScene): void {
                     const r = chatOverlay.getBoundingClientRect();
                     setOverlayPos(r.left, r.top);
                     setCk("chatOlLeft", String(Math.round(r.left)));
-                    setCk("chatOlTop", String(Math.round(r.top)));
+                    setCk("chatOlBottom", String(Math.round(window.innerHeight - r.bottom)));
                     if (chatOverlayMax !== startMax) {
                         setCk("chatOlMax", String(chatOverlayMax));
                         syncSelect(chatOverlayMax);
