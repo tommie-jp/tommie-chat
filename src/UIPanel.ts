@@ -2180,12 +2180,13 @@ export function setupHtmlUI(game: GameScene): void {
         refreshSelfSuffix();
     };
     // システムメッセージ: サーバーからのログイン/ログアウト通知
-    game.nakama.onSystemMessage = (type, username, userId, sessionId, _uidCount, serverNameColor, ts, msgDisplayName, hasGoogle, isAdmin) => {
+    game.nakama.onSystemMessage = (type, username, userId, sessionId, uidCount, serverNameColor, ts, msgDisplayName, hasGoogle, isAdmin) => {
         const existing = [...userMap.values()].find(e => e.uuid === userId);
         // 表示名はサーバメッセージを優先（userMap 未登録時もアイコン付きで表示）
         const displayName = (msgDisplayName && msgDisplayName !== "") ? msgDisplayName : (existing?.displayName ?? "");
         const nameText = displayName || ("@" + username);
-        const hashSuffix = sessionId ? "#" + sessionId.slice(0, 4) : "";
+        // 同一UIDのセッションが複数ある場合のみ #xxxx を付加
+        const hashSuffix = (sessionId && uidCount >= 2) ? "#" + sessionId.slice(0, 4) : "";
         const icon = isAdmin ? " \u{1F451}" : (hasGoogle ? " \u2705" : "");
         const nameColor = serverNameColor || existing?.nameColor;
         const uidColorInput = document.getElementById("uidColorInput") as HTMLInputElement | null;

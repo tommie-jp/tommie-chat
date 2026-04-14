@@ -3284,6 +3284,7 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		}
 	}
 
+	authFlagsCache.Delete(uid)
 	logger.Info("rpcLinkGoogleByCode: linked uid=%s", uid)
 	out, _ := json.Marshal(map[string]interface{}{"linked": true})
 	return string(out), nil
@@ -3464,6 +3465,7 @@ func rpcUnlinkGoogle(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	}}); err != nil {
 		logger.Warn("rpcUnlinkGoogle: storage delete failed uid=%s: %v", uid, err)
 	}
+	authFlagsCache.Delete(uid)
 	logger.Info("rpcUnlinkGoogle: unlinked google from uid=%s", uid)
 	out, _ := json.Marshal(map[string]interface{}{"unlinked": true})
 	return string(out), nil
