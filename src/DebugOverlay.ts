@@ -2063,7 +2063,8 @@ export function setupDebugOverlay(game: GameScene): void {
         };
         const highlightSelectedThumb = () => {
             if (!avThumbScroll) return;
-            const items = avThumbScroll.querySelectorAll<HTMLCanvasElement>(".avPanel-thumb-item");
+            // 一覧と履歴の両方を対象にする
+            const items = document.querySelectorAll<HTMLCanvasElement>(".avPanel-thumb-item");
             items.forEach((el) => {
                 // 赤=適用済み（優先）, 青=選択中（プレビュー）
                 if (isAppliedThumb(el)) {
@@ -2168,6 +2169,66 @@ export function setupDebugOverlay(game: GameScene): void {
             if (match) selectThumb(match);
         };
 
+        // ===== アバター履歴（最大4件、最後に使ったものが上） =====
+        const avHistory = document.getElementById("avPanel-history");
+        const HISTORY_KEY = "avatarHistory";
+        const HISTORY_MAX = 8;
+        type HistoryEntry = { url: string; charCol: number; charRow: number };
+        const loadHistory = (): HistoryEntry[] => {
+            try {
+                const s = localStorage.getItem(HISTORY_KEY);
+                if (!s) return [];
+                const arr = JSON.parse(s);
+                if (!Array.isArray(arr)) return [];
+                return arr.filter((x: unknown): x is HistoryEntry =>
+                    !!x && typeof (x as HistoryEntry).url === "string"
+                    && typeof (x as HistoryEntry).charCol === "number"
+                    && typeof (x as HistoryEntry).charRow === "number"
+                ).slice(0, HISTORY_MAX);
+            } catch (e) { console.warn("avatar history load failed:", e); return []; }
+        };
+        const saveHistory = (h: HistoryEntry[]) => {
+            try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, HISTORY_MAX))); }
+            catch (e) { console.warn("avatar history save failed:", e); }
+        };
+        const renderHistory = () => {
+            if (!avHistory) return;
+            avHistory.innerHTML = "";
+            const h = loadHistory();
+            // 常に HISTORY_MAX スロットを描画（空きはプレースホルダ）
+            for (let i = 0; i < HISTORY_MAX; i++) {
+                const v = h[i];
+                if (v) {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = 48; canvas.height = 48;
+                    canvas.className = "avPanel-thumb-item";
+                    canvas.dataset.url = v.url;
+                    canvas.dataset.charCol = String(v.charCol);
+                    canvas.dataset.charRow = String(v.charRow);
+                    canvas.style.cssText = "width:48px;height:48px;image-rendering:pixelated;background:rgba(0,0,0,0.05);border:2px solid transparent;border-radius:3px;flex-shrink:0;cursor:pointer;box-sizing:border-box;";
+                    canvas.title = (v.url.split("/").pop() ?? "") + ` [${v.charCol},${v.charRow}]`;
+                    canvas.addEventListener("click", () => handleThumbTap(canvas));
+                    avHistory.appendChild(canvas);
+                    loadCached(v.url).then((cached) => {
+                        if (!canvas.isConnected) return;
+                        drawSprite(canvas, cached, v.charCol, v.charRow, 1);
+                    }).catch((e) => console.warn("history thumb draw failed", v.url, e));
+                } else {
+                    const slot = document.createElement("div");
+                    slot.style.cssText = "width:48px;height:48px;border:1px dashed rgba(0,0,0,0.2);border-radius:3px;flex-shrink:0;box-sizing:border-box;";
+                    avHistory.appendChild(slot);
+                }
+            }
+            highlightSelectedThumb();
+        };
+        const pushHistory = (v: HistoryEntry) => {
+            const h = loadHistory();
+            const filtered = h.filter((x) => !(x.url === v.url && x.charCol === v.charCol && x.charRow === v.charRow));
+            filtered.unshift(v);
+            saveHistory(filtered);
+            renderHistory();
+        };
+
         // サムネ: URL ごとに charCols×charRows 個の候補を展開。非同期ロードでも URL 順を保つ。
         let thumbRebuildId = 0;
         let variantCount = 0;
@@ -2257,6 +2318,16 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (avatarPanelInited) return;
                 avatarPanelInited = true;
                 ensureAvatarList().then(() => applyFilter());
+                // 履歴が空なら現在のアバターをシード（履歴列が常に見えるように）
+                if (loadHistory().length === 0 && game.playerTextureUrl) {
+                    pushHistory({
+                        url: game.playerTextureUrl,
+                        charCol: game.playerCharCol ?? 0,
+                        charRow: game.playerCharRow ?? 0,
+                    });
+                } else {
+                    renderHistory();
+                }
             };
             const avPanelEl = document.getElementById("avatar-panel");
             if (avPanelEl) {
@@ -2316,6 +2387,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (dbgCol) dbgCol.value = String(v.charCol);
                 if (dbgRow) dbgRow.value = String(v.charRow);
                 spriteApplyBtn.click();
+                // 履歴に追加（最新を一番上に、最大4件）
+                pushHistory({ url: v.url, charCol: v.charCol, charRow: v.charRow });
                 // 適用後にハイライトを更新（赤=適用済みを反映）
                 requestAnimationFrame(() => highlightSelectedThumb());
             });
