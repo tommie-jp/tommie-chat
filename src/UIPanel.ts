@@ -1276,13 +1276,8 @@ export function setupHtmlUI(game: GameScene): void {
             };
             // ===== アンカー基準の垂直位置 =====
             // 位置はアンカー上端からの「ギャップ」で保存し、アンカーが動けば overlay も相対移動。
-            // アンカー: パネル表示中 → 最も上にあるパネルヘッダー上端、非表示 → #chat-container 上端。
-            const PANEL_HEADER_IDS = [
-                "user-list-header", "chat-history-header", "chat-settings-header",
-                "server-settings-header", "server-log-header", "ping-header",
-                "ccu-header", "bookmark-header", "room-list-header",
-                "debug-title-bar", "about-panel-header", "displayname-header", "avatar-header",
-            ];
+            // アンカー: 常に #chat-container（セリフ入力コントロール）上端を基準とする。
+            // パネル位置は参照しない（パネルを動かしてもオーバーレイは追従しない）。
             const isElVisible = (el: HTMLElement): boolean => {
                 if (el.style.display === "none") return false;
                 const cs = getComputedStyle(el);
@@ -1298,14 +1293,6 @@ export function setupHtmlUI(game: GameScene): void {
                     const cd = document.getElementById("coord-display");
                     if (cd && isElVisible(cd)) return cd.getBoundingClientRect().top;
                 }
-                let minTop = Infinity;
-                for (const id of PANEL_HEADER_IDS) {
-                    const el = document.getElementById(id);
-                    if (!el || !isElVisible(el)) continue;
-                    const r = el.getBoundingClientRect();
-                    if (r.top < minTop) minTop = r.top;
-                }
-                if (minTop !== Infinity) return minTop;
                 const chat = document.getElementById("chat-container");
                 if (chat) return chat.getBoundingClientRect().top;
                 return window.innerHeight - 60;
