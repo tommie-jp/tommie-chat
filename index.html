@@ -2169,15 +2169,19 @@
             }
 
             /* --- ハンバーガーメニュー --- */
+            /* モバイル（ポートレート／ランドスケープ共通）: セリフ入力コントロールの左にインライン配置 */
             #menu-btn {
-                top: 8px !important;
-                width: 40px !important;
-                height: 40px !important;
-                border-radius: 8px !important;
+                position: static !important;
+                top: auto !important;
+                left: auto !important;
+                width: 32px !important;
+                height: 32px !important;
+                border-radius: 6px !important;
+                flex-shrink: 0 !important;
             }
             #menu-btn span {
-                width: 20px !important;
-                height: 3px !important;
+                width: 16px !important;
+                height: 2px !important;
             }
             #menu-popup {
                 font-size: 16px !important;
@@ -2247,26 +2251,84 @@
                 top: auto !important;
                 bottom: calc(env(safe-area-inset-bottom, 0px) + 1px) !important;
             }
+
+            /* モバイル共通: ポップアップメニューは使わない（タブバーで代替） */
+            #menu-popup { display: none !important; }
+
+            /* ===== パネルタブバー（モバイル共通: ポートレート／ランドスケープ両対応） ===== */
+            body.tab-panel-active #panel-tab-bar {
+                display: flex !important;
+                align-items: stretch;
+                width: 100%;
+                height: 36px;
+                background: linear-gradient(135deg, #7c5ce0, #5b8def);
+                color: #fff;
+                box-sizing: border-box;
+                user-select: none;
+                -webkit-user-select: none;
+                flex-shrink: 0;
+            }
+            #panel-tabs-scroll {
+                flex: 1 1 auto;
+                display: flex;
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+                -webkit-overflow-scrolling: touch;
+            }
+            #panel-tabs-scroll::-webkit-scrollbar { display: none; }
+            .panel-tab {
+                flex: 0 0 auto;
+                padding: 0 14px;
+                background: transparent;
+                color: rgba(255,255,255,0.75);
+                border: none;
+                border-right: 1px solid rgba(255,255,255,0.15);
+                font-size: 13px;
+                font-weight: bold;
+                font-family: inherit;
+                white-space: nowrap;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .panel-tab.active {
+                background: rgba(255,255,255,0.18);
+                color: #fff;
+                box-shadow: inset 0 -3px 0 #fff;
+            }
+            #panel-tab-close {
+                flex: 0 0 auto;
+                width: 36px;
+                background: transparent;
+                color: #fff;
+                border: none;
+                font-size: 14px;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            /* タブバーが差し込まれたパネルは元のヘッダーを隠す */
+            body.tab-panel-active #displayname-panel > #displayname-header,
+            body.tab-panel-active #avatar-panel > #avatar-header,
+            body.tab-panel-active #user-list-panel > #user-list-header,
+            body.tab-panel-active #chat-history-panel > #chat-history-header,
+            body.tab-panel-active #chat-settings-panel > #chat-settings-header,
+            body.tab-panel-active #bookmark-panel > #bookmark-header,
+            body.tab-panel-active #room-list-panel > #room-list-header,
+            body.tab-panel-active #server-settings-panel > #server-settings-header,
+            body.tab-panel-active #server-log-panel > #server-log-header,
+            body.tab-panel-active #ping-panel > #ping-header,
+            body.tab-panel-active #ccu-panel > #ccu-header,
+            body.tab-panel-active #settings-panel > #settings-header,
+            body.tab-panel-active #debug-overlay > #debug-title-bar,
+            body.tab-panel-active #about-panel > #about-panel-header {
+                display: none !important;
+            }
         }
 
         /* スマホ縦長（ポートレート） */
         @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: portrait) {
-            /* ポートレート: ハンバーガーはセリフ入力の左にインライン配置（タブバー トグル用） */
-            #menu-btn {
-                position: static !important;
-                top: auto !important;
-                left: auto !important;
-                width: 32px !important;
-                height: 32px !important;
-                border-radius: 6px !important;
-                flex-shrink: 0 !important;
-            }
-            #menu-btn span {
-                width: 16px !important;
-                height: 2px !important;
-            }
-            /* ポートレート: ポップアップメニューは使わない（タブバーで代替） */
-            #menu-popup { display: none !important; }
             /* ポートレート: タブメニューをハンバーガーで明示トグル表示 */
             body.tab-menu-open #panel-tab-bar {
                 display: flex !important;
@@ -2348,76 +2410,6 @@
                 left: 8px !important;
             }
 
-            /* ===== パネルタブバー（表示名/サーバ接続ログ/ブックマーク のモバイル切替） ===== */
-            body.tab-panel-active #panel-tab-bar {
-                display: flex !important;
-                align-items: stretch;
-                width: 100%;
-                height: 36px;
-                background: linear-gradient(135deg, #7c5ce0, #5b8def);
-                color: #fff;
-                box-sizing: border-box;
-                user-select: none;
-                -webkit-user-select: none;
-                flex-shrink: 0;
-            }
-            #panel-tabs-scroll {
-                flex: 1 1 auto;
-                display: flex;
-                flex-direction: row;
-                overflow-x: auto;
-                overflow-y: hidden;
-                scrollbar-width: none;
-                -ms-overflow-style: none;
-                -webkit-overflow-scrolling: touch;
-            }
-            #panel-tabs-scroll::-webkit-scrollbar { display: none; }
-            .panel-tab {
-                flex: 0 0 auto;
-                padding: 0 14px;
-                background: transparent;
-                color: rgba(255,255,255,0.75);
-                border: none;
-                border-right: 1px solid rgba(255,255,255,0.15);
-                font-size: 13px;
-                font-weight: bold;
-                font-family: inherit;
-                white-space: nowrap;
-                cursor: pointer;
-                -webkit-tap-highlight-color: transparent;
-            }
-            .panel-tab.active {
-                background: rgba(255,255,255,0.18);
-                color: #fff;
-                box-shadow: inset 0 -3px 0 #fff;
-            }
-            #panel-tab-close {
-                flex: 0 0 auto;
-                width: 36px;
-                background: transparent;
-                color: #fff;
-                border: none;
-                font-size: 14px;
-                cursor: pointer;
-                -webkit-tap-highlight-color: transparent;
-            }
-            /* タブバーが差し込まれたパネルは元のヘッダーを隠す */
-            body.tab-panel-active #displayname-panel > #displayname-header,
-            body.tab-panel-active #avatar-panel > #avatar-header,
-            body.tab-panel-active #user-list-panel > #user-list-header,
-            body.tab-panel-active #chat-history-panel > #chat-history-header,
-            body.tab-panel-active #chat-settings-panel > #chat-settings-header,
-            body.tab-panel-active #bookmark-panel > #bookmark-header,
-            body.tab-panel-active #room-list-panel > #room-list-header,
-            body.tab-panel-active #server-settings-panel > #server-settings-header,
-            body.tab-panel-active #server-log-panel > #server-log-header,
-            body.tab-panel-active #ping-panel > #ping-header,
-            body.tab-panel-active #ccu-panel > #ccu-header,
-            body.tab-panel-active #settings-panel > #settings-header,
-            body.tab-panel-active #debug-overlay > #debug-title-bar,
-            body.tab-panel-active #about-panel > #about-panel-header {
-                display: none !important;
-            }
         }
 
 
@@ -2437,13 +2429,8 @@
             #portrait-divider { display: none !important; }
             body::before { display: none !important; }
             body.sp-panel-visible::before { display: none !important; }
-            /* ランドスケープ: Safe Area対応 */
-            #menu-btn {
-                left: max(15px, env(safe-area-inset-left, 15px)) !important;
-            }
-            #menu-popup { top: 4px !important; left: max(60px, calc(env(safe-area-inset-left, 15px) + 45px)) !important; max-height: calc(100vh - 8px); overflow-y: auto; }
-            .menu-item { padding: 4px 14px !important; font-size: 13px !important; min-height: 28px !important; box-sizing: border-box !important; }
-            #menu-popup hr { margin: 1px 0 !important; }
+            /* ランドスケープ: ハンバーガーはポートレート同様セリフ入力の左にインライン配置（#menu-btn は共通モバイルルールで static 配置済み）
+               #menu-popup は共通モバイルルールで display:none 済み */
             #renderCanvas {
                 width: var(--ls-divider, 60%) !important;
             }
@@ -2603,8 +2590,7 @@
         /* ========== iPhone PWA ランドスケープ: 上端システムジェスチャー回避 ========== */
         /* display-mode: standalone (PWA) + landscape + iPhone判定 (max-height: 440px = iPadを除外) */
         @media (display-mode: standalone) and (pointer: coarse) and (min-resolution: 2dppx) and (orientation: landscape) and (max-height: 440px) {
-            #menu-btn { top: 20px !important; }
-            #menu-popup { top: 20px !important; max-height: calc(100vh - 28px) !important; }
+            /* #menu-btn と #menu-popup はモバイル共通ルールで処理済み（static / display:none） */
             #ping-display { top: 20px !important; }
             #user-list-panel,
             #chat-history-panel,

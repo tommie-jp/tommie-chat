@@ -298,15 +298,15 @@ export function setupDebugOverlay(game: GameScene): void {
         // GameScene 経由で他ファイルからも呼べるようにする
         (game as any).closeMenu = closeMenu;
 
-        // ポートレート判定: matchMedia が iOS Safari で取りこぼすことがあるため、
-        // 「ポートレート専用 CSS が menu-btn に適用されているか」で判定する
-        // （ポートレート時のみ #menu-btn は position: static、それ以外は position: fixed）
-        const isMobilePortrait = () => getComputedStyle(menuBtn).position === "static";
+        // モバイル判定: matchMedia が iOS Safari で取りこぼすことがあるため、
+        // 「モバイル専用 CSS が menu-btn に適用されているか」で判定する
+        // （モバイル時のみ #menu-btn は position: static、それ以外は position: fixed）
+        const isMobileMenuBtn = () => getComputedStyle(menuBtn).position === "static";
 
         menuBtn.addEventListener("click", () => {
-            // モバイルポートレート: パネル表示中はXボタン相当で閉じ、未表示なら既定パネルを開く
+            // モバイル（ポートレート／ランドスケープ共通）: パネル表示中はXボタン相当で閉じ、未表示なら既定パネルを開く
             // （タブバーはパネル内に差し込まれるため、パネルが開けばタブバーも同時に表示される）
-            if (isMobilePortrait()) {
+            if (isMobileMenuBtn()) {
                 const tabBar = document.getElementById("panel-tab-bar");
                 const activeTab = tabBar?.querySelector<HTMLButtonElement>(".panel-tab.active");
                 if (activeTab) {

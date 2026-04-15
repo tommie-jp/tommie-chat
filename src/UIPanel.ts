@@ -4478,10 +4478,11 @@ export function setupHtmlUI(game: GameScene): void {
                     if (activeTabEl?.dataset.menu) {
                         document.body.dataset.tabLastMenu = activeTabEl.dataset.menu;
                     }
-                    // ポートレート時のみ CSS に表示を委ね、それ以外（PC）は非表示
+                    // モバイル（ポートレート／ランドスケープ）時のみ CSS に表示を委ね、それ以外（PC）は非表示
+                    // menu-btn は共通モバイルルールで position: static になっているためこれで判定可
                     const menuBtnEl = document.getElementById("menu-btn");
-                    const isPortrait = !!menuBtnEl && getComputedStyle(menuBtnEl).position === "static";
-                    tabBar.style.display = isPortrait ? "" : "none";
+                    const isMobile = !!menuBtnEl && getComputedStyle(menuBtnEl).position === "static";
+                    tabBar.style.display = isMobile ? "" : "none";
                     // アクティブタブを中央寄せ。パネル移動時はレイアウト確定前に scrollLeft を触るとクランプされて 0 に張り付くため、
                     // rAF 後に scrollLeft を直接セット（smooth だと 0 から target へアニメーションしてしまう）。
                     const centerActive = () => {
