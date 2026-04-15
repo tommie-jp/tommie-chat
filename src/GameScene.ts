@@ -10,6 +10,7 @@ import {
     StandardMaterial,
     Color3,
     Mesh,
+    Material,
     PointerEventTypes,
     DefaultRenderingPipeline,
     Matrix
@@ -92,8 +93,21 @@ export class GameScene {
     currentUserId: string | null = null;
 
     camAutoRotate = true;
-    private blockMeshes = new Map<number, Mesh>();
-    private blockMatCache = new Map<string, StandardMaterial>();
+    // ブロックは Thin Instance 化（不透明・半透明で2つのソースメッシュ、per-instance 行列＋色）
+    private blockSrcOpaque?: Mesh;
+    private blockSrcAlpha?: Mesh;
+    private blockMatOpaque?: StandardMaterial;
+    private blockMatAlpha?: StandardMaterial;
+    private blockMatrixBufOpaque?: Float32Array;
+    private blockColorBufOpaque?: Float32Array;
+    private blockMatrixBufAlpha?: Float32Array;
+    private blockColorBufAlpha?: Float32Array;
+    private blockSlotCountOpaque = 0;
+    private blockSlotCountAlpha = 0;
+    private blockFreeSlotsOpaque: number[] = [];
+    private blockFreeSlotsAlpha: number[] = [];
+    private blockSlotByKey = new Map<number, { alpha: boolean; slot: number }>();
+    private static readonly BLOCK_BUF_INITIAL = 256;
     buildMode = false;
     latestPingAvg: number | null = null;
     /** 右上バッジの接続状態: "connected" | "retry" | "disconnected" */
@@ -277,15 +291,19 @@ export class GameScene {
         const WS = this.currentWorldSize;
 
         // AOI外のブロックメッシュを破棄
-        for (const [key, mesh] of this.blockMeshes) {
+        const toRemove: number[] = [];
+        for (const key of this.blockSlotByKey.keys()) {
             const gx = Math.floor(key / WS);
             const gz = key % WS;
             const cx = Math.floor(gx / CS);
             const cz = Math.floor(gz / CS);
             if (cx < aoi.minCX || cx > aoi.maxCX || cz < aoi.minCZ || cz > aoi.maxCZ) {
-                mesh.dispose();
-                this.blockMeshes.delete(key);
+                toRemove.push(key);
             }
+        }
+        for (const key of toRemove) {
+            const info = this.blockSlotByKey.get(key);
+            if (info) { this.freeBlockSlot(info); this.blockSlotByKey.delete(key); }
         }
 
         // AOI内のキャッシュ済みチャンクでメッシュが無いブロックを描画
@@ -298,7 +316,7 @@ export class GameScene {
                     for (let lz = 0; lz < CS; lz++) {
                         const gx = baseGX + lx, gz = baseGZ + lz;
                         const mkey = gx * WS + gz;
-                        if (this.blockMeshes.has(mkey)) continue; // 既にメッシュあり
+                        if (this.blockSlotByKey.has(mkey)) continue; // 既にメッシュあり
                         const si = (lx * CS + lz) * 6;
                         const blockId = ch.cells[si] | (ch.cells[si + 1] << 8);
                         if (blockId !== 0) {
@@ -422,39 +440,178 @@ export class GameScene {
         _end();
     }
 
-    private getOrCreateBlockMat(r: number, g: number, b: number, a: number): StandardMaterial {
-        const key = `${r}_${g}_${b}_${a}`;
-        if (!this.blockMatCache.has(key)) {
-            const mat = new StandardMaterial(`blockMat_${key}`, this.scene);
-            mat.diffuseColor = new Color3(r / 255, g / 255, b / 255);
-            if (a < 255) mat.alpha = a / 255;
-            mat.freeze();
-            this.blockMatCache.set(key, mat);
+    private initBlockInstances(): void {
+        if (this.blockSrcOpaque) return;
+        const cap = GameScene.BLOCK_BUF_INITIAL;
+
+        // 不透明ソース
+        // 注意: freeze() は INSTANCESCOLOR 定義のシェーダ反映を阻害するため呼ばない
+        this.blockMatOpaque = new StandardMaterial("blockInstMatOpaque", this.scene);
+        this.blockMatOpaque.diffuseColor = new Color3(1, 1, 1);
+
+        this.blockSrcOpaque = MeshBuilder.CreateBox("blockSrcOpaque", { size: 1 }, this.scene);
+        this.blockSrcOpaque.material = this.blockMatOpaque;
+        this.blockSrcOpaque.isPickable = false;
+        this.blockSrcOpaque.alwaysSelectAsActiveMesh = true;
+        this.blockSrcOpaque.thinInstanceEnablePicking = false;
+        this.blockSrcOpaque.doNotSyncBoundingInfo = true;
+
+        this.blockMatrixBufOpaque = new Float32Array(16 * cap);
+        this.blockColorBufOpaque = new Float32Array(4 * cap);
+        this.blockSrcOpaque.thinInstanceSetBuffer("matrix", this.blockMatrixBufOpaque, 16, false);
+        this.blockSrcOpaque.thinInstanceSetBuffer("color", this.blockColorBufOpaque, 4, false);
+        this.blockSrcOpaque.thinInstanceCount = 0;
+
+        // 半透明ソース
+        this.blockMatAlpha = new StandardMaterial("blockInstMatAlpha", this.scene);
+        this.blockMatAlpha.diffuseColor = new Color3(1, 1, 1);
+        this.blockMatAlpha.transparencyMode = Material.MATERIAL_ALPHABLEND;
+        this.blockMatAlpha.alpha = 1.0;
+
+        this.blockSrcAlpha = MeshBuilder.CreateBox("blockSrcAlpha", { size: 1 }, this.scene);
+        this.blockSrcAlpha.material = this.blockMatAlpha;
+        this.blockSrcAlpha.isPickable = false;
+        this.blockSrcAlpha.alwaysSelectAsActiveMesh = true;
+        this.blockSrcAlpha.thinInstanceEnablePicking = false;
+        this.blockSrcAlpha.doNotSyncBoundingInfo = true;
+        // VERTEXALPHA define を有効化し per-instance color の α を最終α出力に反映させる
+        this.blockSrcAlpha.hasVertexAlpha = true;
+
+        this.blockMatrixBufAlpha = new Float32Array(16 * cap);
+        this.blockColorBufAlpha = new Float32Array(4 * cap);
+        this.blockSrcAlpha.thinInstanceSetBuffer("matrix", this.blockMatrixBufAlpha, 16, false);
+        this.blockSrcAlpha.thinInstanceSetBuffer("color", this.blockColorBufAlpha, 4, false);
+        this.blockSrcAlpha.thinInstanceCount = 0;
+
+        // シェーダが INSTANCESCOLOR/VERTEXALPHA を含めてコンパイルされた後に freeze する。
+        // 最初のインスタンスが描画されるのを待って実行（2フレーム猶予）。
+        let frozenFrames = 0;
+        const frozenObs = this.scene.onAfterRenderObservable.add(() => {
+            const rendered = (this.blockSrcOpaque!.thinInstanceCount > 0) || (this.blockSrcAlpha!.thinInstanceCount > 0);
+            if (!rendered) return;
+            if (frozenFrames++ < 1) return;
+            this.blockMatOpaque!.freeze();
+            this.blockMatAlpha!.freeze();
+            if (frozenObs) this.scene.onAfterRenderObservable.remove(frozenObs);
+        });
+    }
+
+    private growBlockBuffers(alpha: boolean, newCap: number): void {
+        if (alpha) {
+            const oldMat = this.blockMatrixBufAlpha!;
+            const oldCol = this.blockColorBufAlpha!;
+            this.blockMatrixBufAlpha = new Float32Array(16 * newCap);
+            this.blockColorBufAlpha = new Float32Array(4 * newCap);
+            this.blockMatrixBufAlpha.set(oldMat);
+            this.blockColorBufAlpha.set(oldCol);
+            this.blockSrcAlpha!.thinInstanceSetBuffer("matrix", this.blockMatrixBufAlpha, 16, false);
+            this.blockSrcAlpha!.thinInstanceSetBuffer("color", this.blockColorBufAlpha, 4, false);
+        } else {
+            const oldMat = this.blockMatrixBufOpaque!;
+            const oldCol = this.blockColorBufOpaque!;
+            this.blockMatrixBufOpaque = new Float32Array(16 * newCap);
+            this.blockColorBufOpaque = new Float32Array(4 * newCap);
+            this.blockMatrixBufOpaque.set(oldMat);
+            this.blockColorBufOpaque.set(oldCol);
+            this.blockSrcOpaque!.thinInstanceSetBuffer("matrix", this.blockMatrixBufOpaque, 16, false);
+            this.blockSrcOpaque!.thinInstanceSetBuffer("color", this.blockColorBufOpaque, 4, false);
         }
-        return this.blockMatCache.get(key)!;
+    }
+
+    /** 指定スロットを非表示化（ゼロ行列）し、フリーリストに返却 */
+    private freeBlockSlot(info: { alpha: boolean; slot: number }): void {
+        const buf = info.alpha ? this.blockMatrixBufAlpha! : this.blockMatrixBufOpaque!;
+        const off = info.slot * 16;
+        for (let i = 0; i < 16; i++) buf[off + i] = 0;
+        const src = info.alpha ? this.blockSrcAlpha! : this.blockSrcOpaque!;
+        src.thinInstanceBufferUpdated("matrix");
+        if (info.alpha) this.blockFreeSlotsAlpha.push(info.slot);
+        else this.blockFreeSlotsOpaque.push(info.slot);
     }
 
     placeBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): void {
         const _end = prof("GameScene.placeBlock");
+        this.initBlockInstances();
         const ws = this.currentWorldSize;
         const key = gx * ws + gz;
-        const existing = this.blockMeshes.get(key);
-        if (existing) { existing.dispose(); this.blockMeshes.delete(key); }
+
+        // 既存があれば解放
+        const existing = this.blockSlotByKey.get(key);
+        if (existing) {
+            this.freeBlockSlot(existing);
+            this.blockSlotByKey.delete(key);
+        }
         if (blockId === 0) { _end(); return; }
+
+        const isAlpha = a < 255;
+        let slot: number;
+        if (isAlpha) {
+            if (this.blockFreeSlotsAlpha.length > 0) {
+                slot = this.blockFreeSlotsAlpha.pop()!;
+            } else {
+                const cap = this.blockMatrixBufAlpha!.length / 16;
+                if (this.blockSlotCountAlpha >= cap) {
+                    this.growBlockBuffers(true, cap * 2);
+                }
+                slot = this.blockSlotCountAlpha++;
+                this.blockSrcAlpha!.thinInstanceCount = this.blockSlotCountAlpha;
+            }
+        } else {
+            if (this.blockFreeSlotsOpaque.length > 0) {
+                slot = this.blockFreeSlotsOpaque.pop()!;
+            } else {
+                const cap = this.blockMatrixBufOpaque!.length / 16;
+                if (this.blockSlotCountOpaque >= cap) {
+                    this.growBlockBuffers(false, cap * 2);
+                }
+                slot = this.blockSlotCountOpaque++;
+                this.blockSrcOpaque!.thinInstanceCount = this.blockSlotCountOpaque;
+            }
+        }
+        this.blockSlotByKey.set(key, { alpha: isAlpha, slot });
+
         const half = ws / 2;
-        const box = MeshBuilder.CreateBox(`block_${gx}_${gz}`, { size: 1 }, this.scene);
-        box.position.set(gx - half + 0.5, 0.5, gz - half + 0.5);
-        box.material = this.getOrCreateBlockMat(r, g, b, a);
-        box.isPickable = false;
-        box.freezeWorldMatrix();
-        this.blockMeshes.set(key, box);
+        const px = gx - half + 0.5;
+        const py = 0.5;
+        const pz = gz - half + 0.5;
+
+        // 平行移動行列（Babylon は column-major、translation は要素 12,13,14）
+        const buf = isAlpha ? this.blockMatrixBufAlpha! : this.blockMatrixBufOpaque!;
+        const off = slot * 16;
+        buf[off + 0] = 1; buf[off + 1] = 0; buf[off + 2] = 0; buf[off + 3] = 0;
+        buf[off + 4] = 0; buf[off + 5] = 1; buf[off + 6] = 0; buf[off + 7] = 0;
+        buf[off + 8] = 0; buf[off + 9] = 0; buf[off + 10] = 1; buf[off + 11] = 0;
+        buf[off + 12] = px; buf[off + 13] = py; buf[off + 14] = pz; buf[off + 15] = 1;
+
+        const cbuf = isAlpha ? this.blockColorBufAlpha! : this.blockColorBufOpaque!;
+        const coff = slot * 4;
+        cbuf[coff + 0] = r / 255;
+        cbuf[coff + 1] = g / 255;
+        cbuf[coff + 2] = b / 255;
+        cbuf[coff + 3] = a / 255;
+
+        const src = isAlpha ? this.blockSrcAlpha! : this.blockSrcOpaque!;
+        src.thinInstanceBufferUpdated("matrix");
+        src.thinInstanceBufferUpdated("color");
+
         _end();
     }
 
     /** ワールド切替時に全ブロックメッシュ・チャンクキャッシュ・リモートアバター・地面をクリア/再作成 */
     private clearAllBlocks(): void {
-        for (const mesh of this.blockMeshes.values()) mesh.dispose();
-        this.blockMeshes.clear();
+        this.blockSlotByKey.clear();
+        this.blockFreeSlotsOpaque.length = 0;
+        this.blockFreeSlotsAlpha.length = 0;
+        this.blockSlotCountOpaque = 0;
+        this.blockSlotCountAlpha = 0;
+        if (this.blockSrcOpaque) {
+            this.blockSrcOpaque.thinInstanceCount = 0;
+            if (this.blockMatrixBufOpaque) this.blockMatrixBufOpaque.fill(0);
+        }
+        if (this.blockSrcAlpha) {
+            this.blockSrcAlpha.thinInstanceCount = 0;
+            if (this.blockMatrixBufAlpha) this.blockMatrixBufAlpha.fill(0);
+        }
         this.chunks.clear();
         // リモートアバターを破棄（ワールド切替時に旧ワールドのアバターを完全除去）
         for (const [sid, av] of this.remoteAvatars) {
