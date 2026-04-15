@@ -428,6 +428,7 @@ export class GameScene {
             const mat = new StandardMaterial(`blockMat_${key}`, this.scene);
             mat.diffuseColor = new Color3(r / 255, g / 255, b / 255);
             if (a < 255) mat.alpha = a / 255;
+            mat.freeze();
             this.blockMatCache.set(key, mat);
         }
         return this.blockMatCache.get(key)!;
@@ -445,6 +446,7 @@ export class GameScene {
         box.position.set(gx - half + 0.5, 0.5, gz - half + 0.5);
         box.material = this.getOrCreateBlockMat(r, g, b, a);
         box.isPickable = false;
+        box.freezeWorldMatrix();
         this.blockMeshes.set(key, box);
         _end();
     }
