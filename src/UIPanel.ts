@@ -12,17 +12,59 @@ export function setupHtmlUI(game: GameScene): void {
     // アカウント情報の再描画関数（ブロックスコープを超えて doLogin 等から呼ぶため関数スコープに配置）
     let refreshAccountStatus: (() => void) | null = null;
 
+    // タブバーをドラッグしてデバイダー移動を開始した直後、タブ切替のクリックを抑止するフラグ
+    let justDraggedFromTab = false;
+
     // --- i18n 言語セレクター ---
     const langSelect = document.getElementById("langSelect") as HTMLSelectElement | null;
+    const settingsLangSelect = document.getElementById("settings-lang-select") as HTMLSelectElement | null;
     const onLangChangeCallbacks: (() => void)[] = [];
+    const applyLang = (val: string) => {
+        setLang(val as Lang);
+        applyI18n();
+        applyI18nMenus();
+        if (langSelect && langSelect.value !== val) langSelect.value = val;
+        if (settingsLangSelect && settingsLangSelect.value !== val) settingsLangSelect.value = val;
+        for (const cb of onLangChangeCallbacks) cb();
+    };
     if (langSelect) {
         langSelect.value = getLang();
-        langSelect.addEventListener("change", () => {
-            setLang(langSelect.value as Lang);
-            applyI18n();
-            applyI18nMenus();
-            for (const cb of onLangChangeCallbacks) cb();
-        });
+        langSelect.addEventListener("change", () => applyLang(langSelect.value));
+    }
+    if (settingsLangSelect) {
+        settingsLangSelect.value = getLang();
+        settingsLangSelect.addEventListener("change", () => applyLang(settingsLangSelect.value));
+    }
+
+    // --- 設定パネル: ツールチップトグル（menu-tooltips と同期） ---
+    {
+        const settingsTooltipBtn = document.getElementById("settings-tooltip-toggle");
+        const tooltipMenuBtn = document.getElementById("menu-tooltips");
+        if (settingsTooltipBtn && tooltipMenuBtn) {
+            const updateLabel = () => {
+                const enabled = !!game.tooltipsEnabled;
+                settingsTooltipBtn.textContent = enabled ? "ON" : "OFF";
+            };
+            updateLabel();
+            settingsTooltipBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                tooltipMenuBtn.click();
+                setTimeout(updateLabel, 0);
+            });
+            new MutationObserver(updateLabel).observe(tooltipMenuBtn, { childList: true, characterData: true, subtree: true });
+            onLangChangeCallbacks.push(updateLabel);
+        }
+    }
+    // --- 設定パネル: クッキー初期化（menu-cookie-reset を再利用） ---
+    {
+        const settingsCookieResetBtn = document.getElementById("settings-cookie-reset-btn");
+        const cookieResetMenuBtn = document.getElementById("menu-cookie-reset");
+        if (settingsCookieResetBtn && cookieResetMenuBtn) {
+            settingsCookieResetBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                cookieResetMenuBtn.click();
+            });
+        }
     }
     /** メニュー項目のプレフィックス付きテキストを翻訳 */
     const applyI18nMenus = () => {
@@ -40,7 +82,7 @@ export function setupHtmlUI(game: GameScene): void {
     if (isMobileDev) {
         const wrapIds = ["user-list-wrap", "chat-history-wrap", "server-settings-body",
                          "server-log-list", "ping-body", "ccu-body", "debug-content", "about-panel-body", "displayname-body",
-                         "avatar-body", "room-list-body", "room-list-scroll"];
+                         "avatar-body", "room-list-body", "room-list-scroll", "settings-body"];
         for (const id of wrapIds) {
             const el = document.getElementById(id);
             if (!el) continue;
@@ -185,7 +227,7 @@ export function setupHtmlUI(game: GameScene): void {
             if (isMobileDev) {
                 const headerIds = ["user-list-header", "chat-history-header", "chat-settings-header",
                                    "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "room-list-header", "debug-title-bar", "about-panel-header",
-                                   "avatar-header"];
+                                   "avatar-header", "displayname-header", "settings-header"];
                 const EDGE_DEAD_ZONE_PX = 8;
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
@@ -198,6 +240,43 @@ export function setupHtmlUI(game: GameScene): void {
                         if (e.clientY - rect.top < EDGE_DEAD_ZONE_PX) return; // 上端境界線付近は無視
                         startDrag(e, hdr);
                     });
+                }
+                // タブバーのドラッグでもデバイダーを移動させる。
+                // 非ボタン領域: 即ドラッグ開始。タブボタン上: 縦方向に閾値超過で切替ではなくドラッグ。
+                const tabBar = document.getElementById("panel-tab-bar");
+                if (tabBar) {
+                    const TAB_DRAG_THRESHOLD_PX = 8;
+                    let pendingStart: { x: number; y: number; pointerId: number } | null = null;
+                    tabBar.addEventListener("pointerdown", (e: PointerEvent) => {
+                        if (window.matchMedia("(orientation: landscape)").matches) return;
+                        const t = e.target as HTMLElement;
+                        if (t.closest("#panel-tab-close")) return;
+                        const rect = tabBar.getBoundingClientRect();
+                        if (e.clientY - rect.top < EDGE_DEAD_ZONE_PX) return;
+                        if (t.closest(".panel-tab")) {
+                            pendingStart = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+                        } else {
+                            startDrag(e, tabBar);
+                        }
+                    });
+                    document.addEventListener("pointermove", (e: PointerEvent) => {
+                        if (!pendingStart || e.pointerId !== pendingStart.pointerId) return;
+                        const dy = e.clientY - pendingStart.y;
+                        const dx = e.clientX - pendingStart.x;
+                        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 3) {
+                            // 横方向移動が優勢なら横スクロールとみなして中止
+                            pendingStart = null;
+                            return;
+                        }
+                        if (Math.abs(dy) >= TAB_DRAG_THRESHOLD_PX) {
+                            pendingStart = null;
+                            justDraggedFromTab = true;
+                            setTimeout(() => { justDraggedFromTab = false; }, 120);
+                            startDrag(e, tabBar);
+                        }
+                    });
+                    document.addEventListener("pointerup", () => { pendingStart = null; });
+                    document.addEventListener("pointercancel", () => { pendingStart = null; });
                 }
             }
             document.addEventListener("pointermove", (e: PointerEvent) => {
@@ -2479,7 +2558,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (e.key === "Enter") { e.preventDefault(); doLogin(); }
             };
         }
-        { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = "none"; }
+        { const slr = document.getElementById("settings-logout-row"); if (slr) slr.style.display = "none"; }
         { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = "none"; }
         { const mav = document.getElementById("menu-avatar"); if (mav) mav.style.display = "none"; }
         { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = "none"; }
@@ -2724,7 +2803,7 @@ export function setupHtmlUI(game: GameScene): void {
                 loginBtn.style.display = "none";
             }
             setLoginRowVisible(false);
-            { const ml = document.getElementById("menu-logout"); if (ml) ml.style.display = ""; }
+            { const slr = document.getElementById("settings-logout-row"); if (slr) slr.style.display = ""; }
             { const mli = document.getElementById("menu-login"); if (mli) mli.style.display = ""; }
             { const mav = document.getElementById("menu-avatar"); if (mav) mav.style.display = ""; }
             { const mr = document.getElementById("menu-bookmarks"); if (mr) mr.style.display = ""; }
@@ -2941,7 +3020,9 @@ export function setupHtmlUI(game: GameScene): void {
         if (ppanel.style.display === "none") return;
         const canvas = document.getElementById("ping-canvas") as HTMLCanvasElement | null;
         if (!canvas) return;
-        const headerH = pheader.offsetHeight;
+        // タブバー表示中はヘッダーが非表示なのでタブバー高さを使う
+        const tabBar = ppanel.querySelector<HTMLElement>("#panel-tab-bar");
+        const headerH = tabBar ? tabBar.offsetHeight : pheader.offsetHeight;
         canvas.style.top = headerH + "px";
         const w = ppanel.clientWidth, h = ppanel.clientHeight - headerH;
         if (w <= 0 || h <= 0) return;
@@ -3276,7 +3357,8 @@ export function setupHtmlUI(game: GameScene): void {
         const cpanel  = document.getElementById("ccu-panel");
         const cheader = document.getElementById("ccu-header");
         if (!cpanel || !cheader) return;
-        const headerH = cheader.offsetHeight;
+        const tabBar = cpanel.querySelector<HTMLElement>("#panel-tab-bar");
+        const headerH = tabBar ? tabBar.offsetHeight : cheader.offsetHeight;
         canvas.style.top = headerH + "px";
         const w = cpanel.clientWidth, h = cpanel.clientHeight - headerH;
         if (w <= 0 || h <= 0) return;
@@ -3646,17 +3728,15 @@ export function setupHtmlUI(game: GameScene): void {
     }
 
     {
-        const menuLogout = document.getElementById("menu-logout");
+        const settingsLogoutBtn = document.getElementById("settings-logout-btn");
         const logoutPanel = document.getElementById("logout-panel");
         const logoutConfirm = document.getElementById("logout-confirm-btn");
         const logoutCancel = document.getElementById("logout-cancel-btn");
         const logoutClose = document.getElementById("logout-panel-close");
         const hideLogoutPanel = () => { if (logoutPanel) logoutPanel.style.display = "none"; };
-        if (menuLogout && logoutPanel) {
-            menuLogout.addEventListener("click", (e) => {
+        if (settingsLogoutBtn && logoutPanel) {
+            settingsLogoutBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
-                const cl = (game as any).closeMenu as ((btn?: HTMLElement) => void) | undefined;
-                if (cl) cl(menuLogout); else document.getElementById("menu-popup")?.classList.remove("open");
                 logoutPanel.style.display = "block";
             });
         }
@@ -4328,4 +4408,116 @@ export function setupHtmlUI(game: GameScene): void {
         textarea.style.height = snapped + "px";
         lastH = snapped;
     });
+
+    // ===== モバイル・ポートレート専用パネルタブバー =====
+    // 表示名設定 / サーバ接続ログ / ブックマーク を横スクロールタブで切替
+    {
+        const tabBar = document.getElementById("panel-tab-bar");
+        const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>(".panel-tab"));
+        const closeBtn = document.getElementById("panel-tab-close");
+        if (tabBar && tabs.length > 0) {
+            // タブラベルを「N.<訳語>」形式で描画（言語切替時にも呼ぶ）
+            const renderTabLabels = () => {
+                tabs.forEach((tab, i) => {
+                    const key = tab.dataset.tabKey;
+                    if (!key) return;
+                    tab.textContent = `${i + 1}.${t(key as Parameters<typeof t>[0])}`;
+                });
+            };
+            renderTabLabels();
+            onLangChangeCallbacks.push(renderTabLabels);
+
+            // タブクリック → 対応するメニューボタンの click を発火して既存トグルを再利用
+            for (const tab of tabs) {
+                tab.addEventListener("click", () => {
+                    if (justDraggedFromTab) return; // 直前にドラッグでデバイダー移動した場合は抑止
+                    const menuId = tab.dataset.menu;
+                    if (!menuId) return;
+                    const menuBtn = document.getElementById(menuId);
+                    const target = document.getElementById(tab.dataset.target || "");
+                    if (!menuBtn || !target) return;
+                    // 既に表示中のタブを再タップした場合は閉じない（タブは切替専用）
+                    if (target.style.display !== "none") return;
+                    menuBtn.click();
+                });
+            }
+            // ✕ボタン → アクティブなパネルを閉じる（＝そのメニューボタンを再クリック）
+            if (closeBtn) {
+                closeBtn.addEventListener("click", () => {
+                    const activeTab = tabBar.querySelector<HTMLButtonElement>(".panel-tab.active");
+                    if (!activeTab) return;
+                    const menuBtn = document.getElementById(activeTab.dataset.menu || "");
+                    menuBtn?.click();
+                });
+            }
+            // パネル表示状態の監視 → タブバーの表示位置・アクティブ状態を同期
+            const syncTabBar = () => {
+                let activePanelId: string | null = null;
+                for (const tab of tabs) {
+                    const panelId = tab.dataset.target;
+                    if (!panelId) continue;
+                    const panel = document.getElementById(panelId);
+                    if (panel && panel.style.display !== "none") {
+                        activePanelId = panelId;
+                        break;
+                    }
+                }
+                if (activePanelId) {
+                    const activePanel = document.getElementById(activePanelId);
+                    const scrollEl = document.getElementById("panel-tabs-scroll");
+                    const didMove = !!(activePanel && tabBar.parentElement !== activePanel);
+                    if (activePanel && didMove) {
+                        activePanel.insertBefore(tabBar, activePanel.firstChild);
+                    }
+                    for (const tab of tabs) {
+                        tab.classList.toggle("active", tab.dataset.target === activePanelId);
+                    }
+                    document.body.classList.add("tab-panel-active");
+                    // 直前に開いたパネルをハンバーガーの再表示用に記憶
+                    const activeTabEl = tabBar.querySelector<HTMLButtonElement>(".panel-tab.active");
+                    if (activeTabEl?.dataset.menu) {
+                        document.body.dataset.tabLastMenu = activeTabEl.dataset.menu;
+                    }
+                    // ポートレート時のみ CSS に表示を委ね、それ以外（PC）は非表示
+                    const menuBtnEl = document.getElementById("menu-btn");
+                    const isPortrait = !!menuBtnEl && getComputedStyle(menuBtnEl).position === "static";
+                    tabBar.style.display = isPortrait ? "" : "none";
+                    // アクティブタブを中央寄せ。パネル移動時はレイアウト確定前に scrollLeft を触るとクランプされて 0 に張り付くため、
+                    // rAF 後に scrollLeft を直接セット（smooth だと 0 から target へアニメーションしてしまう）。
+                    const centerActive = () => {
+                        if (!scrollEl) return;
+                        const activeTab = tabBar.querySelector<HTMLButtonElement>(".panel-tab.active");
+                        if (!activeTab) return;
+                        const tabRect = activeTab.getBoundingClientRect();
+                        const scrollRect = scrollEl.getBoundingClientRect();
+                        if (scrollRect.width === 0) return;
+                        const targetLeft = scrollEl.scrollLeft + tabRect.left - scrollRect.left
+                            - (scrollRect.width - tabRect.width) / 2;
+                        scrollEl.scrollLeft = Math.max(0, targetLeft);
+                    };
+                    if (didMove) {
+                        requestAnimationFrame(centerActive);
+                    } else {
+                        centerActive();
+                    }
+                } else {
+                    document.body.classList.remove("tab-panel-active");
+                    // パネル全閉じ時は全タブの active クラスをクリア
+                    // （古い active 状態が残るとハンバーガーが「アクティブパネルあり」と誤判定する）
+                    for (const tab of tabs) tab.classList.remove("active");
+                    // タブバーを body 直下に戻して非表示
+                    if (tabBar.parentElement !== document.body) {
+                        document.body.appendChild(tabBar);
+                    }
+                    tabBar.style.display = "none";
+                }
+            };
+            const observer = new MutationObserver(syncTabBar);
+            for (const tab of tabs) {
+                const panel = document.getElementById(tab.dataset.target || "");
+                if (panel) observer.observe(panel, { attributes: true, attributeFilter: ["style"] });
+            }
+            syncTabBar();
+        }
+    }
 }

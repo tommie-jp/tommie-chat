@@ -48,8 +48,12 @@ export const ja = {
     "menu.about": "tommieChatについて",
     "menu.debug": "デバッグツール",
     "menu.cookie_reset": "全パネル非表示（クッキー初期化）",
+    "menu.cookie_reset_label": "クッキー初期化",
+    "menu.cookie_reset_btn": "初期化",
     "menu.displayname": "表示名設定",
     "menu.avatar": "アバター選択",
+    "menu.settings": "設定",
+    "menu.tooltips": "ツールチップ",
 
     // --- サーバ設定 ---
     "server.title": "サーバ設定",

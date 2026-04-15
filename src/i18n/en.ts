@@ -50,8 +50,12 @@ export const en: Record<keyof typeof ja, string> = {
     "menu.about": "About tommieChat",
     "menu.debug": "Debug Tools",
     "menu.cookie_reset": "Hide all panels (reset cookies)",
+    "menu.cookie_reset_label": "Reset Cookies",
+    "menu.cookie_reset_btn": "Reset",
     "menu.displayname": "Display Name",
     "menu.avatar": "Avatar",
+    "menu.settings": "Settings",
+    "menu.tooltips": "Tooltips",
 
     // --- Server Settings ---
     "server.title": "Server Settings",

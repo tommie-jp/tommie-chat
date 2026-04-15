@@ -1451,6 +1451,106 @@
         }
         .about-ops-sp { display: none; }
 
+        /* ===== 設定パネル ===== */
+        #settings-panel {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            width: 320px;
+            background: rgba(255, 255, 255, 0.88);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+            z-index: 300;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            color: #000;
+        }
+        #settings-header {
+            padding: 4px 8px;
+            font-weight: bold;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(0,0,0,0.15);
+            background: rgba(255,255,255,0.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            cursor: grab;
+        }
+        #settings-close {
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            opacity: 0.6;
+            padding: 4px 6px;
+        }
+        #settings-close:hover { opacity: 1; }
+        #settings-body {
+            padding: 12px 16px;
+            line-height: 1.4;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #settings-body .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #settings-body .settings-row label {
+            flex: 0 0 80px;
+            font-weight: bold;
+        }
+        #settings-body .settings-toggle-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid #666;
+            border-radius: 3px;
+            background: #fff;
+        }
+        #settings-body #settings-lang-select {
+            font-size: 12px;
+            padding: 2px 4px;
+            border: 1px solid #666;
+            border-radius: 3px;
+            background: #fff;
+            color: #000;
+            cursor: pointer;
+        }
+        #settings-body .settings-logout-btn {
+            padding: 4px 14px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #c04040;
+            border-radius: 3px;
+            background: #ff6b6b;
+            color: #fff;
+        }
+        #settings-body .settings-logout-btn:hover {
+            background: #e85555;
+        }
+        #settings-body .settings-cookie-reset-btn {
+            padding: 4px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid #888;
+            border-radius: 3px;
+            background: #eee;
+            color: #333;
+        }
+        #settings-body .settings-cookie-reset-btn:hover {
+            background: #ddd;
+        }
+
         /* ===== ハンバーガーメニュー ===== */
         #menu-btn {
             position: fixed;
@@ -1776,7 +1876,8 @@
             #debug-overlay,
             #about-panel,
             #displayname-panel,
-            #avatar-panel {
+            #avatar-panel,
+            #settings-panel {
                 font-size: 16px;
                 left: 0 !important;
                 right: 0 !important;
@@ -1808,7 +1909,8 @@
             #debug-title-bar,
             #about-panel-header,
             #displayname-header,
-            #avatar-header {
+            #avatar-header,
+            #settings-header {
                 display: flex !important;
                 align-items: center !important;
                 justify-content: space-between !important;
@@ -1834,7 +1936,8 @@
             #bookmark-close,
             #about-panel-close,
             #displayname-close,
-            #avatar-close {
+            #avatar-close,
+            #settings-close {
                 font-size: 15px;
                 padding: 6px 8px;
                 color: #fff !important;
@@ -2148,6 +2251,38 @@
 
         /* スマホ縦長（ポートレート） */
         @media (pointer: coarse) and (min-resolution: 2dppx) and (orientation: portrait) {
+            /* ポートレート: ハンバーガーはセリフ入力の左にインライン配置（タブバー トグル用） */
+            #menu-btn {
+                position: static !important;
+                top: auto !important;
+                left: auto !important;
+                width: 32px !important;
+                height: 32px !important;
+                border-radius: 6px !important;
+                flex-shrink: 0 !important;
+            }
+            #menu-btn span {
+                width: 16px !important;
+                height: 2px !important;
+            }
+            /* ポートレート: ポップアップメニューは使わない（タブバーで代替） */
+            #menu-popup { display: none !important; }
+            /* ポートレート: タブメニューをハンバーガーで明示トグル表示 */
+            body.tab-menu-open #panel-tab-bar {
+                display: flex !important;
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: var(--pt-panel-bottom, 90px);
+                z-index: 500;
+                background: linear-gradient(135deg, #7c5ce0, #5b8def);
+                color: #fff;
+                height: 36px;
+                align-items: stretch;
+                box-sizing: border-box;
+                user-select: none;
+                -webkit-user-select: none;
+            }
             body.sp-panel-visible #renderCanvas {
                 height: var(--pt-divider, 60vh) !important;
             }
@@ -2164,12 +2299,17 @@
             #debug-overlay,
             #about-panel,
             #displayname-panel,
-            #avatar-panel {
+            #avatar-panel,
+            #settings-panel {
                 bottom: var(--pt-panel-bottom, 90px) !important;
             }
             /* ポートレート: 表示名パネルは内容に合わせた高さ、底部をセリフ上に */
             #displayname-panel {
                 top: auto !important;
+            }
+            /* タブ切替時は他パネル同様にデバイダーで高さ可変 */
+            body.tab-panel-active #displayname-panel {
+                top: var(--pt-divider, 60vh) !important;
             }
             /* ポートレート: パネル表示中はデバイダーを隠す */
             body.sp-panel-visible #portrait-divider {
@@ -2183,6 +2323,7 @@
             /* ポートレートのみ: ヘッダードラッグ用 */
             #user-list-header,
             #chat-history-header,
+            #chat-settings-header,
             #server-settings-header,
             #server-log-header,
             #ping-header,
@@ -2192,7 +2333,8 @@
             #debug-title-bar,
             #about-panel-header,
             #displayname-header,
-            #avatar-header {
+            #avatar-header,
+            #settings-header {
                 touch-action: none !important;
                 cursor: row-resize !important;
             }
@@ -2205,7 +2347,79 @@
                 bottom: calc(100dvh - var(--pt-divider, 60dvh) + 4px) !important;
                 left: 8px !important;
             }
+
+            /* ===== パネルタブバー（表示名/サーバ接続ログ/ブックマーク のモバイル切替） ===== */
+            body.tab-panel-active #panel-tab-bar {
+                display: flex !important;
+                align-items: stretch;
+                width: 100%;
+                height: 36px;
+                background: linear-gradient(135deg, #7c5ce0, #5b8def);
+                color: #fff;
+                box-sizing: border-box;
+                user-select: none;
+                -webkit-user-select: none;
+                flex-shrink: 0;
+            }
+            #panel-tabs-scroll {
+                flex: 1 1 auto;
+                display: flex;
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+                -webkit-overflow-scrolling: touch;
+            }
+            #panel-tabs-scroll::-webkit-scrollbar { display: none; }
+            .panel-tab {
+                flex: 0 0 auto;
+                padding: 0 14px;
+                background: transparent;
+                color: rgba(255,255,255,0.75);
+                border: none;
+                border-right: 1px solid rgba(255,255,255,0.15);
+                font-size: 13px;
+                font-weight: bold;
+                font-family: inherit;
+                white-space: nowrap;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .panel-tab.active {
+                background: rgba(255,255,255,0.18);
+                color: #fff;
+                box-shadow: inset 0 -3px 0 #fff;
+            }
+            #panel-tab-close {
+                flex: 0 0 auto;
+                width: 36px;
+                background: transparent;
+                color: #fff;
+                border: none;
+                font-size: 14px;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            /* タブバーが差し込まれたパネルは元のヘッダーを隠す */
+            body.tab-panel-active #displayname-panel > #displayname-header,
+            body.tab-panel-active #avatar-panel > #avatar-header,
+            body.tab-panel-active #user-list-panel > #user-list-header,
+            body.tab-panel-active #chat-history-panel > #chat-history-header,
+            body.tab-panel-active #chat-settings-panel > #chat-settings-header,
+            body.tab-panel-active #bookmark-panel > #bookmark-header,
+            body.tab-panel-active #room-list-panel > #room-list-header,
+            body.tab-panel-active #server-settings-panel > #server-settings-header,
+            body.tab-panel-active #server-log-panel > #server-log-header,
+            body.tab-panel-active #ping-panel > #ping-header,
+            body.tab-panel-active #ccu-panel > #ccu-header,
+            body.tab-panel-active #settings-panel > #settings-header,
+            body.tab-panel-active #debug-overlay > #debug-title-bar,
+            body.tab-panel-active #about-panel > #about-panel-header {
+                display: none !important;
+            }
         }
+
 
         /* iPhone ポートレート: セリフ入力・クレジットを画面下部に近づける */
         /* max-width:440px でiPadを除外 */
@@ -2334,7 +2548,8 @@
             #debug-overlay,
             #about-panel,
             #displayname-panel,
-            #avatar-panel {
+            #avatar-panel,
+            #settings-panel {
                 left: calc(var(--ls-divider, 60%) + 12px) !important;
                 right: 0 !important;
                 top: 0 !important;
@@ -2403,7 +2618,8 @@
             #debug-overlay,
             #about-panel,
             #displayname-panel,
-            #avatar-panel {
+            #avatar-panel,
+            #settings-panel {
                 top: 20px !important;
             }
         }
@@ -2960,9 +3176,6 @@
         </div>
     </div>
 
-    <button id="menu-btn" style="-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;">
-        <span></span><span></span><span></span>
-    </button>
     <div id="menu-popup">
         <button class="menu-item dev-only" id="menu-serversettings" data-i18n-prefix="menu.serversettings">✓ サーバ設定</button>
         <button class="menu-item dev-only" id="menu-serverlog" data-i18n-prefix="menu.serverlog">✓ サーバ接続ログ</button>
@@ -2975,13 +3188,13 @@
         <button class="menu-item dev-only" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
         <button class="menu-item dev-only" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
         <button class="menu-item" id="menu-tooltips">✓ ツールチップ</button>
+        <button class="menu-item" id="menu-settings" data-i18n-prefix="menu.settings">　 設定</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
         <button class="menu-item" id="menu-about" data-i18n-prefix="menu.about">　 tommieChatについて</button>
         <button class="menu-item" id="menu-debug" data-i18n-prefix="menu.debug">✓ デバッグツール</button>
         <button class="menu-item dev-only" id="menu-cookie-reset" data-i18n="menu.cookie_reset">全パネル非表示（クッキー初期化）</button>
         <button class="menu-item" id="menu-avatar" style="display:none;" data-i18n-prefix="menu.avatar">　 アバター選択</button>
         <button class="menu-item" id="menu-login" style="display:none;" data-i18n-prefix="menu.displayname">　 表示名設定</button>
-        <button class="menu-item" id="menu-logout" style="display:none;color:#ff6b6b;" data-i18n="logout">ログアウト</button>
         <hr style="margin:4px 0;border-color:rgba(255,255,255,0.2);">
         <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;">
             <span style="font-size:12px;color:rgba(255,255,255,0.7);" data-i18n="lang.label">言語</span>
@@ -3021,6 +3234,34 @@
             <div class="about-ops-sp" id="about-ops-sp"></div>
             <hr style="margin:8px 0;border-color:rgba(0,0,0,0.15);">
             <p style="margin-top:8px;" id="about-app-credits"></p>
+        </div>
+    </div>
+
+    <div id="settings-panel" style="display:none;">
+        <div id="settings-header">
+            <span data-i18n="menu.settings">設定</span>
+            <span id="settings-close">❌️</span>
+        </div>
+        <div id="settings-body">
+            <div class="settings-row">
+                <label data-i18n="lang.label">言語</label>
+                <select id="settings-lang-select">
+                    <option value="ja">🇯🇵 日本語</option>
+                    <option value="en">🇺🇸 English</option>
+                </select>
+            </div>
+            <div class="settings-row">
+                <label data-i18n="menu.tooltips">ツールチップ</label>
+                <button type="button" id="settings-tooltip-toggle" class="settings-toggle-btn"></button>
+            </div>
+            <div class="settings-row" id="settings-logout-row" style="display:none;">
+                <label data-i18n="logout">ログアウト</label>
+                <button type="button" id="settings-logout-btn" class="settings-logout-btn" data-i18n="logout">ログアウト</button>
+            </div>
+            <div class="settings-row">
+                <label data-i18n="menu.cookie_reset_label">クッキー初期化</label>
+                <button type="button" id="settings-cookie-reset-btn" class="settings-cookie-reset-btn" data-i18n="menu.cookie_reset_btn">初期化</button>
+            </div>
         </div>
     </div>
 
@@ -3156,6 +3397,9 @@
             <span id="loginStatus" style="color:#00dd55;font-size:12px;text-shadow:0 1px 2px rgba(0,0,0,0.3);"></span>
         </div>
         <div id="chat-row">
+            <button id="menu-btn" style="-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;">
+                <span></span><span></span><span></span>
+            </button>
             <textarea id="chatInput" placeholder="セリフ" data-i18n-placeholder="chat.placeholder" title="アバターのセリフを入力します&#10;Enter: 送信 / Shift+Enter: 改行&#10;縦方向にリサイズ可能（行単位）&#10;──────────&#10;最大5行（長い行は自動折り返し）&#10;5行を超える分は省略されます&#10;フォントサイズ: デバッグツール46で変更可"></textarea>
             <button id="sendBtn" class="ui-btn" data-i18n="chat.send" title="セリフを送信します（Enter）&#10;空欄で送信すると吹き出しの表示/非表示を切り替えます">送信</button>
         </div>
@@ -3180,6 +3424,27 @@
         <div id="bookmark-body">
             <div id="bookmark-list"></div>
         </div>
+    </div>
+
+    <!-- モバイル・ポートレート専用タブバー -->
+    <div id="panel-tab-bar" style="display:none;">
+        <div id="panel-tabs-scroll">
+            <button type="button" class="panel-tab" data-target="displayname-panel" data-menu="menu-login" data-tab-key="menu.displayname">1.表示名設定</button>
+            <button type="button" class="panel-tab" data-target="avatar-panel" data-menu="menu-avatar" data-tab-key="menu.avatar">2.アバター選択</button>
+            <button type="button" class="panel-tab" data-target="user-list-panel" data-menu="menu-userlist" data-tab-key="menu.userlist">3.プレイヤーリスト</button>
+            <button type="button" class="panel-tab" data-target="chat-history-panel" data-menu="menu-chathistory" data-tab-key="menu.chathistory">4.チャット履歴</button>
+            <button type="button" class="panel-tab" data-target="chat-settings-panel" data-menu="menu-chatsettings" data-tab-key="menu.chatsettings">5.チャット設定</button>
+            <button type="button" class="panel-tab" data-target="bookmark-panel" data-menu="menu-bookmarks" data-tab-key="menu.bookmarks">6.ブックマーク</button>
+            <button type="button" class="panel-tab" data-target="room-list-panel" data-menu="menu-rooms" data-tab-key="menu.rooms">7.部屋一覧</button>
+            <button type="button" class="panel-tab" data-target="server-settings-panel" data-menu="menu-serversettings" data-tab-key="menu.serversettings">8.サーバ設定</button>
+            <button type="button" class="panel-tab" data-target="server-log-panel" data-menu="menu-serverlog" data-tab-key="menu.serverlog">9.サーバ接続ログ</button>
+            <button type="button" class="panel-tab" data-target="ping-panel" data-menu="menu-ping" data-tab-key="menu.ping">10.Pingグラフ</button>
+            <button type="button" class="panel-tab" data-target="ccu-panel" data-menu="menu-ccu" data-tab-key="menu.ccu">11.同接グラフ</button>
+            <button type="button" class="panel-tab" data-target="settings-panel" data-menu="menu-settings" data-tab-key="menu.settings">12.設定</button>
+            <button type="button" class="panel-tab" data-target="debug-overlay" data-menu="menu-debug" data-tab-key="menu.debug">13.デバッグツール</button>
+            <button type="button" class="panel-tab" data-target="about-panel" data-menu="menu-about" data-tab-key="menu.about">14.tommieChatについて</button>
+        </div>
+        <button type="button" id="panel-tab-close" title="パネルを閉じる">❌️</button>
     </div>
 
     <div id="room-list-panel" style="display:none;">

@@ -298,7 +298,28 @@ export function setupDebugOverlay(game: GameScene): void {
         // GameScene 経由で他ファイルからも呼べるようにする
         (game as any).closeMenu = closeMenu;
 
+        // ポートレート判定: matchMedia が iOS Safari で取りこぼすことがあるため、
+        // 「ポートレート専用 CSS が menu-btn に適用されているか」で判定する
+        // （ポートレート時のみ #menu-btn は position: static、それ以外は position: fixed）
+        const isMobilePortrait = () => getComputedStyle(menuBtn).position === "static";
+
         menuBtn.addEventListener("click", () => {
+            // モバイルポートレート: パネル表示中はXボタン相当で閉じ、未表示なら既定パネルを開く
+            // （タブバーはパネル内に差し込まれるため、パネルが開けばタブバーも同時に表示される）
+            if (isMobilePortrait()) {
+                const tabBar = document.getElementById("panel-tab-bar");
+                const activeTab = tabBar?.querySelector<HTMLButtonElement>(".panel-tab.active");
+                if (activeTab) {
+                    document.getElementById(activeTab.dataset.menu || "")?.click();
+                } else {
+                    const savedMenuId = (document.body.dataset.tabLastMenu || "")
+                        || tabBar?.querySelector<HTMLButtonElement>(".panel-tab")?.dataset.menu
+                        || "";
+                    document.getElementById(savedMenuId)?.click();
+                }
+                return;
+            }
+            // PC / モバイルランドスケープ: 従来どおりポップアップメニュー
             if (menuPopup.classList.contains("open")) {
                 closeMenu();
             } else {
@@ -512,24 +533,11 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (anyVisible) {
                     savedPtDivider = gCk("ptDivider") || savedPtDivider;
                     if (ptDiv) ptDiv.style.display = "none";
-                    // 表示名パネルだけ表示中はデバイダーをパネル上端に合わせる
-                    const onlyDisplayName = toggleRegistry.every(reg => {
-                        const el = document.getElementById(reg.targetId);
-                        const vis = el && el.style.display !== "none";
-                        return reg.targetId === "displayname-panel" ? vis : !vis;
-                    });
-                    if (onlyDisplayName) {
-                        const dnPanel = document.getElementById("displayname-panel");
-                        if (dnPanel) {
-                            requestAnimationFrame(() => {
-                                const rect = dnPanel.getBoundingClientRect();
-                                document.documentElement.style.setProperty("--pt-divider", rect.top + "px");
-                                game.engine.resize();
-                            });
-                        }
-                    } else {
-                        document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
-                    }
+                    // パネルはタブバー込みで開くため、デバイダー位置は保存値をそのまま使う
+                    // （以前の onlyDisplayName 特殊対応は、開いた直後の --pt-divider が
+                    //  前回閉じた時の 100vh のままで rect.top を測ると画面外に固定される
+                    //  バグがあったため削除）
+                    document.documentElement.style.setProperty("--pt-divider", savedPtDivider);
                     document.body.classList.add("sp-panel-visible");
                     if (cvs) cvs.style.height = "";
                 } else {
@@ -674,6 +682,7 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-about",          "about-panel",           "menu.about",         "showAbout");
         makeToggle("menu-login",          "displayname-panel",     "menu.displayname",   "showDisplayName");
         makeToggle("menu-avatar",         "avatar-panel",          "menu.avatar",        "showAvatar");
+        makeToggle("menu-settings",       "settings-panel",        "menu.settings",      "showSettings");
 
         // 右上クリック: バッジ→サーバーログ、ユーザID→表示名変更、ping→Pingグラフ、FPS→デバッグツール
         const pdEl = document.getElementById("ping-display");
