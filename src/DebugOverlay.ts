@@ -544,7 +544,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 const cvs = document.getElementById("renderCanvas");
                 if (anyVisible) {
                     savedPtDivider = gCk("ptDivider") || savedPtDivider;
-                    if (ptDiv) ptDiv.style.display = "none";
+                    // パネル表示中も専用ドラッグハンドルとしてデバイダーを表示
+                    if (ptDiv) ptDiv.style.display = "";
                     // パネルはタブバー込みで開くため、デバイダー位置は保存値をそのまま使う
                     // （以前の onlyDisplayName 特殊対応は、開いた直後の --pt-divider が
                     //  前回閉じた時の 100vh のままで rect.top を測ると画面外に固定される
@@ -673,6 +674,11 @@ export function setupDebugOverlay(game: GameScene): void {
                 }
                 btn.textContent = (visible ? "　" : "✓") + " " + t(labelKey);
                 sCk(cookieKey, visible ? "0" : "1");
+                // モバイル復元用: 最後に開いたパネル ID を記録（閉じた場合はクリア）
+                if (isMobileMenu) {
+                    if (!visible) sCk("mobileLastPanel", targetId);
+                    else sCk("mobileLastPanel", "");
+                }
                 updateMobileLayout();
                 // モバイル: clampToViewportのインラインheight/widthをクリア
                 if (isMobileDev) {
@@ -695,6 +701,23 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-login",          "displayname-panel",     "menu.displayname",   "showDisplayName");
         makeToggle("menu-avatar",         "avatar-panel",          "menu.avatar",        "showAvatar");
         makeToggle("menu-settings",       "settings-panel",        "menu.settings",      "showSettings");
+
+        // モバイル: 最後に開いていたパネルを復元。
+        // mobileLastPanel クッキーに記録されたパネル ID を次フレームで開き直す
+        // （HTML デフォルト display:none を btn.click() で上書きし、位置・ラベルも復元）。
+        if (isMobileMenu) {
+            const lastPanelId = gCk("mobileLastPanel");
+            if (lastPanelId) {
+                const reg = toggleRegistry.find(r => r.targetId === lastPanelId);
+                if (reg) {
+                    const btn = document.getElementById(reg.btnId);
+                    const target = document.getElementById(reg.targetId);
+                    if (btn && target && target.style.display === "none") {
+                        requestAnimationFrame(() => btn.click());
+                    }
+                }
+            }
+        }
 
         // 右上クリック: バッジ→サーバーログ、ユーザID→表示名変更、ping→Pingグラフ、FPS→デバッグツール
         const pdEl = document.getElementById("ping-display");

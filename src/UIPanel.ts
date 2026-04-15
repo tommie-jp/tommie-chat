@@ -158,6 +158,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
         if (divider) {
             let dragging = false;
+            let lsRafPending = false;
             divider.addEventListener("pointerdown", (e: PointerEvent) => {
                 dragging = true;
                 divider.setPointerCapture(e.pointerId);
@@ -167,14 +168,28 @@ export function setupHtmlUI(game: GameScene): void {
                 if (!dragging) return;
                 const pct = Math.max(20, Math.min(80, (e.clientX / window.innerWidth) * 100));
                 document.documentElement.style.setProperty("--ls-divider", pct + "%");
-                game.engine.resize();
-                const reapply = (game as any).onChatOverlayReapply;
-                if (typeof reapply === "function") reapply();
-                for (const cb of game.onDividerMove) cb();
+                // engine.resize() は重いので rAF で 1 フレーム 1 回に間引く。
+                // resize 直後に scene.render() を同期呼び出ししてチラつきを防ぐ。
+                if (!lsRafPending) {
+                    lsRafPending = true;
+                    requestAnimationFrame(() => {
+                        lsRafPending = false;
+                        game.engine.resize();
+                        game.scene.render();
+                        const reapply = (game as any).onChatOverlayReapply;
+                        if (typeof reapply === "function") reapply();
+                        for (const cb of game.onDividerMove) cb();
+                    });
+                }
             });
             document.addEventListener("pointerup", () => {
                 if (dragging) {
                     dragging = false;
+                    game.engine.resize();
+                    game.scene.render();
+                    const reapply = (game as any).onChatOverlayReapply;
+                    if (typeof reapply === "function") reapply();
+                    for (const cb of game.onDividerMove) cb();
                     const v = getComputedStyle(document.documentElement).getPropertyValue("--ls-divider").trim();
                     if (v) setDivCk("lsDivider", v);
                 }
@@ -228,7 +243,8 @@ export function setupHtmlUI(game: GameScene): void {
                 const headerIds = ["user-list-header", "chat-history-header", "chat-settings-header",
                                    "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "room-list-header", "debug-title-bar", "about-panel-header",
                                    "avatar-header", "displayname-header", "settings-header"];
-                const EDGE_DEAD_ZONE_PX = 8;
+                // デバイダーがパネル上端に 2px しか被らないのでデッドゾーンは最小限
+                const EDGE_DEAD_ZONE_PX = 2;
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -279,18 +295,34 @@ export function setupHtmlUI(game: GameScene): void {
                     document.addEventListener("pointercancel", () => { pendingStart = null; });
                 }
             }
+            let rafPending = false;
             document.addEventListener("pointermove", (e: PointerEvent) => {
                 if (!dragging) return;
                 const vhPx = window.innerHeight;
                 const pct = Math.max(30, Math.min(75, ((e.clientY - dragOffsetPx) / vhPx) * 100));
                 document.documentElement.style.setProperty("--pt-divider", pct + "vh");
-                game.engine.resize();
-                const reapply = (game as any).onChatOverlayReapply;
-                if (typeof reapply === "function") reapply();
+                // engine.resize() は重いので rAF で 1 フレーム 1 回に間引く。
+                // resize 直後に scene.render() を同期呼び出ししないと
+                // フレームバッファがクリアされた状態で次描画まで一瞬黒く光る（チラつき）。
+                if (!rafPending) {
+                    rafPending = true;
+                    requestAnimationFrame(() => {
+                        rafPending = false;
+                        game.engine.resize();
+                        game.scene.render();
+                        const reapply = (game as any).onChatOverlayReapply;
+                        if (typeof reapply === "function") reapply();
+                    });
+                }
             });
             document.addEventListener("pointerup", () => {
                 if (dragging) {
                     dragging = false;
+                    // ドラッグ終了時に最終リサイズを確実に実行
+                    game.engine.resize();
+                    game.scene.render();
+                    const reapply = (game as any).onChatOverlayReapply;
+                    if (typeof reapply === "function") reapply();
                     const v = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim();
                     if (v) setDivCk("ptDivider", v);
                 }
@@ -1292,6 +1324,11 @@ export function setupHtmlUI(game: GameScene): void {
                 if (isMobileLandscape()) {
                     const cd = document.getElementById("coord-display");
                     if (cd && isElVisible(cd)) return cd.getBoundingClientRect().top;
+                }
+                // モバイルポートレート + パネル表示中: パネル上端（デバイダー位置）をアンカー
+                if (document.body.classList.contains("sp-panel-visible")) {
+                    const div = document.getElementById("portrait-divider");
+                    if (div && isElVisible(div)) return div.getBoundingClientRect().top;
                 }
                 const chat = document.getElementById("chat-container");
                 if (chat) return chat.getBoundingClientRect().top;

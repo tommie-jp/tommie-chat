@@ -1823,17 +1823,20 @@
 
             /* --- ポートレート: canvasの高さはポートレート専用メディアクエリで設定 --- */
 
-            /* --- ポートレート水平デバイダー --- */
+            /* --- ポートレート水平デバイダー ---
+               パネル (z:350) と重なる下半分は元々タップできないため、
+               ヒット領域はデバイダー線より上 24px に限定し z-index を上げる。
+               → 全領域タップ可能になり、パネル上部を隠すのは 2px のみ。 */
             #portrait-divider {
                 display: block;
                 position: fixed;
                 left: 0;
                 right: 0;
-                top: calc(var(--pt-divider, 60vh) - 10px);
-                height: 32px;
+                top: calc(var(--pt-divider, 60vh) - 22px);
+                height: 24px;
                 padding: 0;
                 background: transparent;
-                z-index: 300;
+                z-index: 360;
                 touch-action: none;
                 cursor: row-resize;
                 user-select: none;
@@ -1845,13 +1848,13 @@
                 left: 0;
                 right: 0;
                 top: 6px;
-                height: 20px;
+                height: 18px;
                 background: rgba(0,0,0,0.2);
             }
             #portrait-divider-knob {
                 position: absolute;
                 left: 50%;
-                top: 16px;
+                top: 15px;
                 transform: translate(-50%, -50%);
                 font-size: 20px;
                 color: #fff;
@@ -2277,6 +2280,8 @@
                 scrollbar-width: none;
                 -ms-overflow-style: none;
                 -webkit-overflow-scrolling: touch;
+                /* 横スクロールはブラウザ、垂直ドラッグは JS（パネルリサイズ）が担当 */
+                touch-action: pan-x;
             }
             #panel-tabs-scroll::-webkit-scrollbar { display: none; }
             .panel-tab {
@@ -2292,6 +2297,7 @@
                 white-space: nowrap;
                 cursor: pointer;
                 -webkit-tap-highlight-color: transparent;
+                touch-action: pan-x;
             }
             .panel-tab.active {
                 background: rgba(255,255,255,0.18);
@@ -2373,10 +2379,7 @@
             body.tab-panel-active #displayname-panel {
                 top: var(--pt-divider, 60vh) !important;
             }
-            /* ポートレート: パネル表示中はデバイダーを隠す */
-            body.sp-panel-visible #portrait-divider {
-                display: none !important;
-            }
+            /* ポートレート: パネル表示中もデバイダーをドラッグハンドルとして表示 */
             /* ポートレート: セリフ入力は常に全幅 */
             #chatInput {
                 flex-grow: 1 !important;
