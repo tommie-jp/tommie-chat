@@ -1066,7 +1066,10 @@ export class GameScene {
     }
 
     private handleResize(): void {
-        this.engine.resize(true);
+        this.engine.resize();
+        if (this.scene && this.scene.activeCamera) {
+            this.scene.render();
+        }
     }
 
     applyAvatarDepth(): void {
