@@ -180,10 +180,13 @@ export function setupHtmlUI(game: GameScene): void {
                 ptDivider.addEventListener("pointerdown", (e: PointerEvent) => startDrag(e, ptDivider));
             }
             // スマホ: パネルヘッダーのドラッグでもデバイダーを移動（ポートレートのみ）
+            // ただしヘッダー上端8px以内は境界線付近の誤操作防止のため反応させない。
+            // 表示名・アバター等のポップオーバー系パネルは編集用のため対象外。
             if (isMobileDev) {
                 const headerIds = ["user-list-header", "chat-history-header", "chat-settings-header",
                                    "server-settings-header", "server-log-header", "ping-header", "ccu-header", "bookmark-header", "room-list-header", "debug-title-bar", "about-panel-header",
-                                   "displayname-header", "avatar-header"];
+                                   "avatar-header"];
+                const EDGE_DEAD_ZONE_PX = 8;
                 for (const hid of headerIds) {
                     const hdr = document.getElementById(hid);
                     if (hdr) hdr.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -191,6 +194,8 @@ export function setupHtmlUI(game: GameScene): void {
                         if (window.matchMedia("(orientation: landscape)").matches) return;
                         const t = e.target as HTMLElement;
                         if (t.closest("[id$='-close']")) return; // ✕ボタンは除外
+                        const rect = hdr.getBoundingClientRect();
+                        if (e.clientY - rect.top < EDGE_DEAD_ZONE_PX) return; // 上端境界線付近は無視
                         startDrag(e, hdr);
                     });
                 }
