@@ -1,5 +1,6 @@
 // アプリバージョン・更新日の定数（ここだけ変更する）
 var APP_VERSION = "0.1.29";
+var APP_COMMIT_COUNTER = "1002";
 var APP_DATE    = "2026/04/15";
 
 document.title = "tommieChat " + APP_VERSION;
@@ -29,6 +30,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (ftEl) {
             var ftTip = "tommieChat\n"
                 + "バージョン " + APP_VERSION + "\n"
+                + "コミット番号 " + APP_COMMIT_COUNTER + "\n"
                 + "更新日 " + APP_DATE + "\n"
                 + "\n"
                 + "操作方法\n"
@@ -38,8 +40,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 + "\n\n© 2026 tommie.jp\n\nクリックすると「tommieChatについて」パネルを開きます。";
             ftEl.setAttribute("title", ftTip);
             ftEl.innerHTML = isMobile
-                ? '<span class="ft-label" style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + devTag + '</span>'
-                : '<span class="ft-label">tommieChat ' + APP_VERSION + ' ' + dateDot + devTag + '</span>';
+                ? '<span class="ft-label" style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + ' #' + APP_COMMIT_COUNTER + devTag + '</span>'
+                : '<span class="ft-label">tommieChat ' + APP_VERSION + ' ' + ' #' + APP_COMMIT_COUNTER + dateDot  + devTag + '</span>';
         }
     }
 

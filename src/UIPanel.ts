@@ -126,6 +126,8 @@ export function setupHtmlUI(game: GameScene): void {
                 const pct = Math.max(20, Math.min(80, (e.clientX / window.innerWidth) * 100));
                 document.documentElement.style.setProperty("--ls-divider", pct + "%");
                 game.engine.resize();
+                const reapply = (game as any).onChatOverlayReapply;
+                if (typeof reapply === "function") reapply();
                 for (const cb of game.onDividerMove) cb();
             });
             document.addEventListener("pointerup", () => {
@@ -199,6 +201,8 @@ export function setupHtmlUI(game: GameScene): void {
                 const pct = Math.max(30, Math.min(75, ((e.clientY - dragOffsetPx) / vhPx) * 100));
                 document.documentElement.style.setProperty("--pt-divider", pct + "vh");
                 game.engine.resize();
+                const reapply = (game as any).onChatOverlayReapply;
+                if (typeof reapply === "function") reapply();
             });
             document.addEventListener("pointerup", () => {
                 if (dragging) {
@@ -955,9 +959,20 @@ export function setupHtmlUI(game: GameScene): void {
     }
     // ===============================================
 
+    // モバイル ポートレート / ランドスケープ / デスクトップ で別々にオーバレイ設定を保存
+    const getOverlayMode = (): "ls" | "pt" | "dt" => {
+        if (!matchMedia("(pointer: coarse) and (min-resolution: 2dppx)").matches) return "dt";
+        return matchMedia("(orientation: landscape)").matches ? "ls" : "pt";
+    };
+    const ckKey = (base: string): string => {
+        const m = getOverlayMode();
+        return m === "dt" ? base : base + (m === "ls" ? "Ls" : "Pt");
+    };
     // 起動時に chatOlMax クッキーを読んで初期値を決定（DebugOverlay 初期化より前に適用するため）
     const readChatOlMaxCookie = (): number => {
-        const m = document.cookie.match(/(?:^|; )chatOlMax=([^;]*)/);
+        const key = ckKey("chatOlMax");
+        const re = new RegExp("(?:^|; )" + key + "=([^;]*)");
+        const m = document.cookie.match(re);
         if (!m) return 5;
         const v = parseInt(decodeURIComponent(m[1]), 10);
         if (!Number.isFinite(v) || v < 0 || v > 20) return 5;
@@ -1175,21 +1190,165 @@ export function setupHtmlUI(game: GameScene): void {
                 chatOverlay.style.setProperty("top", "auto", "important");
                 chatOverlay.style.setProperty("right", "auto", "important");
             };
-            // bottom 値をクランプ（overlay が画面外にはみ出さないように）
-            const clampBottom = (left: number, bottom: number): { left: number; bottom: number } => {
+            // ===== アンカー基準の垂直位置 =====
+            // 位置はアンカー上端からの「ギャップ」で保存し、アンカーが動けば overlay も相対移動。
+            // アンカー: パネル表示中 → 最も上にあるパネルヘッダー上端、非表示 → #chat-container 上端。
+            const PANEL_HEADER_IDS = [
+                "user-list-header", "chat-history-header", "chat-settings-header",
+                "server-settings-header", "server-log-header", "ping-header",
+                "ccu-header", "bookmark-header", "room-list-header",
+                "debug-title-bar", "about-panel-header", "displayname-header", "avatar-header",
+            ];
+            const isElVisible = (el: HTMLElement): boolean => {
+                if (el.style.display === "none") return false;
+                const cs = getComputedStyle(el);
+                if (cs.display === "none" || cs.visibility === "hidden") return false;
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+            };
+            const isMobileLandscape = () =>
+                matchMedia("(pointer: coarse) and (min-resolution: 2dppx) and (orientation: landscape)").matches;
+            const getAnchorTopY = (): number => {
+                // モバイルランドスケープ: 部屋名 (#coord-display) 上端をアンカー
+                if (isMobileLandscape()) {
+                    const cd = document.getElementById("coord-display");
+                    if (cd && isElVisible(cd)) return cd.getBoundingClientRect().top;
+                }
+                let minTop = Infinity;
+                for (const id of PANEL_HEADER_IDS) {
+                    const el = document.getElementById(id);
+                    if (!el || !isElVisible(el)) continue;
+                    const r = el.getBoundingClientRect();
+                    if (r.top < minTop) minTop = r.top;
+                }
+                if (minTop !== Infinity) return minTop;
+                const chat = document.getElementById("chat-container");
+                if (chat) return chat.getBoundingClientRect().top;
+                return window.innerHeight - 60;
+            };
+            // モバイルランドスケープ: 幅をデバイダーに合わせて Canvas 領域内に収める
+            const applyLandscapeWidth = () => {
+                if (!isMobileLandscape()) return;
                 const cvs = document.getElementById("renderCanvas");
-                const cr = cvs ? cvs.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight } as DOMRect;
+                if (!cvs) return;
+                const cr = cvs.getBoundingClientRect();
+                const w = Math.max(80, Math.round(cr.width - 24));
+                chatOverlay.style.setProperty("width", w + "px", "important");
+                chatOverlay.style.setProperty("max-width", "none", "important");
+                // 左端も Canvas 左端に揃える（ドラッグで横にずれていても戻す）
+                chatOverlay.style.setProperty("left", Math.round(cr.left + 8) + "px", "important");
+                chatOverlay.style.setProperty("right", "auto", "important");
+            };
+            // ギャップ値を取得（pointerY - overlayBottomY、正値=overlay がアンカーより上）
+            const getSavedGap = (): number => {
+                const g = getCk(ckKey("chatOlGap"));
+                if (g !== null) {
+                    const v = parseInt(g);
+                    if (!isNaN(v)) return v;
+                }
+                // 旧形式: chatOlBottom から現在のアンカーでギャップを逆算して初回適用
+                const b = getCk(ckKey("chatOlBottom"));
+                if (b !== null) {
+                    const bv = parseInt(b);
+                    if (!isNaN(bv)) {
+                        const overlayBottomY = window.innerHeight - bv;
+                        return Math.round(getAnchorTopY() - overlayBottomY);
+                    }
+                }
+                return 4; // デフォルト: アンカー直上 4px
+            };
+            // 位置/サイズを Canvas（アバター領域）内にクランプ
+            // 戻り値: 適用された矩形（実際の left/width/bottom）
+            const clampOverlayToCanvas = () => {
+                const cvs = document.getElementById("renderCanvas");
+                if (!cvs) return;
+                const cr = cvs.getBoundingClientRect();
                 const w = chatOverlay.offsetWidth;
                 const h = chatOverlay.offsetHeight;
-                const L = Math.max(cr.left + 4, Math.min(cr.right - w - 4, left));
-                const minBottom = window.innerHeight - cr.bottom + 4;
-                const maxBottom = window.innerHeight - cr.top - h - 4;
-                const B = Math.max(minBottom, Math.min(maxBottom, bottom));
-                return { left: L, bottom: B };
+                // 幅: Canvas 幅を超えない
+                const maxW = Math.max(OL_WIDTH_MIN, Math.round(cr.width - 16));
+                if (w > maxW) {
+                    chatOverlay.style.setProperty("width", maxW + "px", "important");
+                    chatOverlay.style.setProperty("max-width", "none", "important");
+                }
+                const newW = Math.min(w, maxW);
+                // 左端: Canvas 左端〜右端-幅 にクランプ
+                const r = chatOverlay.getBoundingClientRect();
+                const L = Math.max(cr.left + 4, Math.min(cr.right - newW - 4, r.left));
+                if (Math.abs(L - r.left) > 0.5) {
+                    chatOverlay.style.setProperty("left", Math.round(L) + "px", "important");
+                    chatOverlay.style.setProperty("right", "auto", "important");
+                }
+                // 下端: Canvas 下端より下に出ない / 上端 + 高さ + 4 を下回らない
+                const overlayBottomY = window.innerHeight - parseFloat(chatOverlay.style.bottom || "0");
+                const minBottomY = cr.top + h + 4;
+                const maxBottomY = cr.bottom - 4;
+                const clampedBottomY = Math.max(minBottomY, Math.min(maxBottomY, overlayBottomY));
+                if (Math.abs(clampedBottomY - overlayBottomY) > 0.5) {
+                    chatOverlay.style.setProperty("bottom", Math.round(window.innerHeight - clampedBottomY) + "px", "important");
+                    chatOverlay.style.setProperty("top", "auto", "important");
+                }
+            };
+            // ギャップからインライン bottom を算出し適用
+            const applyOverlayFromGap = (gap: number) => {
+                const anchorTop = getAnchorTopY();
+                const overlayBottomY = anchorTop - gap;
+                const bottom = Math.max(0, window.innerHeight - overlayBottomY);
+                chatOverlay.style.setProperty("bottom", Math.round(bottom) + "px", "important");
+                chatOverlay.style.setProperty("top", "auto", "important");
+            };
+            const saveGapFromCurrent = () => {
+                const r = chatOverlay.getBoundingClientRect();
+                const overlayBottomY = r.bottom;
+                const gap = Math.round(getAnchorTopY() - overlayBottomY);
+                setCk(ckKey("chatOlGap"), String(gap));
+            };
+            const reapplyOverlayVertical = () => {
+                applyLandscapeWidth();
+                applyOverlayFromGap(getSavedGap());
+                clampOverlayToCanvas();
+            };
+            // モード（ポートレート/ランドスケープ/デスクトップ）切替時に幅・行数・位置を再読込
+            let lastOverlayMode = getOverlayMode();
+            const reloadForMode = () => {
+                const m = getOverlayMode();
+                if (m === lastOverlayMode) return;
+                lastOverlayMode = m;
+                // 行数
+                const sm = getCk(ckKey("chatOlMax"));
+                if (sm !== null) {
+                    const v = parseInt(sm);
+                    if (Number.isFinite(v) && v >= 0 && v <= OL_MAX_LIMIT && v !== chatOverlayMax) {
+                        chatOverlayMax = v;
+                        (game as any).chatOverlayMax = v;
+                        trimOlVisibility();
+                        applyOverlayMinHeight();
+                        syncSelect(v);
+                    }
+                }
+                // 幅
+                chatOverlay.style.removeProperty("width");
+                chatOverlay.style.removeProperty("max-width");
+                const sw = getCk(ckKey("chatOlWidth"));
+                if (sw) {
+                    const px = parseInt(sw);
+                    if (px >= OL_WIDTH_MIN) {
+                        chatOverlay.style.setProperty("width", Math.min(px, getMaxWidth()) + "px", "important");
+                        chatOverlay.style.setProperty("max-width", "none", "important");
+                    }
+                }
+                // 左端
+                chatOverlay.style.removeProperty("left");
+                const sl = getCk(ckKey("chatOlLeft"));
+                if (sl !== null) {
+                    chatOverlay.style.setProperty("left", parseInt(sl) + "px", "important");
+                    chatOverlay.style.setProperty("right", "auto", "important");
+                }
+                requestAnimationFrame(reapplyOverlayVertical);
             };
 
             // 起動時: 幅クッキーを復元
-            const savedW = getCk("chatOlWidth");
+            const savedW = getCk(ckKey("chatOlWidth"));
             if (savedW) {
                 const px = parseInt(savedW);
                 if (px >= OL_WIDTH_MIN) {
@@ -1198,21 +1357,48 @@ export function setupHtmlUI(game: GameScene): void {
                     chatOverlay.style.setProperty("max-width", "none", "important");
                 }
             }
-            // 起動時: 位置クッキーを復元（bottom アンカーで保存されているので高さ変化に影響されない）
-            const savedLeft = getCk("chatOlLeft"), savedBottom = getCk("chatOlBottom");
-            if (savedLeft !== null && savedBottom !== null) {
-                const { left, bottom } = clampBottom(parseInt(savedLeft), parseInt(savedBottom));
-                setOverlayPosByBottom(left, bottom);
-            } else {
-                // 旧形式（top保存）からのマイグレーション: 次回保存時に bottom に置き換わる
-                const savedTop = getCk("chatOlTop");
-                if (savedLeft !== null && savedTop !== null) {
-                    requestAnimationFrame(() => {
-                        const { left, top } = clampToCanvas(parseInt(savedLeft), parseInt(savedTop));
-                        setOverlayPos(left, top);
-                    });
-                }
+            // 起動時: 位置クッキーを復元（水平=絶対px, 垂直=アンカー相対ギャップ）
+            const savedLeft = getCk(ckKey("chatOlLeft"));
+            if (savedLeft !== null) {
+                const cvs = document.getElementById("renderCanvas");
+                const cr = cvs ? cvs.getBoundingClientRect() : { left: 0, right: window.innerWidth } as DOMRect;
+                const w = chatOverlay.offsetWidth;
+                const L = Math.max(cr.left + 4, Math.min(cr.right - w - 4, parseInt(savedLeft)));
+                chatOverlay.style.setProperty("left", L + "px", "important");
+                chatOverlay.style.setProperty("right", "auto", "important");
             }
+            // 垂直: DOM 構築が落ち着いてからアンカー基準で適用
+            requestAnimationFrame(() => reapplyOverlayVertical());
+            setTimeout(() => reapplyOverlayVertical(), 300);
+
+            // アンカー変動時に相対位置を再適用
+            window.addEventListener("resize", () => {
+                reloadForMode();
+                requestAnimationFrame(reapplyOverlayVertical);
+            });
+            window.addEventListener("orientationchange", () => setTimeout(() => {
+                reloadForMode();
+                reapplyOverlayVertical();
+            }, 200));
+            // body class（sp-panel-visible）・各パネル表示・chat-container リサイズを監視
+            new MutationObserver(() => requestAnimationFrame(reapplyOverlayVertical))
+                .observe(document.body, { attributes: true, attributeFilter: ["class"] });
+            const panelObsIds = ["user-list-panel", "chat-history-panel", "chat-settings-panel",
+                "server-settings-panel", "server-log-panel", "ping-panel",
+                "ccu-panel", "bookmark-panel", "room-list-panel", "debug-overlay",
+                "about-panel", "displayname-panel", "avatar-panel"];
+            for (const id of panelObsIds) {
+                const el = document.getElementById(id);
+                if (!el) continue;
+                new MutationObserver(() => requestAnimationFrame(reapplyOverlayVertical))
+                    .observe(el, { attributes: true, attributeFilter: ["style", "class"] });
+            }
+            const chatCont = document.getElementById("chat-container");
+            if (chatCont) {
+                new ResizeObserver(() => requestAnimationFrame(reapplyOverlayVertical)).observe(chatCont);
+            }
+            // デバイダー移動でも再適用
+            (game as any).onChatOverlayReapply = reapplyOverlayVertical;
 
             // --- タップゾーン: 短タップでハンドルをトグル／ドラッグで移動 ---
             // iOS Safari は pointer events と touch events を両方発火する場合があるので
@@ -1260,8 +1446,8 @@ export function setupHtmlUI(game: GameScene): void {
                 tapPointerId = -1;
                 if (tapDragging) {
                     const r = chatOverlay.getBoundingClientRect();
-                    setCk("chatOlLeft", String(Math.round(r.left)));
-                    setCk("chatOlBottom", String(Math.round(window.innerHeight - r.bottom)));
+                    setCk(ckKey("chatOlLeft"), String(Math.round(r.left)));
+                    saveGapFromCurrent();
                     tapDragging = false;
                     return;
                 }
@@ -1302,8 +1488,8 @@ export function setupHtmlUI(game: GameScene): void {
                 if (e.changedTouches.length !== 1) return;
                 if (touchDragging) {
                     const r = chatOverlay.getBoundingClientRect();
-                    setCk("chatOlLeft", String(Math.round(r.left)));
-                    setCk("chatOlBottom", String(Math.round(window.innerHeight - r.bottom)));
+                    setCk(ckKey("chatOlLeft"), String(Math.round(r.left)));
+                    saveGapFromCurrent();
                     touchDragging = false;
                     e.preventDefault();
                     return;
@@ -1378,15 +1564,15 @@ export function setupHtmlUI(game: GameScene): void {
                     // ドラッグ終了: left + bottom アンカーに統一し位置を保存
                     const r = chatOverlay.getBoundingClientRect();
                     setOverlayPos(r.left, r.top);
-                    setCk("chatOlLeft", String(Math.round(r.left)));
-                    setCk("chatOlBottom", String(Math.round(window.innerHeight - r.bottom)));
+                    setCk(ckKey("chatOlLeft"), String(Math.round(r.left)));
+                    saveGapFromCurrent();
                     if (chatOverlayMax !== startMax) {
-                        setCk("chatOlMax", String(chatOverlayMax));
+                        setCk(ckKey("chatOlMax"), String(chatOverlayMax));
                         syncSelect(chatOverlayMax);
                         applyOverlayMinHeight();
                     }
                     const w = Math.round(chatOverlay.getBoundingClientRect().width);
-                    if (Math.abs(w - Math.round(startW)) >= 1) setCk("chatOlWidth", String(w));
+                    if (Math.abs(w - Math.round(startW)) >= 1) setCk(ckKey("chatOlWidth"), String(w));
                 };
                 el.addEventListener("pointerup", endDrag);
                 el.addEventListener("pointercancel", endDrag);
