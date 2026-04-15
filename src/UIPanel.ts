@@ -3751,6 +3751,7 @@ export function setupHtmlUI(game: GameScene): void {
 
         // コンテンツ初期化（言語切替時にも再呼び出し）
         const ver = (window as any).APP_VERSION || "";
+        const commit = (window as any).APP_COMMIT_COUNTER || "";
         const date = (window as any).APP_DATE || "";
         const buildAboutContent = () => {
             const nameEl = document.getElementById("about-app-name");
@@ -3758,7 +3759,7 @@ export function setupHtmlUI(game: GameScene): void {
             const dateEl = document.getElementById("about-app-date");
             const creditsEl = document.getElementById("about-app-credits");
             if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommieChat';
-            if (verEl) verEl.textContent = "Ver. " + ver;
+            if (verEl) verEl.textContent = "Ver. " + ver + (commit ? " #" + commit : "");
             if (dateEl) dateEl.textContent = t("about.date_label") + " " + date;
             if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
                 + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'
