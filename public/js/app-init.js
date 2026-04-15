@@ -1,6 +1,6 @@
 // アプリバージョン・更新日の定数（ここだけ変更する）
 var APP_VERSION = "0.1.29";
-var APP_COMMIT_COUNTER = "1002";
+var APP_COMMIT_COUNTER = "1003";
 var APP_DATE    = "2026/04/15";
 
 document.title = "tommieChat " + APP_VERSION;
@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded", function() {
         var devTag = "";
         if (isDev) {
             var now = new Date();
-            devTag = " #" + ("0" + now.getHours()).slice(-2) + ("0" + now.getMinutes()).slice(-2);
+            devTag = " " + ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
         }
         var isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
         var ftEl = document.getElementById("app-footer-text");
@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", function() {
             ftEl.setAttribute("title", ftTip);
             ftEl.innerHTML = isMobile
                 ? '<span class="ft-label" style="color:#333;text-shadow:0 0 3px #fff, 0 0 6px #fff;">tommieChat ' + APP_VERSION + ' #' + APP_COMMIT_COUNTER + devTag + '</span>'
-                : '<span class="ft-label">tommieChat ' + APP_VERSION + ' ' + ' #' + APP_COMMIT_COUNTER + dateDot  + devTag + '</span>';
+                : '<span class="ft-label">tommieChat ' + APP_VERSION + ' #' + APP_COMMIT_COUNTER + ' ' + dateDot + devTag + '</span>';
         }
     }
 

@@ -4,6 +4,7 @@ import { profSetEnabled, profReset, profDump } from "./Profiler";
 
 declare const APP_VERSION: string;
 declare const APP_DATE: string;
+declare const APP_COMMIT_COUNTER: string | number;
 
 // console.log / warn / error に時刻プレフィックスを付与
 for (const method of ["log", "warn", "error"] as const) {
@@ -15,7 +16,7 @@ for (const method of ["log", "warn", "error"] as const) {
     };
 }
 
-console.log(`tommieChat v${APP_VERSION} (${APP_DATE})`);
+console.log(`tommieChat v${APP_VERSION} #${APP_COMMIT_COUNTER} (${APP_DATE})`);
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 if (canvas) {
