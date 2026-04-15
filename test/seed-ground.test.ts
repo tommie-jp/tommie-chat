@@ -126,9 +126,15 @@ describe('seed-ground', () => {
         await sleep(500);
 
         // ブロック設置
+        // サーバ rateLimitBlock=20/sec を超えると黙ってドロップされる。
+        // 安全マージンを取り 18req/sec ≒ 56ms 間隔で送信する。
+        const SEND_INTERVAL_MS = 56;
         let total = 0;
         let skipped = 0;
         const size = GROUND_MAX - GROUND_MIN + 1;
+        const totalCells = size * (GROUND_MAX_Z - GROUND_MIN_Z + 1);
+        const estSec = Math.ceil((totalCells * SEND_INTERVAL_MS) / 1000);
+        console.log(`  送信予定: ${totalCells}件（推定 ${estSec}秒）`);
         for (let gx = GROUND_MIN; gx <= GROUND_MAX; gx++) {
             for (let gz = GROUND_MIN_Z; gz <= GROUND_MAX_Z; gz++) {
                 const color = getColor(gx, gz);
@@ -142,10 +148,10 @@ describe('seed-ground', () => {
                         JSON.stringify({ gx, gz, blockId: 1, r: color.r, g: color.g, b: color.b, a: 255 }));
                     total++;
                 }
+                await sleep(SEND_INTERVAL_MS);
             }
             if ((gx - GROUND_MIN) % 8 === 7) {
                 console.log(`  進捗: ${gx - GROUND_MIN + 1}/${size}行`);
-                await sleep(100);
             }
         }
 
@@ -153,5 +159,5 @@ describe('seed-ground', () => {
 
         await sleep(1000);
         socket.disconnect(false);
-    }, 60_000);
+    }, 600_000);
 });
