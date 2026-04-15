@@ -448,6 +448,7 @@ export class GameScene {
         // 注意: freeze() は INSTANCESCOLOR 定義のシェーダ反映を阻害するため呼ばない
         this.blockMatOpaque = new StandardMaterial("blockInstMatOpaque", this.scene);
         this.blockMatOpaque.diffuseColor = new Color3(1, 1, 1);
+        this.blockMatOpaque.specularColor = new Color3(0.2, 0.2, 0.2);
 
         this.blockSrcOpaque = MeshBuilder.CreateBox("blockSrcOpaque", { size: 1 }, this.scene);
         this.blockSrcOpaque.material = this.blockMatOpaque;
@@ -465,6 +466,7 @@ export class GameScene {
         // 半透明ソース
         this.blockMatAlpha = new StandardMaterial("blockInstMatAlpha", this.scene);
         this.blockMatAlpha.diffuseColor = new Color3(1, 1, 1);
+        this.blockMatAlpha.specularColor = new Color3(0.2, 0.2, 0.2);
         this.blockMatAlpha.transparencyMode = Material.MATERIAL_ALPHABLEND;
         this.blockMatAlpha.alpha = 1.0;
 
@@ -527,6 +529,48 @@ export class GameScene {
         src.thinInstanceBufferUpdated("matrix");
         if (info.alpha) this.blockFreeSlotsAlpha.push(info.slot);
         else this.blockFreeSlotsOpaque.push(info.slot);
+        // 空きスロットが過半数を占めたらバッファを圧縮（Polys/Indices を実数に合わせる）
+        const freeLen = info.alpha ? this.blockFreeSlotsAlpha.length : this.blockFreeSlotsOpaque.length;
+        const count = info.alpha ? this.blockSlotCountAlpha : this.blockSlotCountOpaque;
+        if (freeLen * 2 >= count && count > 0) {
+            this.compactBlockSlots(info.alpha);
+        }
+    }
+
+    /** 指定バケットのスロットを詰めて thinInstanceCount を実アクティブ数に揃える */
+    private compactBlockSlots(alpha: boolean): void {
+        const src = alpha ? this.blockSrcAlpha! : this.blockSrcOpaque!;
+        const mBuf = alpha ? this.blockMatrixBufAlpha! : this.blockMatrixBufOpaque!;
+        const cBuf = alpha ? this.blockColorBufAlpha! : this.blockColorBufOpaque!;
+        const cap = mBuf.length / 16;
+        const newMat = new Float32Array(16 * cap);
+        const newCol = new Float32Array(4 * cap);
+        let newSlot = 0;
+        for (const [key, info] of this.blockSlotByKey) {
+            if (info.alpha !== alpha) continue;
+            const oldOff = info.slot * 16;
+            const newOff = newSlot * 16;
+            for (let i = 0; i < 16; i++) newMat[newOff + i] = mBuf[oldOff + i];
+            const oldCOff = info.slot * 4;
+            const newCOff = newSlot * 4;
+            for (let i = 0; i < 4; i++) newCol[newCOff + i] = cBuf[oldCOff + i];
+            this.blockSlotByKey.set(key, { alpha, slot: newSlot });
+            newSlot++;
+        }
+        if (alpha) {
+            this.blockMatrixBufAlpha = newMat;
+            this.blockColorBufAlpha = newCol;
+            this.blockFreeSlotsAlpha.length = 0;
+            this.blockSlotCountAlpha = newSlot;
+        } else {
+            this.blockMatrixBufOpaque = newMat;
+            this.blockColorBufOpaque = newCol;
+            this.blockFreeSlotsOpaque.length = 0;
+            this.blockSlotCountOpaque = newSlot;
+        }
+        src.thinInstanceSetBuffer("matrix", newMat, 16, false);
+        src.thinInstanceSetBuffer("color", newCol, 4, false);
+        src.thinInstanceCount = newSlot;
     }
 
     placeBlock(gx: number, gz: number, blockId: number, r: number, g: number, b: number, a = 255): void {
