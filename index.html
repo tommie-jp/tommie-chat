@@ -1552,10 +1552,9 @@
         }
 
         /* ===== ハンバーガーメニュー ===== */
+        /* PC／モバイル共通: セリフ入力コントロール（#chat-row）の左にインライン配置 */
         #menu-btn {
-            position: fixed;
-            top: 8px;
-            left: 15px;
+            position: static;
             width: 24px;
             height: 24px;
             background: rgba(0, 0, 0, 0.55);
@@ -1569,6 +1568,7 @@
             align-items: center;
             gap: 3px;
             padding: 0;
+            flex-shrink: 0;
         }
         #menu-btn:hover {
             background: rgba(0, 0, 0, 0.75);

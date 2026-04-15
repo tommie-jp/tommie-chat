@@ -298,15 +298,13 @@ export function setupDebugOverlay(game: GameScene): void {
         // GameScene 経由で他ファイルからも呼べるようにする
         (game as any).closeMenu = closeMenu;
 
-        // モバイル判定: matchMedia が iOS Safari で取りこぼすことがあるため、
-        // 「モバイル専用 CSS が menu-btn に適用されているか」で判定する
-        // （モバイル時のみ #menu-btn は position: static、それ以外は position: fixed）
-        const isMobileMenuBtn = () => getComputedStyle(menuBtn).position === "static";
+        // モバイル判定: タッチ操作かつ高DPIのときタブバー方式、それ以外（PC）はポップアップメニュー
+        const isMobileMenuMode = () => matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
 
         menuBtn.addEventListener("click", () => {
             // モバイル（ポートレート／ランドスケープ共通）: パネル表示中はXボタン相当で閉じ、未表示なら既定パネルを開く
             // （タブバーはパネル内に差し込まれるため、パネルが開けばタブバーも同時に表示される）
-            if (isMobileMenuBtn()) {
+            if (isMobileMenuMode()) {
                 const tabBar = document.getElementById("panel-tab-bar");
                 const activeTab = tabBar?.querySelector<HTMLButtonElement>(".panel-tab.active");
                 if (activeTab) {
@@ -325,6 +323,20 @@ export function setupDebugOverlay(game: GameScene): void {
             } else {
                 menuPopup.classList.remove("menu-fade-out");
                 menuPopup.classList.add("open");
+                // ハンバーガーアイコン付近に配置（上側優先、収まらなければ下側）
+                const btnRect = menuBtn.getBoundingClientRect();
+                menuPopup.style.left = Math.max(4, btnRect.left) + "px";
+                menuPopup.style.right = "auto";
+                // 一旦表示して高さ測定
+                menuPopup.style.top = "0px";
+                const popupH = menuPopup.getBoundingClientRect().height;
+                const spaceAbove = btnRect.top;
+                const spaceBelow = window.innerHeight - btnRect.bottom;
+                if (popupH + 4 <= spaceAbove || spaceAbove >= spaceBelow) {
+                    menuPopup.style.top = Math.max(4, btnRect.top - popupH - 4) + "px";
+                } else {
+                    menuPopup.style.top = (btnRect.bottom + 4) + "px";
+                }
             }
         });
         // iOS: 長押しコピーメニュー抑制
