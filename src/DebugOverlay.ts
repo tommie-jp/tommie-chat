@@ -2056,11 +2056,20 @@ export function setupDebugOverlay(game: GameScene): void {
                 charRow: parseInt(selectedThumb.dataset.charRow ?? "0", 10),
             };
         };
+        const isAppliedThumb = (el: HTMLCanvasElement): boolean => {
+            return el.dataset.url === game.playerTextureUrl
+                && parseInt(el.dataset.charCol ?? "-1", 10) === (game.playerCharCol ?? 0)
+                && parseInt(el.dataset.charRow ?? "-1", 10) === (game.playerCharRow ?? 0);
+        };
         const highlightSelectedThumb = () => {
             if (!avThumbScroll) return;
             const items = avThumbScroll.querySelectorAll<HTMLCanvasElement>(".avPanel-thumb-item");
             items.forEach((el) => {
-                if (el === selectedThumb) {
+                // 赤=適用済み（優先）, 青=選択中（プレビュー）
+                if (isAppliedThumb(el)) {
+                    el.style.outline = "2px solid #e24a4a";
+                    el.style.background = "rgba(226,74,74,0.15)";
+                } else if (el === selectedThumb) {
                     el.style.outline = "2px solid #4a90e2";
                     el.style.background = "rgba(74,144,226,0.15)";
                 } else {
@@ -2068,6 +2077,20 @@ export function setupDebugOverlay(game: GameScene): void {
                     el.style.background = "rgba(0,0,0,0.05)";
                 }
             });
+            // プレビュー枠: 適用済みと一致なら赤、それ以外は青
+            if (avPreview) {
+                const v = getCurrentVariant();
+                const isApplied = !!v && v.url === game.playerTextureUrl
+                    && v.charCol === (game.playerCharCol ?? 0)
+                    && v.charRow === (game.playerCharRow ?? 0);
+                if (isApplied) {
+                    avPreview.style.border = "2px solid #e24a4a";
+                    avPreview.style.background = "rgba(226,74,74,0.15)";
+                } else {
+                    avPreview.style.border = "2px solid #4a90e2";
+                    avPreview.style.background = "rgba(74,144,226,0.15)";
+                }
+            }
             if (selectedThumb && avThumbScroll) {
                 const r = selectedThumb.getBoundingClientRect();
                 const sr = avThumbScroll.getBoundingClientRect();
@@ -2120,6 +2143,23 @@ export function setupDebugOverlay(game: GameScene): void {
             pendingRestore = null;
             updatePreview();
         };
+        // ダブルタップで即時決定（avPreview のクリックと同じ動作）
+        let lastTapThumb: HTMLCanvasElement | null = null;
+        let lastTapTs = 0;
+        const DBLTAP_MS = 300;
+        const handleThumbTap = (canvas: HTMLCanvasElement) => {
+            const now = performance.now();
+            const isDbl = (lastTapThumb === canvas) && (now - lastTapTs < DBLTAP_MS);
+            selectThumb(canvas);
+            if (isDbl) {
+                lastTapThumb = null;
+                lastTapTs = 0;
+                if (avPreview) avPreview.click();
+            } else {
+                lastTapThumb = canvas;
+                lastTapTs = now;
+            }
+        };
         const tryRestoreSelection = () => {
             if (!avThumbScroll || !pendingRestore) return;
             const match = avThumbScroll.querySelector<HTMLCanvasElement>(
@@ -2168,7 +2208,7 @@ export function setupDebugOverlay(game: GameScene): void {
                                 canvas.dataset.charRow = String(cr);
                                 canvas.style.cssText = "width:48px;height:48px;image-rendering:pixelated;background:rgba(0,0,0,0.05);border-radius:3px;flex-shrink:0;cursor:pointer;";
                                 canvas.title = (nC * nR > 1) ? `${filename} [${cc},${cr}]` : filename;
-                                canvas.addEventListener("click", () => selectThumb(canvas));
+                                canvas.addEventListener("click", () => handleThumbTap(canvas));
                                 drawSprite(canvas, cached, cc, cr, 1);  // frame=1 静止
                                 group.appendChild(canvas);
                                 variantCount++;
@@ -2276,6 +2316,8 @@ export function setupDebugOverlay(game: GameScene): void {
                 if (dbgCol) dbgCol.value = String(v.charCol);
                 if (dbgRow) dbgRow.value = String(v.charRow);
                 spriteApplyBtn.click();
+                // 適用後にハイライトを更新（赤=適用済みを反映）
+                requestAnimationFrame(() => highlightSelectedThumb());
             });
         }
     }
