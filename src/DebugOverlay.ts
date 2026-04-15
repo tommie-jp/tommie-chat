@@ -2206,7 +2206,6 @@ export function setupDebugOverlay(game: GameScene): void {
                     canvas.dataset.charCol = String(v.charCol);
                     canvas.dataset.charRow = String(v.charRow);
                     canvas.style.cssText = "width:48px;height:48px;image-rendering:pixelated;background:rgba(0,0,0,0.05);border:2px solid transparent;border-radius:3px;flex-shrink:0;cursor:pointer;box-sizing:border-box;";
-                    canvas.title = (v.url.split("/").pop() ?? "") + ` [${v.charCol},${v.charRow}]`;
                     canvas.addEventListener("click", () => handleThumbTap(canvas));
                     avHistory.appendChild(canvas);
                     loadCached(v.url).then((cached) => {
