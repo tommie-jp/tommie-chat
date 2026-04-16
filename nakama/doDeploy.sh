@@ -494,6 +494,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host minio:9000;
         proxy_buffering off;
+        proxy_intercept_errors on;
     }
 
     # /s3/ の他パスは全て拒否
