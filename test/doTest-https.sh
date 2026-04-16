@@ -114,6 +114,7 @@ check "HTTPS Content-Type: text/html（実際: ${HTTPS_CT:-なし}）" "$(echo "
 # 8. WebSocket プロキシ確認（HTTP Upgrade ヘッダーが通るか）
 echo "[8/11] WebSocket プロキシ ..."
 WS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/ws" \
+    -H "Origin: https://${DOMAIN}" \
     -H "Upgrade: websocket" -H "Connection: upgrade" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGVzdA==" \
     --connect-timeout 5 --max-time 10 2>/dev/null)
 # WebSocket は 101 (Switching Protocols)、400 (Bad Request)、401 (Unauthorized) が期待値（Nakama に到達している）
@@ -123,6 +124,7 @@ check "WebSocket プロキシ (HTTP ${WS_CODE})" "$([ "$WS_CODE" = "101" ] || [ 
 # 9. Nakama API プロキシ確認
 echo "[9/11] Nakama API プロキシ ..."
 API_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/v2/account/authenticate/device?create=false" \
+    -H "Origin: https://${DOMAIN}" \
     -X POST -H "Content-Type: application/json" -d '{}' \
     --connect-timeout 5 --max-time 10 2>/dev/null)
 # 認証なしなので 401 が期待値（Nakama に到達している証拠）
