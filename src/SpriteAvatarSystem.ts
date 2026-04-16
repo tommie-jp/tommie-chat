@@ -52,6 +52,8 @@ export class SpriteAvatarSystem {
     private standBaseVisible = false;
     // 読み込み失敗した URL を記憶し、同じ URL の再リクエストを防止する
     private failedUrls = new Set<string>();
+    // スプライトシート読み込み失敗時のフォールバック画像
+    private static readonly FALLBACK_SHEET_URL = "/img/default-avatar.png";
     // 同時アバター作成数を制限し、大量同時接続によるブラウザクラッシュを防止
     private readonly MAX_CONCURRENT_CREATE = 5;
     private concurrentCreating = 0;
@@ -150,11 +152,25 @@ export class SpriteAvatarSystem {
         try {
             entry = await this.getOrCreateManager(sheetUrl);
         } catch (e) {
-            this.releaseCreateSlot();
-            this.creating.delete(id);
-            _end();
             console.warn(`SpriteAvatarSystem: failed to load sheet ${sheetUrl}:`, e);
-            return new TransformNode("dummy_" + id, this.scene);
+            // フォールバック画像でリトライ（フォールバック自体の失敗時は dummy を返す）
+            if (sheetUrl !== SpriteAvatarSystem.FALLBACK_SHEET_URL) {
+                try {
+                    entry = await this.getOrCreateManager(SpriteAvatarSystem.FALLBACK_SHEET_URL);
+                    console.warn(`SpriteAvatarSystem: using fallback avatar for ${id}`);
+                } catch (e2) {
+                    this.releaseCreateSlot();
+                    this.creating.delete(id);
+                    _end();
+                    console.warn(`SpriteAvatarSystem: fallback also failed:`, e2);
+                    return new TransformNode("dummy_" + id, this.scene);
+                }
+            } else {
+                this.releaseCreateSlot();
+                this.creating.delete(id);
+                _end();
+                return new TransformNode("dummy_" + id, this.scene);
+            }
         }
         const info = entry.sheetInfo;
 

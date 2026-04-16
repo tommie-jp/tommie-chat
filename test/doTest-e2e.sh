@@ -31,6 +31,7 @@ Playwright でブラウザ E2E テストを実行します。
   [chat-send-receive]  2ページ間のチャット送受信
   [logout-relogin]     ログアウト → 再ログイン
   [room-move]          部屋作成 → 移動 → 帰還
+  [avatar-fallback]    存在しないアバターURL → フォールバック画像で描画
 
 前提:
   Nakama サーバが起動済み (docker compose up -d)
