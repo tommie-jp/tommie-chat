@@ -170,14 +170,17 @@ check "カスタム 404 (HTTP ${ERR404_CODE}, カスタムHTML: ${ERR404_HAS_CUS
     "$([ "$ERR404_CODE" = "404" ] && [ "$ERR404_HAS_CUSTOM" = "Y" ] && echo 0 || echo 1)" \
     "期待: 404 + tommieChat 文字列含む。error_page 404 と 404.html の配置を確認してください"
 
-# 13. maintenance.html 直接アクセス不可（internal 指定で SPA フォールバック）
+# 13. maintenance.html 直接アクセス不可（internal 指定で 404）
 echo "[13/${TOTAL}] maintenance.html 直接アクセス不可 ..."
 MAINT_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/maintenance.html" \
     --connect-timeout 5 --max-time 10 2>/dev/null)
-# internal 指定なのでホスト nginx → Docker nginx → SPA フォールバック → 200（index.html）
-check "maintenance.html 直接アクセス不可 (HTTP ${MAINT_CODE})" \
-    "$([ "$MAINT_CODE" = "200" ] && echo 0 || echo 1)" \
-    "期待: 200（SPA フォールバック）。internal 指定が外れている可能性があります"
+MAINT_BODY=$(curl -s "https://${DOMAIN}/maintenance.html" \
+    --connect-timeout 5 --max-time 10 2>/dev/null)
+MAINT_HAS_CONTENT=$(echo "$MAINT_BODY" | grep -q "メンテナンス中" && echo "Y" || echo "N")
+# internal 指定なので直接アクセスは 404。メンテナンスページの内容が表示されなければ OK
+check "maintenance.html 直接アクセス不可 (HTTP ${MAINT_CODE}, 内容漏洩: ${MAINT_HAS_CONTENT})" \
+    "$([ "$MAINT_CODE" != "200" ] && [ "$MAINT_HAS_CONTENT" = "N" ] && echo 0 || echo 1)" \
+    "期待: 404 かつメンテナンス内容非表示。internal 指定が外れている可能性があります"
 
 # 14. セキュリティヘッダー確認
 echo "[14/${TOTAL}] セキュリティヘッダー ..."

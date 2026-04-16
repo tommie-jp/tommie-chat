@@ -215,10 +215,21 @@ VITE_DEFAULT_PORT=443
 EOF
 
 npm install --silent
-npm run build 2>&1 | show_progress
-rm -f .env
+printf '  ビルド中...'
+BUILD_LOG=$(mktemp)
+npm run build >"$BUILD_LOG" 2>&1 || { echo ""; cat "$BUILD_LOG"; rm -f "$BUILD_LOG"; fail "ビルドに失敗しました"; }
+# dist/ 行を抽出してプログレス表示
+BUILD_TOTAL=$(grep -c '^  dist/' "$BUILD_LOG" || true)
+BUILD_N=0
+while IFS= read -r line; do
+    BUILD_N=$((BUILD_N + 1))
+    PCT=$((BUILD_N * 100 / BUILD_TOTAL))
+    printf '\r\e[K  ビルド中... %d%% (%d/%d)' "$PCT" "$BUILD_N" "$BUILD_TOTAL"
+done < <(grep '^  dist/' "$BUILD_LOG")
+printf '\r\e[K'
+rm -f "$BUILD_LOG" .env
 
-echo "✅ ビルド完了"
+echo "  ✅ ビルド完了（${BUILD_TOTAL} ファイル）"
 
 # ── 2. VPS に git clone ──
 step "2. VPS に git clone"
