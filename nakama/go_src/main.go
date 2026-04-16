@@ -340,6 +340,8 @@ const (
 	opJump             int64 = 15 // C→S→C   アバタージャンプ演出（AOI内ブロードキャスト、ペイロード {}）
 	opPlayerListSub    int64 = 16 // C→S     プレイヤーリスト購読（{subscribe:true/false}）
 	opPlayerListData   int64 = 17 // S→C     全プレイヤーリスト（プッシュ配信）
+	opOthelloUpdate    int64 = 18 // S→C     オセロ盤面更新（購読者へ配信）
+	opOthelloSub       int64 = 19 // C→S     オセロ購読/解除（{subscribe:true/false}）
 
 	// ── ブロードキャスト最適化定数 ──
 	safeMessageSize      = 4096 // broadcastSafe のデフォルトチャンク上限[bytes]
@@ -1413,6 +1415,7 @@ type matchState struct {
 	PlayerListVerSub    map[string]uint64                   // sessionID -> 前回送信した gplVer（full用、スロット分散対応）
 	PlayerListCountSub  map[string]int                      // sessionID -> 前回送信した部屋人数（count用、スロット分散対応）
 	ChunkViewers        map[[2]int]map[string]bool          // (cx,cz) → AOI内にこのチャンクを含むセッションID群
+	OthelloSubs         map[string]bool                     // sessionID → オセロ更新を購読中か
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -1439,6 +1442,7 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		PlayerListVerSub:    make(map[string]uint64),
 		PlayerListCountSub:  make(map[string]int),
 		ChunkViewers:        make(map[[2]int]map[string]bool),
+		OthelloSubs:         make(map[string]bool),
 	}, 10, label
 }
 
@@ -1766,6 +1770,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		delete(ms.PlayerListSubs, sid)
 		delete(ms.PlayerListVerSub, sid)
 		delete(ms.PlayerListCountSub, sid)
+		delete(ms.OthelloSubs, sid)
 		// ワールド人数カウンター更新
 		if v, ok := worldPlayerCounts.Load(ms.WorldID); ok {
 			n := v.(int) - 1; if n < 0 { n = 0 }
@@ -2466,6 +2471,20 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			continue
 		}
 
+		if op == opOthelloSub {
+			var sub struct {
+				Subscribe bool `json:"subscribe"`
+			}
+			if err := json.Unmarshal(msg.GetData(), &sub); err == nil {
+				if sub.Subscribe {
+					ms.OthelloSubs[sid] = true
+				} else {
+					delete(ms.OthelloSubs, sid)
+				}
+			}
+			continue
+		}
+
 		// その他のメッセージは全員にブロードキャスト
 		if err := dispatcher.BroadcastMessage(op, msg.GetData(), nil, msg, true); err != nil {
 			logger.Warn("BroadcastMessage error: %v", err)
@@ -2585,7 +2604,80 @@ func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, 
 	return state
 }
 
-func (m *worldMatch) MatchSignal(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, _ runtime.MatchDispatcher, _ int64, state interface{}, data string) (interface{}, string) {
+func (m *worldMatch) MatchSignal(_ context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.NakamaModule, dispatcher runtime.MatchDispatcher, _ int64, state interface{}, data string) (interface{}, string) {
+	ms := state.(*matchState)
+
+	// オセロ更新シグナルの処理
+	var sig struct {
+		Type    string          `json:"type"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal([]byte(data), &sig); err == nil {
+		switch sig.Type {
+		case "othelloUpdate":
+			// オセロ購読者のみに配信
+			var targets []runtime.Presence
+			for sid := range ms.OthelloSubs {
+				if p, ok := ms.Presences[sid]; ok {
+					targets = append(targets, p)
+				}
+			}
+			if len(targets) > 0 {
+				dispatcher.BroadcastMessage(opOthelloUpdate, sig.Payload, targets, nil, true)
+			}
+		case "othelloBlocks":
+			// ブロック更新を AOI 内プレイヤーにブロードキャスト + チャンク保存
+			var blocks []struct {
+				GX      int   `json:"gx"`
+				GZ      int   `json:"gz"`
+				BlockID int   `json:"blockId"`
+				R       uint8 `json:"r"`
+				G       uint8 `json:"g"`
+				B       uint8 `json:"b"`
+				A       uint8 `json:"a"`
+			}
+			if json.Unmarshal(sig.Payload, &blocks) == nil {
+				bw := getWorld(ms.WorldID)
+				if bw == nil {
+					break
+				}
+				// チャンクごとにターゲットを集約してブロードキャスト
+				chunkTargets := map[[2]int][]runtime.Presence{}
+				for _, blk := range blocks {
+					cx := blk.GX / chunkSize
+					cz := blk.GZ / chunkSize
+					lx := blk.GX % chunkSize
+					lz := blk.GZ % chunkSize
+					ch := bw.getChunk(cx, cz)
+					ch.mu.Lock()
+					ch.cells[lx][lz] = blockData{BlockID: uint16(blk.BlockID), R: blk.R, G: blk.G, B: blk.B, A: blk.A}
+					ch.calcHash()
+					ch.mu.Unlock()
+					markChunkDirty(ms.WorldID, cx, cz)
+
+					key := [2]int{cx, cz}
+					if _, ok := chunkTargets[key]; !ok {
+						var targets []runtime.Presence
+						for aoiSid, aoi := range ms.AOIs {
+							if aoi.containsChunk(cx, cz) {
+								if p, ok2 := ms.Presences[aoiSid]; ok2 {
+									targets = append(targets, p)
+								}
+							}
+						}
+						chunkTargets[key] = targets
+					}
+
+					// 個別ブロック更新をブロードキャスト
+					blkJSON, _ := json.Marshal(blk)
+					if targets := chunkTargets[key]; len(targets) > 0 {
+						dispatcher.BroadcastMessage(opBlockUpdate, blkJSON, targets, nil, false)
+					}
+				}
+			}
+		}
+	}
+
 	return state, data
 }
 
@@ -3646,6 +3738,587 @@ func rpcDetachDevice(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	return string(out), nil
 }
 
+// ===== オセロ ゲームロジック =====
+
+// OthelloGame はオセロ1局の状態を管理する
+type OthelloGame struct {
+	GameID    string   `json:"gameId"`
+	Board     [64]int8 `json:"board"`     // 0=空, 1=黒, 2=白
+	BlackUID  string   `json:"black"`     // 黒プレイヤーの userID
+	WhiteUID  string   `json:"white"`     // 白プレイヤーの userID
+	Turn      int8     `json:"turn"`      // 1=黒の番, 2=白の番
+	Status    string   `json:"status"`    // "waiting" / "playing" / "finished"
+	LastMove  int      `json:"lastMove"`  // 最後に石を置いた位置(0-63), -1=なし
+	PassCount int      `json:"passCount"` // 連続パス回数
+	Winner    int8     `json:"winner"`    // 0=未定, 1=黒勝ち, 2=白勝ち, 3=引き分け
+	WorldID   int      `json:"worldId"`   // 所属する部屋ID
+	BoardGX   int      `json:"boardGX"`   // ブロック盤面���左上ワールドX座標
+	BoardGZ   int      `json:"boardGZ"`   // ブロック盤面の左上ワールドZ座標
+	PrevBoard [64]int8 `json:"-"`         // 前回の盤面（差分検出用）
+}
+
+// othelloGames はアクティブなオセロゲームをインメモリで管理する
+var othelloGames sync.Map // gameID (string) → *OthelloGame
+
+// othelloNewGame は初期盤面のゲームを作成する
+func othelloNewGame(gameID, blackUID string, worldID int) *OthelloGame {
+	g := &OthelloGame{
+		GameID:   gameID,
+		BlackUID: blackUID,
+		Turn:     1,
+		Status:   "waiting",
+		LastMove: -1,
+		WorldID:  worldID,
+	}
+	// 初期配置: 中央4マス
+	g.Board[3*8+3] = 2 // 白
+	g.Board[3*8+4] = 1 // 黒
+	g.Board[4*8+3] = 1 // 黒
+	g.Board[4*8+4] = 2 // 白
+	// PrevBoard を -1 で初期化（初回ブロック同期で全マス差分検出用）
+	for i := range g.PrevBoard {
+		g.PrevBoard[i] = -1
+	}
+	return g
+}
+
+// othelloGetFlips は (row,col) に color の石を置いたとき裏返せる位置を返す
+func othelloGetFlips(board *[64]int8, row, col int, color int8) []int {
+	if board[row*8+col] != 0 {
+		return nil
+	}
+	opp := int8(3) - color // 1→2, 2→1
+	dirs := [8][2]int{{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}}
+	var flips []int
+	for _, d := range dirs {
+		var line []int
+		nr, nc := row+d[0], col+d[1]
+		for nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr*8+nc] == opp {
+			line = append(line, nr*8+nc)
+			nr += d[0]
+			nc += d[1]
+		}
+		if len(line) > 0 && nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr*8+nc] == color {
+			flips = append(flips, line...)
+		}
+	}
+	return flips
+}
+
+// othelloGetLegalMoves は指定色の合法手を {位置 → 裏返し位置リスト} で返す
+func othelloGetLegalMoves(board *[64]int8, color int8) map[int][]int {
+	moves := make(map[int][]int)
+	for r := 0; r < 8; r++ {
+		for c := 0; c < 8; c++ {
+			flips := othelloGetFlips(board, r, c, color)
+			if len(flips) > 0 {
+				moves[r*8+c] = flips
+			}
+		}
+	}
+	return moves
+}
+
+// othelloCalcScore は黒と白の石数を返す
+func othelloCalcScore(board *[64]int8) (black, white int) {
+	for i := 0; i < 64; i++ {
+		if board[i] == 1 {
+			black++
+		} else if board[i] == 2 {
+			white++
+		}
+	}
+	return
+}
+
+// othelloApplyMove は石を置いて裏返し、ターン交代・自動パス・終局判定を行う
+// 戻り値: 裏返した位置リスト, エラー
+func othelloApplyMove(g *OthelloGame, row, col int) ([]int, error) {
+	if g.Status != "playing" {
+		return nil, fmt.Errorf("game not in playing state")
+	}
+	flips := othelloGetFlips(&g.Board, row, col, g.Turn)
+	if len(flips) == 0 {
+		return nil, fmt.Errorf("illegal move (%d,%d)", row, col)
+	}
+
+	// 石を置く
+	idx := row*8 + col
+	g.Board[idx] = g.Turn
+	for _, fi := range flips {
+		g.Board[fi] = g.Turn
+	}
+	g.LastMove = idx
+	g.PassCount = 0
+
+	// ターン交代
+	next := int8(3) - g.Turn
+	if len(othelloGetLegalMoves(&g.Board, next)) > 0 {
+		g.Turn = next
+	} else {
+		// 相手に合法手がない → もう一度自分の番
+		if len(othelloGetLegalMoves(&g.Board, g.Turn)) == 0 {
+			// 両者合法手なし → 終局
+			othelloFinish(g)
+		}
+		// else: g.Turn はそのまま（自分がもう1回打てる）
+	}
+	return flips, nil
+}
+
+// othelloPass は手番をパスする（合法手がないときのみ有効）
+func othelloPass(g *OthelloGame) error {
+	if g.Status != "playing" {
+		return fmt.Errorf("game not in playing state")
+	}
+	if len(othelloGetLegalMoves(&g.Board, g.Turn)) > 0 {
+		return fmt.Errorf("cannot pass when legal moves exist")
+	}
+	g.PassCount++
+	if g.PassCount >= 2 {
+		othelloFinish(g)
+		return nil
+	}
+	g.Turn = int8(3) - g.Turn
+	return nil
+}
+
+// othelloFinish は終局処理を行い、勝者を決定する
+func othelloFinish(g *OthelloGame) {
+	g.Status = "finished"
+	b, w := othelloCalcScore(&g.Board)
+	if b > w {
+		g.Winner = 1
+	} else if w > b {
+		g.Winner = 2
+	} else {
+		g.Winner = 3 // 引き分け
+	}
+}
+
+// othelloResign は投了処理を行う
+func othelloResign(g *OthelloGame, uid string) {
+	g.Status = "finished"
+	if uid == g.BlackUID {
+		g.Winner = 2 // 黒が投了 → 白勝ち
+	} else {
+		g.Winner = 1 // 白が投了 → 黒勝ち
+	}
+}
+
+// ===== オセロ RPC =====
+
+// othelloNextGameID は一意なゲームIDを生成する
+var othelloGameSeq int64
+
+func othelloNextGameID() string {
+	seq := atomic.AddInt64(&othelloGameSeq, 1)
+	return fmt.Sprintf("oth_%d_%d", time.Now().UnixMilli(), seq)
+}
+
+// othelloBoardToInts は [64]int8 を []int に変換する（JSONシリアライズ用）
+func othelloBoardToInts(board *[64]int8) []int {
+	out := make([]int, 64)
+	for i, v := range board {
+		out[i] = int(v)
+	}
+	return out
+}
+
+// othelloGameResponse はオセロゲームの状態をJSON用mapで返す
+func othelloGameResponse(g *OthelloGame) map[string]interface{} {
+	b, w := othelloCalcScore(&g.Board)
+	return map[string]interface{}{
+		"gameId":   g.GameID,
+		"board":    othelloBoardToInts(&g.Board),
+		"black":    g.BlackUID,
+		"white":    g.WhiteUID,
+		"turn":     g.Turn,
+		"status":   g.Status,
+		"lastMove": g.LastMove,
+		"winner":   g.Winner,
+		"blackCount": b,
+		"whiteCount": w,
+		"boardGX":  g.BoardGX,
+		"boardGZ":  g.BoardGZ,
+	}
+}
+
+// othelloSignalBroadcast は MatchSignal 経由でオセロ更新を対局者＋同部屋プレイヤーに配信する
+func othelloSignalBroadcast(ctx context.Context, nk runtime.NakamaModule, g *OthelloGame) {
+	// ゲームが所属するワールドのマッチIDを取得
+	worldMatchMu.Lock()
+	matchID := worldMatchIDs[g.WorldID]
+	worldMatchMu.Unlock()
+	if matchID == "" {
+		return
+	}
+
+	resp := othelloGameResponse(g)
+	data, err := json.Marshal(map[string]interface{}{
+		"type":    "othelloUpdate",
+		"payload": resp,
+	})
+	if err != nil {
+		return
+	}
+	nk.MatchSignal(ctx, matchID, string(data))
+
+	// ブロック盤面の差分更新をシグナル送信
+	othelloBlockSignal(ctx, nk, g, matchID)
+}
+
+// othelloBlockSignal はオセロ盤面の変更をブロック更新シグナルとして送信する
+func othelloBlockSignal(ctx context.Context, nk runtime.NakamaModule, g *OthelloGame, matchID string) {
+	if g.BoardGX == 0 && g.BoardGZ == 0 {
+		return // 盤面位置未設定
+	}
+	// 差分を検出してブロック更新リストを作成
+	type blockUpdate struct {
+		GX      int   `json:"gx"`
+		GZ      int   `json:"gz"`
+		BlockID int   `json:"blockId"`
+		R       uint8 `json:"r"`
+		G       uint8 `json:"g"`
+		B       uint8 `json:"b"`
+		A       uint8 `json:"a"`
+	}
+	var blocks []blockUpdate
+	for i := 0; i < 64; i++ {
+		if g.Board[i] != g.PrevBoard[i] {
+			row, col := i/8, i%8
+			gx := g.BoardGX + col
+			gz := g.BoardGZ + row
+			var r, gr, b uint8
+			switch g.Board[i] {
+			case 1: // 黒石
+				r, gr, b = 15, 15, 15
+			case 2: // 白石
+				r, gr, b = 250, 250, 250
+			default: // 空 = 深緑（地面より暗い盤面色）
+				r, gr, b = 0, 100, 0
+			}
+			blocks = append(blocks, blockUpdate{GX: gx, GZ: gz, BlockID: 1, R: r, G: gr, B: b, A: 255})
+		}
+	}
+	if len(blocks) == 0 {
+		return
+	}
+	// PrevBoard を更新
+	g.PrevBoard = g.Board
+
+	data, err := json.Marshal(map[string]interface{}{
+		"type":    "othelloBlocks",
+		"payload": blocks,
+	})
+	if err != nil {
+		return
+	}
+	nk.MatchSignal(ctx, matchID, string(data))
+}
+
+// othelloFrameSignal は盤面の外枠（木目色）ブロックを配置するシグナルを送信する
+func othelloFrameSignal(ctx context.Context, nk runtime.NakamaModule, g *OthelloGame, matchID string) {
+	if g.BoardGX == 0 && g.BoardGZ == 0 {
+		return
+	}
+	type blockUpdate struct {
+		GX      int   `json:"gx"`
+		GZ      int   `json:"gz"`
+		BlockID int   `json:"blockId"`
+		R       uint8 `json:"r"`
+		G       uint8 `json:"g"`
+		B       uint8 `json:"b"`
+		A       uint8 `json:"a"`
+	}
+	var blocks []blockUpdate
+	// 10x10 外枠（boardGX-1 〜 boardGX+8, boardGZ-1 〜 boardGZ+8）
+	for dz := -1; dz <= 8; dz++ {
+		for dx := -1; dx <= 8; dx++ {
+			if dx >= 0 && dx < 8 && dz >= 0 && dz < 8 {
+				continue // 内側8x8はスキップ（盤面ブロックが置かれる）
+			}
+			blocks = append(blocks, blockUpdate{
+				GX: g.BoardGX + dx, GZ: g.BoardGZ + dz,
+				BlockID: 1, R: 60, G: 35, B: 10, A: 255, // 木目色
+			})
+		}
+	}
+	data, err := json.Marshal(map[string]interface{}{
+		"type":    "othelloBlocks",
+		"payload": blocks,
+	})
+	if err != nil {
+		return
+	}
+	nk.MatchSignal(ctx, matchID, string(data))
+}
+
+// othelloClearBlocks は盤面ブロック（10x10:外枠含む）をクリアする（blockId=0 で削除）
+func othelloClearBlocks(boardGX, boardGZ, worldID int) {
+	if boardGX == 0 && boardGZ == 0 {
+		return
+	}
+	bw := getWorld(worldID)
+	if bw == nil {
+		return
+	}
+	for dz := -1; dz <= 8; dz++ {
+		for dx := -1; dx <= 8; dx++ {
+			gx := boardGX + dx
+			gz := boardGZ + dz
+			cx := gx / chunkSize
+			cz := gz / chunkSize
+			lx := gx % chunkSize
+			lz := gz % chunkSize
+			ch := bw.getChunk(cx, cz)
+			ch.mu.Lock()
+			ch.cells[lx][lz] = blockData{}
+			ch.calcHash()
+			ch.mu.Unlock()
+			markChunkDirty(worldID, cx, cz)
+		}
+	}
+	logf("othello clearBlocks: board=(%d,%d) worldId=%d\n", boardGX, boardGZ, worldID)
+}
+
+// rpcOthelloCreate は新しいオセロゲームを作成する
+func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloCreate")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7) // UNAUTHENTICATED
+	}
+
+	var req struct {
+		WorldID int `json:"worldId"`
+	}
+	if payload != "" {
+		json.Unmarshal([]byte(payload), &req)
+	}
+
+	// 既に待機中のゲームがあれば返す（同時に複数ゲーム作成を防止）
+	var existingGame *OthelloGame
+	othelloGames.Range(func(_, v interface{}) bool {
+		g := v.(*OthelloGame)
+		if g.BlackUID == uid && g.Status == "waiting" {
+			existingGame = g
+			return false
+		}
+		return true
+	})
+	if existingGame != nil {
+		resp := othelloGameResponse(existingGame)
+		out, _ := json.Marshal(resp)
+		return string(out), nil
+	}
+
+	gameID := othelloNextGameID()
+	g := othelloNewGame(gameID, uid, req.WorldID)
+	// ブロ��ク盤面の配置位置（ワールド中心付近に固定）
+	g.BoardGX = 504
+	g.BoardGZ = 504
+	othelloGames.Store(gameID, g)
+
+	logf("othello create: gameId=%s black=%s%s worldId=%d board=(%d,%d)\n", gameID, uid, dn(uid), req.WorldID, g.BoardGX, g.BoardGZ)
+
+	// 盤面ブロックを配置（初期盤面＝緑60マス+石4つ）
+	worldMatchMu.Lock()
+	matchID := worldMatchIDs[req.WorldID]
+	worldMatchMu.Unlock()
+	if matchID != "" {
+		othelloFrameSignal(ctx, nk, g, matchID)
+		othelloBlockSignal(ctx, nk, g, matchID)
+	}
+
+	resp := othelloGameResponse(g)
+	out, _ := json.Marshal(resp)
+	return string(out), nil
+}
+
+// rpcOthelloJoin は待機中のオセロゲームに参加する
+func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloJoin")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7)
+	}
+
+	var req struct {
+		GameID string `json:"gameId"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" {
+		return "", runtime.NewError("gameId required", 3) // INVALID_ARGUMENT
+	}
+
+	v, ok := othelloGames.Load(req.GameID)
+	if !ok {
+		return "", runtime.NewError("game not found", 5) // NOT_FOUND
+	}
+	g := v.(*OthelloGame)
+	if g.Status != "waiting" {
+		return "", runtime.NewError("game already started or finished", 9) // FAILED_PRECONDITION
+	}
+	if g.BlackUID == uid {
+		return "", runtime.NewError("cannot join own game", 3)
+	}
+
+	g.WhiteUID = uid
+	g.Status = "playing"
+
+	logf("othello join: gameId=%s white=%s%s\n", g.GameID, uid, dn(uid))
+
+	// 両者に配信
+	othelloSignalBroadcast(ctx, nk, g)
+
+	resp := othelloGameResponse(g)
+	out, _ := json.Marshal(resp)
+	return string(out), nil
+}
+
+// rpcOthelloMove はオセロで石を置く
+func rpcOthelloMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloMove")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7)
+	}
+
+	var req struct {
+		GameID string `json:"gameId"`
+		Row    int    `json:"row"`
+		Col    int    `json:"col"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return "", runtime.NewError("invalid request", 3)
+	}
+
+	v, ok := othelloGames.Load(req.GameID)
+	if !ok {
+		return "", runtime.NewError("game not found", 5)
+	}
+	g := v.(*OthelloGame)
+
+	// ターン確認
+	if (g.Turn == 1 && uid != g.BlackUID) || (g.Turn == 2 && uid != g.WhiteUID) {
+		return "", runtime.NewError("not your turn", 9)
+	}
+
+	flips, err := othelloApplyMove(g, req.Row, req.Col)
+	if err != nil {
+		return "", runtime.NewError(err.Error(), 3)
+	}
+
+	logf("othello move: gameId=%s uid=%s%s (%d,%d) flips=%d\n", g.GameID, uid, dn(uid), req.Row, req.Col, len(flips))
+
+	// 終局時はゲームをクリーンアップ予約（少し遅延してブロック削除＆ゲーム削除）
+	if g.Status == "finished" {
+		boardGX, boardGZ, worldID := g.BoardGX, g.BoardGZ, g.WorldID
+		gameID := g.GameID
+		go func() {
+			time.Sleep(60 * time.Second)
+			othelloClearBlocks(boardGX, boardGZ, worldID)
+			othelloGames.Delete(gameID)
+		}()
+	}
+
+	// 両者に配信
+	othelloSignalBroadcast(ctx, nk, g)
+
+	// 裏返し情報も含めて返す
+	resp := othelloGameResponse(g)
+	flipsInts := make([]int, len(flips))
+	copy(flipsInts, flips)
+	resp["flipped"] = flipsInts
+	out, _ := json.Marshal(resp)
+	return string(out), nil
+}
+
+// rpcOthelloResign はオセロで投了する
+func rpcOthelloResign(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloResign")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7)
+	}
+
+	var req struct {
+		GameID string `json:"gameId"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" {
+		return "", runtime.NewError("gameId required", 3)
+	}
+
+	v, ok := othelloGames.Load(req.GameID)
+	if !ok {
+		return "", runtime.NewError("game not found", 5)
+	}
+	g := v.(*OthelloGame)
+	if g.Status != "playing" {
+		return "", runtime.NewError("game not in playing state", 9)
+	}
+	if uid != g.BlackUID && uid != g.WhiteUID {
+		return "", runtime.NewError("not a player in this game", 3)
+	}
+
+	othelloResign(g, uid)
+
+	logf("othello resign: gameId=%s uid=%s%s winner=%d\n", g.GameID, uid, dn(uid), g.Winner)
+
+	// クリーンアップ（遅延してブロック削除＆ゲーム削除）
+	boardGX, boardGZ, worldID := g.BoardGX, g.BoardGZ, g.WorldID
+	gameID := g.GameID
+	go func() {
+		time.Sleep(60 * time.Second)
+		othelloClearBlocks(boardGX, boardGZ, worldID)
+		othelloGames.Delete(gameID)
+	}()
+
+	othelloSignalBroadcast(ctx, nk, g)
+
+	resp := othelloGameResponse(g)
+	out, _ := json.Marshal(resp)
+	return string(out), nil
+}
+
+// rpcOthelloList は指定ワールドのオセロゲーム一覧を返す
+func rpcOthelloList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloList")()
+
+	var req struct {
+		WorldID int `json:"worldId"`
+	}
+	if payload != "" {
+		json.Unmarshal([]byte(payload), &req)
+	}
+
+	var games []map[string]interface{}
+	othelloGames.Range(func(_, v interface{}) bool {
+		g := v.(*OthelloGame)
+		if g.WorldID == req.WorldID && g.Status != "finished" {
+			b, w := othelloCalcScore(&g.Board)
+			games = append(games, map[string]interface{}{
+				"gameId":     g.GameID,
+				"black":      g.BlackUID,
+				"blackName":  dn(g.BlackUID),
+				"white":      g.WhiteUID,
+				"whiteName":  dn(g.WhiteUID),
+				"status":     g.Status,
+				"turn":       g.Turn,
+				"blackCount": b,
+				"whiteCount": w,
+			})
+		}
+		return true
+	})
+	if games == nil {
+		games = []map[string]interface{}{}
+	}
+
+	out, _ := json.Marshal(map[string]interface{}{"games": games})
+	return string(out), nil
+}
+
 // InitModule は Nakama プラグインのエントリポイント
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// バリデーション設定の読み込み（runtime.env から）
@@ -3825,6 +4498,11 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"getAccountStatus", rpcGetAccountStatus},
 		{"getInitialAvatarIndex", rpcGetInitialAvatarIndex},
 		{"getRecentChat", rpcGetRecentChat},
+		{"othelloCreate", rpcOthelloCreate},
+		{"othelloJoin", rpcOthelloJoin},
+		{"othelloMove", rpcOthelloMove},
+		{"othelloResign", rpcOthelloResign},
+		{"othelloList", rpcOthelloList},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {

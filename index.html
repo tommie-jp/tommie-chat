@@ -1322,9 +1322,84 @@
         .othello-cell .stone.white {
             background: radial-gradient(circle at 35% 35%, #fff, #ccc);
         }
+        .othello-cell .stone.flip {
+            animation: othFlip 0.4s ease-in-out;
+        }
+        .othello-cell .stone.place {
+            animation: othPlace 0.25s ease-out;
+        }
+        @keyframes othFlip {
+            0%   { transform: scaleX(1); }
+            50%  { transform: scaleX(0); }
+            100% { transform: scaleX(1); }
+        }
+        @keyframes othPlace {
+            0%   { transform: scale(0); opacity: 0; }
+            60%  { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); }
+        }
         .othello-cell.last-move {
             outline: 2px solid #ffd700;
             outline-offset: -2px;
+        }
+        #othello-status.oth-result {
+            font-size: 16px;
+            font-weight: bold;
+            padding: 6px 0;
+        }
+        #othello-lobby {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+            max-width: 296px;
+        }
+        #othello-create-btn {
+            background: #2d8a4e;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        #othello-create-btn:hover {
+            background: #36a35d;
+        }
+        #othello-game-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+        .othello-game-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px;
+            background: rgba(0,0,0,0.04);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .othello-game-item button {
+            background: #1a73e8;
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            padding: 3px 10px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: inherit;
+        }
+        .othello-game-item button:hover {
+            background: #1565c0;
+        }
+        #othello-my-color {
+            font-size: 11px;
+            color: #666;
+            text-align: center;
         }
         #othello-controls {
             display: flex;
@@ -1366,6 +1441,15 @@
         }
         body.theme-dark #othello-controls button:hover {
             background: rgba(255,255,255,0.16);
+        }
+        body.theme-dark #othello-create-btn {
+            background: #2d8a4e;
+        }
+        body.theme-dark .othello-game-item {
+            background: rgba(255,255,255,0.06);
+        }
+        body.theme-dark #othello-my-color {
+            color: #aaa;
         }
 
         /* ===== 同接グラフパネル ===== */
@@ -3665,16 +3749,26 @@
             <span id="othello-close">❌️</span>
         </div>
         <div id="othello-body">
-            <div id="othello-status">対戦相手を待っています…</div>
-            <div id="othello-score">
-                <span class="score-black">⚫ <span id="othello-black-count">2</span></span>
-                <span>—</span>
-                <span class="score-white">⚪ <span id="othello-white-count">2</span></span>
+            <!-- ロビー画面 -->
+            <div id="othello-lobby">
+                <button id="othello-create-btn">対戦を作成</button>
+                <div id="othello-game-list"></div>
             </div>
-            <div id="othello-board"></div>
-            <div id="othello-controls">
-                <button id="othello-pass-btn" disabled>パス</button>
-                <button id="othello-resign-btn" disabled>投了</button>
+            <!-- ゲーム画面 -->
+            <div id="othello-game" style="display:none;">
+                <div id="othello-status">対戦相手を待っています…</div>
+                <div id="othello-my-color"></div>
+                <div id="othello-score">
+                    <span class="score-black">⚫ <span id="othello-black-count">2</span></span>
+                    <span>—</span>
+                    <span class="score-white">⚪ <span id="othello-white-count">2</span></span>
+                </div>
+                <div id="othello-board"></div>
+                <div id="othello-controls">
+                    <button id="othello-pass-btn" disabled>パス</button>
+                    <button id="othello-resign-btn" disabled>投了</button>
+                    <button id="othello-back-btn" style="display:none;">ロビーに戻る</button>
+                </div>
             </div>
         </div>
     </div>
