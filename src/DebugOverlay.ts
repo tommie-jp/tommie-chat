@@ -17,6 +17,7 @@ type AvatarDbEntry = {
     terms_url?: string;
     license?: string;
     size?: string;
+    hide?: [number, number][];
 };
 const avatarDbMap = new Map<string, AvatarDbEntry>();
 for (const entry of (avatarsDb as AvatarDbEntry[])) avatarDbMap.set(entry.no, entry);
@@ -2257,8 +2258,11 @@ export function setupDebugOverlay(game: GameScene): void {
                         const nC = Math.max(1, cached.charCols);
                         const nR = Math.max(1, cached.charRows);
                         const filename = url.split("/").pop() ?? "";
+                        const entryNo = avatarNoFromFilename(filename);
+                        const hideSet = entryNo ? avatarDbMap.get(entryNo)?.hide : undefined;
                         for (let cr = 0; cr < nR; cr++) {
                             for (let cc = 0; cc < nC; cc++) {
+                                if (hideSet?.some(([hc, hr]) => hc === cc && hr === cr)) continue;
                                 const canvas = document.createElement("canvas");
                                 canvas.width = 48;
                                 canvas.height = 48;
