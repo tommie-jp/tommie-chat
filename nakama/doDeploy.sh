@@ -458,6 +458,16 @@ server {
     #   - script-src / frame-src: One Tap 併用時用（現状の方式 B のみなら不要）
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.babylonjs.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' wss://*.tommie.jp https://cdn.babylonjs.com https://oauth2.googleapis.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'; frame-src https://accounts.google.com; form-action 'self' https://accounts.google.com" always;
 
+    # カスタムエラーページ
+    error_page 502 503 504 /maintenance.html;
+    location = /maintenance.html {
+        internal;
+    }
+    error_page 404 /404.html;
+    location = /404.html {
+        internal;
+    }
+
     # SPA フォールバック
     location / {
         try_files $uri $uri/ /index.html;
