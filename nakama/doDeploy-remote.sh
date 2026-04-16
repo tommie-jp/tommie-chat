@@ -243,7 +243,7 @@ if ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
         echo "  -y 指定: 自動削除"
     else
         read -p "  削除して再クローンしますか？ (y/N): " ans
-        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ] || [ "$ans" = "ｙ" ] || [ "$ans" = "Ｙ" ] || [ "$ans" = "yes" ] || [ "$ans" = "YES" ]; then
             DO_DELETE=true
         fi
     fi

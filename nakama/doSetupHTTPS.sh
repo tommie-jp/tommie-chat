@@ -147,6 +147,9 @@ server {
     ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
+    # HSTS — HTTPS 強制をブラウザに記憶させる（1年）
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
     # メンテナンスページ（Docker コンテナ停止時に表示）
     error_page 502 503 504 /maintenance.html;
     location = /maintenance.html {
