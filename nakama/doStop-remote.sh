@@ -1,6 +1,6 @@
 #!/bin/bash
 # リモートコンテナ停止（開発環境から VPS のコンテナを停止）
-# Usage: ./nakama/doStop-remote.sh <VPSホスト> [SSHユーザー] [-h] [-v]
+# Usage: ./nakama/doStop-remote.sh [-d <REMOTE_DIR>] <VPSホスト> [SSHユーザー] [-h] [-v]
 #
 # 開発環境（WSL2 Ubuntu 24.04）から実行する。
 SCRIPT_VERSION="2026-04-05"
@@ -14,15 +14,16 @@ if [ -f "$ENV_DEPLOY" ]; then
 fi
 
 # ── 引数解析 ──
-# 解決順: 引数 > .env.deploy(DEPLOY_SSH_USER) > デフォルト "deploy"
+# 解決順: 引数 > .env.deploy > デフォルト
 VPS_HOST="${DEPLOY_SSH_HOST:-}"
 SSH_USER="${DEPLOY_SSH_USER:-deploy}"
+REMOTE_DIR="${DEPLOY_REMOTE_DIR:-}"
 
-for arg in "$@"; do
-    case "$arg" in
+while [ $# -gt 0 ]; do
+    case "$1" in
         -h|--help)
             cat <<'EOF'
-Usage: ./nakama/doStop-remote.sh <VPSホスト> [SSHユーザー]
+Usage: ./nakama/doStop-remote.sh [-d <REMOTE_DIR>] <VPSホスト> [SSHユーザー]
 
 開発環境（WSL2 Ubuntu 24.04）から VPS のコンテナを停止
 
@@ -31,41 +32,53 @@ Usage: ./nakama/doStop-remote.sh <VPSホスト> [SSHユーザー]
   2. VPS 上で docker compose down を実行
 
 引数:
+  -d DIR       リモートディレクトリ
+               解決順: 引数 > .env.deploy(DEPLOY_REMOTE_DIR) > "~/<VPSホスト>"
   VPSホスト    SSH接続先（例: mmo.tommie.jp, 123.45.67.89）
                nakama/.env.deploy の DEPLOY_SSH_HOST で省略可
   SSHユーザー  SSHユーザー名（解決順: 引数 > .env.deploy > デフォルト "deploy"）
 
 前提:
   - VPS に SSH 鍵認証で接続可能
-  - 推奨: nakama/.env.deploy に DEPLOY_SSH_USER を設定
+  - 推奨: nakama/.env.deploy に DEPLOY_SSH_USER / DEPLOY_REMOTE_DIR を設定
     （形式は doc/40-デプロイ手順.md 参照）
 
 例:
   ./nakama/doStop-remote.sh mmo.tommie.jp
   ./nakama/doStop-remote.sh mmo.tommie.jp myuser
+  ./nakama/doStop-remote.sh -d ~/mydir mmo.tommie.jp
 EOF
             exit 0 ;;
         -v|--version)
             echo "doStop-remote.sh  version: ${SCRIPT_VERSION}"
             exit 0 ;;
+        -d)
+            REMOTE_DIR="$2"; shift 2 ;;
+        --dir=*)
+            REMOTE_DIR="${1#--dir=}"; shift ;;
         *)
             if [ -z "$VPS_HOST" ]; then
-                VPS_HOST="$arg"
+                VPS_HOST="$1"
             else
-                SSH_USER="$arg"
-            fi ;;
+                SSH_USER="$1"
+            fi; shift ;;
     esac
 done
 
 if [ -z "$VPS_HOST" ]; then
-    echo "Usage: $0 <VPSホスト> [SSHユーザー]  (-h でヘルプ表示)"
+    echo "Usage: $0 [-d <REMOTE_DIR>] <VPSホスト> [SSHユーザー]  (-h でヘルプ表示)"
     exit 1
 fi
 
+# REMOTE_DIR 未指定時は VPS ホスト名と同じディレクトリをデフォルトにする
+if [ -z "$REMOTE_DIR" ]; then
+    REMOTE_DIR="~/${VPS_HOST}"
+fi
+
 SSH_TARGET="${SSH_USER}@${VPS_HOST}"
-REMOTE_DIR="~/tommie-chat"
 
 echo "doStop-remote.sh  version: ${SCRIPT_VERSION}"
+echo "  remote dir: ${REMOTE_DIR}"
 echo ""
 
 set -euo pipefail

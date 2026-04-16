@@ -127,6 +127,12 @@ fi
 # ── 4. ホスト nginx の HTTPS 設定 ──
 step "4. ホスト nginx 設定（/etc/nginx/sites-available/$DOMAIN）"
 
+MAINT_DIR="/var/www/tommie-chat-error"
+sudo mkdir -p "$MAINT_DIR"
+sudo cp "$SCRIPT_DIR/../dist/maintenance.html" "$MAINT_DIR/maintenance.html"
+sudo cp "$SCRIPT_DIR/../dist/404.html" "$MAINT_DIR/404.html"
+echo "✅ エラーページ配置: $MAINT_DIR"
+
 sudo tee "/etc/nginx/sites-available/$DOMAIN" > /dev/null <<NGINX_EOF
 server {
     listen 80;
@@ -141,6 +147,18 @@ server {
     ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
+    # メンテナンスページ（Docker コンテナ停止時に表示）
+    error_page 502 503 504 /maintenance.html;
+    location = /maintenance.html {
+        root $MAINT_DIR;
+        internal;
+    }
+    error_page 404 /404.html;
+    location = /404.html {
+        root $MAINT_DIR;
+        internal;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
@@ -150,6 +168,7 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_intercept_errors on;
     }
 }
 NGINX_EOF

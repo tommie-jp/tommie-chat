@@ -497,9 +497,9 @@ server {
         proxy_intercept_errors on;
     }
 
-    # /s3/ の他パスは全て拒否
+    # /s3/ の他パスは全て拒否（404 として表示）
     location /s3/ {
-        return 403;
+        return 404;
     }
 
     # Nakama HTTP API（Origin 制限: ブラウザからのリクエストのみ許可）
