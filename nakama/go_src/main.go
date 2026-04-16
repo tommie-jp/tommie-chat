@@ -2478,6 +2478,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if err := json.Unmarshal(msg.GetData(), &sub); err == nil {
 				if sub.Subscribe {
 					ms.OthelloSubs[sid] = true
+					// 即座に現在のゲーム一覧を送信
+					if p, ok := ms.Presences[sid]; ok {
+						listData := othelloListPayload(ms.WorldID)
+						dispatcher.BroadcastMessage(opOthelloUpdate, listData, []runtime.Presence{p}, nil, true)
+					}
 				} else {
 					delete(ms.OthelloSubs, sid)
 				}
@@ -2624,6 +2629,17 @@ func (m *worldMatch) MatchSignal(_ context.Context, _ runtime.Logger, _ *sql.DB,
 			}
 			if len(targets) > 0 {
 				dispatcher.BroadcastMessage(opOthelloUpdate, sig.Payload, targets, nil, true)
+			}
+		case "othelloList":
+			// ゲーム一覧を全オセロ購読者に配信
+			var listTargets []runtime.Presence
+			for sid := range ms.OthelloSubs {
+				if p, ok := ms.Presences[sid]; ok {
+					listTargets = append(listTargets, p)
+				}
+			}
+			if len(listTargets) > 0 {
+				dispatcher.BroadcastMessage(opOthelloUpdate, sig.Payload, listTargets, nil, true)
 			}
 		case "othelloBlocks":
 			// ブロック更新を AOI 内プレイヤーにブロードキャスト + チャンク保存
@@ -3929,6 +3945,7 @@ func othelloBoardToInts(board *[64]int8) []int {
 func othelloGameResponse(g *OthelloGame) map[string]interface{} {
 	b, w := othelloCalcScore(&g.Board)
 	return map[string]interface{}{
+		"type":     "game",
 		"gameId":   g.GameID,
 		"board":    othelloBoardToInts(&g.Board),
 		"black":    g.BlackUID,
@@ -3942,6 +3959,56 @@ func othelloGameResponse(g *OthelloGame) map[string]interface{} {
 		"boardGX":  g.BoardGX,
 		"boardGZ":  g.BoardGZ,
 	}
+}
+
+// othelloListPayload はワールドのオセロゲーム一覧ペイロードを JSON で返す
+func othelloListPayload(worldID int) []byte {
+	var games []map[string]interface{}
+	othelloGames.Range(func(_, v interface{}) bool {
+		g := v.(*OthelloGame)
+		if g.WorldID == worldID && g.Status != "finished" {
+			b, w := othelloCalcScore(&g.Board)
+			games = append(games, map[string]interface{}{
+				"gameId":     g.GameID,
+				"black":      g.BlackUID,
+				"blackName":  dn(g.BlackUID),
+				"white":      g.WhiteUID,
+				"whiteName":  dn(g.WhiteUID),
+				"status":     g.Status,
+				"turn":       g.Turn,
+				"blackCount": b,
+				"whiteCount": w,
+			})
+		}
+		return true
+	})
+	if games == nil {
+		games = []map[string]interface{}{}
+	}
+	data, _ := json.Marshal(map[string]interface{}{
+		"type":  "list",
+		"games": games,
+	})
+	return data
+}
+
+// othelloListBroadcast は MatchSignal 経由でオセロゲーム一覧を全購読者に配信する
+func othelloListBroadcast(ctx context.Context, nk runtime.NakamaModule, worldID int) {
+	worldMatchMu.Lock()
+	matchID := worldMatchIDs[worldID]
+	worldMatchMu.Unlock()
+	if matchID == "" {
+		return
+	}
+	listData := othelloListPayload(worldID)
+	sigData, err := json.Marshal(map[string]interface{}{
+		"type":    "othelloList",
+		"payload": json.RawMessage(listData),
+	})
+	if err != nil {
+		return
+	}
+	nk.MatchSignal(ctx, matchID, string(sigData))
 }
 
 // othelloSignalBroadcast は MatchSignal 経由でオセロ更新を対局者＋同部屋プレイヤーに配信する
@@ -4131,6 +4198,9 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		othelloBlockSignal(ctx, nk, g, matchID)
 	}
 
+	// 購読者にゲーム一覧を配信
+	othelloListBroadcast(ctx, nk, req.WorldID)
+
 	resp := othelloGameResponse(g)
 	out, _ := json.Marshal(resp)
 	return string(out), nil
@@ -4170,6 +4240,7 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 
 	// 両者に配信
 	othelloSignalBroadcast(ctx, nk, g)
+	othelloListBroadcast(ctx, nk, g.WorldID)
 
 	resp := othelloGameResponse(g)
 	out, _ := json.Marshal(resp)
@@ -4224,6 +4295,9 @@ func rpcOthelloMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 
 	// 両者に配信
 	othelloSignalBroadcast(ctx, nk, g)
+	if g.Status == "finished" {
+		othelloListBroadcast(ctx, nk, g.WorldID)
+	}
 
 	// 裏返し情報も含めて返す
 	resp := othelloGameResponse(g)
@@ -4275,47 +4349,10 @@ func rpcOthelloResign(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}()
 
 	othelloSignalBroadcast(ctx, nk, g)
+	othelloListBroadcast(ctx, nk, g.WorldID)
 
 	resp := othelloGameResponse(g)
 	out, _ := json.Marshal(resp)
-	return string(out), nil
-}
-
-// rpcOthelloList は指定ワールドのオセロゲーム一覧を返す
-func rpcOthelloList(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
-	defer prof("rpcOthelloList")()
-
-	var req struct {
-		WorldID int `json:"worldId"`
-	}
-	if payload != "" {
-		json.Unmarshal([]byte(payload), &req)
-	}
-
-	var games []map[string]interface{}
-	othelloGames.Range(func(_, v interface{}) bool {
-		g := v.(*OthelloGame)
-		if g.WorldID == req.WorldID && g.Status != "finished" {
-			b, w := othelloCalcScore(&g.Board)
-			games = append(games, map[string]interface{}{
-				"gameId":     g.GameID,
-				"black":      g.BlackUID,
-				"blackName":  dn(g.BlackUID),
-				"white":      g.WhiteUID,
-				"whiteName":  dn(g.WhiteUID),
-				"status":     g.Status,
-				"turn":       g.Turn,
-				"blackCount": b,
-				"whiteCount": w,
-			})
-		}
-		return true
-	})
-	if games == nil {
-		games = []map[string]interface{}{}
-	}
-
-	out, _ := json.Marshal(map[string]interface{}{"games": games})
 	return string(out), nil
 }
 
@@ -4502,7 +4539,6 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"othelloJoin", rpcOthelloJoin},
 		{"othelloMove", rpcOthelloMove},
 		{"othelloResign", rpcOthelloResign},
-		{"othelloList", rpcOthelloList},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {

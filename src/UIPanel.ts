@@ -4504,7 +4504,11 @@ export function setupHtmlUI(game: GameScene): void {
                 currentGameId = null;
                 myColor = 0;
                 prevBoard = new Array(64).fill(0);
-                refreshGameList();
+                // ゲーム一覧はサーバからの購読応答で自動更新される
+                // 既に購読中なら再購読して最新リストを取得
+                if (subscribed) {
+                    game.nakama.othelloSubscribe(true).catch(e => console.warn("othelloSubscribe error:", e));
+                }
             };
 
             const showGame = () => {
@@ -4512,20 +4516,19 @@ export function setupHtmlUI(game: GameScene): void {
                 othGameView.style.display = "";
             };
 
-            // --- ゲーム一覧取得 ---
-            const refreshGameList = async () => {
+            // --- ゲーム一覧描画（サーバからの購読通知で呼ばれる） ---
+            const applyGameList = (games: import("./NakamaService").OthelloListPayload["games"]) => {
                 if (!othGameList) return;
                 const uid = myUid();
-                const res = await game.nakama.othelloList(game.currentWorldId);
                 othGameList.innerHTML = "";
-                for (const g of res.games) {
+                for (const g of games) {
                     // 自分が参加中のゲームは自動的にそのゲーム画面へ
-                    if (g.black === uid || g.white === uid) {
+                    if (g.status === "playing" && (g.black === uid || g.white === uid)) {
                         currentGameId = g.gameId;
                         myColor = g.black === uid ? 1 : 2;
-                        // RPC で最新状態を取得して描画
-                        const state = await game.nakama.othelloJoin(g.gameId);
-                        if (state) applyState(state);
+                        game.nakama.othelloJoin(g.gameId).then(state => {
+                            if (state) applyState(state);
+                        });
                         showGame();
                         return;
                     }
@@ -4700,14 +4703,16 @@ export function setupHtmlUI(game: GameScene): void {
 
             // --- サーバからの更新通知ハンドラ ---
             game.nakama.onOthelloUpdate = (data) => {
-                if (data.gameId !== currentGameId) {
-                    // ロビー表示中なら一覧を更新
+                if (data.type === "list") {
+                    // ゲーム一覧の更新をサーバから受信
                     if (!currentGameId && othLobby.style.display !== "none") {
-                        refreshGameList();
+                        applyGameList(data.games);
                     }
                     return;
                 }
-                applyState(data);
+                // type === "game" — 盤面更新
+                if (data.gameId !== currentGameId) return;
+                applyState(data as import("./NakamaService").OthelloUpdatePayload);
             };
 
             // --- 購読管理 ---

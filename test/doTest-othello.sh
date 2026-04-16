@@ -44,8 +44,9 @@ EOF
     esac
 done
 
-cd "$(dirname "$0")/.."
-source "$(dirname "$0")/lib/nakama-test-lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
+source "$SCRIPT_DIR/lib/nakama-test-lib.sh"
 load_nakama_config
 detect_api_base
 
@@ -161,14 +162,6 @@ check "othelloCreate: status=waiting" "$([ "$CREATE_STATUS" = "waiting" ] && ech
 
 echo "     gameId=${GAME_ID}"
 
-# ── othelloList ──
-rpc_call "$TOKEN_A" "othelloList" '{"worldId":0}'
-PAYLOAD_LIST=$(extract_payload "$RPC_BODY")
-LIST_HAS_GAME=$(echo "$PAYLOAD_LIST" | grep -c "$GAME_ID")
-
-check "othelloList: HTTP 200" "$([ "$RPC_HTTP" = "200" ] && echo 0 || echo 1)" "HTTP=${RPC_HTTP}"
-check "othelloList: ゲームが一覧に存在" "$([ "$LIST_HAS_GAME" -ge 1 ] && echo 0 || echo 1)" ""
-
 # ── othelloJoin ──
 rpc_call "$TOKEN_B" "othelloJoin" "{\"gameId\":\"${GAME_ID}\"}"
 PAYLOAD_JOIN=$(extract_payload "$RPC_BODY")
@@ -213,23 +206,26 @@ check "othelloResign: HTTP 200" "$([ "$RPC_HTTP" = "200" ] && echo 0 || echo 1)"
 check "othelloResign: status=finished" "$([ "$RESIGN_STATUS" = "finished" ] && echo 0 || echo 1)" "status=${RESIGN_STATUS}"
 check "othelloResign: winner=1(黒勝ち)" "$([ "$RESIGN_WINNER" = "1" ] && echo 0 || echo 1)" "winner=${RESIGN_WINNER}"
 
-# ── othelloList: 終局後は一覧から消える ──
-rpc_call "$TOKEN_A" "othelloList" '{"worldId":0}'
-PAYLOAD_LIST2=$(extract_payload "$RPC_BODY")
-LIST2_HAS_GAME=$(echo "$PAYLOAD_LIST2" | grep -c "$GAME_ID")
+# ── RPC テスト結果 ──
+echo ""
+echo "--- RPC テスト: ${PASS} passed / ${FAILED} failed / ${TOTAL} total ---"
+RPC_FAILED=$FAILED
 
-check "othelloList(終局後): ゲームが一覧から除外" "$([ "$LIST2_HAS_GAME" -eq 0 ] && echo 0 || echo 1)" ""
+# ── 3. WebSocket 通知テスト（vitest） ──
+echo ""
+echo "--- 3. WebSocket 通知テスト ---"
+npx vitest run test/nakama-othello.test.ts 2>&1
+WS_EXIT=$?
 
 # ── 結果 ──
 echo ""
 echo "========================================="
-echo "結果: ${PASS} passed / ${FAILED} failed / ${TOTAL} total"
-echo "========================================="
-
-if [ "$FAILED" -eq 0 ]; then
-    echo "✅ オセロテスト全パス"
+if [ "$RPC_FAILED" -eq 0 ] && [ "$WS_EXIT" -eq 0 ]; then
+    echo "✅ オセロテスト全パス（RPC ${PASS}/${TOTAL} + WebSocket）"
     exit 0
 else
     echo "❌ オセロテスト失敗"
+    [ "$RPC_FAILED" -ne 0 ] && echo "  RPC: ${FAILED} failed"
+    [ "$WS_EXIT" -ne 0 ] && echo "  WebSocket: vitest exit code ${WS_EXIT}"
     exit 1
 fi

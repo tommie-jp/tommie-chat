@@ -27,6 +27,7 @@ const OP_OTHELLO_SUB       = 19; // C→S     オセロ購読/解除（{subscrib
 
 /** オセロ盤面更新のペイロード型 */
 export interface OthelloUpdatePayload {
+    type?: "game";
     gameId: string;
     board: number[];
     black: string;
@@ -39,6 +40,25 @@ export interface OthelloUpdatePayload {
     whiteCount: number;
     flipped?: number[];
 }
+
+/** オセロゲーム一覧のペイロード型 */
+export interface OthelloListPayload {
+    type: "list";
+    games: {
+        gameId: string;
+        black: string;
+        blackName: string;
+        white: string;
+        whiteName: string;
+        status: string;
+        turn: number;
+        blackCount: number;
+        whiteCount: number;
+    }[];
+}
+
+/** OP_OTHELLO_UPDATE で受信するメッセージの共用型 */
+export type OthelloMessage = OthelloUpdatePayload | OthelloListPayload;
 
 export class NakamaService {
     private client: Client;
@@ -73,7 +93,7 @@ export class NakamaService {
     onDisplayName?:      (sessionId: string, displayName: string, nameColor?: string) => void;
     onPlayerListData?:   (players: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[]) => void;
     onPlayerListCount?:  (count: number) => void;
-    onOthelloUpdate?:    (data: OthelloUpdatePayload) => void;
+    onOthelloUpdate?:    (data: OthelloMessage) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
     /** 再接続時に joinMatch に渡すメタデータを取得するコールバック */
@@ -133,7 +153,7 @@ export class NakamaService {
             else if (resp.count !== undefined) this.onPlayerListCount?.(resp.count);
         }},
         [OP_OTHELLO_UPDATE]: { name: "OTHELLO", fn: (p) => {
-            this.onOthelloUpdate?.(p as OthelloUpdatePayload);
+            this.onOthelloUpdate?.(p as OthelloMessage);
         }},
         [OP_DISPLAY_NAME]: { name: "DISPLAY_NAME", silent: true, fn: (p, sid) => {
             if (!sid) return;
@@ -970,13 +990,6 @@ export class NakamaService {
         if (!this.socket) return null;
         const r = await this.socket.rpc("othelloResign", JSON.stringify({ gameId }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
-    }
-
-    /** オセロゲーム一覧を取得 */
-    async othelloList(worldId: number): Promise<{ games: { gameId: string; black: string; blackName: string; white: string; whiteName: string; status: string; turn: number; blackCount: number; whiteCount: number }[] }> {
-        if (!this.socket) return { games: [] };
-        const r = await this.socket.rpc("othelloList", JSON.stringify({ worldId }));
-        return r?.payload ? JSON.parse(r.payload) : { games: [] };
     }
 
     /** オセロ更新通知の購読/解除 */
