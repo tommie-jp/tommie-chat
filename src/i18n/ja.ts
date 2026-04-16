@@ -42,6 +42,7 @@ export const ja = {
     "menu.chatsettings": "チャット設定",
     "menu.bookmarks": "ブックマーク",
     "menu.rooms": "部屋一覧",
+    "menu.othello": "オセロ",
     "menu.ping": "Ping グラフ",
     "menu.ccu": "同接グラフ",
     "menu.minimap": "ミニマップ",

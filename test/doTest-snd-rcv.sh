@@ -301,8 +301,15 @@ run_phase() {
     echo "  Vitest 実行 (${label})..."
     cd "$ROOT_DIR"
     set +e
-    npx vitest run test/nakama-snd-rcv.test.ts -t "$vitest_filter" 2>&1 | stdbuf -oL tee "$client_log"
-    local rc=${PIPESTATUS[0]}
+    # vitest 出力をファイルに直接書き込み（doAll.sh -v 等でネストパイプになると
+    # vitest の console.log 出力が消失する問題を回避）
+    > "$client_log"
+    npx vitest run test/nakama-snd-rcv.test.ts -t "$vitest_filter" >> "$client_log" 2>&1 &
+    local vitest_pid=$!
+    # リアルタイム表示（doAll.sh のタイムアウト検出にも必要）
+    tail -f "$client_log" --pid="$vitest_pid" 2>/dev/null || true
+    wait "$vitest_pid" 2>/dev/null
+    local rc=$?
     set -e
 
     sleep "$wait_extra"

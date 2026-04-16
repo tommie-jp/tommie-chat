@@ -8,7 +8,8 @@
         ["showDebug",       "debug-overlay"],
         ["showPing",        "ping-panel"],
         ["showBookmarks",   "bookmark-panel"],
-        ["showRooms",       "room-list-panel"]
+        ["showRooms",       "room-list-panel"],
+        ["showOthello",     "othello-panel"]
     ];
     var getCookie = function(name) {
         var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));

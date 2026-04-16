@@ -218,8 +218,12 @@ run_test() {
     last_pass_count=""
 
     if [ "$VERBOSE" -eq 1 ]; then
-        bash "$SCRIPT_DIR/$name" "$@" 2>&1 | tee >(sed 's/\x1b\[[0-9;]*[mGKHF]//g' > "$test_log")
+        # process substitution >(sed ...) を廃止し、単純な tee + 後処理に変更
+        # （子プロセスの vitest が二重パイプで console.log を出力しなくなる問題を回避）
+        bash "$SCRIPT_DIR/$name" "$@" 2>&1 | tee "${test_log}.raw"
         rc=${PIPESTATUS[0]}
+        sed 's/\x1b\[[0-9;]*[mGKHF]//g' "${test_log}.raw" > "$test_log"
+        rm -f "${test_log}.raw"
     else
         > "$TMPLOG"
         setsid stdbuf -oL bash "$SCRIPT_DIR/$name" "$@" >> "$TMPLOG" 2>&1 &

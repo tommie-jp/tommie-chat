@@ -1493,7 +1493,7 @@ export function setupHtmlUI(game: GameScene): void {
                 .observe(document.body, { attributes: true, attributeFilter: ["class"] });
             const panelObsIds = ["user-list-panel", "chat-history-panel", "chat-settings-panel",
                 "server-settings-panel", "server-log-panel", "ping-panel",
-                "ccu-panel", "bookmark-panel", "room-list-panel", "debug-overlay",
+                "ccu-panel", "bookmark-panel", "room-list-panel", "othello-panel", "debug-overlay",
                 "about-panel", "displayname-panel", "avatar-panel"];
             for (const id of panelObsIds) {
                 const el = document.getElementById(id);
@@ -4392,6 +4392,217 @@ export function setupHtmlUI(game: GameScene): void {
                     sCk("room-list-panel_w", String(Math.round(r.width)));
                     sCk("room-list-panel_h", String(Math.round(r.height)));
                 }).observe(roomPanel);
+            }
+        }
+    }
+
+    // ===== オセロパネル ドラッグ & クローズ & 盤面モック =====
+    {
+        const othPanel  = document.getElementById("othello-panel") as HTMLElement | null;
+        const othHeader = document.getElementById("othello-header") as HTMLElement | null;
+        const othClose  = document.getElementById("othello-close") as HTMLElement | null;
+        const othBoard  = document.getElementById("othello-board") as HTMLElement | null;
+        const othBlack  = document.getElementById("othello-black-count") as HTMLElement | null;
+        const othWhite  = document.getElementById("othello-white-count") as HTMLElement | null;
+        const othStatus = document.getElementById("othello-status") as HTMLElement | null;
+        const othPassBtn   = document.getElementById("othello-pass-btn") as HTMLButtonElement | null;
+        const othResignBtn = document.getElementById("othello-resign-btn") as HTMLButtonElement | null;
+
+        if (othPanel && othHeader && othBoard) {
+            // --- 盤面データ (0=空, 1=黒, 2=白) ---
+            const board = new Int8Array(64);
+            // 初期配置
+            board[3 * 8 + 3] = 2; board[3 * 8 + 4] = 1;
+            board[4 * 8 + 3] = 1; board[4 * 8 + 4] = 2;
+            let currentTurn = 1; // 1=黒, 2=白
+            let lastMoveIdx = -1;
+            let gameActive = true;
+
+            // --- 8方向探索 ---
+            const DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+            const getFlips = (r: number, c: number, color: number): number[] => {
+                if (board[r * 8 + c] !== 0) return [];
+                const opp = color === 1 ? 2 : 1;
+                const flips: number[] = [];
+                for (const [dr, dc] of DIRS) {
+                    const line: number[] = [];
+                    let nr = r + dr, nc = c + dc;
+                    while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr * 8 + nc] === opp) {
+                        line.push(nr * 8 + nc);
+                        nr += dr; nc += dc;
+                    }
+                    if (line.length > 0 && nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr * 8 + nc] === color) {
+                        flips.push(...line);
+                    }
+                }
+                return flips;
+            };
+
+            // --- 合法手一覧 ---
+            const getLegalMoves = (color: number): Map<number, number[]> => {
+                const moves = new Map<number, number[]>();
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const flips = getFlips(r, c, color);
+                        if (flips.length > 0) moves.set(r * 8 + c, flips);
+                    }
+                }
+                return moves;
+            };
+
+            // --- スコア更新 ---
+            const updateScore = () => {
+                let b = 0, w = 0;
+                for (let i = 0; i < 64; i++) {
+                    if (board[i] === 1) b++;
+                    else if (board[i] === 2) w++;
+                }
+                if (othBlack) othBlack.textContent = String(b);
+                if (othWhite) othWhite.textContent = String(w);
+            };
+
+            // --- 盤面描画 ---
+            const renderBoard = () => {
+                const legalMoves = gameActive ? getLegalMoves(currentTurn) : new Map<number, number[]>();
+                othBoard.innerHTML = "";
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const idx = r * 8 + c;
+                        const cell = document.createElement("div");
+                        cell.className = "othello-cell";
+                        if (idx === lastMoveIdx) cell.classList.add("last-move");
+                        if (board[idx] !== 0) {
+                            const stone = document.createElement("div");
+                            stone.className = "stone " + (board[idx] === 1 ? "black" : "white");
+                            cell.appendChild(stone);
+                        } else if (legalMoves.has(idx)) {
+                            cell.classList.add("hint");
+                        }
+                        cell.addEventListener("click", () => onCellClick(r, c));
+                        othBoard.appendChild(cell);
+                    }
+                }
+                updateScore();
+
+                // ステータス & ボタン
+                if (othStatus) {
+                    if (!gameActive) {
+                        let b = 0, w = 0;
+                        for (let i = 0; i < 64; i++) { if (board[i] === 1) b++; else if (board[i] === 2) w++; }
+                        othStatus.textContent = b > w ? "⚫ 黒の勝ち！" : w > b ? "⚪ 白の勝ち！" : "引き分け";
+                    } else {
+                        othStatus.textContent = currentTurn === 1 ? "⚫ 黒の番" : "⚪ 白の番";
+                    }
+                }
+                if (othPassBtn) othPassBtn.disabled = !gameActive || legalMoves.size > 0;
+                if (othResignBtn) othResignBtn.disabled = !gameActive;
+            };
+
+            // --- セルクリック ---
+            const onCellClick = (r: number, c: number) => {
+                if (!gameActive) return;
+                const idx = r * 8 + c;
+                const flips = getFlips(r, c, currentTurn);
+                if (flips.length === 0) return;
+                board[idx] = currentTurn;
+                for (const fi of flips) board[fi] = currentTurn;
+                lastMoveIdx = idx;
+                currentTurn = currentTurn === 1 ? 2 : 1;
+                // 相手に合法手がなければもう一度自分の番
+                if (getLegalMoves(currentTurn).size === 0) {
+                    currentTurn = currentTurn === 1 ? 2 : 1;
+                    if (getLegalMoves(currentTurn).size === 0) {
+                        gameActive = false; // 両者パス → 終局
+                    }
+                }
+                renderBoard();
+            };
+
+            // --- パスボタン ---
+            if (othPassBtn) {
+                othPassBtn.addEventListener("click", () => {
+                    if (!gameActive) return;
+                    currentTurn = currentTurn === 1 ? 2 : 1;
+                    renderBoard();
+                });
+            }
+
+            // --- 投了ボタン ---
+            if (othResignBtn) {
+                othResignBtn.addEventListener("click", () => {
+                    if (!gameActive) return;
+                    gameActive = false;
+                    if (othStatus) othStatus.textContent = currentTurn === 1 ? "⚫ 黒が投了 → ⚪ 白の勝ち！" : "⚪ 白が投了 → ⚫ 黒の勝ち！";
+                    if (othPassBtn) othPassBtn.disabled = true;
+                    if (othResignBtn) othResignBtn.disabled = true;
+                });
+            }
+
+            // 初回描画
+            renderBoard();
+
+            // --- クッキー復元 ---
+            const sCk = (k: string, v: string) =>
+                document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+            if (!isMobileDev) {
+                const gCk = (k: string): string | null => {
+                    const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                    return m ? decodeURIComponent(m[1]) : null;
+                };
+                const sL = gCk("othello-panel_l"), sT = gCk("othello-panel_t");
+                const sW = gCk("othello-panel_w"), sH = gCk("othello-panel_h");
+                if (sL !== null) { othPanel.style.left = sL + "px"; othPanel.style.transform = "none"; }
+                if (sT !== null) othPanel.style.top = sT + "px";
+                if (sW !== null) othPanel.style.width = sW + "px";
+                if (sH !== null) othPanel.style.height = sH + "px";
+            }
+
+            // --- ドラッグ ---
+            if (!isMobileDev) {
+                let isDrag = false, offX = 0, offY = 0;
+                othHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                    if ((e.target as HTMLElement).id === "othello-close") return;
+                    isDrag = true;
+                    const rect = othPanel.getBoundingClientRect();
+                    offX = e.clientX - rect.left;
+                    offY = e.clientY - rect.top;
+                    othHeader.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+                document.addEventListener("pointermove", (e: PointerEvent) => {
+                    if (!isDrag) return;
+                    othPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    othPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                    othPanel.style.transform = "none";
+                });
+                document.addEventListener("pointerup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                    const r = othPanel.getBoundingClientRect();
+                    sCk("othello-panel_l", String(Math.round(r.left)));
+                    sCk("othello-panel_t", String(Math.round(r.top)));
+                });
+                new ResizeObserver(() => {
+                    if (othPanel.style.display === "none") return;
+                    const r = othPanel.getBoundingClientRect();
+                    sCk("othello-panel_w", String(Math.round(r.width)));
+                    sCk("othello-panel_h", String(Math.round(r.height)));
+                }).observe(othPanel);
+            }
+
+            // --- 閉じる ---
+            if (othClose) {
+                othClose.addEventListener("click", () => {
+                    const r = othPanel.getBoundingClientRect();
+                    sCk("othello-panel_l", String(Math.round(r.left)));
+                    sCk("othello-panel_t", String(Math.round(r.top)));
+                    sCk("othello-panel_w", String(Math.round(r.width)));
+                    sCk("othello-panel_h", String(Math.round(r.height)));
+                    othPanel.style.display = "none";
+                    sCk("showOthello", "0");
+                    const mb = document.getElementById("menu-othello");
+                    if (mb) mb.textContent = "　 " + t("menu.othello");
+                });
             }
         }
     }
