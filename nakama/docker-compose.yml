@@ -60,6 +60,7 @@ services:
             --runtime.env NAKAMA_VERSION=3.35.0 \
             --match.input_queue_size 8192 `# tick毎メッセージキュー[件](default128)` \
             --socket.outgoing_queue_size 2048 `# 接続毎送信バッファ[件](default64)` \
+            --socket.max_message_size_bytes 65536 `# 送信メッセージ上限[bytes](default4096)` \
             --socket.max_request_size_bytes 131072 `# 受信メッセージ上限[bytes](default131072)` \
             --runtime.max_count 8192 `# RPC同時goroutine上限[個](default256)` \
             --match.max_empty_sec 30 `# 空マッチ自動削除[秒](default0)` \

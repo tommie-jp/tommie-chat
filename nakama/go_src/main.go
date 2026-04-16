@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math"
 	"regexp"
 	"strconv"
 	"hash/fnv"
@@ -15,6 +16,7 @@ import (
 	_ "net/http/pprof"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -338,6 +340,11 @@ const (
 	opJump             int64 = 15 // C→S→C   アバタージャンプ演出（AOI内ブロードキャスト、ペイロード {}）
 	opPlayerListSub    int64 = 16 // C→S     プレイヤーリスト購読（{subscribe:true/false}）
 	opPlayerListData   int64 = 17 // S→C     全プレイヤーリスト（プッシュ配信）
+
+	// ── ブロードキャスト最適化定数 ──
+	safeMessageSize      = 4096 // broadcastSafe のデフォルトチャンク上限[bytes]
+	aoiEnterMaxPerTick   = 20   // AOI_ENTER ドリップ送信: 1tick あたりの最大件数/受信者
+	nearThresholdChunks  = 2    // 距離間引き: このチェビシェフ距離以内は「近距離」(毎tick送信)
 )
 
 // 地面セル: blockID (uint16) + RGBA 各1バイト
@@ -1402,10 +1409,10 @@ type matchState struct {
 	Rates            map[string]*sessionRate              // sessionID -> レートリミッター
 	WorldMoveJoin    map[string]bool                      // sessionID -> ワールド移動による入室か
 	PendingLeave     map[string]*pendingLeaveMsg          // userID -> 遅延送信中のleaveメッセージ
-	PlayerListSubs   map[string]string                    // sessionID -> "count" or "full"
-	PlayerListVer    uint64                               // 前回送信した gplVer（full用）
-	PlayerListCount  int                                  // 前回送信した部屋人数（count用）
-	ChunkViewers     map[[2]int]map[string]bool           // (cx,cz) → AOI内にこのチャンクを含むセッションID群
+	PlayerListSubs      map[string]string                    // sessionID -> "count" or "full"
+	PlayerListVerSub    map[string]uint64                   // sessionID -> 前回送信した gplVer（full用、スロット分散対応）
+	PlayerListCountSub  map[string]int                      // sessionID -> 前回送信した部屋人数（count用、スロット分散対応）
+	ChunkViewers        map[[2]int]map[string]bool          // (cx,cz) → AOI内にこのチャンクを含むセッションID群
 }
 
 // worldMatch は Nakama マッチハンドラの実装
@@ -1428,8 +1435,10 @@ func (m *worldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *s
 		Rates:           make(map[string]*sessionRate),
 		WorldMoveJoin:    make(map[string]bool),
 		PendingLeave:     make(map[string]*pendingLeaveMsg),
-		PlayerListSubs:   make(map[string]string),
-		ChunkViewers:     make(map[[2]int]map[string]bool),
+		PlayerListSubs:      make(map[string]string),
+		PlayerListVerSub:    make(map[string]uint64),
+		PlayerListCountSub:  make(map[string]int),
+		ChunkViewers:        make(map[[2]int]map[string]bool),
 	}, 10, label
 }
 
@@ -1755,6 +1764,8 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		delete(ms.PendingInit, sid)
 		delete(ms.PrevSIDs, sid)
 		delete(ms.PlayerListSubs, sid)
+		delete(ms.PlayerListVerSub, sid)
+		delete(ms.PlayerListCountSub, sid)
 		// ワールド人数カウンター更新
 		if v, ok := worldPlayerCounts.Load(ms.WorldID); ok {
 			n := v.(int) - 1; if n < 0 { n = 0 }
@@ -1805,6 +1816,65 @@ func (ms *matchState) collectAOITargets(senderSID string, cx, cz int) []runtime.
 		}
 	}
 	return targets
+}
+
+// collectAOITargetsNearFar は AOI ターゲットをチャンク距離で near/far に分割する。
+// near: nearThresholdChunks 以内（毎tick送信）, far: それ以外（間引き送信）
+func (ms *matchState) collectAOITargetsNearFar(senderSID string, cx, cz int) (near, far []runtime.Presence) {
+	defer prof("collectAOITargetsNearFar")()
+	viewers := ms.ChunkViewers[[2]int{cx, cz}]
+	near = make([]runtime.Presence, 0, len(viewers))
+	far = make([]runtime.Presence, 0, len(viewers)/2)
+	for viewerSID := range viewers {
+		if viewerSID == senderSID {
+			continue
+		}
+		p, ok := ms.Presences[viewerSID]
+		if !ok {
+			continue
+		}
+		vPos, ok := ms.Positions[viewerSID]
+		if !ok {
+			near = append(near, p) // 位置不明は安全側（near）
+			continue
+		}
+		dx := vPos.CX - cx; if dx < 0 { dx = -dx }
+		dz := vPos.CZ - cz; if dz < 0 { dz = -dz }
+		dist := dx; if dz > dist { dist = dz } // チェビシェフ距離
+		if dist <= nearThresholdChunks {
+			near = append(near, p)
+		} else {
+			far = append(far, p)
+		}
+	}
+	return
+}
+
+// broadcastSafe は JSON 配列メッセージが maxBytes を超える場合、自動的にチャンク分割して送信する。
+// クライアント側の変更は不要 — 同じ opcode の小さいメッセージが複数届くだけ。
+func broadcastSafe(d runtime.MatchDispatcher, op int64, data []byte, targets []runtime.Presence, sender runtime.Presence, maxBytes int) error {
+	if len(data) <= maxBytes {
+		return d.BroadcastMessage(op, data, targets, sender, true)
+	}
+	// JSON 配列として分割を試みる
+	var arr []json.RawMessage
+	if err := json.Unmarshal(data, &arr); err != nil {
+		// 配列でない場合はそのまま送信
+		return d.BroadcastMessage(op, data, targets, sender, true)
+	}
+	if len(arr) == 0 {
+		return d.BroadcastMessage(op, data, targets, sender, true)
+	}
+	// 配列をサイズに収まるチャンクに分割
+	batchSize := max(1, len(arr)*maxBytes/len(data))
+	for i := 0; i < len(arr); i += batchSize {
+		end := min(i+batchSize, len(arr))
+		chunk, _ := json.Marshal(arr[i:end])
+		if err := d.BroadcastMessage(op, chunk, targets, sender, true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, messages []runtime.MatchData) interface{} {
@@ -2012,11 +2082,15 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 				worldPlayersCache[sid] = &worldPlayerEntry{SessionID: sid, X: p.X, Z: p.Z, RY: p.RY, TextureUrl: p.TextureUrl, DisplayName: p.DisplayName}
 				worldPlayersMu.Unlock()
 			}
-			// 送信者のチャンク位置がAOI内のプレイヤーにだけ送信
+			// 送信者のチャンク位置がAOI内のプレイヤーにだけ送信（距離ベース間引き）
 			if p, ok := ms.Positions[sid]; ok {
-				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
-				if len(targets) > 0 {
-					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
+				near, far := ms.collectAOITargetsNearFar(sid, p.CX, p.CZ)
+				data := msg.GetData()
+				if len(near) > 0 {
+					dispatcher.BroadcastMessage(op, data, near, msg, true)
+				}
+				if len(far) > 0 && tick%3 == 0 {
+					dispatcher.BroadcastMessage(op, data, far, msg, true)
 				}
 			}
 			continue
@@ -2103,12 +2177,17 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					}
 				}
 			}
-			// AOIフィルタ: 送信者のチャンク位置が受信者のAOI内の場合のみ送信
+			// AOIフィルタ + 距離ベース間引き: near=毎tick(10Hz), far=3tickごと(3.3Hz)
 			if p, ok := ms.Positions[sid]; ok {
-				targets := ms.collectAOITargets(sid, p.CX, p.CZ)
-				if len(targets) > 0 {
-					logf("snd moveTarget sid=%s targets=%d\n", shortSID(sid), len(targets))
-					dispatcher.BroadcastMessage(op, msg.GetData(), targets, msg, true)
+				near, far := ms.collectAOITargetsNearFar(sid, p.CX, p.CZ)
+				data := msg.GetData()
+				if len(near) > 0 {
+					logf("snd moveTarget sid=%s near=%d\n", shortSID(sid), len(near))
+					dispatcher.BroadcastMessage(op, data, near, msg, true)
+				}
+				if len(far) > 0 && tick%3 == 0 {
+					logf("snd moveTarget sid=%s far=%d\n", shortSID(sid), len(far))
+					dispatcher.BroadcastMessage(op, data, far, msg, true)
 				}
 			}
 			continue
@@ -2380,6 +2459,8 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					}
 				} else {
 					delete(ms.PlayerListSubs, sid)
+					delete(ms.PlayerListVerSub, sid)
+					delete(ms.PlayerListCountSub, sid)
 				}
 			}
 			continue
@@ -2391,48 +2472,72 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 		}
 	}
 
-	// AOI_ENTER バッファ: 同一tick内の通知をバルクにまとめて送信
+	// AOI_ENTER バッファ: 距離順ソート + ドリップ送信（最大 aoiEnterMaxPerTick 件/tick/受信者）
 	if len(ms.PendingAOIEnter) > 0 {
 		for recipSID, entries := range ms.PendingAOIEnter {
-			if p, ok := ms.Presences[recipSID]; ok && len(entries) > 0 {
-				data, _ := json.Marshal(entries)
-				dispatcher.BroadcastMessage(opAOIEnter, data, []runtime.Presence{p}, nil, true)
+			p, ok := ms.Presences[recipSID]
+			if !ok || len(entries) == 0 {
+				delete(ms.PendingAOIEnter, recipSID)
+				continue
+			}
+			// 受信者の位置からの距離順にソート（近い人を優先表示）
+			if recipPos, ok := ms.Positions[recipSID]; ok {
+				slices.SortFunc(entries, func(a, b map[string]interface{}) int {
+					ax, _ := a["x"].(float64)
+					az, _ := a["z"].(float64)
+					bx, _ := b["x"].(float64)
+					bz, _ := b["z"].(float64)
+					da := math.Max(math.Abs(ax-recipPos.X), math.Abs(az-recipPos.Z))
+					db := math.Max(math.Abs(bx-recipPos.X), math.Abs(bz-recipPos.Z))
+					if da < db { return -1 }
+					if da > db { return 1 }
+					return 0
+				})
+			}
+			// 先頭 N 件を送信、残りは次 tick へ繰り越し
+			n := min(aoiEnterMaxPerTick, len(entries))
+			send := entries[:n]
+			data, _ := json.Marshal(send)
+			broadcastSafe(dispatcher, opAOIEnter, data, []runtime.Presence{p}, nil, safeMessageSize)
+			if n < len(entries) {
+				ms.PendingAOIEnter[recipSID] = entries[n:]
+			} else {
+				delete(ms.PendingAOIEnter, recipSID)
 			}
 		}
-		ms.PendingAOIEnter = make(map[string][]map[string]interface{})
 	}
 
-	// プレイヤーリスト購読者へプッシュ配信
-	if tick%10 == 0 && len(ms.PlayerListSubs) > 0 {
-		// 購読者をモード別に分類
-		var countSubs, fullSubs []runtime.Presence
+	// プレイヤーリスト購読者へスロット分散プッシュ配信
+	// 10tick(1秒)サイクルで全購読者に行き渡る。各tickは slot = tick%10 の購読者のみ処理。
+	if len(ms.PlayerListSubs) > 0 {
+		slot := int(tick % 10)
+		curCount := len(ms.Presences)
+		curVer := atomic.LoadUint64(&gplVer)
 		for sid, mode := range ms.PlayerListSubs {
-			if p, ok := ms.Presences[sid]; ok {
-				if mode == "full" {
-					fullSubs = append(fullSubs, p)
-				} else {
-					countSubs = append(countSubs, p)
+			// FNV-1a ハッシュでスロット 0〜9 を割り当て
+			h := fnv.New32a()
+			h.Write([]byte(sid))
+			if int(h.Sum32()%10) != slot {
+				continue
+			}
+			p, ok := ms.Presences[sid]
+			if !ok {
+				continue
+			}
+			if mode == "full" {
+				// full モード: gplVer が変わった時のみ送信（per-subscriber 追跡）
+				if ms.PlayerListVerSub[sid] != curVer {
+					data, ver := gplSnapshot()
+					ms.PlayerListVerSub[sid] = ver
+					broadcastSafe(dispatcher, opPlayerListData, data, []runtime.Presence{p}, nil, safeMessageSize)
 				}
-			}
-		}
-
-		// count モード: 自マッチの人数が変わった時のみ送信
-		if len(countSubs) > 0 {
-			curCount := len(ms.Presences)
-			if curCount != ms.PlayerListCount {
-				ms.PlayerListCount = curCount
-				cdata, _ := json.Marshal(map[string]interface{}{"count": curCount})
-				dispatcher.BroadcastMessage(opPlayerListData, cdata, countSubs, nil, true)
-			}
-		}
-
-		// full モード: グローバルリストが変わった時のみ送信
-		if len(fullSubs) > 0 {
-			curVer := atomic.LoadUint64(&gplVer)
-			if curVer != ms.PlayerListVer {
-				data, ver := gplSnapshot()
-				ms.PlayerListVer = ver
-				dispatcher.BroadcastMessage(opPlayerListData, data, fullSubs, nil, true)
+			} else {
+				// count モード: 部屋人数が変わった時のみ送信（per-subscriber 追跡）
+				if ms.PlayerListCountSub[sid] != curCount {
+					ms.PlayerListCountSub[sid] = curCount
+					cdata, _ := json.Marshal(map[string]interface{}{"count": curCount})
+					dispatcher.BroadcastMessage(opPlayerListData, cdata, []runtime.Presence{p}, nil, true)
+				}
 			}
 		}
 	}

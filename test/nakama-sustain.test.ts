@@ -197,7 +197,7 @@ async function createPlayers(prefix: string, count: number, batchSize = 40): Pro
             console.error(`⚠️ バッチ ${offset}〜${offset + batch}: ${rejected}人失敗`);
         }
         // 大人数テスト時は進捗を表示（doAll.shのタイムアウト防止）
-        if (count >= 100 && (offset + batchSize) < count) {
+        if (count >= 100) {
             console.log(`  接続中: ${players.length}/${count}人`);
         }
         if (offset + batchSize < count) await sleep(1000);

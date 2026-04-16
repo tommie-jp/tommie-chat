@@ -19,7 +19,7 @@ import { trackUserId, deleteCreatedUsers } from './test-helpers';
 const HOST        = process.env.NAKAMA_HOST ?? '127.0.0.1';
 const PORT        = process.env.NAKAMA_PORT ?? '7350';
 const SERVER_KEY  = process.env.NAKAMA_SERVER_KEY ?? 'tommie-chat';
-const TEXTURE_URL = '/s3/avatars/pic1.ktx2';
+const TEXTURE_URL = '/s3/avatars/001-pipo-nekonin008.png';
 const CHAT_ROOM   = 'world';
 
 const OP_INIT_POS          = 1;
@@ -208,7 +208,7 @@ async function loginNPlayers(prefix: string, count: number): Promise<PlayerConn[
             }
         }
         // 大人数テスト時は進捗を表示（doAll.shのタイムアウト防止）
-        if (count >= 100 && (i + batchSize) < count) {
+        if (count >= 100) {
             console.log(`  接続中: ${players.length}/${count}人`);
         }
         if (i + batchSize < count) await sleep(1000);
@@ -487,7 +487,7 @@ function makeTextureChangeTest(count: number): void {
         });
 
         it('avatarChange 後にプロフィール取得すると新しい textureUrl が反映されている', async () => {
-            const newTexture = '/s3/avatars/changed.ktx2';
+            const newTexture = '/s3/avatars/001-pipo-nekonin002.png';
             clog(players[0].name, `snd avatarChange textureUrl=${newTexture}`);
             await players[0].socket.sendMatchState(players[0].matchId, OP_AVATAR_CHANGE,
                 JSON.stringify({ textureUrl: newTexture }));

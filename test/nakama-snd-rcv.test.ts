@@ -447,7 +447,7 @@ async function loginNPlayers(label: string, count: number): Promise<PlayerConn[]
             }
         }
         // 大人数テスト時は進捗を表示（doAll.shのタイムアウト防止）
-        if (count >= 100 && (i + batchSize) < count) {
+        if (count >= 100) {
             console.log(`  接続中: ${players.length}/${count}人`);
         }
         if (i + batchSize < count) await sleep(1000);

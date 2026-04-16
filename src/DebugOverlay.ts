@@ -1961,7 +1961,7 @@ export function setupDebugOverlay(game: GameScene): void {
                 // アバター変更時のジャンプ演出（自分 & 他クライアントへ通知）
                 game.spriteAvatarSystem.jump(selfId);
                 game.nakama.sendJump().catch((e) => console.warn("DebugOverlay:", e));
-            });
+            }).catch(e => console.warn("DebugOverlay: createAvatar failed:", e));
             game.nakama.sendAvatarChange(url, cc, cr).catch((e) => console.warn("DebugOverlay:", e));
         });
     }

@@ -17,6 +17,21 @@ export default defineConfig({
         target: 'http://localhost:7350',
         changeOrigin: true,
         ws: true,
+        timeout: 0,          // プロキシリクエストのソケットタイムアウトを無効化
+        configure: (proxy) => {
+          // WebSocket プロキシのソケット設定を強化（テスト高負荷時の切断防止）
+          proxy.on('proxyReqWs', (_proxyReq, _req, socket) => {
+            socket.setTimeout(0);
+            socket.setKeepAlive(true, 30000);
+          });
+          proxy.on('open', (proxySocket) => {
+            proxySocket.setTimeout(0);
+            proxySocket.setKeepAlive(true, 30000);
+          });
+          proxy.on('error', (err, _req, _res) => {
+            console.error('[vite ws proxy]', err.message);
+          });
+        },
       },
       '/s3/avatars': {
         target: 'http://localhost:9000',

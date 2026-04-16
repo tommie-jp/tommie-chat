@@ -50,10 +50,19 @@ export class SpriteAvatarSystem {
     private readonly PENDING_JUMP_TTL_MS = 3000;
     // 足元の五角形（standBase）の表示状態（デバッグ用、デフォルト OFF）
     private standBaseVisible = false;
+    // 読み込み失敗した URL を記憶し、同じ URL の再リクエストを防止する
+    private failedUrls = new Set<string>();
+    // 同時アバター作成数を制限し、大量同時接続によるブラウザクラッシュを防止
+    private readonly MAX_CONCURRENT_CREATE = 5;
+    private concurrentCreating = 0;
+    private createQueue: Array<{ resolve: () => void }> = [];
 
     constructor(private scene: Scene) {}
 
     private async getOrCreateManager(sheetUrl: string): Promise<ManagerEntry> {
+        if (this.failedUrls.has(sheetUrl)) {
+            throw new Error(`Sheet URL previously failed: ${sheetUrl}`);
+        }
         const existing = this.managers.get(sheetUrl);
         if (existing) {
             existing.refCount++;
@@ -71,6 +80,9 @@ export class SpriteAvatarSystem {
             const entry = await promise;
             this.managers.set(sheetUrl, entry);
             return entry;
+        } catch (e) {
+            this.failedUrls.add(sheetUrl);
+            throw e;
         } finally {
             this.processing.delete(sheetUrl);
         }
@@ -86,7 +98,7 @@ export class SpriteAvatarSystem {
 
         const mgr = new SpriteManager(
             "sprMgr_" + sheetUrl.replace(/[^a-zA-Z0-9]/g, "_"),
-            result.dataURL, 50,
+            result.dataURL, 200,
             { width: frameW, height: frameH },
             this.scene
         );
@@ -104,6 +116,24 @@ export class SpriteAvatarSystem {
         return { mgr, sheetInfo: info, refCount: 1 };
     }
 
+    /** セマフォ取得: 同時作成数が上限未満なら即 resolve、超過中はキューで待機 */
+    private acquireCreateSlot(): Promise<void> {
+        if (this.concurrentCreating < this.MAX_CONCURRENT_CREATE) {
+            this.concurrentCreating++;
+            return Promise.resolve();
+        }
+        return new Promise(resolve => this.createQueue.push({ resolve }));
+    }
+    /** セマフォ解放: キューに待機中のものがあれば1つ起こす */
+    private releaseCreateSlot(): void {
+        const next = this.createQueue.shift();
+        if (next) {
+            next.resolve();  // concurrentCreating は変わらない（枠を引き継ぐ）
+        } else {
+            this.concurrentCreating--;
+        }
+    }
+
     async createAvatar(
         id: string, sheetUrl: string, charCol: number, charRow: number,
         x: number, z: number, name: string, baseColor?: Color3, ry?: number
@@ -112,7 +142,20 @@ export class SpriteAvatarSystem {
         // 作成中なら無視
         if (this.creating.has(id)) { _end(); return new TransformNode("dummy_" + id, this.scene); }
         this.creating.add(id);
-        const entry = await this.getOrCreateManager(sheetUrl);
+
+        // 同時作成数を制限（大量接続時のブラウザクラッシュ防止）
+        await this.acquireCreateSlot();
+
+        let entry: ManagerEntry;
+        try {
+            entry = await this.getOrCreateManager(sheetUrl);
+        } catch (e) {
+            this.releaseCreateSlot();
+            this.creating.delete(id);
+            _end();
+            console.warn(`SpriteAvatarSystem: failed to load sheet ${sheetUrl}:`, e);
+            return new TransformNode("dummy_" + id, this.scene);
+        }
         const info = entry.sheetInfo;
 
         console.log(`SpriteAvatarSystem.createAvatar id=${id} sheet=${sheetUrl} frameW=${info.frameW} frameH=${info.frameH} fCols=${info.fCols}`);
@@ -172,6 +215,7 @@ export class SpriteAvatarSystem {
                 m.dispose();
             });
             root.dispose();
+            this.releaseCreateSlot();
             _end();
             return root;
         }
@@ -185,6 +229,7 @@ export class SpriteAvatarSystem {
         };
         this.avatars.set(id, data);
         this.creating.delete(id);
+        this.releaseCreateSlot();
 
         // 再作成中に保留された jump を適用（TTL 内のみ）
         const pending = this.pendingJumps.get(id);

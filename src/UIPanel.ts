@@ -2241,7 +2241,7 @@ export function setupHtmlUI(game: GameScene): void {
                 // 初期色を反映
                 const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
                 if (upd) upd(initLbl.text, initLbl.color, initLbl.suffix);
-            });
+            }).catch(e => console.warn("UIPanel: createAvatar failed:", e));
         }
         game.remoteTargets.delete(sessionId);
         // OP_INIT_POS に含まれるログイン時刻・表示名を userMap に反映
@@ -2292,7 +2292,7 @@ export function setupHtmlUI(game: GameScene): void {
             if (su) game.remoteSpeeches.set(sessionId, su);
             const upd = game.spriteAvatarSystem.getNameUpdate(sessionId);
             if (upd) upd(chgLbl.text, chgLbl.color, chgLbl.suffix);
-        });
+        }).catch(e => console.warn("UIPanel: createAvatar failed:", e));
     };
     game.nakama.onAvatarJump = (sessionId: string) => {
         if (sessionId === game.nakama.selfSessionId) return;
@@ -2362,7 +2362,7 @@ export function setupHtmlUI(game: GameScene): void {
                         if (su) game.remoteSpeeches.set(sid, su);
                         const upd2 = game.spriteAvatarSystem.getNameUpdate(sid);
                         if (upd2) upd2(plbl.text, plbl.color, plbl.suffix);
-                    });
+                    }).catch(e => console.warn("UIPanel: createAvatar failed:", e));
                 }
             }
         }
@@ -2408,9 +2408,9 @@ export function setupHtmlUI(game: GameScene): void {
                         if (su2) game.remoteSpeeches.set(sessionId, su2);
                         const upd2 = game.spriteAvatarSystem.getNameUpdate(sessionId);
                         if (upd2) upd2(lbl2.text, lbl2.color, lbl2.suffix);
-                    });
+                    }).catch(e => console.warn("UIPanel: createAvatar failed:", e));
                 }
-            });
+            }).catch(e => console.warn("UIPanel: createAvatar failed:", e));
         }
         game.remoteTargets.delete(sessionId);
         // キャッシュ未取得ならRPCで取得予約
