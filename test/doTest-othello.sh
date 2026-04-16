@@ -1,6 +1,6 @@
 #!/bin/bash
 # オセロ対戦テスト（RPC フロー: 作成→一覧→参加→着手→投了）
-# Usage: ./test/doTest-Othello.sh [--host HOST] [--port PORT] [-h]
+# Usage: ./test/doTest-othello.sh [--host HOST] [--port PORT] [-h]
 #
 # 2ユーザーを認証し、オセロ RPC の全フローをテストする。
 # 失敗した場合は exit 1 を返す。
@@ -12,7 +12,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
             cat <<'EOF'
-Usage: ./test/doTest-Othello.sh [--host HOST] [--port PORT] [-h]
+Usage: ./test/doTest-othello.sh [--host HOST] [--port PORT] [-h]
 
 オセロ対戦の RPC フローをテストします。
 
@@ -31,8 +31,8 @@ Usage: ./test/doTest-Othello.sh [--host HOST] [--port PORT] [-h]
   7. othelloList — 終局後の一覧（消えていること）
 
 例:
-  ./test/doTest-Othello.sh
-  ./test/doTest-Othello.sh --host mmo.tommie.jp --port 443
+  ./test/doTest-othello.sh
+  ./test/doTest-othello.sh --host mmo.tommie.jp --port 443
 EOF
             exit 0 ;;
         --host)
@@ -83,16 +83,17 @@ rpc_call() {
     RPC_BODY=$(echo "$response" | head -n -1)
 }
 
-# レスポンスの payload フィールドを抽出（Nakama REST API は {payload: "..."} で返す）
+# レスポンスの payload フィールドを抽出（Nakama REST API は {payload: "JSON文字列"} で返す）
+# jq で .payload をパースし、内部 JSON 文字列をデコードして返す
 extract_payload() {
-    echo "$1" | grep -oP '"payload"\s*:\s*"([^"]*(?:\\.[^"]*)*)"' | head -1 | sed 's/"payload"\s*:\s*"//;s/"$//' | sed 's/\\"/"/g;s/\\\\/\\/g'
+    echo "$1" | jq -r '.payload // empty' 2>/dev/null
 }
 
-# JSON からフィールド値を取得（簡易: ネストなしの文字列/数値）
+# JSON からフィールド値を取得
 json_field() {
     local json="$1"
     local field="$2"
-    echo "$json" | grep -oP "\"${field}\"\s*:\s*\"?[^,}\"]*\"?" | head -1 | sed "s/\"${field}\"\s*:\s*//;s/\"//g"
+    echo "$json" | jq -r ".${field} // empty" 2>/dev/null
 }
 
 # デバイス認証してトークンを取得
