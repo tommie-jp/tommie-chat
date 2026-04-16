@@ -12,8 +12,9 @@
 #   ./test/doSeedGround.sh --host 127.0.0.1 --port 7350
 
 set -e
-cd "$(dirname "$0")/.."
-source "$(dirname "$0")/lib/nakama-test-lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
+source "$SCRIPT_DIR/lib/nakama-test-lib.sh"
 
 # 引数パース
 OPT_HOST=""

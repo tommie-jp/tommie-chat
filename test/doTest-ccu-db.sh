@@ -19,8 +19,9 @@ for _a in "$@"; do
 done
 set -- "${_ARGS[@]}"
 
-cd "$(dirname "$0")/.."
-source "$(dirname "$0")/lib/nakama-test-lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
+source "$SCRIPT_DIR/lib/nakama-test-lib.sh"
 load_nakama_config
 detect_api_base
 mkdir -p test/log

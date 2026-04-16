@@ -191,9 +191,9 @@ export class SpriteAvatarSystem {
         const idle = cellIndex(info, charCol, charRow, 0, 1);
         s.cellIndex = idle;
 
-        // stand base
+        // stand base（自分のアバターは常に表示）
         const standBase = this.createStandBase(id, root, baseColor);
-        standBase.setEnabled(this.standBaseVisible);
+        standBase.setEnabled(id === "__self__" || this.standBaseVisible);
 
         // name tag
         const { plane: namePlane, update: nameUpdate } = this.createNameTag(root, name, s.height);
@@ -350,8 +350,8 @@ export class SpriteAvatarSystem {
     /** 足元の五角形（standBase）の表示状態を全アバターに一括適用（新規作成分にも反映） */
     setStandBaseVisible(visible: boolean): void {
         this.standBaseVisible = visible;
-        for (const data of this.avatars.values()) {
-            data.standBase.setEnabled(visible);
+        for (const [id, data] of this.avatars.entries()) {
+            data.standBase.setEnabled(id === "__self__" || visible);
         }
     }
 

@@ -8,8 +8,9 @@
 #   ./test/doClearUsers.sh
 
 set -e
-cd "$(dirname "$0")/.."
-source "$(dirname "$0")/lib/nakama-test-lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
+source "$SCRIPT_DIR/lib/nakama-test-lib.sh"
 detect_compose
 cd nakama
 
