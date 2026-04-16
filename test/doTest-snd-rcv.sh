@@ -129,24 +129,10 @@ export TEST_TIMEOUT_MS=$(( TIMEOUT_SEC > 0 ? TIMEOUT_SEC * 1000 : 0 ))
 export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=8192"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ROOT_DIR/nakama/.env" ]; then
-    set -a; source "$ROOT_DIR/nakama/.env"; set +a
-fi
-# --host/--port 優先 > 環境変数 > デフォルト
-export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
-export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
-IS_LOCAL=false
-if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
-    IS_LOCAL=true
-fi
-# docker compose コマンド（実行中のコンテナから dev/prod を自動検出）
-COMPOSE="docker compose"
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'tommchat-prod'; then
-    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-elif [ -f "$ROOT_DIR/nakama/docker-compose.dev.yml" ]; then
-    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
-fi
+source "$SCRIPT_DIR/lib/nakama-test-lib.sh"
+load_nakama_config
+detect_api_base
+detect_compose
 
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"

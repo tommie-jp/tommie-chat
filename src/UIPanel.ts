@@ -2890,6 +2890,13 @@ export function setupHtmlUI(game: GameScene): void {
                     }
                     scheduleRenderUserList();
                 }
+                // プレイヤーリスト購読を再確立（再接続で旧マッチのサブスクが失われるため）
+                _playerListMode = null;
+                if (isUlPanelVisible()) {
+                    subPlayerListFull();
+                } else {
+                    subPlayerListCount();
+                }
                 // 自分のプロフィール（loginTime等）をサーバから再取得
                 {
                     const sid = game.nakama.selfSessionId;

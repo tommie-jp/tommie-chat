@@ -20,17 +20,9 @@ done
 set -- "${_ARGS[@]}"
 
 cd "$(dirname "$0")/.."
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
-    set -a; source nakama/.env; set +a
-fi
-# --host/--port 優先 > 環境変数 > デフォルト
-export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
-export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
-IS_LOCAL=false
-if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
-    IS_LOCAL=true
-fi
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
+load_nakama_config
+detect_api_base
 mkdir -p test/log
 echo "========================================="
 echo "同接履歴 DB永続化テスト"

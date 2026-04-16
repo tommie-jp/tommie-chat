@@ -43,19 +43,8 @@ EOF
 done
 
 cd "$(dirname "$0")/.."
-
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
-    set -a; source nakama/.env; set +a
-fi
-
-# .env が無い場合、docker-compose.yml から server_key を自動取得
-if [ -z "${NAKAMA_SERVER_KEY:-}" ]; then
-    KEY=$(grep -oP '(?<=--socket\.server_key\s)\S+' nakama/docker-compose.yml 2>/dev/null | head -1)
-    if [ -n "$KEY" ]; then
-        export NAKAMA_SERVER_KEY="$KEY"
-    fi
-fi
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
+load_nakama_config
 
 echo "--- 再接続テスト ---"
 echo "host: ${NAKAMA_HOST:-127.0.0.1}:${NAKAMA_PORT:-7350}"

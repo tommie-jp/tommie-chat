@@ -13,8 +13,11 @@
 
 set -e
 cd "$(dirname "$0")/.."
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
 
 # 引数パース
+OPT_HOST=""
+OPT_PORT=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
@@ -30,12 +33,14 @@ while [[ $# -gt 0 ]]; do
             echo "  -h, --help         このヘルプを表示"
             exit 0
             ;;
-        --host) export NAKAMA_HOST="$2"; shift 2 ;;
-        --port) export NAKAMA_PORT="$2"; shift 2 ;;
+        --host) OPT_HOST="$2"; shift 2 ;;
+        --port) OPT_PORT="$2"; shift 2 ;;
         -p|--pattern) export SEED_PATTERN="$2"; shift 2 ;;
         *) echo "不明なオプション: $1（-h でヘルプ表示）"; exit 1 ;;
     esac
 done
+
+load_nakama_config
 
 PATTERN="${SEED_PATTERN:-plaza}"
 echo "=== 地面データ投入（パターン: ${PATTERN}） ==="

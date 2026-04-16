@@ -60,19 +60,13 @@ EOF
 done
 
 cd "$(dirname "$0")/.."
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
-    set -a; source nakama/.env; set +a
-fi
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
+load_nakama_config
+detect_api_base
 
-SERVER_KEY="${NAKAMA_SERVER_KEY:-tommie-chat}"
-# 優先順位: --host > NAKAMA_HOST > 127.0.0.1
-HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
-PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
-IS_LOCAL=false
-if [ "$HOST" = "127.0.0.1" ] || [ "$HOST" = "localhost" ]; then
-    IS_LOCAL=true
-fi
+# doTest-ping.sh 固有: 短縮変数
+HOST="$NAKAMA_HOST"
+PORT="$NAKAMA_PORT"
 FAILED=0
 
 echo "--- 疎通テスト ---"

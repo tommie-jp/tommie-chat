@@ -30,27 +30,12 @@ DOMAIN="$1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NAKAMA_DIR="$(cd "$SCRIPT_DIR/../nakama" && pwd)"
 
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
+
 GREEN=$'\e[32m'
 RED=$'\e[31m'
 YELLOW=$'\e[33m'
 RESET=$'\e[0m'
-
-FAILED=0
-PASS=0
-
-check() {
-    local label="$1"
-    local result="$2"
-    local detail="${3:-}"
-    if [ "$result" = "0" ]; then
-        echo "  ✅ $label"
-        PASS=$((PASS + 1))
-    else
-        echo "  ❌ $label"
-        [ -n "$detail" ] && echo "     $detail"
-        FAILED=$((FAILED + 1))
-    fi
-}
 
 echo "=== メンテナンスページ表示テスト（${DOMAIN}） ==="
 echo ""

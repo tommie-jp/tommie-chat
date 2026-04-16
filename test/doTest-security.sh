@@ -118,57 +118,18 @@ if [ -n "${1:-}" ]; then
 fi
 
 cd "$(dirname "$0")/.."
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
-    set -a; source nakama/.env; set +a
-fi
-# .env がない場合、docker-compose.yml から server_key を取得
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/docker-compose.yml ]; then
-    _key=$(grep -oP '(?<=--socket\.server_key\s)\S+' nakama/docker-compose.yml 2>/dev/null | head -1)
-    [ -n "$_key" ] && NAKAMA_SERVER_KEY="$_key"
-fi
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
 
-SERVER_KEY="${NAKAMA_SERVER_KEY:-tommie-chat}"
-HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
-IS_LOCAL=false
-if [ "$HOST" = "127.0.0.1" ] || [ "$HOST" = "localhost" ]; then
-    IS_LOCAL=true
+# doTest-security.sh 固有: リモート時は HTTPS/443 固定
+if [ -n "${OPT_HOST:-}" ]; then
+    OPT_PORT="443"
 fi
+load_nakama_config
+detect_api_base
 
-# ポート・プロトコル判定（リモートは HTTPS/443 固定）
-if [ "$IS_LOCAL" = true ]; then
-    PORT="${NAKAMA_PORT:-7350}"
-    PROTO="http"
-else
-    PORT="443"
-    PROTO="https"
-fi
-
-# API ベース URL（HTTPS/443 はポート省略）
-if [ "$IS_LOCAL" = true ]; then
-    API_BASE="${PROTO}://${HOST}:${PORT}"
-else
-    API_BASE="${PROTO}://${HOST}"
-fi
-
-FAILED=0
-PASS=0
-TOTAL=0
-
-check() {
-    local label="$1"
-    local result="$2"
-    local detail="$3"
-    TOTAL=$((TOTAL + 1))
-    if [ "$result" = "0" ]; then
-        echo "  ✅ $label"
-        PASS=$((PASS + 1))
-    else
-        echo "  ❌ $label"
-        [ -n "$detail" ] && echo "     $detail"
-        FAILED=$((FAILED + 1))
-    fi
-}
+# 短縮変数（既存コードとの互換）
+HOST="$NAKAMA_HOST"
+PORT="$NAKAMA_PORT"
 
 echo "=== セキュリティテスト ==="
 echo "スクリプト: $(stat -c '%y' "$SCRIPT_PATH" | cut -d. -f1)"

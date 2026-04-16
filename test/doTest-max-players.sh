@@ -63,20 +63,9 @@ PASS_NEEDED=$(( (TRIALS + 1) / 2 ))
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ROOT_DIR/nakama/.env" ]; then
-    set -a; source "$ROOT_DIR/nakama/.env"; set +a
-fi
-# --host/--port 優先 > 環境変数 > デフォルト
-export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
-export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
-HOST_PORT_OPT=""
-if [ "$NAKAMA_HOST" != "127.0.0.1" ] && [ "$NAKAMA_HOST" != "localhost" ]; then
-    HOST_PORT_OPT="--host $NAKAMA_HOST"
-fi
-if [ "$NAKAMA_PORT" != "7350" ]; then
-    HOST_PORT_OPT="$HOST_PORT_OPT --port $NAKAMA_PORT"
-fi
+source "$SCRIPT_DIR/lib/nakama-test-lib.sh"
+load_nakama_config
+build_host_port_opt
 LOG_DIR="$SCRIPT_DIR/log"
 mkdir -p "$LOG_DIR"
 

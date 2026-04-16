@@ -71,27 +71,9 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み（未設定の場合のみ）
-ENV_FILE="$ROOT_DIR/nakama/.env"
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f "$ENV_FILE" ]; then
-    set -a; source "$ENV_FILE"; set +a
-fi
-# .env が無い場合、docker-compose.yml から server_key を自動取得
-if [ -z "${NAKAMA_SERVER_KEY:-}" ]; then
-    _KEY=$(grep -oP '(?<=--socket\.server_key\s)\S+' "$ROOT_DIR/nakama/docker-compose.yml" 2>/dev/null | head -1)
-    [ -n "$_KEY" ] && export NAKAMA_SERVER_KEY="$_KEY"
-fi
-# --host/--port 優先 > 環境変数 > デフォルト
-export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
-export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
-HOST_PORT_OPT=""
-if [ "$NAKAMA_HOST" != "127.0.0.1" ] && [ "$NAKAMA_HOST" != "localhost" ]; then
-    HOST_PORT_OPT="--host $NAKAMA_HOST"
-fi
-if [ "$NAKAMA_PORT" != "7350" ]; then
-    HOST_PORT_OPT="$HOST_PORT_OPT --port $NAKAMA_PORT"
-fi
+source "$SCRIPT_DIR/lib/nakama-test-lib.sh"
+load_nakama_config
+build_host_port_opt
 # ── 疎通テスト（server_key 認証確認） ──
 bash "$SCRIPT_DIR/doTest-ping.sh" $HOST_PORT_OPT || exit 1
 

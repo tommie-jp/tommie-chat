@@ -20,13 +20,10 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     exit 0
 fi
 
-cd "$(dirname "$0")/../nakama"
-
-# dev/prod 自動検出
-COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'tommchat-prod'; then
-    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-fi
+cd "$(dirname "$0")/.."
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
+detect_compose
+cd nakama
 
 echo "=== 地面データ初期化 ==="
 

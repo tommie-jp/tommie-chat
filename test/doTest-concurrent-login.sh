@@ -31,24 +31,10 @@ if [ -n "$PLAYERS_FILTER" ]; then
     export CONCURRENT_N_COUNT="$PLAYERS_FILTER"
 fi
 cd "$(dirname "$0")/.."
-# .env から NAKAMA_SERVER_KEY 等を自動読み込み
-if [ -z "${NAKAMA_SERVER_KEY:-}" ] && [ -f nakama/.env ]; then
-    set -a; source nakama/.env; set +a
-fi
-# --host/--port 優先 > 環境変数 > デフォルト
-export NAKAMA_HOST="${OPT_HOST:-${NAKAMA_HOST:-127.0.0.1}}"
-export NAKAMA_PORT="${OPT_PORT:-${NAKAMA_PORT:-7350}}"
-IS_LOCAL=false
-if [ "$NAKAMA_HOST" = "127.0.0.1" ] || [ "$NAKAMA_HOST" = "localhost" ]; then
-    IS_LOCAL=true
-fi
-# docker compose コマンド（実行中のコンテナから dev/prod を自動検出）
-COMPOSE="docker compose"
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'tommchat-prod'; then
-    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-elif [ -f nakama/docker-compose.dev.yml ]; then
-    COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
-fi
+source "$(dirname "$0")/lib/nakama-test-lib.sh"
+load_nakama_config
+detect_api_base
+detect_compose
 
 mkdir -p test/log
 echo "========================================="
