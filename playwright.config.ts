@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 60_000,
   retries: 0,
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: "http://localhost:3000",
     headless: true,
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -18,4 +18,10 @@ export default defineConfig({
   ],
   outputDir: "test/e2e/results",
   reporter: [["list"], ["html", { outputFolder: "test/e2e/report", open: "never" }]],
+  webServer: {
+    command: "npx vite --no-open",
+    url: "http://localhost:3000",
+    reuseExistingServer: true,
+    timeout: 30_000,
+  },
 });

@@ -74,3 +74,5 @@ nakama/go_src/nakama-tommie-chat.so
 test/__pycache__/
 .env.*
 01-README.md
+test/e2e/results/
+test/e2e/report/
