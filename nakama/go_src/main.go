@@ -3785,6 +3785,14 @@ func rpcDetachDevice(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	return string(out), nil
 }
 
+// ===== socket.notification コード定義（仕様書 doc/20 参照） =====
+const (
+	CodeOthelloJoined = 1001 // オセロ参加通知（オーナーへ）
+	CodeDirectMessage = 1002 // DM
+	CodeLiked         = 1003 // いいね
+	CodeFriendRequest = 1004 // フレンド申請
+)
+
 // ===== オセロ ゲームロジック =====
 
 // OthelloGame はオセロ1局の状態を管理する
@@ -4438,6 +4446,25 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	computeAuthFlags(ctx, nk, uid)
 
 	logf("othello join: gameId=%s white=%s%s\n", g.GameID, shortSID(uid), dn(uid))
+
+	// オーナー（黒）へ参加通知を送信（DB永続化）
+	// 仕様書 doc/20 ⭐️通知 参照
+	opponentName := ""
+	if v, ok := displayNameCache.Load(uid); ok {
+		opponentName = v.(string)
+	}
+	if opponentName == "" {
+		if v, ok := usernameCache.Load(uid); ok {
+			opponentName = v.(string)
+		}
+	}
+	notifContent := map[string]interface{}{
+		"gameNo":       g.GameNo,
+		"opponentName": opponentName,
+	}
+	if err := nk.NotificationSend(ctx, g.BlackUID, "対戦相手が見つかりました", notifContent, CodeOthelloJoined, uid, true); err != nil {
+		logf("othello join: NotificationSend failed gameId=%s black=%s err=%v\n", g.GameID, shortSID(g.BlackUID), err)
+	}
 
 	// 両者に配信（join は履歴更新なし）
 	othelloSignalBroadcast(ctx, nk, g)

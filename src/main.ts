@@ -18,6 +18,23 @@ for (const method of ["log", "warn", "error"] as const) {
 
 console.log(`tommieChat v${APP_VERSION} #${APP_COMMIT_COUNTER} (${APP_DATE})`);
 
+// URL パラメータ ?ot=<ゲーム番号> を page load 時に取り込む（仕様書 doc/20 参照）
+// 実際の処理は socket 接続確立後に UIPanel 側で行う（遅延呼び出し）
+{
+    const params = new URLSearchParams(location.search);
+    if (params.has("ot")) {
+        const ot = params.get("ot") ?? "";
+        const w = window as unknown as { __pendingOthelloOpen?: boolean; __pendingOthelloGameNo?: number };
+        w.__pendingOthelloOpen = true;
+        if (/^\d+$/.test(ot)) {
+            w.__pendingOthelloGameNo = parseInt(ot, 10);
+            console.log(`URL ?ot=${ot} captured (processed after socket ready)`);
+        } else {
+            console.log(`URL ?ot captured (no gameNo — open panel only)`);
+        }
+    }
+}
+
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 if (canvas) {
     const game = new GameScene(canvas);

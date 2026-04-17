@@ -29,6 +29,9 @@ Usage: ./test/doTest-othello.sh [--host HOST] [--port PORT] [-h]
   5. othelloMove — 着手（黒→白 各1手）
   6. othelloResign — 投了（終局確認）
   7. othelloList — 終局後の一覧（消えていること）
+  8. WebSocket 通知テスト (vitest)
+  9. 参加通知テスト (socket.onnotification, vitest)
+  10. URL パラメータ ?ot テスト (Playwright E2E)
 
 例:
   ./test/doTest-othello.sh
@@ -217,15 +220,29 @@ echo "--- 3. WebSocket 通知テスト ---"
 npx vitest run test/nakama-othello.test.ts 2>&1
 WS_EXIT=$?
 
+# ── 4. 参加通知テスト（socket.onnotification, vitest） ──
+echo ""
+echo "--- 4. 参加通知テスト (socket.onnotification) ---"
+npx vitest run test/nakama-othello-notification.test.ts 2>&1
+NOTIF_EXIT=$?
+
+# ── 5. URL パラメータ ?ot テスト（Playwright E2E） ──
+echo ""
+echo "--- 5. URL パラメータ ?ot テスト ---"
+npx playwright test test/e2e/url-ot-param.spec.ts --reporter=list 2>&1
+URL_EXIT=$?
+
 # ── 結果 ──
 echo ""
 echo "========================================="
-if [ "$RPC_FAILED" -eq 0 ] && [ "$WS_EXIT" -eq 0 ]; then
-    echo "✅ オセロテスト全パス（RPC ${PASS}/${TOTAL} + WebSocket）"
+if [ "$RPC_FAILED" -eq 0 ] && [ "$WS_EXIT" -eq 0 ] && [ "$NOTIF_EXIT" -eq 0 ] && [ "$URL_EXIT" -eq 0 ]; then
+    echo "✅ オセロテスト全パス（RPC ${PASS}/${TOTAL} + WebSocket + Notification + URL param）"
     exit 0
 else
     echo "❌ オセロテスト失敗"
     [ "$RPC_FAILED" -ne 0 ] && echo "  RPC: ${FAILED} failed"
     [ "$WS_EXIT" -ne 0 ] && echo "  WebSocket: vitest exit code ${WS_EXIT}"
+    [ "$NOTIF_EXIT" -ne 0 ] && echo "  Notification: vitest exit code ${NOTIF_EXIT}"
+    [ "$URL_EXIT" -ne 0 ] && echo "  URL param: playwright exit code ${URL_EXIT}"
     exit 1
 fi

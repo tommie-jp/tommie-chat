@@ -4537,6 +4537,12 @@ export function setupHtmlUI(game: GameScene): void {
             let winner = 0;
             let subscribed = false;
             let prevBoard: number[] = new Array(64).fill(0);
+            // URL パラメータ ?ot / ?ot=<gameNo> 遅延処理用（仕様書 doc/20 参照）
+            const otWin = window as unknown as { __pendingOthelloOpen?: boolean; __pendingOthelloGameNo?: number };
+            let pendingOthelloOpen: boolean = otWin.__pendingOthelloOpen === true;
+            let pendingOthelloGameNo: number | undefined = otWin.__pendingOthelloGameNo;
+            if (pendingOthelloOpen) otWin.__pendingOthelloOpen = undefined;
+            if (pendingOthelloGameNo !== undefined) otWin.__pendingOthelloGameNo = undefined;
 
             const myUid = () => game.nakama.getSession()?.user_id ?? "";
 
@@ -4842,6 +4848,23 @@ export function setupHtmlUI(game: GameScene): void {
                 } else {
                     othLobbySection?.classList.remove("othello-lobby-empty");
                 }
+                // URL パラメータ ?ot=<gameNo> の遅延処理（仕様書 doc/20 参照）
+                // list 受信時に gameNo を解決し、状態に応じて 参加/閲覧/不在 へ遷移
+                if (pendingOthelloGameNo !== undefined) {
+                    const targetNo = pendingOthelloGameNo;
+                    pendingOthelloGameNo = undefined;
+                    const target = games.find(g => g.gameNo === targetNo);
+                    if (!target) {
+                        // v1: トースト未実装のため console.warn で代替
+                        console.warn(`URL ?ot=${targetNo}: オセロゲーム番号${targetNo}は存在しないか終了済みです`);
+                    } else if (target.black === uid || target.white === uid) {
+                        // 自分が参加中のゲーム — 前段の自動遷移で既に処理済みのはず
+                    } else if (target.status === "waiting") {
+                        joinGame(target.gameId).catch(e => console.warn(`URL ?ot=${targetNo} join error:`, e));
+                    } else if (target.status === "playing") {
+                        watchGame(target.gameId).catch(e => console.warn(`URL ?ot=${targetNo} watch error:`, e));
+                    }
+                }
             };
 
             // --- ゲーム作成 ---
@@ -5103,6 +5126,19 @@ export function setupHtmlUI(game: GameScene): void {
             game.nakama.addMatchReadyListener(() => {
                 if (othPanel.style.display !== "none" && !subscribed) {
                     ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
+                }
+                // URL ?ot / ?ot=<gameNo> が指定されていればオセロパネルを開く
+                // （gameNo 指定時は 購読→list 応答→applyGameList 内で解決）
+                if (pendingOthelloOpen) {
+                    pendingOthelloOpen = false;
+                    const label = pendingOthelloGameNo !== undefined ? `?ot=${pendingOthelloGameNo}` : "?ot";
+                    console.log(`URL ${label} → オセロパネルを開く`);
+                    if (othPanel.style.display === "none") {
+                        const menuBtn = document.getElementById("menu-othello");
+                        menuBtn?.click();
+                    } else {
+                        ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
+                    }
                 }
             });
 
