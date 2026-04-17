@@ -23,7 +23,14 @@ const NOTIF_SOUND_VOLUME = 0.5;
 
 let container: HTMLDivElement | null = null;
 let viewportListenerAttached = false;
-let notifAudio: HTMLAudioElement | null = null;
+
+// 通知音: 旧 iPad Safari は HTMLAudioElement の非 gesture 再生が不安定なので
+// WebAudio の AudioBuffer にデコードしておき、必要時に BufferSourceNode で再生する。
+let notifAudioCtx: AudioContext | null = null;
+let notifBuffer: AudioBuffer | null = null;
+let notifLoadPromise: Promise<void> | null = null;
+// フォールバック（WebAudio 不可の環境）
+let notifAudioEl: HTMLAudioElement | null = null;
 
 function isNotifSoundEnabled(): boolean {
     const m = document.cookie.match(/(?:^|; )notifSound=([^;]*)/);
@@ -31,18 +38,90 @@ function isNotifSoundEnabled(): boolean {
     return v !== "off";
 }
 
+function ensureNotifCtx(): AudioContext | null {
+    if (notifAudioCtx) return notifAudioCtx;
+    try {
+        const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) return null;
+        notifAudioCtx = new Ctor();
+    } catch (e) {
+        console.warn("ensureNotifCtx failed:", e);
+        notifAudioCtx = null;
+    }
+    return notifAudioCtx;
+}
+
+function loadNotifBuffer(): Promise<void> {
+    if (notifLoadPromise) return notifLoadPromise;
+    const ctx = ensureNotifCtx();
+    if (!ctx) return Promise.resolve();
+    notifLoadPromise = fetch(NOTIF_SOUND_URL)
+        .then(r => r.arrayBuffer())
+        .then(ab => ctx.decodeAudioData(ab))
+        .then(buf => { notifBuffer = buf; })
+        .catch(e => { console.warn("loadNotifBuffer failed:", e); notifLoadPromise = null; });
+    return notifLoadPromise;
+}
+
+/** user gesture 内で呼び出して AudioContext を解禁 + mp3 をプリロード */
+export function primeNotificationSound(): void {
+    const ctx = ensureNotifCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+        ctx.resume().catch(e => console.warn("notifAudioCtx.resume failed:", e));
+    }
+    loadNotifBuffer();
+    // HTMLAudio フォールバックも同じ gesture で解禁（WebAudio decode が失敗する環境用）
+    if (!notifAudioEl) {
+        try {
+            notifAudioEl = new Audio(NOTIF_SOUND_URL);
+            notifAudioEl.volume = NOTIF_SOUND_VOLUME;
+            (notifAudioEl as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+            notifAudioEl.preload = "auto";
+            notifAudioEl.load();
+        } catch (e) { console.warn("notifAudioEl init failed:", e); }
+    }
+    if (notifAudioEl) {
+        const prev = notifAudioEl.volume;
+        notifAudioEl.volume = 0;
+        notifAudioEl.play().then(() => {
+            notifAudioEl!.pause();
+            notifAudioEl!.currentTime = 0;
+            notifAudioEl!.volume = prev;
+        }).catch(e => {
+            if (notifAudioEl) notifAudioEl.volume = prev;
+            console.warn("notifAudioEl prime failed:", e);
+        });
+    }
+}
+
 function playNotificationSound(): void {
     if (!isNotifSoundEnabled()) return;
-    try {
-        if (!notifAudio) {
-            notifAudio = new Audio(NOTIF_SOUND_URL);
-            notifAudio.volume = NOTIF_SOUND_VOLUME;
-            (notifAudio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+    const ctx = notifAudioCtx;
+    // WebAudio 経路（推奨）
+    if (ctx && notifBuffer) {
+        try {
+            if (ctx.state === "suspended") ctx.resume().catch(() => {});
+            const src = ctx.createBufferSource();
+            const gain = ctx.createGain();
+            gain.gain.value = NOTIF_SOUND_VOLUME;
+            src.buffer = notifBuffer;
+            src.connect(gain);
+            gain.connect(ctx.destination);
+            src.start(0);
+            return;
+        } catch (e) {
+            console.warn("WebAudio notif play failed, fallback to Audio element:", e);
         }
-        notifAudio.currentTime = 0;
-        notifAudio.play().catch(e => console.warn("notification sound play failed:", e));
-    } catch (e) {
-        console.warn("playNotificationSound failed:", e);
+    }
+    // HTMLAudio フォールバック
+    if (notifAudioEl) {
+        try {
+            notifAudioEl.currentTime = 0;
+            notifAudioEl.play().catch(e => console.warn("notifAudioEl play failed:", e));
+        } catch (e) {
+            console.warn("notifAudioEl play exception:", e);
+        }
     }
 }
 

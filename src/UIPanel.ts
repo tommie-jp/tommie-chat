@@ -5,7 +5,7 @@ import { prof } from "./Profiler";
 import { t, getLang, setLang, applyI18n } from "./i18n";
 import type { Lang } from "./i18n";
 import { escapeHtml, sanitizeColor } from "./utils";
-import { showToast } from "./Toast";
+import { showToast, primeNotificationSound } from "./Toast";
 import type { Notification } from "@heroiclabs/nakama-js";
 
 // socket.notification コード定数（仕様書 doc/20 参照、サーバ側 main.go と同期）
@@ -2677,6 +2677,8 @@ export function setupHtmlUI(game: GameScene): void {
                 (silentKeepalive as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
             }
             silentKeepalive.play().catch(e => console.warn("silentKeepalive.play failed:", e));
+            // 通知音 Audio 要素も同じ user gesture 内で解禁（iOS Safari は Audio 要素ごとに解禁が必要）
+            primeNotificationSound();
             if (sharedAudioCtx.state === "running") audioUnlocked = true;
         } catch (e) {
             console.warn("unlockAudio failed:", e);
