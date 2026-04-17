@@ -1,9 +1,9 @@
 // アプリバージョン・更新日の定数（ここだけ変更する）
 var APP_VERSION = "0.1.31";
-var APP_COMMIT_COUNTER = "1045";
+var APP_COMMIT_COUNTER = "1046";
 var APP_DATE    = "2026/04/17";
 
-document.title = "tommieChat " + APP_VERSION;
+document.title = "tommieChat " + APP_VERSION + "#" + APP_COMMIT_COUNTER;
 
 // ブラウザ標準の右クリック/長押しコンテキストメニューを抑止
 document.addEventListener("contextmenu", function(e) { e.preventDefault(); });

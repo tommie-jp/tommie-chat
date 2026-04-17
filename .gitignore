@@ -77,3 +77,4 @@ test/__pycache__/
 test/e2e/results/
 test/e2e/report/
 othello-*.png
+test/ss/

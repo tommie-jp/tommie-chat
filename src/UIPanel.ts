@@ -4485,6 +4485,7 @@ export function setupHtmlUI(game: GameScene): void {
         const othBlackName = document.getElementById("othello-black-name") as HTMLElement | null;
         const othWhiteName = document.getElementById("othello-white-name") as HTMLElement | null;
         const othStatus    = document.getElementById("othello-status") as HTMLElement | null;
+        const othGameNoLabel = document.getElementById("othello-game-no-label") as HTMLElement | null;
         const othCreateBtn = document.getElementById("othello-create-btn") as HTMLButtonElement | null;
         const othGameList  = document.getElementById("othello-game-list-tbody") as HTMLElement | null;
         const othGameListScroll    = document.getElementById("othello-game-list-scroll") as HTMLElement | null;
@@ -4602,6 +4603,7 @@ export function setupHtmlUI(game: GameScene): void {
             const renderHistory = (records: import("./NakamaService").OthelloHistoryRecord[]) => {
                 if (!othHistoryTbody) return;
                 othHistoryTbody.innerHTML = "";
+                historyItems.length = 0;
                 if (records.length === 0) {
                     const tr = document.createElement("tr");
                     const td = document.createElement("td");
@@ -4622,22 +4624,33 @@ export function setupHtmlUI(game: GameScene): void {
                     const blackLabel = formatPlayer(r.blackName, r.blackUser, r.blackHasGoogle, r.blackIsAdmin);
                     const whiteLabel = formatPlayer(r.whiteName, r.whiteUser, r.whiteHasGoogle, r.whiteIsAdmin);
 
-                    const gameNoStr = r.gameNo ? String(r.gameNo).padStart(3, "0") : "";
-                    const cols: Array<{ text: string; title: string }> = [
-                        { text: gameNoStr, title: gameNoStr },
-                        { text: othRelTime(r.ts), title: fullDateStr },
-                        { text: `${blackMark}${blackLabel}`, title: blackLabel },
-                        { text: `${whiteMark}${whiteLabel}`, title: whiteLabel },
-                        { text: `${r.blackCount}-${r.whiteCount}`, title: `${r.blackCount}-${r.whiteCount}` },
-                        { text: reasonStr, title: reasonStr },
-                    ];
-                    for (const c of cols) {
+                    const gameNoStr = r.gameNo ? String(r.gameNo % 1000).padStart(3, "0") : "";
+                    const gameNoFull = r.gameNo ? String(r.gameNo) : "";
+                    const tsText = othRelTime(r.ts);
+                    const mkNameTd = (mark: string, name: string): HTMLTableCellElement => {
                         const td = document.createElement("td");
-                        td.textContent = c.text;
-                        td.title = c.title;
-                        tr.appendChild(td);
-                    }
+                        td.title = name;
+                        if (mark) td.appendChild(document.createTextNode(mark));
+                        const nameSpan = document.createElement("span");
+                        nameSpan.className = "oth-hist-name";
+                        nameSpan.textContent = name;
+                        td.appendChild(nameSpan);
+                        return td;
+                    };
+                    const noTd = document.createElement("td"); noTd.className = "oth-hist-no"; noTd.textContent = gameNoStr; noTd.title = gameNoFull;
+                    const tsTd = document.createElement("td"); tsTd.textContent = tsText; tsTd.title = fullDateStr;
+                    const blackTd = mkNameTd(blackMark, blackLabel);
+                    const whiteTd = mkNameTd(whiteMark, whiteLabel);
+                    const scoreTd = document.createElement("td"); scoreTd.className = "oth-hist-score"; scoreTd.textContent = `${r.blackCount}-${r.whiteCount}`; scoreTd.title = `${r.blackCount}-${r.whiteCount}`;
+                    const reasonTd = document.createElement("td"); reasonTd.className = "oth-hist-reason"; reasonTd.textContent = reasonStr; reasonTd.title = reasonStr;
+                    tr.appendChild(noTd);
+                    tr.appendChild(tsTd);
+                    tr.appendChild(blackTd);
+                    tr.appendChild(whiteTd);
+                    tr.appendChild(scoreTd);
+                    tr.appendChild(reasonTd);
                     othHistoryTbody.appendChild(tr);
+                    if (tsTd) historyItems.push({ tsCell: tsTd, ts: r.ts, tsText });
                 }
             };
             const loadHistory = async () => {
@@ -4660,6 +4673,7 @@ export function setupHtmlUI(game: GameScene): void {
                 gameStatus = "";
                 refreshRecruit();
                 prevBoard = new Array(64).fill(0);
+                if (othGameNoLabel) { othGameNoLabel.textContent = ""; othGameNoLabel.title = ""; }
                 // ゲーム一覧はサーバからの購読応答で自動更新される
                 // 再購読して最新リストを取得（未購読の場合も購読を試みる）
                 game.nakama.othelloSubscribe(true).then(ok => {
@@ -4680,11 +4694,17 @@ export function setupHtmlUI(game: GameScene): void {
             // 対戦中の盤面更新（type="game"）を受けて、ロビーの一覧項目を即時更新するため
             const gameListItems = new Map<string, {
                 tr: HTMLTableRowElement;
+                tsCell: HTMLTableCellElement;
+                ts: number;
+                tsText: string;
+                ownerCell: HTMLTableCellElement;
                 commentCell: HTMLTableCellElement;
                 commentSpan: HTMLSpanElement;
                 joinBtn: HTMLButtonElement;
                 status: string;
             }>();
+            // 履歴の日時セル参照（1秒tickでの更新用）
+            const historyItems: Array<{ tsCell: HTMLTableCellElement; ts: number; tsText: string }> = [];
 
             // コメント列のテキストを組み立て（待機中=募集告知、対戦中=プレイヤー名）
             const othCommentText = (status: string, blackLabel: string, whiteLabel: string): string => {
@@ -4692,6 +4712,24 @@ export function setupHtmlUI(game: GameScene): void {
                 return `${blackLabel} vs ${whiteLabel}`;
             };
 
+            // コメント文字列から owner 名部分だけ赤色で色分けして commentSpan へ反映
+            const applyCommentContent = (span: HTMLSpanElement, commentText: string, ownerLabel: string) => {
+                span.textContent = "";
+                const idx = ownerLabel ? commentText.indexOf(ownerLabel) : -1;
+                if (idx >= 0) {
+                    if (idx > 0) span.appendChild(document.createTextNode(commentText.slice(0, idx)));
+                    const nameSpan = document.createElement("span");
+                    nameSpan.className = "othello-comment-name";
+                    nameSpan.textContent = ownerLabel;
+                    span.appendChild(nameSpan);
+                    const rest = commentText.slice(idx + ownerLabel.length);
+                    if (rest) span.appendChild(document.createTextNode(rest));
+                } else {
+                    span.textContent = commentText;
+                }
+            };
+
+            const othLobbySection = document.getElementById("othello-game-list-section");
             // --- ゲーム一覧描画（サーバからの購読通知で呼ばれる） ---
             const applyGameList = (games: import("./NakamaService").OthelloListPayload["games"]) => {
                 if (!othGameList) return;
@@ -4733,7 +4771,8 @@ export function setupHtmlUI(game: GameScene): void {
                         const whiteLabel = g.status === "playing"
                             ? formatPlayer(g.whiteName, g.whiteUser, g.whiteHasGoogle, g.whiteIsAdmin) : "";
                         const commentText = (g.comment && g.comment !== "") ? g.comment : othCommentText(g.status, blackLabel, whiteLabel);
-                        const gameNoStr = g.gameNo ? String(g.gameNo).padStart(3, "0") : "";
+                        const gameNoStr = g.gameNo ? String(g.gameNo % 1000).padStart(3, "0") : "";
+                        const gameNoFull = g.gameNo ? String(g.gameNo) : "";
                         const ts = othParseTs(g.gameId);
                         const tsStr = ts ? othRelTime(ts) : "";
                         const d = ts ? new Date(ts) : null;
@@ -4747,15 +4786,18 @@ export function setupHtmlUI(game: GameScene): void {
                             td.title = title;
                             return td;
                         };
-                        const noCell = mkTd(gameNoStr, gameNoStr);
+                        const noCell = mkTd(gameNoStr, gameNoFull);
+                        noCell.className = "oth-game-no";
                         const tsCell = mkTd(tsStr, fullDateStr);
+                        const ownerCell = mkTd(blackLabel, blackLabel);
+                        ownerCell.className = "oth-game-owner";
                         const commentCell = document.createElement("td");
                         commentCell.className = "othello-game-comment";
                         commentCell.title = commentText;
                         const commentSpan = document.createElement("span");
                         commentSpan.className = "othello-comment-text";
                         if (g.status === "waiting") commentSpan.classList.add("othello-comment-marquee");
-                        commentSpan.textContent = commentText;
+                        applyCommentContent(commentSpan, commentText, blackLabel);
                         commentCell.appendChild(commentSpan);
 
                         const actionCell = document.createElement("td");
@@ -4774,20 +4816,31 @@ export function setupHtmlUI(game: GameScene): void {
 
                         tr.appendChild(noCell);
                         tr.appendChild(tsCell);
+                        tr.appendChild(ownerCell);
                         tr.appendChild(commentCell);
                         tr.appendChild(actionCell);
                         othGameList.appendChild(tr);
-                        gameListItems.set(g.gameId, { tr, commentCell, commentSpan, joinBtn, status: g.status });
+                        gameListItems.set(g.gameId, { tr, tsCell, ts, tsText: tsStr, ownerCell, commentCell, commentSpan, joinBtn, status: g.status });
                     }
                 }
                 if (othGameList.children.length === 0) {
+                    othLobbySection?.classList.add("othello-lobby-empty");
                     const tr = document.createElement("tr");
-                    const td = document.createElement("td");
-                    td.colSpan = 4;
-                    td.id = "othello-game-list-empty";
-                    td.textContent = "新ゲームを開始しよう！";
-                    tr.appendChild(td);
+                    tr.className = "othello-game-empty-row";
+                    const noCell = document.createElement("td"); noCell.className = "oth-game-no"; tr.appendChild(noCell);
+                    const tsCell = document.createElement("td"); tr.appendChild(tsCell);
+                    const commentCell = document.createElement("td");
+                    commentCell.className = "othello-game-comment";
+                    commentCell.colSpan = 2;
+                    const commentSpan = document.createElement("span");
+                    commentSpan.className = "othello-comment-text othello-comment-marquee othello-comment-empty";
+                    commentSpan.textContent = "*** 新ゲームを開始しよう！ ***";
+                    commentCell.appendChild(commentSpan);
+                    tr.appendChild(commentCell);
+                    const actionCell = document.createElement("td"); actionCell.className = "othello-game-action"; tr.appendChild(actionCell);
                     othGameList.appendChild(tr);
+                } else {
+                    othLobbySection?.classList.remove("othello-lobby-empty");
                 }
             };
 
@@ -4855,6 +4908,11 @@ export function setupHtmlUI(game: GameScene): void {
                 lastMoveIdx = data.lastMove;
                 refreshRecruit();
                 winner = data.winner;
+                if (othGameNoLabel) {
+                    const n = data.gameNo;
+                    othGameNoLabel.textContent = n ? `ゲーム番号:${String(n % 1000).padStart(3, "0")}` : "";
+                    othGameNoLabel.title = n ? String(n) : "";
+                }
                 if (othBlack) othBlack.textContent = String(data.blackCount);
                 if (othWhite) othWhite.textContent = String(data.whiteCount);
                 // プレイヤー名（自分のほうは "(YOU)" を付ける）
@@ -5012,7 +5070,9 @@ export function setupHtmlUI(game: GameScene): void {
                             const whiteLabel = gd.status === "playing"
                                 ? formatPlayer(gd.whiteName ?? "", gd.whiteUser, gd.whiteHasGoogle, gd.whiteIsAdmin) : "";
                             const commentText = (gd.comment && gd.comment !== "") ? gd.comment : othCommentText(gd.status, blackLabel, whiteLabel);
-                            entry.commentSpan.textContent = commentText;
+                            entry.ownerCell.textContent = blackLabel;
+                            entry.ownerCell.title = blackLabel;
+                            applyCommentContent(entry.commentSpan, commentText, blackLabel);
                             entry.commentCell.title = commentText;
                             entry.commentSpan.classList.toggle("othello-comment-marquee", gd.status === "waiting");
                             entry.joinBtn.disabled = gd.status !== "waiting";
@@ -5047,8 +5107,14 @@ export function setupHtmlUI(game: GameScene): void {
             });
 
             // パネル表示時に購読 + ロビー表示
+            // 注意: style 属性の変更はドラッグ/リサイズ等でも発火するため、
+            //       display の表示⇔非表示トランジションのみに反応する
+            let othPanelVisible = othPanel.style.display !== "none";
             const panelObs = new MutationObserver(() => {
-                if (othPanel.style.display !== "none") {
+                const visible = othPanel.style.display !== "none";
+                if (visible === othPanelVisible) return;
+                othPanelVisible = visible;
+                if (visible) {
                     console.log("othello panel opened");
                     ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
                     if (!currentGameId) showLobby();
@@ -5057,6 +5123,29 @@ export function setupHtmlUI(game: GameScene): void {
                 }
             });
             panelObs.observe(othPanel, { attributes: true, attributeFilter: ["style"] });
+
+            // 日時セルを 1 秒ごとに更新（tick 方式、パネル表示中のみ、チラツキ防止のため差分のみ反映）
+            let othTsTickCounter = 0;
+            game.scene.onAfterRenderObservable.add(() => {
+                if (othPanel.style.display === "none") return;
+                if (++othTsTickCounter < 60) return;
+                othTsTickCounter = 0;
+                for (const entry of gameListItems.values()) {
+                    if (!entry.ts) continue;
+                    const s = othRelTime(entry.ts);
+                    if (s !== entry.tsText) {
+                        entry.tsText = s;
+                        entry.tsCell.textContent = s;
+                    }
+                }
+                for (const h of historyItems) {
+                    const s = othRelTime(h.ts);
+                    if (s !== h.tsText) {
+                        h.tsText = s;
+                        h.tsCell.textContent = s;
+                    }
+                }
+            });
 
             // --- クッキー復元 ---
             const sCk = (k: string, v: string) =>
