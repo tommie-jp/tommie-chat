@@ -2644,6 +2644,57 @@ export function setupHtmlUI(game: GameScene): void {
 
     if (loginBtn) loginBtn.title = "tommieChatサーバへログインします。\nサーバURL: " + location.host;
 
+    // ===== 共有 AudioContext（iOS Safari 自動再生解禁） =====
+    // iPhone Safari は AudioContext を user gesture 内で resume しないと無音になる。
+    // ログイン押下時に resume + 無音バッファ再生で解禁する（iPad は緩いので iPhone のみ問題化しやすい）。
+    let sharedAudioCtx: AudioContext | null = null;
+    let audioUnlocked = false;
+    let silentKeepalive: HTMLAudioElement | null = null;
+    // 44バイトWAVヘッダ + 4バイト(2サンプル)の無音。iPhone Safari の mute スイッチ経路でも
+    // HTMLAudioElement を走らせてセッションを確立する目的。
+    const SILENT_WAV_DATA_URI = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAA";
+    const unlockAudio = () => {
+        try {
+            if (!sharedAudioCtx) {
+                const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+                if (!Ctor) return;
+                sharedAudioCtx = new Ctor();
+            }
+            if (sharedAudioCtx.state === "suspended") {
+                sharedAudioCtx.resume().catch(e => console.warn("AudioContext.resume failed:", e));
+            }
+            const buf = sharedAudioCtx.createBuffer(1, 1, 22050);
+            const src = sharedAudioCtx.createBufferSource();
+            src.buffer = buf;
+            src.connect(sharedAudioCtx.destination);
+            src.start(0);
+            // HTMLAudioElement でもセッション確立（iOS Safari の autoplay 解禁）
+            if (!silentKeepalive) {
+                silentKeepalive = new Audio(SILENT_WAV_DATA_URI);
+                silentKeepalive.loop = true;
+                silentKeepalive.volume = 0;
+                silentKeepalive.muted = false;
+                (silentKeepalive as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+            }
+            silentKeepalive.play().catch(e => console.warn("silentKeepalive.play failed:", e));
+            if (sharedAudioCtx.state === "running") audioUnlocked = true;
+        } catch (e) {
+            console.warn("unlockAudio failed:", e);
+        }
+    };
+    // 最初の user gesture で必ず解禁する（自動ログイン経路では doLogin が gesture 外で走るため）
+    const onFirstGesture = () => {
+        unlockAudio();
+        if (audioUnlocked) {
+            document.removeEventListener("pointerdown", onFirstGesture, true);
+            document.removeEventListener("keydown", onFirstGesture, true);
+            document.removeEventListener("touchstart", onFirstGesture, true);
+        }
+    };
+    document.addEventListener("pointerdown", onFirstGesture, true);
+    document.addEventListener("keydown", onFirstGesture, true);
+    document.addEventListener("touchstart", onFirstGesture, true);
+
     const isMobile = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
     if (loginStatus) {
         loginStatus.textContent = "";
@@ -2678,6 +2729,8 @@ export function setupHtmlUI(game: GameScene): void {
     const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
     const doLogin = async () => {
         const _end = prof("UIPanel.doLogin");
+        // iOS Safari 対策: 最初の user gesture 内で AudioContext を解禁
+        unlockAudio();
         const name = loginNameInput?.value.trim();
         if (!name || name.length < 6) {
             if (loginStatus) {
@@ -4474,12 +4527,20 @@ export function setupHtmlUI(game: GameScene): void {
     }
 
     // ===== オセロ サウンドエフェクト（Web Audio API） =====
-    let othAudioCtx: AudioContext | null = null;
+    // iPhone Safari 対策: ログイン時に unlockAudio() で解禁済みの sharedAudioCtx を使う。
+    // 未解禁（ログイン前に呼ばれる経路）の場合も lazy 生成 + resume() を試みる。
     const othelloPlaySound = (type: "place" | "flip" | "end") => {
-        if (!othAudioCtx) {
-            try { othAudioCtx = new AudioContext(); } catch { return; }
+        if (!sharedAudioCtx) {
+            try {
+                const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+                if (!Ctor) return;
+                sharedAudioCtx = new Ctor();
+            } catch { return; }
         }
-        const ctx = othAudioCtx;
+        const ctx = sharedAudioCtx;
+        if (ctx.state === "suspended") {
+            ctx.resume().catch(e => console.warn("AudioContext.resume failed:", e));
+        }
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);

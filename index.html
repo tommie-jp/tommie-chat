@@ -3364,6 +3364,12 @@
                     <option value="north">北固定</option>
                 </select>
             </td></tr>
+            <tr><td class="label" title="02d.通知音&#10;トースト通知の受信音 ON/OFF&#10;ON: 受信時に short beep&#10;OFF: 無音">02d.通知音</td><td class="value">
+                <select id="notifSoundSelect" class="debug-select">
+                    <option value="on">ON</option>
+                    <option value="off">OFF</option>
+                </select>
+            </td></tr>
             <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale</td><td class="value">
                 <select id="scaleSelect" class="debug-select">
                     <option value="0.50" data-i18n="dbg.scale.050">0.50 Retina/4K クッキリ</option>

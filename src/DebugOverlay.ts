@@ -891,6 +891,27 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
+    // --- 通知音 ON/OFF ---
+    const notifSoundSelect = document.getElementById("notifSoundSelect") as HTMLSelectElement | null;
+    if (notifSoundSelect) {
+        const getNotifSoundCookie = (): string => {
+            const m = document.cookie.match(/(?:^|; )notifSound=([^;]*)/);
+            return m ? decodeURIComponent(m[1]) : "on";
+        };
+        const setNotifSoundCookie = (v: string) => {
+            document.cookie = `notifSound=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+        };
+        const saved = getNotifSoundCookie();
+        notifSoundSelect.value = saved === "off" ? "off" : "on";
+        markNonDefault(notifSoundSelect, "on", notifSoundSelect.value, () => {
+            notifSoundSelect.value = "on"; setNotifSoundCookie("on"); markNonDefault(notifSoundSelect, "on", "on");
+        });
+        notifSoundSelect.addEventListener("change", () => {
+            setNotifSoundCookie(notifSoundSelect.value);
+            markNonDefault(notifSoundSelect, "on", notifSoundSelect.value);
+        });
+    }
+
     // --- チャットオーバーレイ行数 ---
     const chatOlMaxSelect = document.getElementById("chatOlMaxSelect") as HTMLSelectElement | null;
     if (chatOlMaxSelect) {

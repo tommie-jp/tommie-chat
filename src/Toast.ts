@@ -4,7 +4,7 @@
  * 仕様: doc/20-仕様書.md ⭐️トースト（吹き出し）
  *   - 画面右下端（送信ボタンの少し上あたり）に表示
  *   - ソフトキーボード表示中も送信ボタンに追従（window.visualViewport）
- *   - 時間が経過すると消える：５秒（デフォルト）
+ *   - 時間が経過すると消える：10秒（デフォルト）
  *   - タップで onTap コールバック（任意）
  *
  * 汎用コンポーネント: オセロ参加通知 / DM / いいね / フレンド申請 で共通使用予定
@@ -16,11 +16,35 @@ export interface ToastOptions {
     onTap?: () => void;
 }
 
-const DEFAULT_DURATION_MS = 5000;
+const DEFAULT_DURATION_MS = 10000;
 const BASE_BOTTOM_PX = 60; // 送信ボタンの少し上
+const NOTIF_SOUND_URL = "/sounds/notification.mp3";
+const NOTIF_SOUND_VOLUME = 0.5;
 
 let container: HTMLDivElement | null = null;
 let viewportListenerAttached = false;
+let notifAudio: HTMLAudioElement | null = null;
+
+function isNotifSoundEnabled(): boolean {
+    const m = document.cookie.match(/(?:^|; )notifSound=([^;]*)/);
+    const v = m ? decodeURIComponent(m[1]) : "on";
+    return v !== "off";
+}
+
+function playNotificationSound(): void {
+    if (!isNotifSoundEnabled()) return;
+    try {
+        if (!notifAudio) {
+            notifAudio = new Audio(NOTIF_SOUND_URL);
+            notifAudio.volume = NOTIF_SOUND_VOLUME;
+            (notifAudio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+        }
+        notifAudio.currentTime = 0;
+        notifAudio.play().catch(e => console.warn("notification sound play failed:", e));
+    } catch (e) {
+        console.warn("playNotificationSound failed:", e);
+    }
+}
 
 function ensureContainer(): HTMLDivElement {
     if (container) return container;
@@ -98,6 +122,8 @@ export function showToast(opts: ToastOptions): void {
         el.style.opacity = "1";
         el.style.transform = "translateY(0)";
     });
+
+    playNotificationSound();
 
     setTimeout(dismiss, duration);
 }
