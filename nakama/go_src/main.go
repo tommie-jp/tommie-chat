@@ -229,9 +229,11 @@ func cacheDN(ctx context.Context, nk runtime.NakamaModule, uid string) {
 	displayNameCache.Store(uid, users[0].DisplayName)
 }
 
-// logf は時刻プレフィックス付きでログを出力する
+// logf は時刻プレフィックス付き（JST）でログを出力する
+var jst = time.FixedZone("JST", 9*60*60)
+
 func logf(format string, a ...interface{}) {
-	now := time.Now()
+	now := time.Now().In(jst)
 	ts := now.Format("15:04:05") + fmt.Sprintf(".%d", now.Nanosecond()/100_000_000)
 	fmt.Printf(ts+" "+format, a...)
 }
@@ -923,7 +925,7 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 	sid, _ := ctx.Value(runtime.RUNTIME_CTX_SESSION_ID).(string)
 	cacheDN(ctx, nk, uid)
-	logf("rcv getServerInfo uid=%s%s sid=%s\n", uid, dn(uid), shortSID(sid))
+	logf("rcv getServerInfo uid=%s%s sid=%s\n", shortSID(uid), dn(uid), shortSID(sid))
 	env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
 	node, _ := ctx.Value(runtime.RUNTIME_CTX_NODE).(string)
 
@@ -1139,7 +1141,7 @@ func rpcGetWorldMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		return "", runtime.NewError(fmt.Sprintf("unknown worldId=%d", wid), 3)
 	}
 	label := fmt.Sprintf("world_%d", wid)
-	logf("rcv getWorldMatch uid=%s%s sid=%s worldId=%d\n", uid, dn(uid), shortSID(sid), wid)
+	logf("rcv getWorldMatch uid=%s%s sid=%s worldId=%d\n", shortSID(uid), dn(uid), shortSID(sid), wid)
 
 	worldMatchMu.Lock()
 	defer worldMatchMu.Unlock()
@@ -1485,7 +1487,7 @@ func (m *worldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger
 			// 前セッションの PendingLeave をキャンセル（ブラウザリフレッシュによる再接続）
 			uid := presence.GetUserId()
 			if _, pending := ms.PendingLeave[uid]; pending {
-				logf("MatchJoinAttempt cancelled pending leave for uid=%s prevSid=%s\n", uid, shortSID(prevSid))
+				logf("MatchJoinAttempt cancelled pending leave for uid=%s prevSid=%s\n", shortSID(uid), shortSID(prevSid))
 				delete(ms.PendingLeave, uid)
 			}
 		}
@@ -1510,7 +1512,7 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 
 		// 同一UUIDの遅延 leave メッセージをキャンセル（ブラウザリフレッシュ時の再接続）
 		if _, pending := ms.PendingLeave[uid]; pending {
-			logf("MatchJoin cancelled pending leave for uid=%s\n", uid)
+			logf("MatchJoin cancelled pending leave for uid=%s\n", shortSID(uid))
 			delete(ms.PendingLeave, uid)
 		}
 
@@ -1719,7 +1721,7 @@ func (m *worldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db *
 		if _, moving := worldMovingUsers.LoadAndDelete(uid); moving {
 			leaveType = "world_move"
 		}
-		logf("MatchLeave uid=%s uname=%s leaveType=%s\n", uid, uname, leaveType)
+		logf("MatchLeave uid=%s uname=%s leaveType=%s\n", shortSID(uid), uname, leaveType)
 		// 同一UUIDのセッション数をカウント（自分を含む、削除前）
 		uidCount := 0
 		for _, pr := range ms.Presences { if pr.GetUserId() == uid { uidCount++ } }
@@ -2482,6 +2484,7 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 					if p, ok := ms.Presences[sid]; ok {
 						listData := othelloListPayload(ms.WorldID)
 						dispatcher.BroadcastMessage(opOthelloUpdate, listData, []runtime.Presence{p}, nil, true)
+						logf("snd OthelloUpdate(list) uid=%s%s sid=%s\n", shortSID(p.GetUserId()), dn(p.GetUserId()), shortSID(sid))
 					}
 				} else {
 					delete(ms.OthelloSubs, sid)
@@ -2629,6 +2632,7 @@ func (m *worldMatch) MatchSignal(_ context.Context, _ runtime.Logger, _ *sql.DB,
 			}
 			if len(targets) > 0 {
 				dispatcher.BroadcastMessage(opOthelloUpdate, sig.Payload, targets, nil, true)
+				logf("snd OthelloUpdate targets=%d\n", len(targets))
 			}
 		case "othelloList":
 			// ゲーム一覧を全オセロ購読者に配信
@@ -2640,6 +2644,7 @@ func (m *worldMatch) MatchSignal(_ context.Context, _ runtime.Logger, _ *sql.DB,
 			}
 			if len(listTargets) > 0 {
 				dispatcher.BroadcastMessage(opOthelloUpdate, sig.Payload, listTargets, nil, true)
+				logf("snd OthelloUpdate(list) targets=%d\n", len(listTargets))
 			}
 		case "othelloBlocks":
 			// ブロック更新を AOI 内プレイヤーにブロードキャスト + チャンク保存
@@ -2819,7 +2824,7 @@ func rpcGetGroundChunk(ctx context.Context, _ runtime.Logger, _ *sql.DB, _ runti
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return "", err
 	}
-	logf("rcv getGroundChunk uid=%s%s sid=%s cx=%d cz=%d worldId=%d\n", uid, dn(uid), shortSID(sid), req.CX, req.CZ, req.WorldID)
+	logf("rcv getGroundChunk uid=%s%s sid=%s cx=%d cz=%d worldId=%d\n", shortSID(uid), dn(uid), shortSID(sid), req.CX, req.CZ, req.WorldID)
 	w := getWorld(req.WorldID)
 	if w == nil { w = defaultWorld }
 	if !w.inBounds(req.CX, req.CZ) {
@@ -2910,7 +2915,7 @@ func rpcSyncChunks(ctx context.Context, _ runtime.Logger, _ *sql.DB, _ runtime.N
 			})
 		}
 	}
-	logf("rcv syncChunks uid=%s%s sid=%s sent=%d/%d (range %d,%d-%d,%d)\n", uid, dn(uid), shortSID(sid), len(diff), total, req.MinCX, req.MinCZ, req.MaxCX, req.MaxCZ)
+	logf("rcv syncChunks uid=%s%s sid=%s sent=%d/%d (range %d,%d-%d,%d)\n", shortSID(uid), dn(uid), shortSID(sid), len(diff), total, req.MinCX, req.MinCZ, req.MaxCX, req.MaxCZ)
 	b, err := json.Marshal(map[string]interface{}{"chunks": diff})
 	if err != nil {
 		return "", err
@@ -3922,6 +3927,54 @@ func othelloResign(g *OthelloGame, uid string) {
 	}
 }
 
+// othelloSaveHistory は終局（通常終了・投了・中断）時に対戦結果をサーバDBに保存する
+// systemUserID 所有の共有レコードとして保存し、誰でも閲覧可能にする
+func othelloSaveHistory(ctx context.Context, nk runtime.NakamaModule, g *OthelloGame, reason string) {
+	b, w := othelloCalcScore(&g.Board)
+	record := map[string]interface{}{
+		"gameId":     g.GameID,
+		"black":      g.BlackUID,
+		"blackName":  dn(g.BlackUID),
+		"white":      g.WhiteUID,
+		"whiteName":  dn(g.WhiteUID),
+		"blackCount": b,
+		"whiteCount": w,
+		"winner":     g.Winner, // 0=未定, 1=黒勝, 2=白勝, 3=引分
+		"reason":     reason,   // "normal", "resign", "cancel"
+		"ts":         time.Now().UnixMilli(),
+	}
+
+	// 既存履歴を読み込み
+	const maxHistory = 50
+	var history []map[string]interface{}
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "othello_history", Key: "history", UserID: systemUserID,
+	}})
+	if err == nil && len(objs) > 0 {
+		var stored struct {
+			Records []map[string]interface{} `json:"records"`
+		}
+		if json.Unmarshal([]byte(objs[0].Value), &stored) == nil {
+			history = stored.Records
+		}
+	}
+	// 先頭に追加して最大件数に制限
+	history = append([]map[string]interface{}{record}, history...)
+	if len(history) > maxHistory {
+		history = history[:maxHistory]
+	}
+	data, _ := json.Marshal(map[string]interface{}{"records": history})
+	nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+		Collection:      "othello_history",
+		Key:             "history",
+		UserID:          systemUserID,
+		Value:           string(data),
+		PermissionRead:  2, // 誰でも読み取り可
+		PermissionWrite: 0, // サーバのみ書き込み可
+	}})
+	logf("othello saveHistory: gameId=%s reason=%s winner=%d black=%d white=%d\n", g.GameID, reason, g.Winner, b, w)
+}
+
 // ===== オセロ RPC =====
 
 // othelloNextGameID は一意なゲームIDを生成する
@@ -4187,7 +4240,7 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	g.BoardGZ = 504
 	othelloGames.Store(gameID, g)
 
-	logf("othello create: gameId=%s black=%s%s worldId=%d board=(%d,%d)\n", gameID, uid, dn(uid), req.WorldID, g.BoardGX, g.BoardGZ)
+	logf("othello create: gameId=%s black=%s%s worldId=%d board=(%d,%d)\n", gameID, shortSID(uid), dn(uid), req.WorldID, g.BoardGX, g.BoardGZ)
 
 	// 盤面ブロックを配置（初期盤面＝緑60マス+石4つ）
 	worldMatchMu.Lock()
@@ -4236,7 +4289,7 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	g.WhiteUID = uid
 	g.Status = "playing"
 
-	logf("othello join: gameId=%s white=%s%s\n", g.GameID, uid, dn(uid))
+	logf("othello join: gameId=%s white=%s%s\n", g.GameID, shortSID(uid), dn(uid))
 
 	// 両者に配信
 	othelloSignalBroadcast(ctx, nk, g)
@@ -4280,10 +4333,11 @@ func rpcOthelloMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		return "", runtime.NewError(err.Error(), 3)
 	}
 
-	logf("othello move: gameId=%s uid=%s%s (%d,%d) flips=%d\n", g.GameID, uid, dn(uid), req.Row, req.Col, len(flips))
+	logf("othello move: gameId=%s uid=%s%s (%d,%d) flips=%d\n", g.GameID, shortSID(uid), dn(uid), req.Row, req.Col, len(flips))
 
 	// 終局時はゲームをクリーンアップ予約（少し遅延してブロック削除＆ゲーム削除）
 	if g.Status == "finished" {
+		othelloSaveHistory(ctx, nk, g, "normal")
 		boardGX, boardGZ, worldID := g.BoardGX, g.BoardGZ, g.WorldID
 		gameID := g.GameID
 		go func() {
@@ -4309,6 +4363,48 @@ func rpcOthelloMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 }
 
 // rpcOthelloResign はオセロで投了する
+func rpcOthelloCancel(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloCancel")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7)
+	}
+
+	var req struct {
+		GameID string `json:"gameId"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" {
+		return "", runtime.NewError("gameId required", 3)
+	}
+
+	v, ok := othelloGames.Load(req.GameID)
+	if !ok {
+		return "", runtime.NewError("game not found", 5)
+	}
+	g := v.(*OthelloGame)
+	if g.Status != "waiting" {
+		return "", runtime.NewError("game not in waiting state", 9)
+	}
+	if uid != g.BlackUID {
+		return "", runtime.NewError("only the creator can cancel", 3)
+	}
+
+	worldID := g.WorldID
+	boardGX, boardGZ := g.BoardGX, g.BoardGZ
+	gameID := g.GameID
+
+	logf("othello cancel: gameId=%s uid=%s%s\n", gameID, shortSID(uid), dn(uid))
+
+	// ブロック盤面を即座に削除
+	othelloClearBlocks(boardGX, boardGZ, worldID)
+	othelloGames.Delete(gameID)
+
+	// 購読者にゲーム一覧を配信（ゲームが消えたことを通知）
+	othelloListBroadcast(ctx, nk, worldID)
+
+	return "{}", nil
+}
+
 func rpcOthelloResign(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
 	defer prof("rpcOthelloResign")()
 	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
@@ -4336,8 +4432,9 @@ func rpcOthelloResign(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}
 
 	othelloResign(g, uid)
+	othelloSaveHistory(ctx, nk, g, "resign")
 
-	logf("othello resign: gameId=%s uid=%s%s winner=%d\n", g.GameID, uid, dn(uid), g.Winner)
+	logf("othello resign: gameId=%s uid=%s%s winner=%d\n", g.GameID, shortSID(uid), dn(uid), g.Winner)
 
 	// クリーンアップ（遅延してブロック削除＆ゲーム削除）
 	boardGX, boardGZ, worldID := g.BoardGX, g.BoardGZ, g.WorldID
@@ -4353,6 +4450,30 @@ func rpcOthelloResign(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 
 	resp := othelloGameResponse(g)
 	out, _ := json.Marshal(resp)
+	return string(out), nil
+}
+
+// rpcOthelloHistory は全プレイヤー共有の対戦履歴を返す
+func rpcOthelloHistory(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloHistory")()
+
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "othello_history", Key: "history", UserID: systemUserID,
+	}})
+	if err != nil {
+		return "[]", nil
+	}
+	if len(objs) == 0 {
+		return "[]", nil
+	}
+
+	var stored struct {
+		Records []json.RawMessage `json:"records"`
+	}
+	if err := json.Unmarshal([]byte(objs[0].Value), &stored); err != nil {
+		return "[]", nil
+	}
+	out, _ := json.Marshal(stored.Records)
 	return string(out), nil
 }
 
@@ -4539,6 +4660,8 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"othelloJoin", rpcOthelloJoin},
 		{"othelloMove", rpcOthelloMove},
 		{"othelloResign", rpcOthelloResign},
+		{"othelloCancel", rpcOthelloCancel},
+		{"othelloHistory", rpcOthelloHistory},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {
@@ -4604,7 +4727,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	if err := initializer.RegisterAfterAuthenticateCustom(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, out *api.Session, in *api.AuthenticateCustomRequest) error {
 		uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 		cacheDN(ctx, nk, uid)
-		logf("rcv login/custom uid=%s%s\n", uid, dn(uid))
+		logf("rcv login/custom uid=%s%s\n", shortSID(uid), dn(uid))
 		return nil
 	}); err != nil {
 		return err
@@ -4614,7 +4737,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	if err := initializer.RegisterAfterAuthenticateDevice(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, out *api.Session, in *api.AuthenticateDeviceRequest) error {
 		uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 		cacheDN(ctx, nk, uid)
-		logf("rcv login/device uid=%s%s\n", uid, dn(uid))
+		logf("rcv login/device uid=%s%s\n", shortSID(uid), dn(uid))
 		return nil
 	}); err != nil {
 		return err
@@ -4625,7 +4748,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
 		displayName := dn(uid)
 		displayNameCache.Delete(uid)
-		logf("rcv logout uid=%s%s\n", uid, displayName)
+		logf("rcv logout uid=%s%s\n", shortSID(uid), displayName)
 	}); err != nil {
 		return err
 	}

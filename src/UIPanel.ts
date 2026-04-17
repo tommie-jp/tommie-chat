@@ -312,6 +312,8 @@ export function setupHtmlUI(game: GameScene): void {
                         game.scene.render();
                         const reapply = (game as any).onChatOverlayReapply;
                         if (typeof reapply === "function") reapply();
+                        const fitBoard = (game as any)._othelloFitBoard;
+                        if (typeof fitBoard === "function") fitBoard();
                     });
                 }
             });
@@ -323,6 +325,8 @@ export function setupHtmlUI(game: GameScene): void {
                     game.scene.render();
                     const reapply = (game as any).onChatOverlayReapply;
                     if (typeof reapply === "function") reapply();
+                    const fitBoard = (game as any)._othelloFitBoard;
+                    if (typeof fitBoard === "function") fitBoard();
                     const v = getComputedStyle(document.documentElement).getPropertyValue("--pt-divider").trim();
                     if (v) setDivCk("ptDivider", v);
                 }
@@ -4461,6 +4465,38 @@ export function setupHtmlUI(game: GameScene): void {
         const othBackBtn   = document.getElementById("othello-back-btn") as HTMLButtonElement | null;
 
         if (othPanel && othHeader && othBoard && othLobby && othGameView) {
+            // --- 盤面サイズ自動調整 ---
+            const fitBoard = () => {
+                if (othGameView.style.display === "none") return;
+                // ボードを一旦縮小してflex レイアウトを安定させる
+                othBoard.style.width = "0";
+                othBoard.style.height = "0";
+                // othGameView の flex 後の高さを取得（パネルの overflow:hidden で制約済み）
+                const gameRect = othGameView.getBoundingClientRect();
+                // 兄弟要素（ボード以外）の高さ合計
+                let usedH = 0;
+                for (const child of Array.from(othGameView.children)) {
+                    if (child === othBoard || (child as HTMLElement).style.display === "none") continue;
+                    usedH += (child as HTMLElement).getBoundingClientRect().height;
+                }
+                // gap: 4px × (表示中の子要素数-1)
+                const visCount = Array.from(othGameView.children).filter(
+                    c => (c as HTMLElement).style.display !== "none").length;
+                const totalGap = Math.max(0, visCount - 1) * 4;
+                const availH = gameRect.height - usedH - totalGap;
+                const availW = gameRect.width;
+                const size = Math.floor(Math.min(availW, Math.max(0, availH)));
+                if (size > 0) {
+                    othBoard.style.width = size + "px";
+                    othBoard.style.height = size + "px";
+                }
+            };
+            // パネルのリサイズを監視（パネルサイズはボードに依存しない）
+            new ResizeObserver(fitBoard).observe(othPanel);
+            window.addEventListener("resize", fitBoard);
+            // デバイダーのドラッグ中にも呼ばれるようにする
+            (game as any)._othelloFitBoard = fitBoard;
+
             // --- サーバ駆動ゲーム状態 ---
             let currentGameId: string | null = null;
             let myColor: number = 0; // 1=黒, 2=白, 0=観戦
@@ -4497,6 +4533,46 @@ export function setupHtmlUI(game: GameScene): void {
                 return moves;
             };
 
+            // --- 対戦履歴描画 ---
+            const othHistoryList = document.getElementById("othello-history-list");
+            const loadHistory = async () => {
+                if (!othHistoryList) return;
+                const uid = myUid();
+                const records = await game.nakama.othelloHistory();
+                othHistoryList.innerHTML = "";
+                if (records.length === 0) {
+                    const empty = document.createElement("div");
+                    empty.style.cssText = "font-size:11px;color:#888;text-align:center;padding:4px;";
+                    empty.textContent = "まだ対戦履歴がありません";
+                    othHistoryList.appendChild(empty);
+                    return;
+                }
+                for (const r of records) {
+                    const iAmBlack = r.black === uid;
+                    const myWin = (r.winner === 1 && iAmBlack) || (r.winner === 2 && !iAmBlack);
+                    const myLose = (r.winner === 1 && !iAmBlack) || (r.winner === 2 && iAmBlack);
+                    const cls = r.winner === 3 ? "draw" : myWin ? "win" : myLose ? "lose" : "";
+
+                    const item = document.createElement("div");
+                    item.className = "othello-history-item" + (cls ? " " + cls : "");
+
+                    const opponent = iAmBlack ? (r.whiteName || "???") : (r.blackName || "???");
+                    const info = document.createElement("span");
+                    const d = new Date(r.ts);
+                    const dateStr = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+                    const reasonStr = r.reason === "resign" ? " (投了)" : "";
+                    info.textContent = `${dateStr} vs ${opponent}  ${r.blackCount}-${r.whiteCount}${reasonStr}`;
+
+                    const result = document.createElement("span");
+                    result.className = "othello-history-result" + (cls ? " " + cls : "");
+                    result.textContent = r.winner === 3 ? "引分" : myWin ? "勝ち" : myLose ? "負け" : "中断";
+
+                    item.appendChild(info);
+                    item.appendChild(result);
+                    othHistoryList.appendChild(item);
+                }
+            };
+
             // --- 画面切り替え ---
             const showLobby = () => {
                 othLobby.style.display = "";
@@ -4505,15 +4581,19 @@ export function setupHtmlUI(game: GameScene): void {
                 myColor = 0;
                 prevBoard = new Array(64).fill(0);
                 // ゲーム一覧はサーバからの購読応答で自動更新される
-                // 既に購読中なら再購読して最新リストを取得
-                if (subscribed) {
-                    game.nakama.othelloSubscribe(true).catch(e => console.warn("othelloSubscribe error:", e));
-                }
+                // 再購読して最新リストを取得（未購読の場合も購読を試みる）
+                game.nakama.othelloSubscribe(true).then(ok => {
+                    if (ok) subscribed = true;
+                }).catch(e => console.warn("othelloSubscribe error:", e));
+                // 対戦履歴を取得
+                loadHistory().catch(e => console.warn("othelloHistory error:", e));
             };
 
             const showGame = () => {
                 othLobby.style.display = "none";
                 othGameView.style.display = "";
+                renderBoard();
+                requestAnimationFrame(fitBoard);
             };
 
             // --- ゲーム一覧描画（サーバからの購読通知で呼ばれる） ---
@@ -4526,9 +4606,22 @@ export function setupHtmlUI(game: GameScene): void {
                     if (g.status === "playing" && (g.black === uid || g.white === uid)) {
                         currentGameId = g.gameId;
                         myColor = g.black === uid ? 1 : 2;
+                        gameStatus = "playing";
                         game.nakama.othelloJoin(g.gameId).then(state => {
                             if (state) applyState(state);
-                        });
+                        }).catch(e => console.warn("othelloJoin error:", e));
+                        showGame();
+                        return;
+                    }
+                    // 自分が作成した待機中ゲームを自動復元（joinせず初期盤面をローカル設定）
+                    if (g.status === "waiting" && g.black === uid) {
+                        currentGameId = g.gameId;
+                        myColor = 1;
+                        gameStatus = "waiting";
+                        board = new Array(64).fill(0);
+                        board[27] = 2; board[28] = 1; board[35] = 1; board[36] = 2;
+                        if (othBlack) othBlack.textContent = "2";
+                        if (othWhite) othWhite.textContent = "2";
                         showGame();
                         return;
                     }
@@ -4566,12 +4659,17 @@ export function setupHtmlUI(game: GameScene): void {
 
             // --- ゲーム参加 ---
             const joinGame = async (gameId: string) => {
-                const res = await game.nakama.othelloJoin(gameId);
-                if (!res) return;
-                currentGameId = res.gameId;
-                myColor = res.black === myUid() ? 1 : (res.white === myUid() ? 2 : 0);
-                applyState(res);
-                showGame();
+                currentGameId = gameId; // ブロードキャスト到着前に設定して重複joinを防ぐ
+                try {
+                    const res = await game.nakama.othelloJoin(gameId);
+                    if (!res) { currentGameId = null; return; }
+                    myColor = res.black === myUid() ? 1 : (res.white === myUid() ? 2 : 0);
+                    applyState(res);
+                    showGame();
+                } catch (e) {
+                    currentGameId = null;
+                    console.warn("othelloJoin error:", e);
+                }
             };
 
             // --- サーバからの状態を適用 ---
@@ -4661,8 +4759,8 @@ export function setupHtmlUI(game: GameScene): void {
                 if (othPassBtn) othPassBtn.disabled = !isMyTurn || legalMoves.size > 0;
                 // 投了ボタン: ゲーム中かつ自分が参加者のときのみ有効
                 if (othResignBtn) othResignBtn.disabled = gameStatus !== "playing" || myColor === 0;
-                // 戻るボタン: 終局時のみ表示
-                if (othBackBtn) othBackBtn.style.display = gameStatus === "finished" ? "" : "none";
+                // 戻るボタン: 待機中または終局時に表示
+                if (othBackBtn) othBackBtn.style.display = (gameStatus === "finished" || gameStatus === "waiting") ? "" : "none";
             };
 
             // --- セルクリック（サーバに送信） ---
@@ -4698,29 +4796,40 @@ export function setupHtmlUI(game: GameScene): void {
 
             // --- 戻るボタン ---
             if (othBackBtn) {
-                othBackBtn.addEventListener("click", () => showLobby());
+                othBackBtn.addEventListener("click", async () => {
+                    // 待機中のゲームはキャンセルRPCで削除
+                    if (currentGameId && gameStatus === "waiting") {
+                        try {
+                            await game.nakama.othelloCancel(currentGameId);
+                        } catch (e) {
+                            console.warn("othelloCancel error:", e);
+                        }
+                    }
+                    showLobby();
+                });
             }
 
             // --- サーバからの更新通知ハンドラ ---
             game.nakama.onOthelloUpdate = (data) => {
                 if (data.type === "list") {
-                    // ゲーム一覧の更新をサーバから受信
+                    console.log(`rcv othello list: ${data.games.length} games`);
                     if (!currentGameId && othLobby.style.display !== "none") {
                         applyGameList(data.games);
                     }
                     return;
                 }
                 // type === "game" — 盤面更新
-                if (data.gameId !== currentGameId) return;
-                applyState(data as import("./NakamaService").OthelloUpdatePayload);
+                const gd = data as import("./NakamaService").OthelloUpdatePayload;
+                console.log(`rcv othello game: gameId=${gd.gameId} status=${gd.status} turn=${gd.turn}`);
+                if (gd.gameId !== currentGameId) return;
+                applyState(gd);
             };
 
             // --- 購読管理 ---
             const ensureSubscribe = async () => {
-                if (!subscribed) {
-                    await game.nakama.othelloSubscribe(true);
-                    subscribed = true;
-                }
+                if (subscribed) return;
+                const ok = await game.nakama.othelloSubscribe(true);
+                if (ok) subscribed = true;
             };
             const ensureUnsubscribe = async () => {
                 if (subscribed) {
@@ -4729,9 +4838,18 @@ export function setupHtmlUI(game: GameScene): void {
                 }
             };
 
+            // マッチ参加完了時: パネルが表示中なら購読する
+            // （リロード時のモバイルCookie復元でパネルが先に開かれた場合のリカバリ）
+            game.nakama.addMatchReadyListener(() => {
+                if (othPanel.style.display !== "none" && !subscribed) {
+                    ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
+                }
+            });
+
             // パネル表示時に購読 + ロビー表示
             const panelObs = new MutationObserver(() => {
                 if (othPanel.style.display !== "none") {
+                    console.log("othello panel opened");
                     ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
                     if (!currentGameId) showLobby();
                 } else {

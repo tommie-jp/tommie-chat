@@ -1283,9 +1283,8 @@
             gap: 1px;
             background: #000;
             border: 2px solid #000;
-            aspect-ratio: 1;
-            width: 100%;
-            max-width: 296px;
+            box-sizing: border-box;
+            align-self: center;
             flex-shrink: 0;
         }
         .othello-cell {
@@ -1352,9 +1351,11 @@
             flex-direction: column;
             gap: 8px;
             width: 100%;
-            max-width: 296px;
+            flex: 1;
+            min-height: 0;
         }
         #othello-create-btn {
+            flex-shrink: 0;
             background: #2d8a4e;
             color: #fff;
             border: none;
@@ -1371,7 +1372,8 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
-            max-height: 160px;
+            flex: 1;
+            min-height: 0;
             overflow-y: auto;
         }
         .othello-game-item {
@@ -1396,6 +1398,60 @@
         .othello-game-item button:hover {
             background: #1565c0;
         }
+        #othello-history-section {
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        #othello-history-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #666;
+            padding: 4px 0 2px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+        #othello-history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            max-height: 140px;
+            overflow-y: auto;
+        }
+        .othello-history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            background: rgba(0,0,0,0.03);
+        }
+        .othello-history-item.win {
+            background: rgba(46,139,87,0.1);
+        }
+        .othello-history-item.lose {
+            background: rgba(220,60,60,0.08);
+        }
+        .othello-history-item.draw {
+            background: rgba(180,180,0,0.08);
+        }
+        .othello-history-result {
+            font-weight: bold;
+            min-width: 24px;
+            text-align: center;
+        }
+        .othello-history-result.win { color: #2e8b57; }
+        .othello-history-result.lose { color: #c03030; }
+        .othello-history-result.draw { color: #888; }
+        #othello-game {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+            align-items: center;
+            gap: 4px;
+            overflow: hidden;
+        }
         #othello-my-color {
             font-size: 11px;
             color: #666;
@@ -1405,13 +1461,15 @@
             display: flex;
             gap: 8px;
             width: 100%;
-            max-width: 296px;
+            margin-top: auto;
+            flex-shrink: 0;
+            align-self: stretch;
         }
         #othello-controls button {
             flex: 1;
-            background: rgba(0,0,0,0.06);
-            color: #000;
-            border: 1px solid rgba(0,0,0,0.12);
+            background: #5b9bd5;
+            color: #fff;
+            border: 1px solid #4a8ac4;
             border-radius: 4px;
             padding: 6px 8px;
             cursor: pointer;
@@ -1419,7 +1477,7 @@
             font-family: inherit;
         }
         #othello-controls button:hover {
-            background: rgba(0,0,0,0.12);
+            background: #4a8ac4;
         }
         #othello-controls button:disabled {
             opacity: 0.4;
@@ -1435,12 +1493,12 @@
             border-bottom-color: rgba(255,255,255,0.1);
         }
         body.theme-dark #othello-controls button {
-            background: rgba(255,255,255,0.08);
-            color: #ddd;
-            border-color: rgba(255,255,255,0.12);
+            background: #4a7fb5;
+            color: #fff;
+            border-color: #3a6fa5;
         }
         body.theme-dark #othello-controls button:hover {
-            background: rgba(255,255,255,0.16);
+            background: #3a6fa5;
         }
         body.theme-dark #othello-create-btn {
             background: #2d8a4e;
@@ -1450,6 +1508,22 @@
         }
         body.theme-dark #othello-my-color {
             color: #aaa;
+        }
+        body.theme-dark #othello-history-title {
+            color: #999;
+            border-top-color: rgba(255,255,255,0.1);
+        }
+        body.theme-dark .othello-history-item {
+            background: rgba(255,255,255,0.04);
+        }
+        body.theme-dark .othello-history-item.win {
+            background: rgba(46,139,87,0.15);
+        }
+        body.theme-dark .othello-history-item.lose {
+            background: rgba(220,60,60,0.12);
+        }
+        body.theme-dark .othello-history-item.draw {
+            background: rgba(180,180,0,0.12);
         }
 
         /* ===== 同接グラフパネル ===== */
@@ -2673,6 +2747,18 @@
                 bottom: calc(100dvh - var(--pt-divider, 60dvh) + 4px) !important;
                 left: 8px !important;
             }
+            /* ポートレート: オセロ盤面を大きく表示 */
+            #othello-body {
+                padding: 12px !important;
+                align-items: stretch !important;
+            }
+            #othello-game {
+                align-items: stretch !important;
+            }
+            #othello-lobby,
+            #othello-controls {
+                max-width: none !important;
+            }
 
         }
 
@@ -3751,8 +3837,12 @@
         <div id="othello-body">
             <!-- ロビー画面 -->
             <div id="othello-lobby">
-                <button id="othello-create-btn">対戦を作成</button>
                 <div id="othello-game-list"></div>
+                <button id="othello-create-btn">対戦を作成</button>
+                <div id="othello-history-section">
+                    <div id="othello-history-title">対戦履歴</div>
+                    <div id="othello-history-list"></div>
+                </div>
             </div>
             <!-- ゲーム画面 -->
             <div id="othello-game" style="display:none;">

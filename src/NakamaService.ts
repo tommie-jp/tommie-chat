@@ -57,6 +57,20 @@ export interface OthelloListPayload {
     }[];
 }
 
+/** オセロ対戦履歴の1レコード */
+export interface OthelloHistoryRecord {
+    gameId: string;
+    black: string;
+    blackName: string;
+    white: string;
+    whiteName: string;
+    blackCount: number;
+    whiteCount: number;
+    winner: number; // 0=未定, 1=黒勝, 2=白勝, 3=引分
+    reason: string; // "normal", "resign", "cancel"
+    ts: number;     // UnixMilli
+}
+
 /** OP_OTHELLO_UPDATE で受信するメッセージの共用型 */
 export type OthelloMessage = OthelloUpdatePayload | OthelloListPayload;
 
@@ -98,6 +112,21 @@ export class NakamaService {
     onMatchReconnect?:   () => void;
     /** 再接続時に joinMatch に渡すメタデータを取得するコールバック */
     getReconnectMeta?: () => Record<string, string>;
+
+    private matchReadyListeners: (() => void)[] = [];
+    private matchReady = false;
+
+    /** マッチ参加完了時に呼ばれるリスナーを登録。既に参加済みなら即座に呼ぶ */
+    addMatchReadyListener(fn: () => void): void {
+        if (this.matchReady) { fn(); return; }
+        this.matchReadyListeners.push(fn);
+    }
+
+    private fireMatchReady(): void {
+        this.matchReady = true;
+        for (const fn of this.matchReadyListeners) fn();
+        this.matchReadyListeners.length = 0;
+    }
 
     private reconnecting = false;
     private loginName: string | null = null;
@@ -417,6 +446,7 @@ export class NakamaService {
             this.onMatchPresenceJoin?.(p.session_id, p.user_id, p.username);
         }
         this.currentPresenceIds = ids;
+        this.fireMatchReady();
         return worldInfo;
         } finally { _end(); }
     }
@@ -967,6 +997,7 @@ export class NakamaService {
     /** オセロゲームを作成 */
     async othelloCreate(worldId: number): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
+        console.log(`snd othelloCreate worldId=${worldId}`);
         const r = await this.socket.rpc("othelloCreate", JSON.stringify({ worldId }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
@@ -974,6 +1005,7 @@ export class NakamaService {
     /** オセロゲームに参加 */
     async othelloJoin(gameId: string): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
+        console.log(`snd othelloJoin gameId=${gameId}`);
         const r = await this.socket.rpc("othelloJoin", JSON.stringify({ gameId }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
@@ -981,6 +1013,7 @@ export class NakamaService {
     /** オセロで石を置く */
     async othelloMove(gameId: string, row: number, col: number): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
+        console.log(`snd othelloMove gameId=${gameId} row=${row} col=${col}`);
         const r = await this.socket.rpc("othelloMove", JSON.stringify({ gameId, row, col }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
@@ -988,14 +1021,34 @@ export class NakamaService {
     /** オセロで投了 */
     async othelloResign(gameId: string): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
+        console.log(`snd othelloResign gameId=${gameId}`);
         const r = await this.socket.rpc("othelloResign", JSON.stringify({ gameId }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
 
-    /** オセロ更新通知の購読/解除 */
-    async othelloSubscribe(subscribe: boolean): Promise<void> {
-        if (!this.socket || !this.matchId) return;
+    /** 待機中のオセロゲームをキャンセルする（作成者のみ） */
+    async othelloCancel(gameId: string): Promise<void> {
+        if (!this.socket) return;
+        console.log(`snd othelloCancel gameId=${gameId}`);
+        await this.socket.rpc("othelloCancel", JSON.stringify({ gameId }));
+    }
+
+    /** オセロ対戦履歴を取得する */
+    async othelloHistory(): Promise<OthelloHistoryRecord[]> {
+        if (!this.socket) return [];
+        console.log("snd othelloHistory");
+        const r = await this.socket.rpc("othelloHistory", "");
+        try {
+            return JSON.parse(r.payload ?? "[]") as OthelloHistoryRecord[];
+        } catch { return []; }
+    }
+
+    /** オセロ更新通知の購読/解除。送信できた場合 true を返す */
+    async othelloSubscribe(subscribe: boolean): Promise<boolean> {
+        if (!this.socket || !this.matchId) return false;
+        console.log(`snd othelloSubscribe ${subscribe ? "subscribe" : "unsubscribe"}`);
         await this.socket.sendMatchState(this.matchId, OP_OTHELLO_SUB, this._encoder.encode(JSON.stringify({ subscribe })));
+        return true;
     }
 
 }

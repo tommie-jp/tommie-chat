@@ -76,3 +76,4 @@ test/__pycache__/
 01-README.md
 test/e2e/results/
 test/e2e/report/
+othello-*.png
