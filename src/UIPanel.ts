@@ -4606,30 +4606,42 @@ export function setupHtmlUI(game: GameScene): void {
 
         if (othPanel && othHeader && othBoard && othLobby && othGameView) {
             // --- 盤面サイズ自動調整 ---
+            // iPhone Safari で visualViewport 変化中に測ると gameRect が旧値のことがあるため
+            // rAF で次フレームに測り直す
+            let fitRafPending = false;
             const fitBoard = () => {
                 if (othGameView.style.display === "none") return;
-                // ボードを一旦縮小してflex レイアウトを安定させる
-                othBoard.style.width = "0";
-                othBoard.style.height = "0";
-                // othGameView の flex 後の高さを取得（パネルの overflow:hidden で制約済み）
-                const gameRect = othGameView.getBoundingClientRect();
-                // 兄弟要素（ボード以外）の高さ合計
-                let usedH = 0;
-                for (const child of Array.from(othGameView.children)) {
-                    if (child === othBoard || (child as HTMLElement).style.display === "none") continue;
-                    usedH += (child as HTMLElement).getBoundingClientRect().height;
-                }
-                // gap: 4px × (表示中の子要素数-1)
-                const visCount = Array.from(othGameView.children).filter(
-                    c => (c as HTMLElement).style.display !== "none").length;
-                const totalGap = Math.max(0, visCount - 1) * 4;
-                const availH = gameRect.height - usedH - totalGap;
-                const availW = gameRect.width;
-                const size = Math.floor(Math.min(availW, Math.max(0, availH)));
-                if (size > 0) {
-                    othBoard.style.width = size + "px";
-                    othBoard.style.height = size + "px";
-                }
+                if (fitRafPending) return;
+                fitRafPending = true;
+                requestAnimationFrame(() => {
+                    fitRafPending = false;
+                    if (othGameView.style.display === "none") return;
+                    // ボードを一旦縮小してflex レイアウトを安定させる
+                    othBoard.style.width = "0";
+                    othBoard.style.height = "0";
+                    // othGameView の flex 後の高さを取得（パネルの overflow:hidden で制約済み）
+                    const gameRect = othGameView.getBoundingClientRect();
+                    // flex レイアウトに参加する子要素のみを対象にする
+                    // （#othello-game-no-label は position:absolute なので除外）
+                    let usedH = 0;
+                    let visCount = 0;
+                    for (const child of Array.from(othGameView.children)) {
+                        const el = child as HTMLElement;
+                        if (el.style.display === "none") continue;
+                        if (getComputedStyle(el).position === "absolute") continue;
+                        visCount++;
+                        if (el === othBoard) continue;
+                        usedH += el.getBoundingClientRect().height;
+                    }
+                    const totalGap = Math.max(0, visCount - 1) * 4;
+                    const availH = gameRect.height - usedH - totalGap;
+                    const availW = gameRect.width;
+                    const size = Math.floor(Math.min(availW, Math.max(0, availH)));
+                    if (size > 0) {
+                        othBoard.style.width = size + "px";
+                        othBoard.style.height = size + "px";
+                    }
+                });
             };
             // パネルのリサイズを監視（パネルサイズはボードに依存しない）
             new ResizeObserver(fitBoard).observe(othPanel);
