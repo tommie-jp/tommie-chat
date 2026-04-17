@@ -4862,36 +4862,43 @@ export function setupHtmlUI(game: GameScene): void {
             const applyGameList = (games: import("./NakamaService").OthelloListPayload["games"]) => {
                 if (!othGameList) return;
                 const uid = myUid();
-                othGameList.innerHTML = "";
-                gameListItems.clear();
                 // ゲーム番号降順（新しいゲームを先頭に）
                 const sorted = [...games].sort((a, b) => (b.gameNo ?? 0) - (a.gameNo ?? 0));
+                // --- 参加中ゲームの自動復帰検知（ロビー表示/ゲーム表示いずれでも常に実行）---
+                // 状態遷移図: [doc/57-state-othello.puml](doc/57-state-othello.puml) E3/E4
                 for (const g of sorted) {
-                    // 自分が参加中のゲームは自動的にそのゲーム画面へ
-                    if (g.status === "playing" && (g.black === uid || g.white === uid)) {
-                        currentGameId = g.gameId;
-                        myColor = g.black === uid ? 1 : 2;
-                        gameStatus = "playing";
-                        refreshRecruit();
-                        game.nakama.othelloJoin(g.gameId).then(state => {
-                            if (state) applyState(state);
-                        }).catch(e => console.warn("othelloJoin error:", e));
-                        showGame();
+                    if ((g.status === "playing" || g.status === "waiting") &&
+                        (g.black === uid || g.white === uid)) {
+                        const stateChanged = g.gameId !== currentGameId || g.status !== gameStatus;
+                        if (stateChanged) {
+                            currentGameId = g.gameId;
+                            myColor = g.black === uid ? 1 : 2;
+                            gameStatus = g.status;
+                            refreshRecruit();
+                            if (g.status === "playing") {
+                                // サーバから実状態を取得（watch=true で own game でも取得可能）
+                                game.nakama.othelloJoin(g.gameId, true).then(state => {
+                                    if (state) applyState(state);
+                                }).catch(e => console.warn("othelloJoin(watch) error:", e));
+                            } else {
+                                // 自分が作成した待機中ゲーム: 初期盤面をローカル設定
+                                board = new Array(64).fill(0);
+                                board[27] = 2; board[28] = 1; board[35] = 1; board[36] = 2;
+                                if (othBlack) othBlack.textContent = "2";
+                                if (othWhite) othWhite.textContent = "2";
+                            }
+                            showGame();
+                        }
+                        // 自分のゲームで URL 遅延処理は解決済みとして消費
+                        pendingOthelloGameNo = undefined;
                         return;
                     }
-                    // 自分が作成した待機中ゲームを自動復元（joinせず初期盤面をローカル設定）
-                    if (g.status === "waiting" && g.black === uid) {
-                        currentGameId = g.gameId;
-                        myColor = 1;
-                        gameStatus = "waiting";
-                        refreshRecruit();
-                        board = new Array(64).fill(0);
-                        board[27] = 2; board[28] = 1; board[35] = 1; board[36] = 2;
-                        if (othBlack) othBlack.textContent = "2";
-                        if (othWhite) othWhite.textContent = "2";
-                        showGame();
-                        return;
-                    }
+                }
+                // --- 以降はロビー表示中のみテーブル描画 ---
+                if (othLobby.style.display === "none") return;
+                othGameList.innerHTML = "";
+                gameListItems.clear();
+                for (const g of sorted) {
                     // 待機中または対戦中のゲームを一覧に表示
                     if (g.status === "waiting" || g.status === "playing") {
                         const tr = document.createElement("tr");
@@ -5190,9 +5197,9 @@ export function setupHtmlUI(game: GameScene): void {
                 if (data.type === "list") {
                     const histCount = data.history ? data.history.length : 0;
                     console.log(`rcv othello list: ${data.games.length} games${data.history ? `, ${histCount} history` : ""}`);
-                    if (!currentGameId && othLobby.style.display !== "none") {
-                        applyGameList(data.games);
-                    }
+                    // 参加中ゲームの状態遷移(waiting→playing)を検知するため常に実行
+                    // （テーブル描画は applyGameList 内でロビー表示時のみ行う）
+                    applyGameList(data.games);
                     // 履歴フィールドが含まれていれば更新（省略時は更新なし）
                     if (data.history) {
                         renderHistory(data.history);
