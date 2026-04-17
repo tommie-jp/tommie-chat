@@ -29,41 +29,70 @@ const OP_OTHELLO_SUB       = 19; // C→S     オセロ購読/解除（{subscrib
 export interface OthelloUpdatePayload {
     type?: "game";
     gameId: string;
+    gameNo?: number;
     board: number[];
     black: string;
+    blackName?: string;
+    blackUser?: string;
+    blackHasGoogle?: boolean;
+    blackIsAdmin?: boolean;
     white: string;
+    whiteName?: string;
+    whiteUser?: string;
+    whiteHasGoogle?: boolean;
+    whiteIsAdmin?: boolean;
     turn: number;
     status: string;
     lastMove: number;
     winner: number;
     blackCount: number;
     whiteCount: number;
+    comment?: string;
     flipped?: number[];
 }
 
-/** オセロゲーム一覧のペイロード型 */
+/** オセロゲーム一覧のペイロード型
+ *  - games は常に存在（現在の待機中＋進行中ゲーム）
+ *  - history はゲーム終了通知・初回購読時のみ存在（省略時は履歴更新なし）
+ */
 export interface OthelloListPayload {
     type: "list";
     games: {
         gameId: string;
+        gameNo?: number;
         black: string;
-        blackName: string;
+        blackName: string;          // displayName 生値（括弧なし）
+        blackUser?: string;         // username（@フォールバック用）
+        blackHasGoogle?: boolean;
+        blackIsAdmin?: boolean;
         white: string;
         whiteName: string;
+        whiteUser?: string;
+        whiteHasGoogle?: boolean;
+        whiteIsAdmin?: boolean;
         status: string;
         turn: number;
         blackCount: number;
         whiteCount: number;
+        comment?: string;
     }[];
+    history?: OthelloHistoryRecord[]; // 省略時は履歴更新なし
 }
 
 /** オセロ対戦履歴の1レコード */
 export interface OthelloHistoryRecord {
     gameId: string;
+    gameNo?: number;
     black: string;
-    blackName: string;
+    blackName: string;          // displayName 生値（括弧なし）
+    blackUser?: string;         // username（@フォールバック用）
+    blackHasGoogle?: boolean;
+    blackIsAdmin?: boolean;
     white: string;
     whiteName: string;
+    whiteUser?: string;
+    whiteHasGoogle?: boolean;
+    whiteIsAdmin?: boolean;
     blackCount: number;
     whiteCount: number;
     winner: number; // 0=未定, 1=黒勝, 2=白勝, 3=引分
@@ -1002,11 +1031,11 @@ export class NakamaService {
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
 
-    /** オセロゲームに参加 */
-    async othelloJoin(gameId: string): Promise<OthelloUpdatePayload | null> {
+    /** オセロゲームに参加（watch=true で観戦取得、状態変更なし） */
+    async othelloJoin(gameId: string, watch: boolean = false): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
-        console.log(`snd othelloJoin gameId=${gameId}`);
-        const r = await this.socket.rpc("othelloJoin", JSON.stringify({ gameId }));
+        console.log(`snd othelloJoin gameId=${gameId}${watch ? " watch" : ""}`);
+        const r = await this.socket.rpc("othelloJoin", JSON.stringify({ gameId, watch }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
 
@@ -1031,6 +1060,17 @@ export class NakamaService {
         if (!this.socket) return;
         console.log(`snd othelloCancel gameId=${gameId}`);
         await this.socket.rpc("othelloCancel", JSON.stringify({ gameId }));
+    }
+
+    /** 待機中オセロのコメント列を更新する（作成者のみ） */
+    async othelloComment(gameId: string, text: string): Promise<void> {
+        if (!this.socket) return;
+        console.log(`snd othelloComment gameId=${gameId} text=${text}`);
+        try {
+            await this.socket.rpc("othelloComment", JSON.stringify({ gameId, text }));
+        } catch (e) {
+            console.warn("othelloComment error:", e);
+        }
     }
 
     /** オセロ対戦履歴を取得する */

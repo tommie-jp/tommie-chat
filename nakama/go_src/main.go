@@ -209,6 +209,9 @@ func withRateLimit(rl *rpcRateLimiter, fn func(context.Context, runtime.Logger, 
 // displayNameCache は uid → 表示名 のキャッシュ
 var displayNameCache sync.Map
 
+// usernameCache は uid → username のキャッシュ（オセロ対戦履歴の @username フォールバック用）
+var usernameCache sync.Map
+
 // dn は uid に対応する表示名を "(name)" 形式で返す（未登録時は "(?)"）
 func dn(uid string) string {
 	if v, ok := displayNameCache.Load(uid); ok {
@@ -218,6 +221,7 @@ func dn(uid string) string {
 }
 
 // cacheDN は uid の表示名をキャッシュに登録する（未登録時のみ nk.UsersGetId を呼ぶ）
+// 同時に username も usernameCache に登録する
 func cacheDN(ctx context.Context, nk runtime.NakamaModule, uid string) {
 	if _, ok := displayNameCache.Load(uid); ok {
 		return
@@ -227,6 +231,24 @@ func cacheDN(ctx context.Context, nk runtime.NakamaModule, uid string) {
 		return
 	}
 	displayNameCache.Store(uid, users[0].DisplayName)
+	usernameCache.Store(uid, users[0].Username)
+}
+
+// playerInfo は uid に対応する表示名・ユーザ名・認証フラグをキャッシュから返す
+// オセロ対戦履歴／一覧でチャットオーバレイ形式の表示名を組み立てるのに使う
+func playerInfo(uid string) (displayName, username string, hasGoogle, isAdmin bool) {
+	if v, ok := displayNameCache.Load(uid); ok {
+		displayName = v.(string)
+	}
+	if v, ok := usernameCache.Load(uid); ok {
+		username = v.(string)
+	}
+	if v, ok := authFlagsCache.Load(uid); ok {
+		f := v.(authFlags)
+		hasGoogle = f.HasGoogle
+		isAdmin = f.IsAdmin
+	}
+	return
 }
 
 // logf は時刻プレフィックス付き（JST）でログを出力する
@@ -1595,6 +1617,10 @@ func (m *worldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db *s
 			if init.DisplayName != "" {
 				displayNameCache.Store(uid, init.DisplayName)
 			}
+			// usernameCache も合わせて更新（オセロ対戦履歴の @username 表示用）
+			if uname := p.GetUsername(); uname != "" {
+				usernameCache.Store(uid, uname)
+			}
 			// グローバルキャッシュ更新
 			if init.TextureUrl != "" {
 				worldPlayersMu.Lock()
@@ -2480,11 +2506,11 @@ func (m *worldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db *s
 			if err := json.Unmarshal(msg.GetData(), &sub); err == nil {
 				if sub.Subscribe {
 					ms.OthelloSubs[sid] = true
-					// 即座に現在のゲーム一覧を送信
+					// 即座に現在のゲーム一覧と対戦履歴を送信（初回購読時は必ず履歴も含める）
 					if p, ok := ms.Presences[sid]; ok {
-						listData := othelloListPayload(ms.WorldID)
+						listData := othelloListPayload(ctx, nk, ms.WorldID, true)
 						dispatcher.BroadcastMessage(opOthelloUpdate, listData, []runtime.Presence{p}, nil, true)
-						logf("snd OthelloUpdate(list) uid=%s%s sid=%s\n", shortSID(p.GetUserId()), dn(p.GetUserId()), shortSID(sid))
+						logf("snd OthelloUpdate(list+history) uid=%s%s sid=%s\n", shortSID(p.GetUserId()), dn(p.GetUserId()), shortSID(sid))
 					}
 				} else {
 					delete(ms.OthelloSubs, sid)
@@ -3764,6 +3790,7 @@ func rpcDetachDevice(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 // OthelloGame はオセロ1局の状態を管理する
 type OthelloGame struct {
 	GameID    string   `json:"gameId"`
+	GameNo    int64    `json:"gameNo"`    // DB永続連番（作成ごとに+1）
 	Board     [64]int8 `json:"board"`     // 0=空, 1=黒, 2=白
 	BlackUID  string   `json:"black"`     // 黒プレイヤーの userID
 	WhiteUID  string   `json:"white"`     // 白プレイヤーの userID
@@ -3775,6 +3802,7 @@ type OthelloGame struct {
 	WorldID   int      `json:"worldId"`   // 所属する部屋ID
 	BoardGX   int      `json:"boardGX"`   // ブロック盤面���左上ワールドX座標
 	BoardGZ   int      `json:"boardGZ"`   // ブロック盤面の左上ワールドZ座標
+	Comment   string   `json:"comment"`   // ロビーのコメント列に表示する文言（クライアント整形）
 	PrevBoard [64]int8 `json:"-"`         // 前回の盤面（差分検出用）
 }
 
@@ -3931,17 +3959,34 @@ func othelloResign(g *OthelloGame, uid string) {
 // systemUserID 所有の共有レコードとして保存し、誰でも閲覧可能にする
 func othelloSaveHistory(ctx context.Context, nk runtime.NakamaModule, g *OthelloGame, reason string) {
 	b, w := othelloCalcScore(&g.Board)
+
+	// キャッシュ未登録時のフォールバック（通常は create/join 時点でキャッシュ済み）
+	cacheDN(ctx, nk, g.BlackUID)
+	cacheDN(ctx, nk, g.WhiteUID)
+	computeAuthFlags(ctx, nk, g.BlackUID)
+	computeAuthFlags(ctx, nk, g.WhiteUID)
+
+	bName, bUser, bGoogle, bAdmin := playerInfo(g.BlackUID)
+	wName, wUser, wGoogle, wAdmin := playerInfo(g.WhiteUID)
+
 	record := map[string]interface{}{
-		"gameId":     g.GameID,
-		"black":      g.BlackUID,
-		"blackName":  dn(g.BlackUID),
-		"white":      g.WhiteUID,
-		"whiteName":  dn(g.WhiteUID),
-		"blackCount": b,
-		"whiteCount": w,
-		"winner":     g.Winner, // 0=未定, 1=黒勝, 2=白勝, 3=引分
-		"reason":     reason,   // "normal", "resign", "cancel"
-		"ts":         time.Now().UnixMilli(),
+		"gameId":         g.GameID,
+		"gameNo":         g.GameNo,
+		"black":          g.BlackUID,
+		"blackName":      bName, // 括弧なし生値（空なら空文字）
+		"blackUser":      bUser,
+		"blackHasGoogle": bGoogle,
+		"blackIsAdmin":   bAdmin,
+		"white":          g.WhiteUID,
+		"whiteName":      wName,
+		"whiteUser":      wUser,
+		"whiteHasGoogle": wGoogle,
+		"whiteIsAdmin":   wAdmin,
+		"blackCount":     b,
+		"whiteCount":     w,
+		"winner":         g.Winner, // 0=未定, 1=黒勝, 2=白勝, 3=引分
+		"reason":         reason,   // "normal", "resign", "cancel"
+		"ts":             time.Now().UnixMilli(),
 	}
 
 	// 既存履歴を読み込み
@@ -3985,6 +4030,43 @@ func othelloNextGameID() string {
 	return fmt.Sprintf("oth_%d_%d", time.Now().UnixMilli(), seq)
 }
 
+// othelloGameNoSeq は DB永続のゲーム番号カウンタ（InitModule で復元）
+var othelloGameNoSeq int64
+
+// othelloLoadGameNoSeq はサーバ起動時にゲーム番号カウンタを DB から復元する
+func othelloLoadGameNoSeq(ctx context.Context, nk runtime.NakamaModule) {
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "othello_counter", Key: "counter", UserID: systemUserID,
+	}})
+	if err != nil || len(objs) == 0 {
+		return
+	}
+	var stored struct {
+		N int64 `json:"n"`
+	}
+	if json.Unmarshal([]byte(objs[0].Value), &stored) == nil {
+		atomic.StoreInt64(&othelloGameNoSeq, stored.N)
+	}
+}
+
+// othelloNextGameNo は新しいゲーム番号を採番して DB に永続化する
+func othelloNextGameNo(ctx context.Context, nk runtime.NakamaModule) int64 {
+	n := atomic.AddInt64(&othelloGameNoSeq, 1)
+	data, _ := json.Marshal(map[string]interface{}{"n": n})
+	_, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{{
+		Collection:      "othello_counter",
+		Key:             "counter",
+		UserID:          systemUserID,
+		Value:           string(data),
+		PermissionRead:  2,
+		PermissionWrite: 0,
+	}})
+	if err != nil {
+		logf("othello nextGameNo StorageWrite: %v\n", err)
+	}
+	return n
+}
+
 // othelloBoardToInts は [64]int8 を []int に変換する（JSONシリアライズ用）
 func othelloBoardToInts(board *[64]int8) []int {
 	out := make([]int, 64)
@@ -3997,40 +4079,84 @@ func othelloBoardToInts(board *[64]int8) []int {
 // othelloGameResponse はオセロゲームの状態をJSON用mapで返す
 func othelloGameResponse(g *OthelloGame) map[string]interface{} {
 	b, w := othelloCalcScore(&g.Board)
+	bName, bUser, bGoogle, bAdmin := playerInfo(g.BlackUID)
+	wName, wUser, wGoogle, wAdmin := playerInfo(g.WhiteUID)
 	return map[string]interface{}{
-		"type":     "game",
-		"gameId":   g.GameID,
-		"board":    othelloBoardToInts(&g.Board),
-		"black":    g.BlackUID,
-		"white":    g.WhiteUID,
-		"turn":     g.Turn,
-		"status":   g.Status,
-		"lastMove": g.LastMove,
-		"winner":   g.Winner,
-		"blackCount": b,
-		"whiteCount": w,
-		"boardGX":  g.BoardGX,
-		"boardGZ":  g.BoardGZ,
+		"type":           "game",
+		"gameId":         g.GameID,
+		"gameNo":         g.GameNo,
+		"board":          othelloBoardToInts(&g.Board),
+		"black":          g.BlackUID,
+		"blackName":      bName,
+		"blackUser":      bUser,
+		"blackHasGoogle": bGoogle,
+		"blackIsAdmin":   bAdmin,
+		"white":          g.WhiteUID,
+		"whiteName":      wName,
+		"whiteUser":      wUser,
+		"whiteHasGoogle": wGoogle,
+		"whiteIsAdmin":   wAdmin,
+		"turn":           g.Turn,
+		"status":         g.Status,
+		"lastMove":       g.LastMove,
+		"winner":         g.Winner,
+		"blackCount":     b,
+		"whiteCount":     w,
+		"boardGX":        g.BoardGX,
+		"boardGZ":        g.BoardGZ,
+		"comment":        g.Comment,
 	}
 }
 
+// othelloReadHistory はストレージから対戦履歴レコードを読み込む
+func othelloReadHistory(ctx context.Context, nk runtime.NakamaModule) []json.RawMessage {
+	objs, err := nk.StorageRead(ctx, []*runtime.StorageRead{{
+		Collection: "othello_history", Key: "history", UserID: systemUserID,
+	}})
+	if err != nil || len(objs) == 0 {
+		return []json.RawMessage{}
+	}
+	var stored struct {
+		Records []json.RawMessage `json:"records"`
+	}
+	if err := json.Unmarshal([]byte(objs[0].Value), &stored); err != nil {
+		return []json.RawMessage{}
+	}
+	if stored.Records == nil {
+		return []json.RawMessage{}
+	}
+	return stored.Records
+}
+
 // othelloListPayload はワールドのオセロゲーム一覧ペイロードを JSON で返す
-func othelloListPayload(worldID int) []byte {
+// includeHistory=true のときは history フィールドも含める（対戦履歴更新通知を兼ねる）
+// includeHistory=false のときは history フィールドを含めない（更新なし）
+func othelloListPayload(ctx context.Context, nk runtime.NakamaModule, worldID int, includeHistory bool) []byte {
 	var games []map[string]interface{}
 	othelloGames.Range(func(_, v interface{}) bool {
 		g := v.(*OthelloGame)
 		if g.WorldID == worldID && g.Status != "finished" {
 			b, w := othelloCalcScore(&g.Board)
+			bName, bUser, bGoogle, bAdmin := playerInfo(g.BlackUID)
+			wName, wUser, wGoogle, wAdmin := playerInfo(g.WhiteUID)
 			games = append(games, map[string]interface{}{
-				"gameId":     g.GameID,
-				"black":      g.BlackUID,
-				"blackName":  dn(g.BlackUID),
-				"white":      g.WhiteUID,
-				"whiteName":  dn(g.WhiteUID),
-				"status":     g.Status,
-				"turn":       g.Turn,
-				"blackCount": b,
-				"whiteCount": w,
+				"gameId":         g.GameID,
+				"gameNo":         g.GameNo,
+				"black":          g.BlackUID,
+				"blackName":      bName, // 括弧なし生値
+				"blackUser":      bUser,
+				"blackHasGoogle": bGoogle,
+				"blackIsAdmin":   bAdmin,
+				"white":          g.WhiteUID,
+				"whiteName":      wName,
+				"whiteUser":      wUser,
+				"whiteHasGoogle": wGoogle,
+				"whiteIsAdmin":   wAdmin,
+				"status":         g.Status,
+				"turn":           g.Turn,
+				"blackCount":     b,
+				"whiteCount":     w,
+				"comment":        g.Comment,
 			})
 		}
 		return true
@@ -4038,22 +4164,27 @@ func othelloListPayload(worldID int) []byte {
 	if games == nil {
 		games = []map[string]interface{}{}
 	}
-	data, _ := json.Marshal(map[string]interface{}{
+	out := map[string]interface{}{
 		"type":  "list",
 		"games": games,
-	})
+	}
+	if includeHistory {
+		out["history"] = othelloReadHistory(ctx, nk)
+	}
+	data, _ := json.Marshal(out)
 	return data
 }
 
 // othelloListBroadcast は MatchSignal 経由でオセロゲーム一覧を全購読者に配信する
-func othelloListBroadcast(ctx context.Context, nk runtime.NakamaModule, worldID int) {
+// historyUpdated=true のときは対戦履歴も同じ通知に含めて配信する（更新通知を兼ねる）
+func othelloListBroadcast(ctx context.Context, nk runtime.NakamaModule, worldID int, historyUpdated bool) {
 	worldMatchMu.Lock()
 	matchID := worldMatchIDs[worldID]
 	worldMatchMu.Unlock()
 	if matchID == "" {
 		return
 	}
-	listData := othelloListPayload(worldID)
+	listData := othelloListPayload(ctx, nk, worldID, historyUpdated)
 	sigData, err := json.Marshal(map[string]interface{}{
 		"type":    "othelloList",
 		"payload": json.RawMessage(listData),
@@ -4235,9 +4366,13 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 
 	gameID := othelloNextGameID()
 	g := othelloNewGame(gameID, uid, req.WorldID)
+	g.GameNo = othelloNextGameNo(ctx, nk)
 	// ブロ��ク盤面の配置位置（ワールド中心付近に固定）
 	g.BoardGX = 504
 	g.BoardGZ = 504
+	// 表示名・username・認証フラグをキャッシュに読み込み（以降の list/history で cache-only で参照可）
+	cacheDN(ctx, nk, uid)
+	computeAuthFlags(ctx, nk, uid)
 	othelloGames.Store(gameID, g)
 
 	logf("othello create: gameId=%s black=%s%s worldId=%d board=(%d,%d)\n", gameID, shortSID(uid), dn(uid), req.WorldID, g.BoardGX, g.BoardGZ)
@@ -4251,15 +4386,15 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		othelloBlockSignal(ctx, nk, g, matchID)
 	}
 
-	// 購読者にゲーム一覧を配信
-	othelloListBroadcast(ctx, nk, req.WorldID)
+	// 購読者にゲーム一覧を配信（履歴更新なし）
+	othelloListBroadcast(ctx, nk, req.WorldID, false)
 
 	resp := othelloGameResponse(g)
 	out, _ := json.Marshal(resp)
 	return string(out), nil
 }
 
-// rpcOthelloJoin は待機中のオセロゲームに参加する
+// rpcOthelloJoin は待機中のオセロゲームに参加する（watch=true で観戦取得、状態変更なし）
 func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
 	defer prof("rpcOthelloJoin")()
 	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
@@ -4269,6 +4404,7 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 
 	var req struct {
 		GameID string `json:"gameId"`
+		Watch  bool   `json:"watch"`
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" {
 		return "", runtime.NewError("gameId required", 3) // INVALID_ARGUMENT
@@ -4279,6 +4415,14 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		return "", runtime.NewError("game not found", 5) // NOT_FOUND
 	}
 	g := v.(*OthelloGame)
+
+	// 観戦モード: 状態を変更せず現在盤面を返すだけ
+	if req.Watch {
+		resp := othelloGameResponse(g)
+		out, _ := json.Marshal(resp)
+		return string(out), nil
+	}
+
 	if g.Status != "waiting" {
 		return "", runtime.NewError("game already started or finished", 9) // FAILED_PRECONDITION
 	}
@@ -4289,11 +4433,15 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	g.WhiteUID = uid
 	g.Status = "playing"
 
+	// 表示名・username・認証フラグをキャッシュに読み込み
+	cacheDN(ctx, nk, uid)
+	computeAuthFlags(ctx, nk, uid)
+
 	logf("othello join: gameId=%s white=%s%s\n", g.GameID, shortSID(uid), dn(uid))
 
-	// 両者に配信
+	// 両者に配信（join は履歴更新なし）
 	othelloSignalBroadcast(ctx, nk, g)
-	othelloListBroadcast(ctx, nk, g.WorldID)
+	othelloListBroadcast(ctx, nk, g.WorldID, false)
 
 	resp := othelloGameResponse(g)
 	out, _ := json.Marshal(resp)
@@ -4347,10 +4495,10 @@ func rpcOthelloMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		}()
 	}
 
-	// 両者に配信
+	// 両者に配信（終局時は履歴更新を伴う）
 	othelloSignalBroadcast(ctx, nk, g)
 	if g.Status == "finished" {
-		othelloListBroadcast(ctx, nk, g.WorldID)
+		othelloListBroadcast(ctx, nk, g.WorldID, true)
 	}
 
 	// 裏返し情報も含めて返す
@@ -4399,9 +4547,46 @@ func rpcOthelloCancel(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	othelloClearBlocks(boardGX, boardGZ, worldID)
 	othelloGames.Delete(gameID)
 
-	// 購読者にゲーム一覧を配信（ゲームが消えたことを通知）
-	othelloListBroadcast(ctx, nk, worldID)
+	// 購読者にゲーム一覧を配信（キャンセルは履歴更新なし）
+	othelloListBroadcast(ctx, nk, worldID, false)
 
+	return "{}", nil
+}
+
+// rpcOthelloComment は待機中ゲームのコメント列を更新する（ロビー購読者に配信）
+// 呼び出し権は作成者（black）のみ。text はクライアント整形済み文字列。
+func rpcOthelloComment(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloComment")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7)
+	}
+
+	var req struct {
+		GameID string `json:"gameId"`
+		Text   string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" {
+		return "", runtime.NewError("gameId required", 3)
+	}
+	if len(req.Text) > 200 {
+		req.Text = req.Text[:200]
+	}
+
+	v, ok := othelloGames.Load(req.GameID)
+	if !ok {
+		return "", runtime.NewError("game not found", 5)
+	}
+	g := v.(*OthelloGame)
+	if g.Status != "waiting" {
+		return "", runtime.NewError("game not in waiting state", 9)
+	}
+	if uid != g.BlackUID {
+		return "", runtime.NewError("only the creator can set comment", 3)
+	}
+
+	g.Comment = req.Text
+	othelloSignalBroadcast(ctx, nk, g)
 	return "{}", nil
 }
 
@@ -4446,7 +4631,8 @@ func rpcOthelloResign(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}()
 
 	othelloSignalBroadcast(ctx, nk, g)
-	othelloListBroadcast(ctx, nk, g.WorldID)
+	// 投了で履歴更新
+	othelloListBroadcast(ctx, nk, g.WorldID, true)
 
 	resp := othelloGameResponse(g)
 	out, _ := json.Marshal(resp)
@@ -4512,6 +4698,9 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 
 	// グローバル NakamaModule 参照を設定（World.getChunk の遅延ロード用）
 	globalNK = nk
+
+	// オセロゲーム番号カウンタを復元
+	othelloLoadGameNoSeq(ctx, nk)
 
 	// ワールド定義を Storage から復元
 	loadWorldsMeta(ctx, nk, logger)
@@ -4661,6 +4850,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"othelloMove", rpcOthelloMove},
 		{"othelloResign", rpcOthelloResign},
 		{"othelloCancel", rpcOthelloCancel},
+		{"othelloComment", rpcOthelloComment},
 		{"othelloHistory", rpcOthelloHistory},
 	}
 	for _, r := range rpcs {
