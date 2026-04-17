@@ -5,6 +5,11 @@ import { prof } from "./Profiler";
 import { t, getLang, setLang, applyI18n } from "./i18n";
 import type { Lang } from "./i18n";
 import { escapeHtml, sanitizeColor } from "./utils";
+import { showToast } from "./Toast";
+import type { Notification } from "@heroiclabs/nakama-js";
+
+// socket.notification コード定数（仕様書 doc/20 参照、サーバ側 main.go と同期）
+const CODE_OTHELLO_JOINED = 1001;
 
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
@@ -2173,6 +2178,48 @@ export function setupHtmlUI(game: GameScene): void {
             } else {
                 game.spriteAvatarSystem.setSpeechAlpha(sid, next);
             }
+        }
+    });
+
+    // オセロ参加通知タップで利用する。オセロパネル初期化時に代入される（仕様書 doc/20 step 6）
+    let openOthelloForGameNo: ((gameNo: number) => void) | null = null;
+
+    // socket.notification 受信ハンドラ（仕様書 doc/20 参照）
+    const seenNotifIds = new Set<string>();
+    const handleNotification = (n: Notification) => {
+        if (n.id) {
+            if (seenNotifIds.has(n.id)) return; // socket push と listNotifications の二重発火を排除
+            seenNotifIds.add(n.id);
+        }
+        if (n.code === CODE_OTHELLO_JOINED) {
+            const content = n.content as { gameNo?: number; opponentName?: string } | undefined;
+            const gameNo = content?.gameNo ?? 0;
+            const opponentName = content?.opponentName || "対戦相手";
+            const gameNo3 = String(gameNo).padStart(3, "0");
+            // 既にオセロパネル表示中なら吹き出し不要（マッチメッセージ経由で自動遷移）
+            const othPanel = document.getElementById("othello-panel");
+            if (othPanel && othPanel.style.display !== "none") {
+                console.log(`Othello notif skipped (panel visible): gameNo=${gameNo3}`);
+            } else {
+                showToast({
+                    text: `${opponentName}が見つかりました。ゲーム番号:${gameNo3}`,
+                    onTap: () => openOthelloForGameNo?.(gameNo),
+                });
+            }
+        }
+        // DB 永続化済みなら削除（重複排除）
+        if (n.persistent && n.id) {
+            game.nakama.deleteNotifications([n.id]).catch(e => console.warn("deleteNotifications:", e));
+        }
+    };
+    game.nakama.onNotification = handleNotification;
+
+    // マッチ参加完了時に取り残し通知を回収（起動時）
+    game.nakama.addMatchReadyListener(async () => {
+        const pending = await game.nakama.fetchPendingNotifications();
+        if (pending.length > 0) {
+            console.log(`listNotifications: ${pending.length} pending`);
+            for (const n of pending) handleNotification(n);
         }
     });
 
@@ -5113,6 +5160,22 @@ export function setupHtmlUI(game: GameScene): void {
                 if (subscribed) return;
                 const ok = await game.nakama.othelloSubscribe(true);
                 if (ok) subscribed = true;
+            };
+
+            // トースト通知タップで呼ばれる: URL 反映 + オセロパネルを開く（仕様書 doc/20 step 6）
+            openOthelloForGameNo = (gameNo: number) => {
+                pendingOthelloGameNo = gameNo;
+                try {
+                    history.pushState({}, "", `?ot=${gameNo}`);
+                } catch (e) {
+                    console.warn("history.pushState failed:", e);
+                }
+                if (othPanel.style.display === "none") {
+                    const menuBtn = document.getElementById("menu-othello");
+                    menuBtn?.click();
+                } else {
+                    ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
+                }
             };
             const ensureUnsubscribe = async () => {
                 if (subscribed) {

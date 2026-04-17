@@ -32,6 +32,8 @@ Usage: ./test/doTest-othello.sh [--host HOST] [--port PORT] [-h]
   8. WebSocket 通知テスト (vitest)
   9. 参加通知テスト (socket.onnotification, vitest)
   10. URL パラメータ ?ot テスト (Playwright E2E)
+  11. 参加通知トーストテスト (Playwright E2E)
+  12. トーストタップ遷移テスト (Playwright E2E)
 
 例:
   ./test/doTest-othello.sh
@@ -232,11 +234,23 @@ echo "--- 5. URL パラメータ ?ot テスト ---"
 npx playwright test test/e2e/url-ot-param.spec.ts --reporter=list 2>&1
 URL_EXIT=$?
 
+# ── 6. 参加通知トーストテスト（Playwright E2E） ──
+echo ""
+echo "--- 6. 参加通知トーストテスト ---"
+npx playwright test test/e2e/othello-join-toast.spec.ts --reporter=list 2>&1
+TOAST_EXIT=$?
+
+# ── 7. トーストタップ遷移テスト（Playwright E2E） ──
+echo ""
+echo "--- 7. トーストタップ遷移テスト ---"
+npx playwright test test/e2e/othello-toast-tap.spec.ts --reporter=list 2>&1
+TAP_EXIT=$?
+
 # ── 結果 ──
 echo ""
 echo "========================================="
-if [ "$RPC_FAILED" -eq 0 ] && [ "$WS_EXIT" -eq 0 ] && [ "$NOTIF_EXIT" -eq 0 ] && [ "$URL_EXIT" -eq 0 ]; then
-    echo "✅ オセロテスト全パス（RPC ${PASS}/${TOTAL} + WebSocket + Notification + URL param）"
+if [ "$RPC_FAILED" -eq 0 ] && [ "$WS_EXIT" -eq 0 ] && [ "$NOTIF_EXIT" -eq 0 ] && [ "$URL_EXIT" -eq 0 ] && [ "$TOAST_EXIT" -eq 0 ] && [ "$TAP_EXIT" -eq 0 ]; then
+    echo "✅ オセロテスト全パス（RPC ${PASS}/${TOTAL} + WebSocket + Notification + URL param + Toast + Tap）"
     exit 0
 else
     echo "❌ オセロテスト失敗"
@@ -244,5 +258,7 @@ else
     [ "$WS_EXIT" -ne 0 ] && echo "  WebSocket: vitest exit code ${WS_EXIT}"
     [ "$NOTIF_EXIT" -ne 0 ] && echo "  Notification: vitest exit code ${NOTIF_EXIT}"
     [ "$URL_EXIT" -ne 0 ] && echo "  URL param: playwright exit code ${URL_EXIT}"
+    [ "$TOAST_EXIT" -ne 0 ] && echo "  Toast: playwright exit code ${TOAST_EXIT}"
+    [ "$TAP_EXIT" -ne 0 ] && echo "  Tap: playwright exit code ${TAP_EXIT}"
     exit 1
 fi

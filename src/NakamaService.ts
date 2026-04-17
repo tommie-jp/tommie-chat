@@ -1,4 +1,4 @@
-import { Client, Session, Socket, MatchData, MatchPresenceEvent } from "@heroiclabs/nakama-js";
+import { Client, Session, Socket, MatchData, MatchPresenceEvent, Notification } from "@heroiclabs/nakama-js";
 import { prof } from "./Profiler";
 
 // matchデータ opコード（WebSocket sendMatchState 経由の双方向メッセージ）
@@ -137,6 +137,7 @@ export class NakamaService {
     onPlayerListData?:   (players: { sessionId: string; userId: string; username: string; displayName: string; loginTime: string; nameColor?: string; worldId: number; matchId: string }[]) => void;
     onPlayerListCount?:  (count: number) => void;
     onOthelloUpdate?:    (data: OthelloMessage) => void;
+    onNotification?:     (n: Notification) => void;
     onMatchDisconnect?:  () => void;
     onMatchReconnect?:   () => void;
     /** 再接続時に joinMatch に渡すメタデータを取得するコールバック */
@@ -377,7 +378,33 @@ export class NakamaService {
             this.onMatchDisconnect?.();
             this.tryReconnect();
         };
+        this.socket.onnotification = (n: Notification) => {
+            console.log(`rcv notification code=${n.code ?? "?"} id=${n.id ?? "?"}`);
+            this.onNotification?.(n);
+        };
         _end();
+    }
+
+    /** DB 永続化された通知を取得（ログイン直後の取り残し回収用、仕様書 doc/20 参照） */
+    async fetchPendingNotifications(limit = 100): Promise<Notification[]> {
+        if (!this.session) return [];
+        try {
+            const list = await this.client.listNotifications(this.session, limit);
+            return list.notifications ?? [];
+        } catch (e) {
+            console.warn("listNotifications failed:", e);
+            return [];
+        }
+    }
+
+    /** 指定 ID の通知を DB から削除（処理後の重複排除用） */
+    async deleteNotifications(ids: string[]): Promise<void> {
+        if (!this.session || ids.length === 0) return;
+        try {
+            await this.client.deleteNotifications(this.session, ids);
+        } catch (e) {
+            console.warn("deleteNotifications failed:", e);
+        }
     }
 
     private async tryReconnect(): Promise<void> {
