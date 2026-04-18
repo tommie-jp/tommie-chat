@@ -1261,6 +1261,21 @@
             font-weight: bold;
             text-align: center;
         }
+        #othello-timer {
+            font-family: monospace;
+            font-size: 13px;
+            text-align: center;
+            color: #666;
+        }
+        #othello-timer.warning {
+            color: #d93025;
+            font-weight: bold;
+            animation: othTimerPulse 0.5s ease-in-out infinite alternate;
+        }
+        @keyframes othTimerPulse {
+            0%   { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
         #othello-score {
             text-align: center;
             display: flex;
@@ -4107,6 +4122,7 @@
             <div id="othello-game" style="display:none;">
                 <div id="othello-game-no-label"></div>
                 <div id="othello-status">対戦相手を待っています…</div>
+                <div id="othello-timer" style="display:none;"></div>
                 <div id="othello-score">
                     <span class="score-black">⚫ <span id="othello-black-name"></span></span>
                     <span>vs</span>
