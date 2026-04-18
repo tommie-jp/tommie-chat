@@ -452,6 +452,8 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # Web Serial API / WebUSB を明示的に許可（Android Chrome で空リスト問題回避のため）
+    add_header Permissions-Policy "serial=(self), usb=(self)" always;
     # CSP: Google OAuth2 用に accounts.google.com / oauth2.googleapis.com を許可
     #   - form-action: 認可リダイレクト先
     #   - connect-src: トークン交換 (サーバ側 RPC 経由なので厳密には不要だが将来的な fetch 用に許可)
