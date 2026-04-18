@@ -4595,6 +4595,7 @@ export function setupHtmlUI(game: GameScene): void {
         const othBlackName = document.getElementById("othello-black-name") as HTMLElement | null;
         const othWhiteName = document.getElementById("othello-white-name") as HTMLElement | null;
         const othStatus    = document.getElementById("othello-status") as HTMLElement | null;
+        const othTimer     = document.getElementById("othello-timer") as HTMLElement | null;
         const othGameNoLabel = document.getElementById("othello-game-no-label") as HTMLElement | null;
         const othCreateBtn = document.getElementById("othello-create-btn") as HTMLButtonElement | null;
         const othGameList  = document.getElementById("othello-game-list-tbody") as HTMLElement | null;
@@ -4659,6 +4660,25 @@ export function setupHtmlUI(game: GameScene): void {
             let winner = 0;
             let subscribed = false;
             let prevBoard: number[] = new Array(64).fill(0);
+            // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— doc/56-設計-対戦オセロ.md 参照
+            const OTHELLO_TURN_LIMIT_SEC = 30;
+            let turnStartMs = 0;
+            const updateOthelloTimer = () => {
+                if (!othTimer) return;
+                if (gameStatus !== "playing" || turnStartMs === 0) {
+                    othTimer.style.display = "none";
+                    othTimer.className = "";
+                    return;
+                }
+                const elapsed = Math.floor((Date.now() - turnStartMs) / 1000);
+                const remaining = Math.max(0, OTHELLO_TURN_LIMIT_SEC - elapsed);
+                const isMyTurn = currentTurn === myColor;
+                const label = myColor === 0 ? "残り時間" : isMyTurn ? "あなたの残り時間" : "相手の残り時間";
+                othTimer.textContent = `${label}: ${remaining}秒`;
+                othTimer.style.display = "";
+                othTimer.className = remaining <= 5 ? "warning" : "";
+            };
+            setInterval(updateOthelloTimer, 1000);
             // URL パラメータ ?ot / ?ot=<gameNo> 遅延処理用（仕様書 doc/20 参照）
             const otWin = window as unknown as { __pendingOthelloOpen?: boolean; __pendingOthelloGameNo?: number };
             let pendingOthelloOpen: boolean = otWin.__pendingOthelloOpen === true;
@@ -4748,7 +4768,7 @@ export function setupHtmlUI(game: GameScene): void {
                     const fullDateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
                     const blackMark = r.winner === 1 ? "\u2714" : "";
                     const whiteMark = r.winner === 2 ? "\u2714" : "";
-                    const reasonStr = r.reason === "resign" ? "投了" : r.winner === 3 ? "引分" : "";
+                    const reasonStr = r.reason === "resign" ? "投了" : r.winner === 3 ? "引分" : r.reason === "normal" ? "終局" : "";
                     const blackLabel = formatPlayer(r.blackName, r.blackUser, r.blackHasGoogle, r.blackIsAdmin);
                     const whiteLabel = formatPlayer(r.whiteName, r.whiteUser, r.whiteHasGoogle, r.whiteIsAdmin);
 
@@ -5055,8 +5075,17 @@ export function setupHtmlUI(game: GameScene): void {
                     setTimeout(() => othelloPlaySound("end"), 200);
                 }
                 board = data.board;
+                // タイマーリセット条件: ゲーム中でターンが変わった、または playing に入った瞬間
+                const prevTurn = currentTurn;
+                const prevStatus = gameStatus;
                 currentTurn = data.turn;
                 gameStatus = data.status;
+                if (gameStatus === "playing" && (currentTurn !== prevTurn || prevStatus !== "playing")) {
+                    turnStartMs = Date.now();
+                } else if (gameStatus !== "playing") {
+                    turnStartMs = 0;
+                }
+                updateOthelloTimer();
                 lastMoveIdx = data.lastMove;
                 refreshRecruit();
                 winner = data.winner;
