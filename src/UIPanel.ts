@@ -2731,8 +2731,8 @@ export function setupHtmlUI(game: GameScene): void {
     const NAKAMA_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._@+\-]{5,127}$/;
     const doLogin = async () => {
         const _end = prof("UIPanel.doLogin");
-        // iOS Safari 対策: 最初の user gesture 内で AudioContext を解禁
-        unlockAudio();
+        // AudioContext の解禁は onFirstGesture (pointerdown/keydown/touchstart) に一本化。
+        // Chrome autoplay policy に完全準拠し、user gesture 外での AudioContext 作成警告を防ぐ。
         const name = loginNameInput?.value.trim();
         if (!name || name.length < 6) {
             if (loginStatus) {
