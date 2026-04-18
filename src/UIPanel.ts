@@ -2655,6 +2655,12 @@ export function setupHtmlUI(game: GameScene): void {
     const SILENT_WAV_DATA_URI = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAA";
     const unlockAudio = () => {
         try {
+            // iPhone Safari 対策: audio session を "playback" にしてサイレントスイッチでも通知音を鳴らす。
+            // iOS 17+ のみ対応、それ以外のブラウザでは navAudio が undefined で noop となる。
+            const navAudio = (navigator as unknown as { audioSession?: { type?: string } }).audioSession;
+            if (navAudio && navAudio.type !== "playback") {
+                navAudio.type = "playback";
+            }
             if (!sharedAudioCtx) {
                 const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
                 if (!Ctor) return;
