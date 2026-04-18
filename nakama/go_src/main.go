@@ -2625,6 +2625,21 @@ func (m *worldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger, 
 	defer prof("MatchTerminate")()
 	ms := state.(*matchState)
 	logger.Info("MatchTerminate called: worldId=%d graceSeconds=%d tick=%d", ms.WorldID, graceSeconds, tick)
+	// シャットダウン時: 当ワールドの未クリーン・オセロ盤面を直接クリア
+	// （60秒遅延 goroutine が完走できないケースの保険。MatchSignal は match loop 停止中で使えないため直接 chunk を書き換える）
+	othelloCleanedCount := 0
+	othelloGames.Range(func(_, v interface{}) bool {
+		g := v.(*OthelloGame)
+		if g.WorldID != ms.WorldID {
+			return true
+		}
+		othelloClearBlocksDirect(g.BoardGX, g.BoardGZ, g.WorldID)
+		othelloCleanedCount++
+		return true
+	})
+	if othelloCleanedCount > 0 {
+		logger.Info("MatchTerminate: cleaned %d othello board(s) for worldId=%d", othelloCleanedCount, ms.WorldID)
+	}
 	// シャットダウン時: ダーティチャンクを保存
 	flushDirtyChunks(ctx, nk, logger)
 	// 未フラッシュの1sデータを1mに追加してからDB保存
@@ -4318,6 +4333,36 @@ func othelloFrameSignal(ctx context.Context, nk runtime.NakamaModule, g *Othello
 		return
 	}
 	nk.MatchSignal(ctx, matchID, string(data))
+}
+
+// othelloClearBlocksDirect は MatchSignal を経由せず、直接チャンクをクリアする。
+// MatchTerminate（プロセス停止時）などで match loop が動かない状況で使う。
+// クライアントへのブロードキャストは行わないが、markChunkDirty でDBに保存されるため、
+// 次回接続時にハッシュ同期で空チャンクが配信される。
+func othelloClearBlocksDirect(boardGX, boardGZ, worldID int) {
+	if boardGX == 0 && boardGZ == 0 {
+		return
+	}
+	bw := getWorld(worldID)
+	if bw == nil {
+		return
+	}
+	for dz := -1; dz <= 8; dz++ {
+		for dx := -1; dx <= 8; dx++ {
+			gx := boardGX + dx
+			gz := boardGZ + dz
+			cx := gx / chunkSize
+			cz := gz / chunkSize
+			lx := gx % chunkSize
+			lz := gz % chunkSize
+			ch := bw.getChunk(cx, cz)
+			ch.mu.Lock()
+			ch.cells[lx][lz] = blockData{}
+			ch.calcHash()
+			ch.mu.Unlock()
+			markChunkDirty(worldID, cx, cz)
+		}
+	}
 }
 
 // othelloClearBlocks は盤面ブロック（10x10:外枠含む）をクリアする（blockId=0 で削除）
