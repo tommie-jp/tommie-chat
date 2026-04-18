@@ -1274,24 +1274,35 @@
             font-weight: bold;
             text-align: center;
         }
-        /* オセロ 1手タイマー（SVG円形リング） */
+        /* オセロ 1手タイマー（チェスクロック風: 黒/白 並列表示、アクティブ側のみカウントダウン） */
         #othello-timer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 24px;
+            margin: 0 auto;
+        }
+        .oth-clock {
             position: relative;
             width: 64px;
             height: 64px;
-            margin: 0 auto;
+            opacity: 0.35; /* 非アクティブ側はディム */
+            transition: opacity 0.3s ease;
         }
-        #othello-timer .oth-timer-ring {
+        .oth-clock.active {
+            opacity: 1;
+        }
+        .oth-clock .oth-timer-ring {
             width: 100%;
             height: 100%;
             transform: rotate(-90deg); /* 12時方向から開始 */
         }
-        #othello-timer .ring-bg {
+        .oth-clock .ring-bg {
             fill: none;
             stroke: rgba(0, 0, 0, 0.1);
             stroke-width: 6;
         }
-        #othello-timer .ring-fg {
+        .oth-clock .ring-fg {
             fill: none;
             stroke: #3bb273; /* 初期色(緑) JSで動的変更 */
             stroke-width: 6;
@@ -1301,7 +1312,7 @@
             stroke-dashoffset: 0;
             transition: stroke-dashoffset 0.9s linear, stroke 0.3s ease;
         }
-        #othello-timer .oth-timer-num {
+        .oth-clock .oth-timer-num {
             position: absolute;
             top: 40%;
             left: 0;
@@ -1314,7 +1325,7 @@
             transform: translateY(-50%);
             line-height: 1;
         }
-        #othello-timer .oth-timer-label {
+        .oth-clock .oth-timer-label {
             position: absolute;
             top: 62%;
             left: 0;
@@ -1324,10 +1335,15 @@
             color: #666;
             line-height: 1;
         }
-        #othello-timer.warning {
+        .oth-clock.you .oth-timer-label::after {
+            content: " YOU";
+            color: #d93025;
+            font-weight: bold;
+        }
+        .oth-clock.warning {
             animation: othTimerPulse 0.5s ease-in-out infinite alternate;
         }
-        #othello-timer.warning .oth-timer-num {
+        .oth-clock.warning .oth-timer-num {
             color: #d93025;
         }
         @keyframes othTimerPulse {
@@ -1335,13 +1351,13 @@
             100% { transform: scale(1.08); }
         }
         /* ダークテーマ対応 */
-        body.theme-dark #othello-timer .ring-bg {
+        body.theme-dark .oth-clock .ring-bg {
             stroke: rgba(255, 255, 255, 0.15);
         }
-        body.theme-dark #othello-timer .oth-timer-num {
+        body.theme-dark .oth-clock .oth-timer-num {
             color: #eee;
         }
-        body.theme-dark #othello-timer .oth-timer-label {
+        body.theme-dark .oth-clock .oth-timer-label {
             color: #bbb;
         }
         #othello-score {
@@ -4267,12 +4283,22 @@
                 <div id="othello-game-no-label"></div>
                 <div id="othello-status">対戦相手を待っています…</div>
                 <div id="othello-timer" style="display:none;">
-                    <svg class="oth-timer-ring" viewBox="0 0 60 60">
-                        <circle class="ring-bg" cx="30" cy="30" r="26"></circle>
-                        <circle class="ring-fg" cx="30" cy="30" r="26"></circle>
-                    </svg>
-                    <div class="oth-timer-num">30</div>
-                    <div class="oth-timer-label">⚫</div>
+                    <div class="oth-clock" data-color="black">
+                        <svg class="oth-timer-ring" viewBox="0 0 60 60">
+                            <circle class="ring-bg" cx="30" cy="30" r="26"></circle>
+                            <circle class="ring-fg" cx="30" cy="30" r="26"></circle>
+                        </svg>
+                        <div class="oth-timer-num">30</div>
+                        <div class="oth-timer-label">⚫</div>
+                    </div>
+                    <div class="oth-clock" data-color="white">
+                        <svg class="oth-timer-ring" viewBox="0 0 60 60">
+                            <circle class="ring-bg" cx="30" cy="30" r="26"></circle>
+                            <circle class="ring-fg" cx="30" cy="30" r="26"></circle>
+                        </svg>
+                        <div class="oth-timer-num">30</div>
+                        <div class="oth-timer-label">⚪</div>
+                    </div>
                 </div>
                 <div id="othello-score">
                     <span class="score-black">⚫ <span id="othello-black-name"></span></span>

@@ -4662,42 +4662,50 @@ export function setupHtmlUI(game: GameScene): void {
             let subscribed = false;
             let prevBoard: number[] = new Array(64).fill(0);
             // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— doc/56-設計-対戦オセロ.md 参照
-            // SVG 円形リング方式。詳細 doc 参照。
+            // チェスクロック風: 黒/白 2つのクロックを並べ、アクティブ側のみカウントダウン。
             const OTHELLO_TURN_LIMIT_SEC = 30;
             const OTHELLO_RING_CIRCUMFERENCE = 2 * Math.PI * 26; // r=26
             let turnStartMs = 0;
-            const othTimerRingFg = othTimer?.querySelector(".ring-fg") as SVGCircleElement | null;
-            const othTimerNum = othTimer?.querySelector(".oth-timer-num") as HTMLElement | null;
-            const othTimerLabel = othTimer?.querySelector(".oth-timer-label") as HTMLElement | null;
+            const othClockBlack = othTimer?.querySelector<HTMLElement>('.oth-clock[data-color="black"]') ?? null;
+            const othClockWhite = othTimer?.querySelector<HTMLElement>('.oth-clock[data-color="white"]') ?? null;
+            const updateOneClock = (clock: HTMLElement | null, active: boolean, remaining: number, ratio: number, isYou: boolean) => {
+                if (!clock) return;
+                clock.classList.toggle("active", active);
+                clock.classList.toggle("you", isYou);
+                clock.classList.toggle("warning", active && remaining <= 5);
+                const numEl = clock.querySelector<HTMLElement>(".oth-timer-num");
+                const ringFg = clock.querySelector<SVGCircleElement>(".ring-fg");
+                if (numEl) numEl.textContent = String(active ? remaining : OTHELLO_TURN_LIMIT_SEC);
+                if (ringFg) {
+                    if (active) {
+                        ringFg.style.strokeDashoffset = String(OTHELLO_RING_CIRCUMFERENCE * (1 - ratio));
+                        let color = "#3bb273"; // 緑
+                        if (remaining <= 5) color = "#d93025";       // 赤
+                        else if (remaining <= 10) color = "#f28c28"; // 橙
+                        else if (remaining <= 15) color = "#f0c541"; // 黄
+                        ringFg.style.stroke = color;
+                    } else {
+                        ringFg.style.strokeDashoffset = "0"; // full ring (idle)
+                        ringFg.style.stroke = "#3bb273";
+                    }
+                }
+            };
             const updateOthelloTimer = () => {
                 if (!othTimer) return;
-                if (gameStatus !== "playing" || turnStartMs === 0) {
+                if (gameStatus !== "playing") {
                     othTimer.style.display = "none";
-                    othTimer.className = "";
                     return;
                 }
-                const elapsedMs = Date.now() - turnStartMs;
-                const remaining = Math.max(0, OTHELLO_TURN_LIMIT_SEC - Math.floor(elapsedMs / 1000));
-                const ratio = Math.max(0, Math.min(1, 1 - elapsedMs / (OTHELLO_TURN_LIMIT_SEC * 1000)));
                 othTimer.style.display = "";
-                othTimer.className = remaining <= 5 ? "warning" : "";
-                if (othTimerNum) othTimerNum.textContent = String(remaining);
-                if (othTimerLabel) {
-                    // 誰のターンかを石アイコンで表示。観戦時は黒/白どちらかを示す
-                    const stone = currentTurn === 1 ? "⚫" : currentTurn === 2 ? "⚪" : "";
-                    const you = myColor !== 0 && currentTurn === myColor ? " YOU" : "";
-                    othTimerLabel.textContent = stone + you;
-                }
-                if (othTimerRingFg) {
-                    // stroke-dashoffset: 0=full, circumference=empty
-                    othTimerRingFg.style.strokeDashoffset = String(OTHELLO_RING_CIRCUMFERENCE * (1 - ratio));
-                    // 色遷移: 緑→黄→橙→赤
-                    let color = "#3bb273"; // 緑
-                    if (remaining <= 5) color = "#d93025";      // 赤
-                    else if (remaining <= 10) color = "#f28c28"; // 橙
-                    else if (remaining <= 15) color = "#f0c541"; // 黄
-                    othTimerRingFg.style.stroke = color;
-                }
+                const elapsedMs = turnStartMs > 0 ? Date.now() - turnStartMs : 0;
+                const remaining = turnStartMs > 0
+                    ? Math.max(0, OTHELLO_TURN_LIMIT_SEC - Math.floor(elapsedMs / 1000))
+                    : OTHELLO_TURN_LIMIT_SEC;
+                const ratio = turnStartMs > 0
+                    ? Math.max(0, Math.min(1, 1 - elapsedMs / (OTHELLO_TURN_LIMIT_SEC * 1000)))
+                    : 1;
+                updateOneClock(othClockBlack, currentTurn === 1, remaining, ratio, myColor === 1);
+                updateOneClock(othClockWhite, currentTurn === 2, remaining, ratio, myColor === 2);
             };
             setInterval(updateOthelloTimer, 250); // 1秒未満の粒度で滑らかに更新
             // URL パラメータ ?ot / ?ot=<gameNo> 遅延処理用（仕様書 doc/20 参照）

@@ -282,7 +282,39 @@ Secret を入れ替えたくなったら:
 
 ---
 
-## 5. よくあるエラーと対処
+## 5. ローカル/LAN テスト時の制約
+
+Google OAuth の redirect URI は **HTTPS 必須**。例外は loopback (`http://localhost`
+と `http://127.0.0.1`) のみ。**LAN IP (`192.168.x.x` 等) は Cloud Console の
+登録画面で弾かれる**ため、別 PC・スマホから素の LAN IP でテストすることはできない。
+
+| URL | OAuth 可否 | 備考 |
+| --- | ---------- | ---- |
+| `http://localhost:5173` | ✅ | 同一 PC のみ |
+| `http://127.0.0.1:5173` | ✅ | 同一 PC のみ |
+| `http://192.168.1.40:5173` | ❌ | Console で登録不可 |
+| `https://mmo-test.tommie.jp` | ✅ | **別 PC・スマホからのテストはこれを使う** |
+| `https://mmo.tommie.jp` | ✅ | 本番 |
+
+> **注意**: `chrome://flags/#unsafely-treat-insecure-origin-as-secure` で LAN IP を
+> secure context 扱いにしても、**Google OAuth は救えない**。
+> このフラグはブラウザ側の secure context チェック（Web Serial API・Service Worker 等）
+> にしか効かず、Google 認可サーバの redirect_uri 検証は変わらない。
+
+### 別 PC・スマホからの確認シナリオ
+
+| シナリオ | 推奨手段 |
+| -------- | -------- |
+| 同じ PC で軽く動作確認 | `http://localhost:5173` |
+| LAN 内別 PC・スマホで確認 | `https://mmo-test.tommie.jp` にデプロイして確認 |
+| 短時間だけ HTTPS URL が欲しい | ngrok / Cloudflare Tunnel → 取得した URL を Console の承認済み Origin/Redirect に追加 |
+
+→ Google OAuth テストは **`mmo-test.tommie.jp` ステージングを使うのが最短・最確実**
+（CSP・nginx 検証も同時にできる運用方針 → [doc/44-テスト環境-ngrok対VPS.md](44-テスト環境-ngrok対VPS.md)）。
+
+---
+
+## 6. よくあるエラーと対処
 
 | エラー | 原因 | 対処 |
 | --- | --- | --- |
@@ -294,7 +326,7 @@ Secret を入れ替えたくなったら:
 
 ---
 
-## 6. 推奨セキュリティ運用
+## 7. 推奨セキュリティ運用
 
 - **Client Secret は git に絶対コミットしない** — `nakama/.env` を `.gitignore` で除外
 - **本番用と開発用でクライアントを分ける** — Cloud Console で OAuth Client を 2 つ作り、`mmo-test` 用と `mmo.tommie.jp` 用を分離するとさらに安全（漏洩時の影響範囲を限定）
@@ -303,7 +335,7 @@ Secret を入れ替えたくなったら:
 
 ---
 
-## 7. 関連ドキュメント
+## 8. 関連ドキュメント
 
 - [53-設計-認証システム.md](53-設計-認証システム.md) — 認証システム全体の設計方針（§8 最小実装、§13 OAuth フロー方式選定）
 - [54-OAuth-プロバイダ詳細.md](54-OAuth-プロバイダ詳細.md) — Google / Apple / X など各プロバイダの比較

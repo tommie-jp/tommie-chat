@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Serial API テスト</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; padding: 1em; max-width: 1000px; margin: 0 auto; }
+  h1 { margin: 0 0 0.5em 0; }
+  button { font-size: 1em; padding: 0.4em 1em; margin: 0.2em; cursor: pointer; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  select, input { font-size: 1em; padding: 0.3em; }
+  #log { width: 100%; height: 55vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 0.85em;
+         background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
+  .row { margin: 0.4em 0; }
+  .status { font-weight: bold; }
+  .status.connected { color: #2a7; }
+  .status.disconnected { color: #888; }
+  .status.error { color: #c33; }
+  .stats { font-size: 0.85em; color: #666; margin-left: 1em; }
+  fieldset { border: 1px solid #ccc; padding: 0.5em 1em; margin: 0.5em 0; }
+  legend { padding: 0 0.3em; color: #555; }
+  label { margin-right: 1em; }
+</style>
+</head>
+<body>
+<h1>Web Serial API テスト</h1>
+
+<fieldset>
+  <legend>接続</legend>
+  <div class="row">
+    Baud:
+    <select id="baud">
+      <option>300</option>
+      <option>1200</option>
+      <option>9600</option>
+      <option>38400</option>
+      <option selected>115200</option>
+      <option>230400</option>
+      <option>460800</option>
+      <option>921600</option>
+    </select>
+    <button id="connect">Connect</button>
+    <button id="disconnect" disabled>Disconnect</button>
+    <button id="clear">Clear log</button>
+  </div>
+  <div class="row">
+    状態: <span id="status" class="status disconnected">未接続</span>
+    <span class="stats" id="stats"></span>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>送信</legend>
+  <div class="row">
+    <input id="send-text" placeholder="送信文字列" style="width: 60%;">
+    改行:
+    <select id="send-eol">
+      <option value="crlf">CRLF</option>
+      <option value="lf">LF</option>
+      <option value="cr">CR</option>
+      <option value="none">なし</option>
+    </select>
+    <button id="send" disabled>Send</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>表示オプション</legend>
+  <div class="row">
+    <label><input type="checkbox" id="opt-line-buffer" checked> 行バッファリング（改行で確定）</label>
+    <label><input type="checkbox" id="opt-timestamp"> タイムスタンプ表示</label>
+    <label><input type="checkbox" id="opt-hex"> Hex 表示</label>
+    <label><input type="checkbox" id="opt-autoscroll" checked> 自動スクロール</label>
+  </div>
+</fieldset>
+
+<textarea id="log" readonly></textarea>
+
+<script src="/js/test-web-serial-api.js" defer></script>
+</body>
+</html>
