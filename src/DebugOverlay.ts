@@ -17,7 +17,11 @@ type AvatarDbEntry = {
     terms_url?: string;
     license?: string;
     size?: string;
-    hide?: [number, number][];
+    /**
+     * 空白セルなどを非表示にする指定（キー: s3_name_for 後のファイル名、値: [col,row] の配列）。
+     * 例: { "041-Lanto_mv2_4_13.png": [[2,0],[3,0],[2,1],[3,1]] }
+     */
+    hide?: { [filename: string]: [number, number][] };
 };
 const avatarDbMap = new Map<string, AvatarDbEntry>();
 for (const entry of (avatarsDb as AvatarDbEntry[])) avatarDbMap.set(entry.no, entry);
@@ -2276,10 +2280,10 @@ export function setupDebugOverlay(game: GameScene): void {
                         const nR = Math.max(1, cached.charRows);
                         const filename = url.split("/").pop() ?? "";
                         const entryNo = avatarNoFromFilename(filename);
-                        const hideSet = entryNo ? avatarDbMap.get(entryNo)?.hide : undefined;
+                        const hideCells = entryNo ? avatarDbMap.get(entryNo)?.hide?.[filename] : undefined;
                         for (let cr = 0; cr < nR; cr++) {
                             for (let cc = 0; cc < nC; cc++) {
-                                if (hideSet?.some(([hc, hr]) => hc === cc && hr === cr)) continue;
+                                if (hideCells?.some(([hc, hr]) => hc === cc && hr === cr)) continue;
                                 const canvas = document.createElement("canvas");
                                 canvas.width = 48;
                                 canvas.height = 48;

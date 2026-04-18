@@ -827,7 +827,9 @@
     "total": 100,
     "note": "要検証：作者が『any RPG Maker MV project, commercial and non-commercial』と明記しており、他エンジン（ウェブゲーム含む）での利用は作者コメントで事例ありだが法的にはグレー。tommieChat はブラウザ上の Babylon.js ゲームのため使用前に作者に確認推奨。48x48 ツクールMV形式で100体超、PNG、クレジット任意、寄付歓迎。",
     "png_paths": ["./avatars/041-lanto/*.png"],
-    "hide": [[2, 0], [3, 0], [2, 1], [3, 1]]
+    "hide": {
+      "041-Lanto_mv2_4_13.png": [[2, 0], [3, 0], [2, 1], [3, 1]]
+    }
 
   },
   {
