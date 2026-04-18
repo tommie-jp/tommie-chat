@@ -1261,20 +1261,75 @@
             font-weight: bold;
             text-align: center;
         }
+        /* オセロ 1手タイマー（SVG円形リング） */
         #othello-timer {
-            font-family: monospace;
-            font-size: 13px;
+            position: relative;
+            width: 64px;
+            height: 64px;
+            margin: 0 auto;
+        }
+        #othello-timer .oth-timer-ring {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg); /* 12時方向から開始 */
+        }
+        #othello-timer .ring-bg {
+            fill: none;
+            stroke: rgba(0, 0, 0, 0.1);
+            stroke-width: 6;
+        }
+        #othello-timer .ring-fg {
+            fill: none;
+            stroke: #3bb273; /* 初期色(緑) JSで動的変更 */
+            stroke-width: 6;
+            stroke-linecap: round;
+            /* 周長 = 2π * 26 ≒ 163.36 */
+            stroke-dasharray: 163.36 163.36;
+            stroke-dashoffset: 0;
+            transition: stroke-dashoffset 0.9s linear, stroke 0.3s ease;
+        }
+        #othello-timer .oth-timer-num {
+            position: absolute;
+            top: 40%;
+            left: 0;
+            right: 0;
             text-align: center;
+            font-family: monospace;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            transform: translateY(-50%);
+            line-height: 1;
+        }
+        #othello-timer .oth-timer-label {
+            position: absolute;
+            top: 62%;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 11px;
             color: #666;
+            line-height: 1;
         }
         #othello-timer.warning {
-            color: #d93025;
-            font-weight: bold;
             animation: othTimerPulse 0.5s ease-in-out infinite alternate;
         }
+        #othello-timer.warning .oth-timer-num {
+            color: #d93025;
+        }
         @keyframes othTimerPulse {
-            0%   { opacity: 0.5; }
-            100% { opacity: 1; }
+            0%   { transform: scale(1); }
+            100% { transform: scale(1.08); }
+        }
+        /* ダークテーマ対応 */
+        body.theme-dark #othello-timer .ring-bg {
+            stroke: rgba(255, 255, 255, 0.15);
+        }
+        body.theme-dark #othello-timer .oth-timer-num {
+            color: #eee;
+        }
+        body.theme-dark #othello-timer .oth-timer-label {
+            color: #bbb;
         }
         #othello-score {
             text-align: center;
@@ -4122,7 +4177,14 @@
             <div id="othello-game" style="display:none;">
                 <div id="othello-game-no-label"></div>
                 <div id="othello-status">対戦相手を待っています…</div>
-                <div id="othello-timer" style="display:none;"></div>
+                <div id="othello-timer" style="display:none;">
+                    <svg class="oth-timer-ring" viewBox="0 0 60 60">
+                        <circle class="ring-bg" cx="30" cy="30" r="26"></circle>
+                        <circle class="ring-fg" cx="30" cy="30" r="26"></circle>
+                    </svg>
+                    <div class="oth-timer-num">30</div>
+                    <div class="oth-timer-label">⚫</div>
+                </div>
                 <div id="othello-score">
                     <span class="score-black">⚫ <span id="othello-black-name"></span></span>
                     <span>vs</span>
