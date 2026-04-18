@@ -4321,31 +4321,44 @@ func othelloFrameSignal(ctx context.Context, nk runtime.NakamaModule, g *Othello
 }
 
 // othelloClearBlocks は盤面ブロック（10x10:外枠含む）をクリアする（blockId=0 で削除）
-func othelloClearBlocks(boardGX, boardGZ, worldID int) {
+// MatchSignal("othelloBlocks") 経由でチャンク更新＆AOI 内プレイヤーへのブロードキャストを行う
+func othelloClearBlocks(ctx context.Context, nk runtime.NakamaModule, boardGX, boardGZ, worldID int) {
 	if boardGX == 0 && boardGZ == 0 {
 		return
 	}
-	bw := getWorld(worldID)
-	if bw == nil {
+	worldMatchMu.Lock()
+	matchID := worldMatchIDs[worldID]
+	worldMatchMu.Unlock()
+	if matchID == "" {
 		return
 	}
+	type blockUpdate struct {
+		GX      int   `json:"gx"`
+		GZ      int   `json:"gz"`
+		BlockID int   `json:"blockId"`
+		R       uint8 `json:"r"`
+		G       uint8 `json:"g"`
+		B       uint8 `json:"b"`
+		A       uint8 `json:"a"`
+	}
+	var blocks []blockUpdate
 	for dz := -1; dz <= 8; dz++ {
 		for dx := -1; dx <= 8; dx++ {
-			gx := boardGX + dx
-			gz := boardGZ + dz
-			cx := gx / chunkSize
-			cz := gz / chunkSize
-			lx := gx % chunkSize
-			lz := gz % chunkSize
-			ch := bw.getChunk(cx, cz)
-			ch.mu.Lock()
-			ch.cells[lx][lz] = blockData{}
-			ch.calcHash()
-			ch.mu.Unlock()
-			markChunkDirty(worldID, cx, cz)
+			blocks = append(blocks, blockUpdate{
+				GX: boardGX + dx, GZ: boardGZ + dz,
+				BlockID: 0, R: 0, G: 0, B: 0, A: 0,
+			})
 		}
 	}
-	logf("othello clearBlocks: board=(%d,%d) worldId=%d\n", boardGX, boardGZ, worldID)
+	data, err := json.Marshal(map[string]interface{}{
+		"type":    "othelloBlocks",
+		"payload": blocks,
+	})
+	if err != nil {
+		return
+	}
+	nk.MatchSignal(ctx, matchID, string(data))
+	logf("othello clearBlocks: board=(%d,%d) worldId=%d blocks=%d\n", boardGX, boardGZ, worldID, len(blocks))
 }
 
 // rpcOthelloCreate は新しいオセロゲームを作成する
@@ -4524,7 +4537,7 @@ func rpcOthelloMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		gameID := g.GameID
 		go func() {
 			time.Sleep(60 * time.Second)
-			othelloClearBlocks(boardGX, boardGZ, worldID)
+			othelloClearBlocks(context.Background(), nk, boardGX, boardGZ, worldID)
 			othelloGames.Delete(gameID)
 		}()
 	}
@@ -4578,7 +4591,7 @@ func rpcOthelloCancel(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	logf("othello cancel: gameId=%s uid=%s%s\n", gameID, shortSID(uid), dn(uid))
 
 	// ブロック盤面を即座に削除
-	othelloClearBlocks(boardGX, boardGZ, worldID)
+	othelloClearBlocks(ctx, nk, boardGX, boardGZ, worldID)
 	othelloGames.Delete(gameID)
 
 	// 購読者にゲーム一覧を配信（キャンセルは履歴更新なし）
@@ -4660,7 +4673,7 @@ func rpcOthelloResign(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	gameID := g.GameID
 	go func() {
 		time.Sleep(60 * time.Second)
-		othelloClearBlocks(boardGX, boardGZ, worldID)
+		othelloClearBlocks(context.Background(), nk, boardGX, boardGZ, worldID)
 		othelloGames.Delete(gameID)
 	}()
 
