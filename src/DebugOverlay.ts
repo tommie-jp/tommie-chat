@@ -4,7 +4,7 @@ import { CHUNK_SIZE } from "./WorldConstants";
 import { profSetEnabled, profReset } from "./Profiler";
 import { t } from "./i18n";
 import { autoChatMessages } from "./AutoChatMessages";
-import { escapeHtml } from "./utils";
+import { escapeHtml, fetchAvatarList } from "./utils";
 import { cellIndex, buildTransparentPNG, sampleBgColor } from "../lib/babylon-rpgmaker-sprites/src/RpgMakerSpriteSheet";
 import avatarsDb from "../nakama/avatars.json";
 
@@ -1912,7 +1912,7 @@ export function setupDebugOverlay(game: GameScene): void {
         });
     }
 
-    // スプライトアバター: /s3/avatars/ のファイル一覧はアバターパネル初回表示時に遅延ロード
+    // スプライトアバター: /avatars/manifest.json のファイル一覧はアバターパネル初回表示時に遅延ロード
     const spriteUrlSelect = document.getElementById("spriteUrlSelect") as HTMLSelectElement | null;
     let avatarListPromise: Promise<void> | null = null;
     const ensureAvatarList = (): Promise<void> => {
@@ -1920,24 +1920,19 @@ export function setupDebugOverlay(game: GameScene): void {
         if (avatarListPromise) return avatarListPromise;
         avatarListPromise = (async () => {
             try {
-                const res = await fetch("/s3/avatars/");
-                const xml = await res.text();
-                const doc = new DOMParser().parseFromString(xml, "application/xml");
-                const keys = doc.querySelectorAll("Contents > Key");
+                const urls = await fetchAvatarList();
                 spriteUrlSelect.innerHTML = "";
-                keys.forEach(k => {
-                    const name = k.textContent ?? "";
-                    if (!name) return;
+                urls.forEach(url => {
                     const opt = document.createElement("option");
-                    opt.value = "/s3/avatars/" + name;
-                    opt.textContent = name;
+                    opt.value = url;
+                    opt.textContent = url.slice("/avatars/".length);
                     spriteUrlSelect.appendChild(opt);
                 });
                 // localStorage に保存された URL を復元
                 const savedSpriteUrl = localStorage.getItem("spriteAvatarUrl");
                 if (savedSpriteUrl) spriteUrlSelect.value = savedSpriteUrl;
             } catch (e) {
-                console.warn("Failed to fetch avatar list from /s3/avatars/:", e);
+                console.warn("Failed to fetch avatar list from /avatars/manifest.json:", e);
                 avatarListPromise = null;  // 失敗したら再試行を許可
             }
         })();

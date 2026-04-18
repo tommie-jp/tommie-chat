@@ -30,9 +30,24 @@ import { setupHtmlUI } from "./UIPanel";
 import { setupDebugOverlay } from "./DebugOverlay";
 import { prof } from "./Profiler";
 import { t } from "./i18n";
+import { DEFAULT_AVATAR_URL, isAvatarUrl } from "./utils";
 
 /** 角度差を [-π, π] に正規化 */
 const wrapAngle = (d: number) => d - Math.PI * 2 * Math.round(d / (Math.PI * 2));
+
+/**
+ * localStorage からアバター URL を読み込み、旧 /s3/avatars/ 形式は
+ * /avatars/ 形式に透過的に移行する（MinIO 障害時の静的フォールバック用）。
+ */
+function loadAvatarUrlFromStorage(): string {
+    const raw = localStorage.getItem("spriteAvatarUrl") ?? "";
+    if (raw.startsWith("/s3/avatars/")) {
+        const migrated = "/avatars/" + raw.slice("/s3/avatars/".length);
+        localStorage.setItem("spriteAvatarUrl", migrated);
+        return migrated;
+    }
+    return isAvatarUrl(raw) ? raw : DEFAULT_AVATAR_URL;
+}
 
 export class GameScene {
     engine: Engine;
@@ -116,7 +131,7 @@ export class GameScene {
     minimapRotate = true;
     /** ツールチップ表示（false で全 title 属性を無効化） */
     tooltipsEnabled = !document.cookie.includes("tooltips=0");
-    playerTextureUrl = localStorage.getItem("spriteAvatarUrl") || "/s3/avatars/001-pipo-nekonin008.png";
+    playerTextureUrl = loadAvatarUrlFromStorage();
     playerCharCol = parseInt(localStorage.getItem("spriteAvatarCol") ?? "0", 10) || 0;
     playerCharRow = parseInt(localStorage.getItem("spriteAvatarRow") ?? "0", 10) || 0;
     avatarDepth = 0.05;

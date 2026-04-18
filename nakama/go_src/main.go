@@ -72,9 +72,16 @@ func sanitizeColor(s string) string {
 	return ""
 }
 
-// sanitizeTextureUrl は /s3/avatars/ で始まるパスのみ通す（不正値は空文字）
+// sanitizeTextureUrl はアバターテクスチャ URL を許可リストで検証する（不正値は空文字）
+// 許可: /avatars/<NNN-xxx>.png （デフォルト群、public/avatars/ 配下、dist/ 同梱配信）
+//       /s3/avatars/<NNN-xxx>.png （MinIO 配下、UGC 投稿含む）
 func sanitizeTextureUrl(s string) string {
-	if strings.HasPrefix(s, "/s3/avatars/") && !strings.Contains(s, "..") && !strings.Contains(s, "<") { return s }
+	if strings.Contains(s, "..") || strings.Contains(s, "<") {
+		return ""
+	}
+	if strings.HasPrefix(s, "/avatars/") || strings.HasPrefix(s, "/s3/avatars/") {
+		return s
+	}
 	return ""
 }
 

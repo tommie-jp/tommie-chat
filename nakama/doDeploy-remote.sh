@@ -4,7 +4,7 @@
 #
 # 開発環境（WSL2 Ubuntu 24.04）から実行する。
 # フロントエンドビルド → git clone → dist/ 転送 → doDeploy.sh を一括で行う。
-SCRIPT_VERSION="2026-04-11g"
+SCRIPT_VERSION="2026-04-18a"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
 # 形式は doc/40-デプロイ手順.md 参照:
@@ -208,6 +208,19 @@ echo "  ✅ Node.js $(node --version)"
 step "1. フロントエンドビルド（ローカル）"
 cd "$ROOT_DIR"
 
+# デフォルトアバター PNG を public/avatars/ に配置して dist/ に同梱する。
+# nakama/avatars.json の png_paths を元にコピーし、manifest.json を生成する。
+# --prune でローカルに無いファイルは削除（ミラーモード）。
+STATIC_AVATAR_SCRIPT="$SCRIPT_DIR/doStatic-set-avatars.sh"
+if [ -x "$STATIC_AVATAR_SCRIPT" ]; then
+    echo "  デフォルトアバターを public/avatars/ に配置中..."
+    if ! "$STATIC_AVATAR_SCRIPT" --prune; then
+        fail "doStatic-set-avatars.sh に失敗しました"
+    fi
+else
+    warn "doStatic-set-avatars.sh が見つかりません（スキップ）"
+fi
+
 cat > .env <<'EOF'
 VITE_SERVER_KEY=tommie-chat
 VITE_DEFAULT_HOST=mmo.tommie.jp
@@ -320,22 +333,6 @@ step "4. VPS で doDeploy.sh 実行（SSH 経由）"
 # DEPLOY_HOSTNAME を伝達し、リモート側 nginx.conf の Origin 検査を
 # デプロイ先ホスト名に合わせて生成させる（本番/ステージングで共通スクリプトを使うため）
 ssh -t "${SSH_TARGET}" "cd ${REMOTE_DIR}/nakama && DEPLOY_HOSTNAME=${VPS_HOST} bash doDeploy.sh"
-
-# ── 5. アバター PNG を MinIO に投入 ──
-# doDeploy.sh で MinIO コンテナが起動した後に実行する。
-# nakama/avatars.json の png_paths で指定されたローカル PNG を
-# VPS の MinIO の local/avatars/ バケットに投入する。
-# avatars.json がプレースホルダのままや PNG ファイルが不在の場合は
-# スクリプトが失敗するが、デプロイ全体は継続する（best-effort）。
-step "5. アバター PNG を MinIO に投入"
-S3_SCRIPT="$SCRIPT_DIR/doS3-set-avatars.sh"
-if [ ! -x "$S3_SCRIPT" ]; then
-    warn "doS3-set-avatars.sh が見つかりません（スキップ）"
-else
-    if ! "$S3_SCRIPT" -d "$REMOTE_DIR" "$VPS_HOST" "$SSH_USER"; then
-        warn "アバター PNG の投入に失敗しました（デプロイは継続）"
-    fi
-fi
 
 echo ""
 echo "${GREEN}=========================================${RESET}"
