@@ -1,6 +1,18 @@
-'use strict';
+// ES module — type="module" でロードされる
+import { serial as polyfillSerial } from './web-serial-polyfill.js';
 
 const $ = (id) => document.getElementById(id);
+
+// 選択中の API（native or polyfill）に応じた serial 実装を返す
+function getSerial() {
+  const mode = $('api')?.value || 'polyfill';
+  if (mode === 'native') {
+    if (!('serial' in navigator)) throw new Error('navigator.serial 非対応');
+    return navigator.serial;
+  }
+  if (!('usb' in navigator)) throw new Error('navigator.usb 非対応');
+  return polyfillSerial;
+}
 
 // 画面内コンソール（Android リモートデバッグ無しでも見れるように）
 (function installConsoleHook() {
@@ -28,16 +40,18 @@ const $ = (id) => document.getElementById(id);
 // 環境情報を起動時に出す
 console.log('UA:', navigator.userAgent);
 console.log('serial in navigator:', 'serial' in navigator);
+console.log('usb in navigator:', 'usb' in navigator);
 console.log('isSecureContext:', window.isSecureContext);
 if (navigator.serial) {
   navigator.serial.getPorts().then((ports) => {
-    console.log('既に許可済みのポート数:', ports.length);
-    ports.forEach((p, i) => {
-      const info = p.getInfo();
-      console.log(`  port[${i}]:`, JSON.stringify(info));
-    });
-  }).catch((e) => console.warn('getPorts:', e));
+    console.log('Native: 既に許可済みのポート数:', ports.length);
+    ports.forEach((p, i) => console.log(`  native[${i}]:`, JSON.stringify(p.getInfo())));
+  }).catch((e) => console.warn('Native getPorts:', e));
 }
+polyfillSerial.getPorts().then((ports) => {
+  console.log('Polyfill: 既に許可済みのポート数:', ports.length);
+  ports.forEach((p, i) => console.log(`  polyfill[${i}]:`, JSON.stringify(p.getInfo())));
+}).catch((e) => console.warn('Polyfill getPorts:', e));
 
 let port = null;
 let reader = null;
@@ -123,16 +137,18 @@ function flushLineBuffer() {
   }
 }
 
-if (!('serial' in navigator)) {
-  setStatus('navigator.serial がありません（Web Serial API 非対応ブラウザ）', 'error');
+if (!('serial' in navigator) && !('usb' in navigator)) {
+  setStatus('Web Serial API も WebUSB も使えません', 'error');
   $('connect').disabled = true;
 }
 
 $('connect').onclick = async () => {
   try {
-    console.log('requestPort 呼び出し直前');
-    port = await navigator.serial.requestPort({});
-    console.log('requestPort 成功:', JSON.stringify(port.getInfo()));
+    const mode = $('api').value;
+    console.log(`[${mode}] requestPort 呼び出し直前`);
+    const serial = getSerial();
+    port = await serial.requestPort({});
+    console.log(`[${mode}] requestPort 成功:`, JSON.stringify(port.getInfo()));
     const baud = parseInt($('baud').value, 10);
     console.log('port.open baudRate=', baud);
     await port.open({ baudRate: baud });

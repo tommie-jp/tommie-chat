@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Web Serial API テスト</title>
+<title>WebSocket ブリッジ テスト</title>
 <style>
   body { font-family: system-ui, -apple-system, sans-serif; padding: 1em; max-width: 1000px; margin: 0 auto; }
   h1 { margin: 0 0 0.5em 0; }
@@ -21,30 +21,20 @@
   fieldset { border: 1px solid #ccc; padding: 0.5em 1em; margin: 0.5em 0; }
   legend { padding: 0 0.3em; color: #555; }
   label { margin-right: 1em; }
+  .hint { font-size: 0.85em; color: #666; margin: 0.3em 0; }
 </style>
 </head>
 <body>
-<h1>Web Serial API テスト</h1>
+<h1>WebSocket ブリッジ テスト</h1>
+<p class="hint">
+  ローカルで <code>python bridge/serial_ws_bridge.py --port COM3</code> を起動してから接続してください。
+</p>
 
 <fieldset>
   <legend>接続</legend>
   <div class="row">
-    API:
-    <select id="api">
-      <option value="native">Native (navigator.serial)</option>
-      <option value="polyfill" selected>Polyfill (WebUSB)</option>
-    </select>
-    Baud:
-    <select id="baud">
-      <option>300</option>
-      <option>1200</option>
-      <option>9600</option>
-      <option>38400</option>
-      <option selected>115200</option>
-      <option>230400</option>
-      <option>460800</option>
-      <option>921600</option>
-    </select>
+    URL:
+    <input id="ws-url" value="ws://localhost:8765" style="width: 300px;">
     <button id="connect">Connect</button>
     <button id="disconnect" disabled>Disconnect</button>
     <button id="clear">Clear log</button>
@@ -82,6 +72,6 @@
 
 <textarea id="log" readonly></textarea>
 
-<script type="module" src="/js/test-web-serial-api.js"></script>
+<script src="/js/test-ws-bridge.js" defer></script>
 </body>
 </html>
