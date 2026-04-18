@@ -1,6 +1,6 @@
 // アプリバージョン・更新日の定数（ここだけ変更する）
-var APP_VERSION = "0.1.44";
-var APP_COMMIT_COUNTER = "1087";
+var APP_VERSION = "0.1.45";
+var APP_COMMIT_COUNTER = "1088";
 var APP_DATE    = "2026/04/19";
 
 document.title = "tommieChat " + APP_VERSION + "#" + APP_COMMIT_COUNTER;
