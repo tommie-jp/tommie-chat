@@ -93,7 +93,7 @@ if (!('serial' in navigator)) {
 
 $('connect').onclick = async () => {
   try {
-    port = await navigator.serial.requestPort();
+    port = await navigator.serial.requestPort({});
     await port.open({ baudRate: parseInt($('baud').value, 10) });
     bytesRx = 0;
     bytesTx = 0;
