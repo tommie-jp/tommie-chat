@@ -2,6 +2,43 @@
 
 const $ = (id) => document.getElementById(id);
 
+// 画面内コンソール（Android リモートデバッグ無しでも見れるように）
+(function installConsoleHook() {
+  const origLog = console.log.bind(console);
+  const origWarn = console.warn.bind(console);
+  const origError = console.error.bind(console);
+  const fmt = (args) => Array.from(args).map((a) => {
+    if (a instanceof Error) return `${a.name}: ${a.message}\n${a.stack || ''}`;
+    if (typeof a === 'object') { try { return JSON.stringify(a); } catch (e) { return String(a); } }
+    return String(a);
+  }).join(' ');
+  const writeToLog = (tag, args) => {
+    const el = document.getElementById('log');
+    if (!el) return;
+    el.value += `[${tag}] ${fmt(args)}\n`;
+    if (document.getElementById('opt-autoscroll')?.checked) el.scrollTop = el.scrollHeight;
+  };
+  console.log = function () { writeToLog('LOG', arguments); origLog(...arguments); };
+  console.warn = function () { writeToLog('WARN', arguments); origWarn(...arguments); };
+  console.error = function () { writeToLog('ERR', arguments); origError(...arguments); };
+  window.addEventListener('error', (e) => writeToLog('UNCAUGHT', [e.message, e.filename + ':' + e.lineno]));
+  window.addEventListener('unhandledrejection', (e) => writeToLog('UNHANDLED', [e.reason]));
+})();
+
+// 環境情報を起動時に出す
+console.log('UA:', navigator.userAgent);
+console.log('serial in navigator:', 'serial' in navigator);
+console.log('isSecureContext:', window.isSecureContext);
+if (navigator.serial) {
+  navigator.serial.getPorts().then((ports) => {
+    console.log('既に許可済みのポート数:', ports.length);
+    ports.forEach((p, i) => {
+      const info = p.getInfo();
+      console.log(`  port[${i}]:`, JSON.stringify(info));
+    });
+  }).catch((e) => console.warn('getPorts:', e));
+}
+
 let port = null;
 let reader = null;
 let writer = null;
@@ -93,8 +130,13 @@ if (!('serial' in navigator)) {
 
 $('connect').onclick = async () => {
   try {
+    console.log('requestPort 呼び出し直前');
     port = await navigator.serial.requestPort({});
-    await port.open({ baudRate: parseInt($('baud').value, 10) });
+    console.log('requestPort 成功:', JSON.stringify(port.getInfo()));
+    const baud = parseInt($('baud').value, 10);
+    console.log('port.open baudRate=', baud);
+    await port.open({ baudRate: baud });
+    console.log('port.open 成功');
     bytesRx = 0;
     bytesTx = 0;
     connectedAt = Date.now();
@@ -107,7 +149,8 @@ $('connect').onclick = async () => {
     abortRead = false;
     readLoop();
   } catch (e) {
-    emitLine('[ERR] ' + e.message);
+    console.error('connect 例外:', e);
+    emitLine('[ERR] ' + e.name + ': ' + e.message);
     setStatus('エラー: ' + e.message, 'error');
   }
 };
