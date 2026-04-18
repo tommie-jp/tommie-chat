@@ -10,8 +10,12 @@
   button { font-size: 1em; padding: 0.4em 1em; margin: 0.2em; cursor: pointer; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   select, input { font-size: 1em; padding: 0.3em; }
-  #log { width: 100%; height: 55vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 0.85em;
+  #log { width: 100%; height: 40vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 0.85em;
          background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
+  #console-log { width: 100%; height: 20vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 0.8em;
+         background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
+  .section-label { font-size: 0.85em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
+  .section-label button { font-size: 0.8em; padding: 0.1em 0.5em; }
   .row { margin: 0.4em 0; }
   .status { font-weight: bold; }
   .status.connected { color: #2a7; }
@@ -31,8 +35,9 @@
   <div class="row">
     API:
     <select id="api">
+      <option value="auto" selected>自動 (Android=Polyfill / その他=Native)</option>
       <option value="native">Native (navigator.serial)</option>
-      <option value="polyfill" selected>Polyfill (WebUSB)</option>
+      <option value="polyfill">Polyfill (WebUSB)</option>
     </select>
     Baud:
     <select id="baud">
@@ -80,7 +85,14 @@
   </div>
 </fieldset>
 
+<div class="section-label">シリアル出力</div>
 <textarea id="log" readonly></textarea>
+
+<div class="section-label">
+  <span>コンソールログ</span>
+  <button id="clear-console">Clear console</button>
+</div>
+<textarea id="console-log" readonly></textarea>
 
 <script type="module" src="/js/test-web-serial-api.js"></script>
 </body>

@@ -3,9 +3,15 @@ import { serial as polyfillSerial } from './web-serial-polyfill.js';
 
 const $ = (id) => document.getElementById(id);
 
-// 選択中の API（native or polyfill）に応じた serial 実装を返す
+// 選択中の API（auto/native/polyfill）に応じた serial 実装を返す
+// auto: Android のみ polyfill（WebUSB）、その他は Native（Windows等で usbser.sys と取り合わない）
+function resolveMode() {
+  const sel = $('api')?.value || 'auto';
+  if (sel !== 'auto') return sel;
+  return /Android/i.test(navigator.userAgent) ? 'polyfill' : 'native';
+}
 function getSerial() {
-  const mode = $('api')?.value || 'polyfill';
+  const mode = resolveMode();
   if (mode === 'native') {
     if (!('serial' in navigator)) throw new Error('navigator.serial 非対応');
     return navigator.serial;
@@ -15,6 +21,7 @@ function getSerial() {
 }
 
 // 画面内コンソール（Android リモートデバッグ無しでも見れるように）
+// シリアル出力 (#log) とは別の textarea (#console-log) に表示する
 (function installConsoleHook() {
   const origLog = console.log.bind(console);
   const origWarn = console.warn.bind(console);
@@ -24,17 +31,22 @@ function getSerial() {
     if (typeof a === 'object') { try { return JSON.stringify(a); } catch (e) { return String(a); } }
     return String(a);
   }).join(' ');
-  const writeToLog = (tag, args) => {
-    const el = document.getElementById('log');
+  const writeToConsole = (tag, args) => {
+    const el = document.getElementById('console-log');
     if (!el) return;
-    el.value += `[${tag}] ${fmt(args)}\n`;
-    if (document.getElementById('opt-autoscroll')?.checked) el.scrollTop = el.scrollHeight;
+    const ts = new Date().toTimeString().slice(0, 8);
+    el.value += `[${ts}][${tag}] ${fmt(args)}\n`;
+    el.scrollTop = el.scrollHeight;
   };
-  console.log = function () { writeToLog('LOG', arguments); origLog(...arguments); };
-  console.warn = function () { writeToLog('WARN', arguments); origWarn(...arguments); };
-  console.error = function () { writeToLog('ERR', arguments); origError(...arguments); };
-  window.addEventListener('error', (e) => writeToLog('UNCAUGHT', [e.message, e.filename + ':' + e.lineno]));
-  window.addEventListener('unhandledrejection', (e) => writeToLog('UNHANDLED', [e.reason]));
+  console.log = function () { writeToConsole('LOG', arguments); origLog(...arguments); };
+  console.warn = function () { writeToConsole('WARN', arguments); origWarn(...arguments); };
+  console.error = function () { writeToConsole('ERR', arguments); origError(...arguments); };
+  window.addEventListener('error', (e) => writeToConsole('UNCAUGHT', [e.message, e.filename + ':' + e.lineno]));
+  window.addEventListener('unhandledrejection', (e) => writeToConsole('UNHANDLED', [e.reason]));
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('clear-console');
+    if (btn) btn.onclick = () => { document.getElementById('console-log').value = ''; };
+  });
 })();
 
 // 環境情報を起動時に出す
@@ -144,8 +156,8 @@ if (!('serial' in navigator) && !('usb' in navigator)) {
 
 $('connect').onclick = async () => {
   try {
-    const mode = $('api').value;
-    console.log(`[${mode}] requestPort 呼び出し直前`);
+    const mode = resolveMode();
+    console.log(`[${mode}] requestPort 呼び出し直前 (UA-detected)`);
     const serial = getSerial();
     port = await serial.requestPort({});
     console.log(`[${mode}] requestPort 成功:`, JSON.stringify(port.getInfo()));
