@@ -1248,6 +1248,19 @@
             padding: 4px 6px;
         }
         #othello-close:hover { opacity: 1; }
+        .oth-header-btns {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        #othello-max {
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1;
+            opacity: 0.6;
+            padding: 4px 6px;
+        }
+        #othello-max:hover { opacity: 1; }
         #othello-body {
             display: flex;
             flex-direction: column;
@@ -2546,6 +2559,7 @@
             #ccu-close,
             #bookmark-close,
             #othello-close,
+            #othello-max,
             #about-panel-close,
             #displayname-close,
             #avatar-close,
@@ -2913,7 +2927,8 @@
                 color: #fff;
                 box-shadow: inset 0 -3px 0 #fff;
             }
-            #panel-tab-close {
+            #panel-tab-close,
+            #panel-tab-max {
                 flex: 0 0 auto;
                 width: 36px;
                 background: transparent;
@@ -3399,6 +3414,76 @@
             word-break: break-word;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             display: none;
+        }
+
+        /* --- パネル最大化 (doc/56 参照) ---
+           アクティブなパネルをチャット入力バーの上まで最大化。
+           モバイル／PC 両対応。メニュー・セリフ・送信ボタン (#chat-container) は独立しているため残る。
+           このルールはモバイル向け @media より後に書き、!important の最終上書きを行う。 */
+        body.panel-maximized #user-list-panel.maximized,
+        body.panel-maximized #chat-history-panel.maximized,
+        body.panel-maximized #chat-settings-panel.maximized,
+        body.panel-maximized #server-settings-panel.maximized,
+        body.panel-maximized #server-log-panel.maximized,
+        body.panel-maximized #ping-panel.maximized,
+        body.panel-maximized #ccu-panel.maximized,
+        body.panel-maximized #bookmark-panel.maximized,
+        body.panel-maximized #room-list-panel.maximized,
+        body.panel-maximized #othello-panel.maximized,
+        body.panel-maximized #debug-overlay.maximized,
+        body.panel-maximized #about-panel.maximized,
+        body.panel-maximized #displayname-panel.maximized,
+        body.panel-maximized #avatar-panel.maximized,
+        body.panel-maximized #settings-panel.maximized {
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: var(--pt-panel-bottom, 90px) !important;
+            width: auto !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            height: auto !important;
+            max-height: none !important;
+            transform: none !important;
+            resize: none !important;
+            border-radius: 0 !important;
+            z-index: 400 !important;
+        }
+        body.panel-maximized #portrait-divider,
+        body.panel-maximized #landscape-divider {
+            display: none !important;
+        }
+        /* 最大化時はタブバーが viewport 最上部に来るため、右上の #ping-display (ON/CCU/FPS) と
+           タブバー右端の ⛷/❌️ が重なる。padding-right で右端ボタンを ON バッジの左側へ寄せる。 */
+        body.panel-maximized.tab-panel-active #panel-tab-bar {
+            padding-right: 90px !important;
+        }
+        /* 最大化時は 🗗/❌️ をタブバーから切り離し、パネル右上（タブバー直下）に浮かせる。
+           position: fixed でパネル左上（top:0）ではなく、#ping-display と被らない高さに配置。 */
+        body.panel-maximized.tab-panel-active #panel-tab-max,
+        body.panel-maximized.tab-panel-active #panel-tab-close {
+            position: fixed !important;
+            top: calc(36px + env(safe-area-inset-top, 0px) + 4px) !important;
+            width: 34px !important;
+            height: 34px !important;
+            padding: 0 !important;
+            background: rgba(40, 40, 60, 0.75) !important;
+            border: 1px solid rgba(255, 255, 255, 0.35) !important;
+            border-radius: 6px !important;
+            color: #fff !important;
+            font-size: 16px !important;
+            line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 500 !important;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+        }
+        body.panel-maximized.tab-panel-active #panel-tab-max {
+            right: 46px !important;
+        }
+        body.panel-maximized.tab-panel-active #panel-tab-close {
+            right: 6px !important;
         }
     </style>
     <script src="/js/app-init.js?v=0.1.41" defer></script>
@@ -4072,6 +4157,7 @@
             <button type="button" class="panel-tab" data-target="debug-overlay" data-menu="menu-debug" data-tab-key="menu.debug">13.デバッグツール</button>
             <button type="button" class="panel-tab" data-target="about-panel" data-menu="menu-about" data-tab-key="menu.about">14.tommieChatについて</button>
         </div>
+        <button type="button" id="panel-tab-max" title="最大化">⛶</button>
         <button type="button" id="panel-tab-close" title="パネルを閉じる">❌️</button>
     </div>
 
@@ -4115,7 +4201,10 @@
     <div id="othello-panel" style="display:none;">
         <div id="othello-header">
             <span>オセロ</span>
-            <span id="othello-close">❌️</span>
+            <span class="oth-header-btns">
+                <span id="othello-max" title="最大化">⛶</span>
+                <span id="othello-close">❌️</span>
+            </span>
         </div>
         <div id="othello-body">
             <!-- ロビー画面 -->

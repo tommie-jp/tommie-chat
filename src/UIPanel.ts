@@ -4587,6 +4587,7 @@ export function setupHtmlUI(game: GameScene): void {
         const othPanel     = document.getElementById("othello-panel") as HTMLElement | null;
         const othHeader    = document.getElementById("othello-header") as HTMLElement | null;
         const othClose     = document.getElementById("othello-close") as HTMLElement | null;
+        const othMax       = document.getElementById("othello-max") as HTMLElement | null;
         const othLobby     = document.getElementById("othello-lobby") as HTMLElement | null;
         const othGameView  = document.getElementById("othello-game") as HTMLElement | null;
         const othBoard     = document.getElementById("othello-board") as HTMLElement | null;
@@ -5440,6 +5441,31 @@ export function setupHtmlUI(game: GameScene): void {
                     if (mb) mb.textContent = "　 " + t("menu.othello");
                 });
             }
+
+            // --- 最大化トグル (doc/56 参照) ---
+            // body.panel-maximized を全パネル共通のフラグとして使い、タブ切替でも維持する。
+            // オセロパネルには .maximized を付与。
+            const applyMaximized = (max: boolean) => {
+                othPanel.classList.toggle("maximized", max);
+                document.body.classList.toggle("panel-maximized", max);
+                if (othMax) othMax.textContent = max ? "🗗" : "⛶";
+                if (othMax) othMax.title = max ? "元のサイズに戻す" : "最大化";
+                // 盤面サイズ再計算
+                requestAnimationFrame(() => {
+                    (game as unknown as { _othelloFitBoard?: () => void })._othelloFitBoard?.();
+                });
+            };
+            // Cookie から初期状態復元
+            if (getCookie("panelMax") === "1") {
+                applyMaximized(true);
+            }
+            if (othMax) {
+                othMax.addEventListener("click", () => {
+                    const willMax = !othPanel.classList.contains("maximized");
+                    applyMaximized(willMax);
+                    sCk("panelMax", willMax ? "1" : "0");
+                });
+            }
         }
     }
 
@@ -5529,6 +5555,43 @@ export function setupHtmlUI(game: GameScene): void {
                     menuBtn?.click();
                 });
             }
+            // 最大化ボタン（タブバー版）: アクティブパネルに .maximized クラスをトグル（全パネル共通）。
+            const maxBtn = document.getElementById("panel-tab-max");
+            const syncMaxIcon = (isMax: boolean) => {
+                if (maxBtn) {
+                    maxBtn.textContent = isMax ? "🗗" : "⛶";
+                    maxBtn.title = isMax ? "元のサイズに戻す" : "最大化";
+                }
+                const othMaxBtn = document.getElementById("othello-max");
+                if (othMaxBtn) {
+                    othMaxBtn.textContent = isMax ? "🗗" : "⛶";
+                    othMaxBtn.title = isMax ? "元のサイズに戻す" : "最大化";
+                }
+            };
+            const applyMaxToActive = (want: boolean) => {
+                const activeTab = tabBar.querySelector<HTMLButtonElement>(".panel-tab.active");
+                const activePanel = activeTab
+                    ? document.getElementById(activeTab.dataset.target || "")
+                    : document.querySelector<HTMLElement>("#othello-panel");
+                if (activePanel) activePanel.classList.toggle("maximized", want);
+                document.body.classList.toggle("panel-maximized", want);
+                syncMaxIcon(want);
+                setCookie("panelMax", want ? "1" : "0");
+                // Othello 固有: 盤面サイズ再計算
+                requestAnimationFrame(() => {
+                    (game as unknown as { _othelloFitBoard?: () => void })._othelloFitBoard?.();
+                });
+            };
+            if (maxBtn) {
+                maxBtn.addEventListener("click", () => {
+                    const isMax = document.body.classList.contains("panel-maximized");
+                    applyMaxToActive(!isMax);
+                });
+            }
+            // Cookie から初期状態復元（タブバーが表示されていない PC では無害）
+            if (getCookie("panelMax") === "1") {
+                applyMaxToActive(true);
+            }
             // パネル表示状態の監視 → タブバーの表示位置・アクティブ状態を同期
             const syncTabBar = () => {
                 let activePanelId: string | null = null;
@@ -5550,6 +5613,13 @@ export function setupHtmlUI(game: GameScene): void {
                     }
                     for (const tab of tabs) {
                         tab.classList.toggle("active", tab.dataset.target === activePanelId);
+                    }
+                    // 最大化状態を維持（Option A）: アクティブパネルに .maximized を付け、非アクティブからは外す
+                    const bodyMax = document.body.classList.contains("panel-maximized");
+                    for (const tab of tabs) {
+                        const p = document.getElementById(tab.dataset.target || "");
+                        if (!p) continue;
+                        p.classList.toggle("maximized", bodyMax && tab.dataset.target === activePanelId);
                     }
                     document.body.classList.add("tab-panel-active");
                     // 直前に開いたパネルをハンバーガーの再表示用に記憶
