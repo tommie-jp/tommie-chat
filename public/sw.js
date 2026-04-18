@@ -1,6 +1,7 @@
 // tommieChat Service Worker
+// CACHE_VERSION は APP_VERSION と同期（doVersionUp.sh が自動更新）
 // バージョンを変更するとキャッシュが自動クリアされます
-const CACHE_VERSION = "v0.1.10.5";
+const CACHE_VERSION = "v0.1.35";
 const CACHE_NAME = "tommiechat-" + CACHE_VERSION;
 
 // キャッシュ対象（アプリシェル）
@@ -54,8 +55,8 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(req)
       .then((response) => {
-        // 正常なレスポンスをキャッシュに保存
-        if (response.ok) {
+        // 正常なレスポンスをキャッシュに保存（206 Partial Content は Cache API で put 不可のため除外）
+        if (response.ok && response.status !== 206) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
         }
