@@ -10,7 +10,7 @@
 # Usage:
 #   ./nakama/doStatic-set-avatars.sh              # コピー実行
 #   ./nakama/doStatic-set-avatars.sh --prune      # ミラーモード（ローカルに無いファイルを全削除）
-SCRIPT_VERSION="2026-04-18a"
+SCRIPT_VERSION="2026-04-18b"
 
 PRUNE=false
 
@@ -271,15 +271,18 @@ LOCAL_AGG=$(
 )
 
 # manifest.json を生成（クライアントはこの JSON でアバター一覧を取得する）
+# 空白を含むファイル名（例: "012-Cat 01-1.png"）を正しく扱うため、
+# `for n in $(...)` ではなく `while read` でNL区切りに固定する。
 MANIFEST="$PUBLIC_DIR/manifest.json"
 {
     printf '{"files":['
     first=true
-    for n in $(printf '%s\n' "${ENABLED_BASENAMES[@]}" | LC_ALL=C sort); do
+    while IFS= read -r n; do
+        [ -z "$n" ] && continue
         [ -f "$PUBLIC_DIR/$n" ] || continue
         if [ "$first" = true ]; then first=false; else printf ','; fi
         printf '"%s"' "$n"
-    done
+    done < <(printf '%s\n' "${ENABLED_BASENAMES[@]}" | LC_ALL=C sort -u)
     printf ']}\n'
 } > "$MANIFEST"
 
