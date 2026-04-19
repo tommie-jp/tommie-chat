@@ -1,7 +1,7 @@
 {
   "name": "tommie-chat",
   "private": true,
-  "version": "0.1.46",
+  "version": "0.1.47",
   "description": "ブラウザで動く3D MMOチャットゲーム (Browser-based 3D MMO chat)",
   "license": "MIT",
   "repository": {
