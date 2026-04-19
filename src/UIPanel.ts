@@ -4605,6 +4605,18 @@ export function setupHtmlUI(game: GameScene): void {
         const othPassBtn   = document.getElementById("othello-pass-btn") as HTMLButtonElement | null;
         const othResignBtn = document.getElementById("othello-resign-btn") as HTMLButtonElement | null;
         const othBackBtn   = document.getElementById("othello-back-btn") as HTMLButtonElement | null;
+        const othSerialTest = document.getElementById("othello-serial-test") as HTMLAnchorElement | null;
+
+        // PWA standalone だと <a target="_blank"> が同ウィンドウで開くブラウザがあるため、window.open で明示する。
+        // Chrome は window.open の 3 引数目に feature 文字列を渡すと「別タブ」ではなく「独立ウィンドウ（popup）」
+        // として開く仕様なので、第3引数は渡さない。opener 側の保護は rel="noopener" と手動 nullify で担保する。
+        if (othSerialTest) {
+            othSerialTest.addEventListener("click", (e) => {
+                e.preventDefault();
+                const w = window.open(othSerialTest.href, "_blank");
+                if (w) w.opener = null;
+            });
+        }
 
         if (othPanel && othHeader && othBoard && othLobby && othGameView) {
             // --- 盤面サイズ自動調整 ---

@@ -3,19 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Web Serial API テスト</title>
+<title>シリアルテスト</title>
 <style>
-  body { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; padding: 1em; max-width: 1000px; margin: 0 auto; }
-  h1 { font-size: 1.4em; margin: 0 0 0.5em 0; }
-  button { font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
+  body { font-family: sans-serif; font-size: 14px; padding: 1em; max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.5em; margin: 0 0 0.5em 0; }
+  button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
-  select, input { font-size: 1em; padding: 0.2em; }
-  #log { width: 100%; height: 40vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 12px;
+  select, input { font-family: inherit; font-size: 1em; padding: 0.2em; }
+  textarea { font-family: monospace; font-size: 14px; line-height: 1.5; }
+  #log { width: 100%; height: 40vh;
          background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-  #console-log { width: 100%; height: 20vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 11px;
+  #console-log { width: 100%; height: 20vh;
          background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-  .section-label { font-size: 0.9em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
-  .section-label button { font-size: 0.85em; padding: 0.1em 0.5em; }
+  .section-label { font-size: 1em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
+  .section-label button { font-size: 0.9em; padding: 0.1em 0.5em; }
   .row { margin: 0.3em 0; }
   .status { font-weight: bold; }
   .status.connected { color: #2a7; }
@@ -28,31 +29,31 @@
 </style>
 </head>
 <body>
-<h1>Web Serial API テスト</h1>
+<h1>シリアルテスト</h1>
 
 <fieldset>
   <legend>接続</legend>
   <div class="row">
     API:
     <select id="api">
-      <option value="auto" selected>自動 (Android=Polyfill / その他=Native)</option>
+      <option value="auto" selected>自動</option>
       <option value="native">Native (navigator.serial)</option>
       <option value="polyfill">Polyfill (WebUSB)</option>
     </select>
     Baud:
     <select id="baud">
-      <option>300</option>
-      <option>1200</option>
-      <option>9600</option>
-      <option>38400</option>
-      <option selected>115200</option>
-      <option>230400</option>
-      <option>460800</option>
-      <option>921600</option>
+      <option value="300">300</option>
+      <option value="1200">1,200</option>
+      <option value="9600">9,600</option>
+      <option value="38400">38,400</option>
+      <option value="115200" selected>115,200</option>
+      <option value="230400">230,400</option>
+      <option value="460800">460,800</option>
+      <option value="921600">921,600</option>
     </select>
-    <button id="connect">Connect</button>
-    <button id="disconnect" disabled>Disconnect</button>
-    <button id="clear">Clear log</button>
+    <button id="connect">新接続</button>
+    <button id="reconnect">再接続</button>
+    <button id="disconnect" disabled>接続を切る</button>
   </div>
   <div class="row">
     状態: <span id="status" class="status disconnected">未接続</span>
@@ -64,13 +65,40 @@
   <legend>表示オプション</legend>
   <div class="row">
     <label><input type="checkbox" id="opt-line-buffer" checked> 行バッファリング（改行で確定）</label>
-    <label><input type="checkbox" id="opt-timestamp"> タイムスタンプ表示</label>
-    <label><input type="checkbox" id="opt-hex"> Hex 表示</label>
-    <label><input type="checkbox" id="opt-autoscroll" checked> 自動スクロール</label>
+    <label><input type="checkbox" id="opt-line-number" checked> 行番号</label>
+    <label>タイムスタンプ:
+      <select id="opt-timestamp">
+        <option value="none">なし</option>
+        <option value="clock">時刻</option>
+        <option value="relative" selected>相対時間</option>
+      </select>
+    </label>
+    <label>Hex:
+      <select id="opt-hex">
+        <option value="none" selected>なし</option>
+        <option value="hex">Hex</option>
+        <option value="hex-ascii">Hex+ASCII</option>
+        <option value="hex-ascii-offset">Hex+ASCII+オフセット</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="opt-autoscroll" checked> スクロール</label>
+    <label>行間:
+      <select id="opt-line-gap">
+        <option value="1">0</option>
+        <option value="1.25">1/4</option>
+        <option value="1.5" selected>1/2</option>
+      </select>
+    </label>
   </div>
 </fieldset>
 
-<div class="section-label">シリアル出力</div>
+<div class="section-label">
+  <span>シリアル出力</span>
+  <span>
+    <button id="copy-log">Copy</button>
+    <button id="clear">Clear</button>
+  </span>
+</div>
 <textarea id="log" readonly></textarea>
 
 <div class="row">
@@ -82,12 +110,15 @@
     <option value="cr">CR</option>
     <option value="none">なし</option>
   </select>
-  <button id="send" disabled>Send</button>
+  <button id="send" disabled>送信</button>
 </div>
 
 <div class="section-label">
   <span>コンソールログ</span>
-  <button id="clear-console">Clear console</button>
+  <span>
+    <button id="copy-console">Copy</button>
+    <button id="clear-console">Clear</button>
+  </span>
 </div>
 <textarea id="console-log" readonly></textarea>
 
