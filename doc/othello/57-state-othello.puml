@@ -59,15 +59,18 @@ state "G6: URL参入\n(gameNo判定)" as URLEntry <<entry>> {
 [*] --> URLEntry : E2: QR/URL ?ot=123
 
 ' --- URL参入からの分岐 ---
-URLEntry --> Playing : E3: 自分が作成した\n待機中ゲーム\n(ゲーム画面へ自動復帰)
-URLEntry --> Playing : E4: 自分が参加者の\n対局中ゲーム
-URLEntry --> Spectating : E5: 他人の対局中ゲーム
+URLEntry --> Waiting : E3: 自分が作成した\n待機中ゲーム\n(applyGameList 自動復帰)
+URLEntry --> Playing : E4: 自分が参加者の\n対局中ゲーム\n(applyGameList 自動復帰)
+URLEntry --> Spectating : E5: 他人の対局中ゲーム\n(watchGame)
 URLEntry --> Lobby : E6: 不在/削除済/満員/\n相手離脱\n(理由をトースト表示)
+URLEntry --> Playing : E22: 他人の待機中ゲーム\n(joinGame → 白で参加\n→ status=playing)
 
 ' --- ロビーからの遷移 ---
 Lobby --> Waiting : E7: [新ゲーム開始]\nrpcOthelloCreate
 Lobby --> Playing : E8: [参加]ボタン\nrpcOthelloJoin\n(相手のゲームに参加)
 Lobby --> Spectating : E9: [閲覧]ボタン\n(対戦中ゲーム観戦)
+Lobby --> Waiting : E23: 自動復帰\n(applyGameList で\n自ゲーム status=waiting 検知)
+Lobby --> Playing : E24: 自動復帰\n(applyGameList で\n自ゲーム status=playing 検知)
 
 ' --- 待ち受けからの遷移 ---
 Waiting --> Playing : E10: 相手が参加\nOP_OTHELLO_UPDATE\n(type="game", status="playing")

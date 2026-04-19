@@ -4926,7 +4926,7 @@ export function setupHtmlUI(game: GameScene): void {
                 // ゲーム番号降順（新しいゲームを先頭に）
                 const sorted = [...games].sort((a, b) => (b.gameNo ?? 0) - (a.gameNo ?? 0));
                 // --- 参加中ゲームの自動復帰検知（ロビー表示/ゲーム表示いずれでも常に実行）---
-                // 状態遷移図: [doc/57-state-othello.puml](doc/57-state-othello.puml) E3/E4
+                // 状態遷移図: [doc/othello/57-state-othello.puml](doc/othello/57-state-othello.puml) E3/E4/E23/E24
                 for (const g of sorted) {
                     if ((g.status === "playing" || g.status === "waiting") &&
                         (g.black === uid || g.white === uid)) {
