@@ -1614,10 +1614,25 @@
             text-align: left;
             padding: 6px;
         }
+        /* アクション列: 横スクロール時も右端に固定して閲覧/参加/URL共有/取消を常に表示 */
+        #othello-game-list-header-table th.othello-game-action,
         #othello-game-list-table td.othello-game-action {
-            padding: 2px 0;
+            position: sticky;
+            right: 0;
+            z-index: 2;
+        }
+        #othello-game-list-header-table th.othello-game-action {
+            z-index: 4;
+            background: #f5faff;
+        }
+        #othello-game-list-table td.othello-game-action {
+            padding: 2px 4px;
             overflow: visible;
             text-align: right;
+            background: #fff;
+        }
+        #othello-game-list-table tbody tr:nth-child(odd) td.othello-game-action {
+            background: #eaf2fb;
         }
         #othello-game-list-table td.othello-game-action button {
             background: #1a73e8;
@@ -1639,6 +1654,14 @@
         }
         #othello-game-list-table td.othello-game-action button:not(:disabled):hover {
             background: #1565c0;
+        }
+        /* X (旧Twitter) 専用ボタン: ブランドカラーの黒 */
+        #othello-game-list-table td.othello-game-action button.oth-x-btn {
+            background: #000;
+            color: #fff;
+        }
+        #othello-game-list-table td.othello-game-action button.oth-x-btn:not(:disabled):hover {
+            background: #333;
         }
         #othello-history-section {
             display: flex;
@@ -4247,7 +4270,7 @@
                     <div id="othello-game-list-scroll">
                         <table id="othello-game-list-header-table">
                             <colgroup>
-                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col style="width:96px">
+                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col class="oth-game-action-col" style="width:200px">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -4261,7 +4284,7 @@
                         </table>
                         <table id="othello-game-list-table">
                             <colgroup>
-                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col style="width:96px">
+                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col class="oth-game-action-col" style="width:200px">
                             </colgroup>
                             <tbody id="othello-game-list-tbody"></tbody>
                         </table>

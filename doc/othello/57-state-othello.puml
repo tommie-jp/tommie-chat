@@ -4,53 +4,40 @@ title オセロ画面の状態遷移図
 skinparam state {
     BackgroundColor<<entry>> #E8F5E9
     BackgroundColor<<play>> #FFF3E0
-    BackgroundColor<<end>> #FFEBEE
 }
 
 ' === 画面 ===
-' G1: ロビー画面
-' G2: 待ち受け画面
-' G3: ゲームプレイ画面
-' G4: 観戦画面
-' G5: 結果画面
-' G6: URL参入（判定）
+' G1: ロビー画面（待機中ゲームの一覧・作成・URL共有・取消をここで完結）
+' G3: ゲーム画面（プレイ/観戦/結果を myColor と gameStatus で切替）
+' G6: URL参入判定（分岐ノード／画面ではない）
+' ※ G2 待ち受け画面は廃止（ロビーに統合）
+' ※ G4 観戦画面・G5 結果画面は G3 に統合（同一DOMでモード切替）
 
 state "G1: ロビー画面" as Lobby <<entry>> {
-    Lobby : gameStatus = ""
+    Lobby : gameStatus = "" or "waiting"
     Lobby : - 対戦中ゲーム一覧
     Lobby : - 対戦履歴
     Lobby : - [新ゲーム開始]ボタン
+    Lobby : 自分の待機中ゲームの行:
+    Lobby :   - [URL共有]ボタン
+    Lobby :   - [取消]ボタン (othelloCancel)
 }
 
-state "G2: 待ち受け画面" as Waiting {
-    Waiting : gameStatus = "waiting"
-    Waiting : myColor = 1 (黒)
-    Waiting : "対戦相手を待っています…"
-    Waiting : ゲーム番号表示
+state "G3: ゲーム画面" as Game <<play>> {
+    Game : gameStatus = "playing" or "finished"
+    Game : ---- プレイモード (myColor=1 or 2, playing) ----
+    Game :   - 盤面（自分の手番でヒント）
+    Game :   - [パス] [投了]ボタン
+    Game : ---- 観戦モード (myColor=0, playing) ----
+    Game :   - 盤面（操作不可）
+    Game :   - [ロビーへ]ボタン
+    Game : ---- 結果モード (finished) ----
+    Game :   - 最終盤面（操作不可）
+    Game :   - 勝敗/引き分けバナー
+    Game :   - [ロビーへ]ボタン
 }
 
-state "G3: ゲームプレイ画面" as Playing <<play>> {
-    Playing : gameStatus = "playing"
-    Playing : myColor = 1 or 2
-    Playing : - 盤面（自分の手番でヒント）
-    Playing : - [パス] [投了]ボタン
-}
-
-state "G4: 観戦画面" as Spectating <<play>> {
-    Spectating : gameStatus = "playing"
-    Spectating : myColor = 0
-    Spectating : - 盤面（操作不可）
-    Spectating : - [ロビーへ]ボタン
-}
-
-state "G5: 結果画面" as Result <<end>> {
-    Result : gameStatus = "finished"
-    Result : - 勝敗/引き分け表示
-    Result : - [ロビーへ]ボタン
-}
-
-state "G6: URL参入\n(gameNo判定)" as URLEntry <<entry>> {
-}
+state "G6: URL参入判定\n(gameNo 判定)" as URLEntry <<choice>>
 
 ' === 遷移 ===
 
@@ -59,39 +46,27 @@ state "G6: URL参入\n(gameNo判定)" as URLEntry <<entry>> {
 [*] --> URLEntry : E2: QR/URL ?ot=123
 
 ' --- URL参入からの分岐 ---
-URLEntry --> Waiting : E3: 自分が作成した\n待機中ゲーム\n(applyGameList 自動復帰)
-URLEntry --> Playing : E4: 自分が参加者の\n対局中ゲーム\n(applyGameList 自動復帰)
-URLEntry --> Spectating : E5: 他人の対局中ゲーム\n(watchGame)
+URLEntry --> Lobby : E3: 自分が作成した\n待機中ゲーム\n(ロビー表示のまま待つ)
+URLEntry --> Game : E4: 自分が参加者の\n対局中ゲーム\n(applyGameList 自動復帰)
+URLEntry --> Game : E5: 他人の対局中ゲーム\n(watchGame, 観戦モード)
 URLEntry --> Lobby : E6: 不在/削除済/満員/\n相手離脱\n(理由をトースト表示)
-URLEntry --> Playing : E22: 他人の待機中ゲーム\n(joinGame → 白で参加\n→ status=playing)
+URLEntry --> Game : E22: 他人の待機中ゲーム\n(joinGame → 白で参加\n→ status=playing)
 
 ' --- ロビーからの遷移 ---
-Lobby --> Waiting : E7: [新ゲーム開始]\nrpcOthelloCreate
-Lobby --> Playing : E8: [参加]ボタン\nrpcOthelloJoin\n(相手のゲームに参加)
-Lobby --> Spectating : E9: [閲覧]ボタン\n(対戦中ゲーム観戦)
-Lobby --> Waiting : E23: 自動復帰\n(applyGameList で\n自ゲーム status=waiting 検知)
-Lobby --> Playing : E24: 自動復帰\n(applyGameList で\n自ゲーム status=playing 検知)
+Lobby --> Lobby : E7: [新ゲーム開始]\nrpcOthelloCreate\n(G2は作らず、そのままロビーに留まる)
+Lobby --> Game : E8: [参加]ボタン\nrpcOthelloJoin\n(他人のゲームに参加)
+Lobby --> Game : E9: [閲覧]ボタン\n(対戦中ゲーム観戦)
+Lobby --> Game : E10: 相手が参加\nOP_OTHELLO_UPDATE\n(自分の待機中ゲームが status="playing" へ)
+Lobby --> Lobby : E11: 自分の待機中ゲームの\n[URL共有]ボタン\n(navigator.share or クリップボード)
+Lobby --> Lobby : E25: 自分の待機中ゲームの\n[取消]ボタン\nrpcOthelloCancel
+Lobby --> Game : E24: 自動復帰\n(applyGameList で\n自ゲーム status=playing 検知)
 
-' --- 待ち受けからの遷移 ---
-Waiting --> Playing : E10: 相手が参加\nOP_OTHELLO_UPDATE\n(type="game", status="playing")
-Waiting --> Lobby : E11: [ロビーへ]ボタン\n(自ゲーム削除)
-
-' --- プレイからの遷移 ---
-Playing --> Result : E12: [投了]ボタン\nrpcOthelloResign
-Playing --> Result : E13: ゲーム終了\n(両者置けない/満杯)\nstatus="finished"
-
-' --- 観戦からの遷移 ---
-Spectating --> Result : E14: 対局終了通知\nstatus="finished"
-Spectating --> Lobby : E15: [ロビーへ]ボタン
-
-' --- 結果からの遷移 ---
-Result --> Lobby : E16: [ロビーへ]ボタン
+' --- ゲーム画面からの遷移 ---
+' 投了/終局/対局終了通知は G3 内部で結果モードへ切り替わる（画面遷移なし）
+Game --> Lobby : E15: [ロビーへ]ボタン\n(観戦中 or 結果モード)
 
 ' --- パネルを閉じる ---
-Lobby --> [*] : E17: ❌パネルを閉じる
-Waiting --> [*] : E18: ❌パネルを閉じる\n(ゲームは残る)
-Playing --> [*] : E19: ❌パネルを閉じる\n(対局は継続)
-Spectating --> [*] : E20: ❌パネルを閉じる
-Result --> [*] : E21: ❌パネルを閉じる
+Lobby --> [*] : E17: ❌パネルを閉じる\n(待機中ゲームがあっても残る)
+Game --> [*] : E19: ❌パネルを閉じる\n(対局中なら継続)
 
 @enduml
