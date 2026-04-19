@@ -7,6 +7,7 @@ import type { Lang } from "./i18n";
 import { escapeHtml, sanitizeColor, resolveAvatarUrl, isAvatarUrl, fetchAvatarList } from "./utils";
 import { showToast, primeNotificationSound } from "./Toast";
 import type { Notification } from "@heroiclabs/nakama-js";
+import QRCode from "qrcode";
 
 // socket.notification コード定数（仕様書 doc/20 参照、サーバ側 main.go と同期）
 const CODE_OTHELLO_JOINED = 1001;
@@ -4879,7 +4880,7 @@ export function setupHtmlUI(game: GameScene): void {
                 requestAnimationFrame(fitBoard);
             };
 
-            // 一覧アイテムへの参照（gameId → 各セル要素・参加ボタン要素）
+            // 一覧アイテムへの参照（gameId → 各セル要素）
             // 対戦中の盤面更新（type="game"）を受けて、ロビーの一覧項目を即時更新するため
             const gameListItems = new Map<string, {
                 tr: HTMLTableRowElement;
@@ -4889,9 +4890,12 @@ export function setupHtmlUI(game: GameScene): void {
                 ownerCell: HTMLTableCellElement;
                 commentCell: HTMLTableCellElement;
                 commentSpan: HTMLSpanElement;
-                joinBtn: HTMLButtonElement;
                 status: string;
             }>();
+            // 選択中のゲーム行（タップでトグル）。選択行の直下にアクションボタン行を挿入する。
+            let selectedGameId: string | null = null;
+            // 直近のゲーム一覧（選択トグル時の再描画用）
+            let lastGamesList: import("./NakamaService").OthelloListPayload["games"] = [];
             // 履歴の日時セル参照（1秒tickでの更新用）
             const historyItems: Array<{ tsCell: HTMLTableCellElement; ts: number; tsText: string }> = [];
 
@@ -4919,9 +4923,234 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             const othLobbySection = document.getElementById("othello-game-list-section");
+
+            // 自分の待機中ゲームの選択時に表示するオーバレイ（URL共有/X投稿）
+            // 行の下にオーバレイ表示（別行としては追加しない）
+            // スクロールコンテナには contain:paint が入っているため、その外側（section）に配置する
+            let selectOverlay: HTMLDivElement | null = null;
+            const ensureSelectOverlay = () => {
+                if (selectOverlay || !othLobbySection) return;
+                selectOverlay = document.createElement("div");
+                selectOverlay.id = "othello-select-overlay";
+                selectOverlay.style.display = "none";
+                othLobbySection.appendChild(selectOverlay);
+            };
+            ensureSelectOverlay();
+            // スクロール時にオーバレイ位置を追従
+            othGameListScroll?.addEventListener("scroll", () => positionSelectOverlay());
+
+            // オーバレイ外クリックで選択解除（URL共有/X投稿 以外をタップしたら消す）
+            // 選択中の行自体をタップした場合は行のクリックハンドラに委ねる（トグル動作）
+            document.addEventListener("click", (ev) => {
+                if (!selectedGameId || !selectOverlay) return;
+                if (othLobby.style.display === "none") return;
+                const target = ev.target as Element | null;
+                if (!target) return;
+                if (selectOverlay.contains(target)) return;
+                if (target.closest?.(".othello-game-row-selectable")) return;
+                selectedGameId = null;
+                applyGameList(lastGamesList);
+            });
+
+            // オーバレイ位置を選択行の直下に合わせる
+            // オーバレイは section 内にあり、スクロールコンテナ (othGameListScroll) の
+            // スクロール量を差し引いて section 基準の top を計算する
+            const positionSelectOverlay = () => {
+                if (!selectOverlay) return;
+                if (!selectedGameId || !othGameListScroll) {
+                    selectOverlay.style.display = "none";
+                    return;
+                }
+                const entry = gameListItems.get(selectedGameId);
+                if (!entry || selectOverlay.childElementCount === 0) {
+                    selectOverlay.style.display = "none";
+                    return;
+                }
+                const scrollTop = othGameListScroll.scrollTop;
+                const scrollOffsetTop = othGameListScroll.offsetTop;
+                const scrollHeight = othGameListScroll.clientHeight;
+                const rowBottomInContent = entry.tr.offsetTop + entry.tr.offsetHeight;
+                // 行がスクロール外（上または下）に出たらオーバレイ非表示
+                if (rowBottomInContent - entry.tr.offsetHeight > scrollTop + scrollHeight ||
+                    rowBottomInContent < scrollTop) {
+                    selectOverlay.style.display = "none";
+                    return;
+                }
+                const top = scrollOffsetTop + rowBottomInContent - scrollTop;
+                selectOverlay.style.top = `${top}px`;
+                selectOverlay.style.display = "";
+            };
+
+            // 選択時に表示するオーバレイの中身（URL共有/X投稿）を構築
+            // 取消ボタンはインラインで常に表示されるのでオーバレイには含めない
+            const buildSelectOverlayContent = (
+                g: import("./NakamaService").OthelloListPayload["games"][number],
+            ) => {
+                if (!selectOverlay) return;
+                selectOverlay.innerHTML = "";
+                const shareBtn = document.createElement("button");
+                shareBtn.textContent = "URL共有";
+                shareBtn.title = "招待URLを共有（クリップボードにもコピー）";
+                shareBtn.addEventListener("click", async (ev) => {
+                    ev.stopPropagation();
+                    const gameNo = g.gameNo ?? 0;
+                    const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
+                    const shareData = {
+                        title: "tommieChat オセロ",
+                        text: `オセロで対戦しよう！（ゲーム番号${gameNo}）`,
+                        url,
+                    };
+                    const copyFallback = async () => {
+                        try {
+                            if (navigator.clipboard?.writeText) {
+                                await navigator.clipboard.writeText(url);
+                                showToast({ text: "招待URLをコピーしました" });
+                                return;
+                            }
+                        } catch (e) {
+                            console.warn("clipboard error:", e);
+                        }
+                        window.prompt("招待URL（コピーしてください）", url);
+                    };
+                    if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+                        try {
+                            await navigator.share(shareData);
+                            return;
+                        } catch (e) {
+                            if ((e as Error).name === "AbortError") return;
+                            console.warn("share error:", e);
+                        }
+                    }
+                    await copyFallback();
+                });
+                const xBtn = document.createElement("button");
+                xBtn.textContent = "X投稿";
+                xBtn.className = "oth-x-btn";
+                xBtn.title = "Xに招待を投稿";
+                xBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    const gameNo = g.gameNo ?? 0;
+                    const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
+                    const text = `オセロで対戦しよう！（ゲーム番号${gameNo}）\nLet's play Othello! (Game #${gameNo})`;
+                    const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=tommieChat`;
+                    window.open(intentUrl, "_blank", "noopener");
+                });
+                const qrBtn = document.createElement("button");
+                qrBtn.textContent = "QRコード";
+                qrBtn.title = "招待URLをQRコードで表示";
+                qrBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    const gameNo = g.gameNo ?? 0;
+                    const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
+                    showQrModal(url, gameNo);
+                });
+                selectOverlay.appendChild(shareBtn);
+                selectOverlay.appendChild(xBtn);
+                selectOverlay.appendChild(qrBtn);
+            };
+
+            // QRコード表示モーダル — 招待URLを大きなQRコードで見せる
+            const showQrModal = (url: string, gameNo: number) => {
+                const overlay = document.createElement("div");
+                overlay.className = "oth-qr-modal";
+                const box = document.createElement("div");
+                box.className = "oth-qr-box";
+                const title = document.createElement("div");
+                title.className = "oth-qr-title";
+                title.textContent = `オセロ招待 (ゲーム番号${gameNo})`;
+                const canvas = document.createElement("canvas");
+                canvas.className = "oth-qr-canvas";
+                const urlLabel = document.createElement("div");
+                urlLabel.className = "oth-qr-url";
+                urlLabel.textContent = url;
+                const closeBtn = document.createElement("button");
+                closeBtn.className = "oth-qr-close";
+                closeBtn.textContent = "閉じる";
+                closeBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    overlay.remove();
+                });
+                overlay.addEventListener("click", (ev) => {
+                    if (ev.target === overlay) overlay.remove();
+                });
+                box.appendChild(title);
+                box.appendChild(canvas);
+                box.appendChild(urlLabel);
+                box.appendChild(closeBtn);
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
+                QRCode.toCanvas(canvas, url, { width: 240, margin: 2 }).catch(e => {
+                    console.warn("QRCode.toCanvas error:", e);
+                });
+            };
+
+            // 選択トグル（自分の待機中ゲームでのみ作用）
+            const toggleSelection = (g: import("./NakamaService").OthelloListPayload["games"][number]) => {
+                const uid = myUid();
+                const isOwnWaiting = (g.black === uid || g.white === uid) && g.status === "waiting";
+                if (!isOwnWaiting) {
+                    // 他人のゲーム/自分の対戦中ゲームはオーバレイを出さない
+                    if (selectedGameId) {
+                        selectedGameId = null;
+                        applyGameList(lastGamesList);
+                    }
+                    return;
+                }
+                selectedGameId = (selectedGameId === g.gameId) ? null : g.gameId;
+                applyGameList(lastGamesList);
+            };
+
+            // 行の右端に常時表示するアクションセル（5列目）
+            // 自分の待機中ゲーム: [取消]（URL共有/X投稿 は選択時オーバレイに出す）
+            // 他プレイヤーのゲーム: [閲覧] [参加]（参加は status=waiting のときのみ有効）
+            const buildActionCell = (
+                g: import("./NakamaService").OthelloListPayload["games"][number],
+                isOwnGame: boolean,
+            ): HTMLTableCellElement => {
+                const td = document.createElement("td");
+                td.className = "othello-game-action";
+                if (isOwnGame && g.status === "waiting") {
+                    const cancelBtn = document.createElement("button");
+                    cancelBtn.textContent = "取消";
+                    cancelBtn.title = "この待機中ゲームを取り消す";
+                    cancelBtn.addEventListener("click", async (ev) => {
+                        ev.stopPropagation();
+                        try {
+                            await game.nakama.othelloCancel(g.gameId);
+                            currentGameId = null;
+                            gameStatus = "";
+                            myColor = 0;
+                            selectedGameId = null;
+                            refreshRecruit();
+                        } catch (e) {
+                            console.warn("othelloCancel error:", e);
+                        }
+                    });
+                    td.appendChild(cancelBtn);
+                } else if (!isOwnGame) {
+                    const watchBtn = document.createElement("button");
+                    watchBtn.textContent = "閲覧";
+                    watchBtn.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        watchGame(g.gameId).catch(e => console.warn("othelloWatch error:", e));
+                    });
+                    const joinBtn = document.createElement("button");
+                    joinBtn.textContent = "参加";
+                    joinBtn.disabled = g.status !== "waiting";
+                    joinBtn.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        joinGame(g.gameId).catch(e => console.warn("othelloJoin error:", e));
+                    });
+                    td.appendChild(watchBtn);
+                    td.appendChild(joinBtn);
+                }
+                return td;
+            };
+
             // --- ゲーム一覧描画（サーバからの購読通知で呼ばれる） ---
             const applyGameList = (games: import("./NakamaService").OthelloListPayload["games"]) => {
                 if (!othGameList) return;
+                lastGamesList = games;
                 const uid = myUid();
                 // ゲーム番号降順（新しいゲームを先頭に）
                 const sorted = [...games].sort((a, b) => (b.gameNo ?? 0) - (a.gameNo ?? 0));
@@ -4983,114 +5212,48 @@ export function setupHtmlUI(game: GameScene): void {
                         const tsCell = mkTd(tsStr, fullDateStr);
                         const ownerCell = mkTd(blackLabel, blackLabel);
                         ownerCell.className = "oth-game-owner";
-                        const commentCell = document.createElement("td");
-                        commentCell.className = "othello-game-comment";
-                        commentCell.title = commentText;
-                        const commentSpan = document.createElement("span");
-                        commentSpan.className = "othello-comment-text";
-                        if (g.status === "waiting") commentSpan.classList.add("othello-comment-marquee");
-                        applyCommentContent(commentSpan, commentText, blackLabel);
-                        commentCell.appendChild(commentSpan);
-
-                        const actionCell = document.createElement("td");
-                        actionCell.className = "othello-game-action";
                         const isOwnGame = g.black === uid || g.white === uid;
                         const isOwnWaiting = isOwnGame && g.status === "waiting";
-                        // 自分のゲームでは 閲覧/参加 は出さない（狭い画面で URL共有/取消 が収まらないため）
-                        // 他プレイヤーのゲームでは 閲覧/参加 のみ出す（取消は出さない）
-                        const joinBtn = document.createElement("button");
-                        joinBtn.textContent = "参加";
-                        joinBtn.disabled = g.status !== "waiting";
-                        joinBtn.addEventListener("click", () => joinGame(g.gameId));
-                        if (!isOwnGame) {
-                            const watchBtn = document.createElement("button");
-                            watchBtn.textContent = "閲覧";
-                            watchBtn.addEventListener("click", () => {
-                                watchGame(g.gameId).catch(e => console.warn("othelloWatch error:", e));
-                            });
-                            actionCell.appendChild(watchBtn);
-                            actionCell.appendChild(joinBtn);
+                        const commentCell = document.createElement("td");
+                        commentCell.className = "othello-game-comment";
+                        const commentSpan = document.createElement("span");
+                        commentSpan.className = "othello-comment-text";
+                        if (isOwnGame) {
+                            // 自分が作成したゲームは太字青で「自分が作成」を表示
+                            commentSpan.classList.add("othello-comment-own");
+                            commentSpan.textContent = "自分が作成";
+                            commentCell.title = "自分が作成";
+                        } else {
+                            if (g.status === "waiting") commentSpan.classList.add("othello-comment-marquee");
+                            applyCommentContent(commentSpan, commentText, blackLabel);
+                            commentCell.title = commentText;
                         }
-                        // 自分が作成した待機中ゲームには [URL共有] [取消] のみ表示 (E11/E25)
-                        if (isOwnWaiting) {
-                            const shareBtn = document.createElement("button");
-                            shareBtn.textContent = "URL共有";
-                            shareBtn.title = "招待URLを共有（クリップボードにもコピー）";
-                            shareBtn.addEventListener("click", async () => {
-                                const gameNo = g.gameNo ?? 0;
-                                const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
-                                const shareData = {
-                                    title: "tommieChat オセロ",
-                                    text: `オセロで対戦しよう！（ゲーム番号${gameNo}）`,
-                                    url,
-                                };
-                                // クリップボード or prompt へフォールバック
-                                const copyFallback = async () => {
-                                    try {
-                                        if (navigator.clipboard?.writeText) {
-                                            await navigator.clipboard.writeText(url);
-                                            showToast({ text: "招待URLをコピーしました" });
-                                            return;
-                                        }
-                                    } catch (e) {
-                                        console.warn("clipboard error:", e);
-                                    }
-                                    // 最終フォールバック: prompt で URL を表示
-                                    window.prompt("招待URL（コピーしてください）", url);
-                                };
-                                // iOS Safari: navigator.share があっても HTTPS でない/canShare 不可で失敗する
-                                if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
-                                    try {
-                                        await navigator.share(shareData);
-                                        return;
-                                    } catch (e) {
-                                        // ユーザーが共有シートをキャンセルした場合は何もしない
-                                        if ((e as Error).name === "AbortError") return;
-                                        console.warn("share error:", e);
-                                    }
-                                }
-                                await copyFallback();
-                            });
-                            const cancelBtn = document.createElement("button");
-                            cancelBtn.textContent = "取消";
-                            cancelBtn.title = "この待機中ゲームを取り消す";
-                            cancelBtn.addEventListener("click", async () => {
-                                try {
-                                    await game.nakama.othelloCancel(g.gameId);
-                                    currentGameId = null;
-                                    gameStatus = "";
-                                    myColor = 0;
-                                    refreshRecruit();
-                                } catch (e) {
-                                    console.warn("othelloCancel error:", e);
-                                }
-                            });
-                            // X (旧Twitter) 投稿ボタン — iOS共有シートの共有拡張が無効な人向け
-                            const xBtn = document.createElement("button");
-                            xBtn.textContent = "X投稿";
-                            xBtn.className = "oth-x-btn";
-                            xBtn.title = "Xに招待を投稿";
-                            xBtn.addEventListener("click", () => {
-                                const gameNo = g.gameNo ?? 0;
-                                const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
-                                const text = `オセロで対戦しよう！（ゲーム番号${gameNo}）\nLet's play Othello! (Game #${gameNo})`;
-                                // /intent/post は一部環境で「このページは存在しません」になるため /intent/tweet を使う
-                                const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=tommieChat`;
-                                window.open(intentUrl, "_blank", "noopener");
-                            });
-                            actionCell.appendChild(shareBtn);
-                            actionCell.appendChild(xBtn);
-                            actionCell.appendChild(cancelBtn);
-                        }
-
+                        commentCell.appendChild(commentSpan);
+                        const actionCell = buildActionCell(g, isOwnGame);
                         tr.appendChild(noCell);
                         tr.appendChild(tsCell);
                         tr.appendChild(ownerCell);
                         tr.appendChild(commentCell);
                         tr.appendChild(actionCell);
+                        // 自分の待機中ゲームのみタップで選択可能（URL共有/X投稿オーバレイ表示用）
+                        if (isOwnWaiting) {
+                            tr.classList.add("othello-game-row-selectable");
+                            if (selectedGameId === g.gameId) tr.classList.add("selected");
+                            tr.addEventListener("click", () => toggleSelection(g));
+                        }
                         othGameList.appendChild(tr);
-                        gameListItems.set(g.gameId, { tr, tsCell, ts, tsText: tsStr, ownerCell, commentCell, commentSpan, joinBtn, status: g.status });
+                        gameListItems.set(g.gameId, { tr, tsCell, ts, tsText: tsStr, ownerCell, commentCell, commentSpan, status: g.status });
                     }
+                }
+                // 選択中ゲームがなお存在すればオーバレイ位置を更新、なければ非表示
+                const selectedGame = selectedGameId ? sorted.find(g => g.gameId === selectedGameId) : undefined;
+                if (selectedGame && selectedGame.status === "waiting" &&
+                    (selectedGame.black === uid || selectedGame.white === uid)) {
+                    buildSelectOverlayContent(selectedGame);
+                    requestAnimationFrame(positionSelectOverlay);
+                } else {
+                    selectedGameId = null;
+                    if (selectOverlay) selectOverlay.style.display = "none";
                 }
                 if (othGameList.children.length === 0) {
                     othLobbySection?.classList.add("othello-lobby-empty");
@@ -5100,13 +5263,11 @@ export function setupHtmlUI(game: GameScene): void {
                     const tsCell = document.createElement("td"); tr.appendChild(tsCell);
                     const commentCell = document.createElement("td");
                     commentCell.className = "othello-game-comment";
-                    commentCell.colSpan = 2;
                     const commentSpan = document.createElement("span");
                     commentSpan.className = "othello-comment-text othello-comment-marquee othello-comment-empty";
                     commentSpan.textContent = "*** 新ゲームを開始しよう！ ***";
                     commentCell.appendChild(commentSpan);
                     tr.appendChild(commentCell);
-                    const actionCell = document.createElement("td"); actionCell.className = "othello-game-action"; tr.appendChild(actionCell);
                     othGameList.appendChild(tr);
                 } else {
                     othLobbySection?.classList.remove("othello-lobby-empty");
@@ -5373,12 +5534,20 @@ export function setupHtmlUI(game: GameScene): void {
                             const commentText = (gd.comment && gd.comment !== "") ? gd.comment : othCommentText(gd.status, blackLabel, whiteLabel);
                             entry.ownerCell.textContent = blackLabel;
                             entry.ownerCell.title = blackLabel;
-                            applyCommentContent(entry.commentSpan, commentText, blackLabel);
-                            entry.commentCell.title = commentText;
-                            entry.commentSpan.classList.toggle("othello-comment-marquee", gd.status === "waiting");
                             const uid = myUid();
                             const isOwnGame = gd.black === uid || gd.white === uid;
-                            entry.joinBtn.disabled = gd.status !== "waiting" || isOwnGame;
+                            if (isOwnGame) {
+                                // 自分が作成したゲームは太字青で「自分が作成」を維持
+                                entry.commentSpan.textContent = "自分が作成";
+                                entry.commentSpan.classList.add("othello-comment-own");
+                                entry.commentSpan.classList.remove("othello-comment-marquee");
+                                entry.commentCell.title = "自分が作成";
+                            } else {
+                                entry.commentSpan.classList.remove("othello-comment-own");
+                                applyCommentContent(entry.commentSpan, commentText, blackLabel);
+                                entry.commentCell.title = commentText;
+                                entry.commentSpan.classList.toggle("othello-comment-marquee", gd.status === "waiting");
+                            }
                             entry.status = gd.status;
                         }
                     }
