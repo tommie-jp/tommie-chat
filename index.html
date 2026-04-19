@@ -1261,6 +1261,17 @@
             padding: 4px 6px;
         }
         #othello-max:hover { opacity: 1; }
+        #othello-serial-test {
+            font-size: 11px;
+            font-weight: normal;
+            color: #06c;
+            text-decoration: underline;
+            padding: 4px 6px;
+            opacity: 0.75;
+            white-space: nowrap;
+        }
+        #othello-serial-test:hover { opacity: 1; }
+        body.theme-dark #othello-serial-test { color: #8cf; }
         #othello-body {
             display: flex;
             flex-direction: column;
@@ -1483,6 +1494,9 @@
             color: #666;
             padding: 2px 0;
             flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         #othello-game-list-header-table,
         #othello-game-list-table {
@@ -4226,7 +4240,10 @@
             <!-- ロビー画面 -->
             <div id="othello-lobby">
                 <div id="othello-game-list-section">
-                    <div id="othello-game-list-title">ゲームロビー</div>
+                    <div id="othello-game-list-title">
+                        <span>ゲームロビー</span>
+                        <a id="othello-serial-test" href="/test-web-serial-api.html" target="_blank" rel="noopener" title="Web Serial API テストページを開く">シリアルテスト</a>
+                    </div>
                     <div id="othello-game-list-scroll">
                         <table id="othello-game-list-header-table">
                             <colgroup>
