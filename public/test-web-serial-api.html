@@ -5,24 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Web Serial API テスト</title>
 <style>
-  body { font-family: system-ui, -apple-system, sans-serif; padding: 1em; max-width: 1000px; margin: 0 auto; }
-  h1 { margin: 0 0 0.5em 0; }
-  button { font-size: 1em; padding: 0.4em 1em; margin: 0.2em; cursor: pointer; }
+  body { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; padding: 1em; max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.4em; margin: 0 0 0.5em 0; }
+  button { font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
-  select, input { font-size: 1em; padding: 0.3em; }
-  #log { width: 100%; height: 40vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 0.85em;
+  select, input { font-size: 1em; padding: 0.2em; }
+  #log { width: 100%; height: 40vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 12px;
          background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-  #console-log { width: 100%; height: 20vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 0.8em;
+  #console-log { width: 100%; height: 20vh; font-family: 'Consolas', 'Menlo', monospace; font-size: 11px;
          background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-  .section-label { font-size: 0.85em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
-  .section-label button { font-size: 0.8em; padding: 0.1em 0.5em; }
-  .row { margin: 0.4em 0; }
+  .section-label { font-size: 0.9em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
+  .section-label button { font-size: 0.85em; padding: 0.1em 0.5em; }
+  .row { margin: 0.3em 0; }
   .status { font-weight: bold; }
   .status.connected { color: #2a7; }
   .status.disconnected { color: #888; }
   .status.error { color: #c33; }
-  .stats { font-size: 0.85em; color: #666; margin-left: 1em; }
-  fieldset { border: 1px solid #ccc; padding: 0.5em 1em; margin: 0.5em 0; }
+  .stats { font-size: 0.9em; color: #666; margin-left: 1em; }
+  fieldset { border: 1px solid #ccc; padding: 0.4em 0.8em; margin: 0.4em 0; }
   legend { padding: 0 0.3em; color: #555; }
   label { margin-right: 1em; }
 </style>
@@ -61,21 +61,6 @@
 </fieldset>
 
 <fieldset>
-  <legend>送信</legend>
-  <div class="row">
-    <input id="send-text" placeholder="送信文字列" style="width: 60%;">
-    改行:
-    <select id="send-eol">
-      <option value="crlf">CRLF</option>
-      <option value="lf">LF</option>
-      <option value="cr">CR</option>
-      <option value="none">なし</option>
-    </select>
-    <button id="send" disabled>Send</button>
-  </div>
-</fieldset>
-
-<fieldset>
   <legend>表示オプション</legend>
   <div class="row">
     <label><input type="checkbox" id="opt-line-buffer" checked> 行バッファリング（改行で確定）</label>
@@ -87,6 +72,18 @@
 
 <div class="section-label">シリアル出力</div>
 <textarea id="log" readonly></textarea>
+
+<div class="row">
+  <input id="send-text" placeholder="送信文字列" style="width: 60%;">
+  改行:
+  <select id="send-eol">
+    <option value="crlf">CRLF</option>
+    <option value="lf">LF</option>
+    <option value="cr">CR</option>
+    <option value="none">なし</option>
+  </select>
+  <button id="send" disabled>Send</button>
+</div>
 
 <div class="section-label">
   <span>コンソールログ</span>
