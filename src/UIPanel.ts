@@ -2209,7 +2209,7 @@ export function setupHtmlUI(game: GameScene): void {
                 console.log(`Othello notif skipped (panel visible): gameNo=${gameNo3}`);
             } else {
                 showToast({
-                    text: `${opponentName}が見つかりました。ゲーム番号:${gameNo3}`,
+                    text: `オセロ相手${opponentName}が参加しました。タップして開始（ゲーム番号:${gameNo3}）`,
                     onTap: () => openOthelloForGameNo?.(gameNo),
                 });
             }

@@ -207,13 +207,13 @@ export function showToast(opts: ToastOptions): void {
     el.style.cssText = `
         background: rgba(0, 118, 215, 0.92);
         color: #fff;
-        padding: 10px 14px;
+        padding: 12px 18px;
         border-radius: 14px;
-        font-size: 14px;
+        font-size: 17px;
         line-height: 1.4;
         box-shadow: 0 2px 8px rgba(0,0,0,0.35);
         pointer-events: auto;
-        cursor: ${opts.onTap ? "pointer" : "default"};
+        cursor: pointer;
         word-break: break-word;
         max-width: 100%;
         opacity: 0;
@@ -231,9 +231,8 @@ export function showToast(opts: ToastOptions): void {
         setTimeout(() => { el.remove(); }, 300);
     };
 
-    if (opts.onTap) {
-        el.addEventListener("click", () => { opts.onTap?.(); dismiss(); });
-    }
+    // タップで消える（onTap 指定時はコールバック実行も）
+    el.addEventListener("click", () => { opts.onTap?.(); dismiss(); });
 
     root.appendChild(el);
     requestAnimationFrame(() => {
