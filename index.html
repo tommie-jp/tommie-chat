@@ -581,6 +581,42 @@
             flex-shrink: 0;
         }
         #debug-minimize-btn:hover, #debug-restore-btn:hover { opacity: 1; }
+        /* scrollbar-3d-ghost 対策（MEMORY feedback_scrollbar_3d_ghost 参照）: overflow:auto の
+           パネルには必ずカスタム ::-webkit-scrollbar をセットで定義して Babylon canvas に
+           水色ゴーストバーが残るバグを回避する。以下 8 セレクタ分を一括定義。 */
+        #debug-body::-webkit-scrollbar,
+        #chat-history-list::-webkit-scrollbar,
+        #server-settings-body::-webkit-scrollbar,
+        #srvPingResult::-webkit-scrollbar,
+        #server-log-list::-webkit-scrollbar,
+        .oth-invite-list::-webkit-scrollbar,
+        #about-panel-body::-webkit-scrollbar,
+        #settings-body::-webkit-scrollbar { width: 8px; height: 8px; }
+        #debug-body::-webkit-scrollbar-track,
+        #chat-history-list::-webkit-scrollbar-track,
+        #server-settings-body::-webkit-scrollbar-track,
+        #srvPingResult::-webkit-scrollbar-track,
+        #server-log-list::-webkit-scrollbar-track,
+        .oth-invite-list::-webkit-scrollbar-track,
+        #about-panel-body::-webkit-scrollbar-track,
+        #settings-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+        #debug-body::-webkit-scrollbar-thumb,
+        #chat-history-list::-webkit-scrollbar-thumb,
+        #server-settings-body::-webkit-scrollbar-thumb,
+        #srvPingResult::-webkit-scrollbar-thumb,
+        #server-log-list::-webkit-scrollbar-thumb,
+        .oth-invite-list::-webkit-scrollbar-thumb,
+        #about-panel-body::-webkit-scrollbar-thumb,
+        #settings-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+        #debug-body::-webkit-scrollbar-thumb:hover,
+        #chat-history-list::-webkit-scrollbar-thumb:hover,
+        #server-settings-body::-webkit-scrollbar-thumb:hover,
+        #srvPingResult::-webkit-scrollbar-thumb:hover,
+        #server-log-list::-webkit-scrollbar-thumb:hover,
+        .oth-invite-list::-webkit-scrollbar-thumb:hover,
+        #about-panel-body::-webkit-scrollbar-thumb:hover,
+        #settings-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+
         #debug-body {
             padding: 4px 10px 8px 10px;
             overflow-x: hidden;
@@ -2411,6 +2447,12 @@
             overflow-y: auto;
             flex: 1;
         }
+        /* Windows Chrome のデフォルトスクロールバーは GPU コンポジタ経由で Babylon canvas に
+           水色バーとしてゴーストが残る。他パネル同様にカスタム ::-webkit-scrollbar で回避。 */
+        #chat-settings-body::-webkit-scrollbar { width: 8px; }
+        #chat-settings-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+        #chat-settings-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+        #chat-settings-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
         #chat-settings-body table {
             width: 100%;
             border-collapse: collapse;
