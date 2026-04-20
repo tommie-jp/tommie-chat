@@ -4736,7 +4736,7 @@ export function setupHtmlUI(game: GameScene): void {
             let winner = 0;
             let subscribed = false;
             let prevBoard: number[] = new Array(64).fill(0);
-            // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— doc/othello/56-設計-対戦リバーシ.md 参照
+            // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— doc/reversi/56-設計-対戦リバーシ.md 参照
             // チェスクロック風: 黒/白 2つのクロックを並べ、アクティブ側のみカウントダウン。
             const OTHELLO_TURN_LIMIT_SEC = 30;
             const OTHELLO_RING_CIRCUMFERENCE = 2 * Math.PI * 26; // r=26
@@ -5417,7 +5417,7 @@ export function setupHtmlUI(game: GameScene): void {
                 // ゲーム番号降順（新しいゲームを先頭に）
                 const sorted = [...games].sort((a, b) => (b.gameNo ?? 0) - (a.gameNo ?? 0));
                 // --- 参加中ゲームの自動復帰検知（ロビー表示/ゲーム表示いずれでも常に実行）---
-                // 状態遷移図: [doc/othello/57-state-othello.puml](doc/othello/57-state-othello.puml) E4/E24
+                // 状態遷移図: [doc/reversi/57-state-reversi.puml](doc/reversi/57-state-reversi.puml) E4/E24
                 // G2待ち受け画面は廃止。status="waiting" の自ゲームはロビー一覧の行として表示する
                 const ownGame = sorted.find(g =>
                     (g.status === "playing" || g.status === "waiting") &&
