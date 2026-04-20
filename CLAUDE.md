@@ -114,6 +114,7 @@ Single Go file (~3000 lines) containing:
 - **PWA** — Safari↔PWA 間でデバイスIDを Cookie 経由で引き継ぎ（`max-age=3600`、引き継ぎ後即削除）
 - **CSP** — 本番 nginx で `script-src 'self' 'wasm-unsafe-eval' https://cdn.babylonjs.com`（`'unsafe-inline'` 不可）。新しいスクリプトは `public/js/` に外部ファイルとして追加する
 - **ステージング検証** — 本番デプロイ前に `mmo-test.tommie.jp` で動作確認する（CSP/nginx設定の差異で本番のみ起きる問題があるため）
+- **Playwright MCP** — テスト完了後は必ず `mcp__playwright__browser_close` でブラウザを閉じる（開きっぱなしだとリソース占有・次回起動で状態衝突が起きる）
 
 ## Documentation
 

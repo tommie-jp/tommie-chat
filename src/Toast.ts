@@ -82,14 +82,21 @@ export function primeNotificationSound(): void {
         } catch (e) { console.warn("notifAudioEl init failed:", e); }
     }
     if (notifAudioEl) {
-        const prev = notifAudioEl.volume;
+        // volume=0 だけだと解禁瞬間に一瞬音漏れするブラウザがあるため muted も併用する
+        const prevVol = notifAudioEl.volume;
+        const prevMuted = notifAudioEl.muted;
         notifAudioEl.volume = 0;
+        notifAudioEl.muted = true;
         notifAudioEl.play().then(() => {
             notifAudioEl!.pause();
             notifAudioEl!.currentTime = 0;
-            notifAudioEl!.volume = prev;
+            notifAudioEl!.volume = prevVol;
+            notifAudioEl!.muted = prevMuted;
         }).catch(e => {
-            if (notifAudioEl) notifAudioEl.volume = prev;
+            if (notifAudioEl) {
+                notifAudioEl.volume = prevVol;
+                notifAudioEl.muted = prevMuted;
+            }
             // NotAllowedError は user gesture 前の期待される状態なので抑制する
             if ((e as Error)?.name === "NotAllowedError") return;
             console.warn("notifAudioEl prime failed:", e);
@@ -137,7 +144,7 @@ function ensureContainer(): HTMLDivElement {
         bottom: ${BASE_BOTTOM_PX}px;
         z-index: 10000;
         display: flex;
-        flex-direction: column-reverse;
+        flex-direction: column;
         gap: 6px;
         pointer-events: none;
         max-width: min(380px, calc(100vw - 16px));
@@ -196,6 +203,7 @@ export function showToast(opts: ToastOptions): void {
 
     const el = document.createElement("div");
     el.className = "toast-bubble";
+    // Pigg 風: 画面右端からスライドインして表示、消えるときも右へスライドアウト
     el.style.cssText = `
         background: rgba(0, 118, 215, 0.92);
         color: #fff;
@@ -209,8 +217,8 @@ export function showToast(opts: ToastOptions): void {
         word-break: break-word;
         max-width: 100%;
         opacity: 0;
-        transform: translateY(8px);
-        transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+        transform: translateX(calc(100% + 16px));
+        transition: opacity 0.3s ease-out, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
     `;
     el.textContent = opts.text;
 
@@ -219,8 +227,8 @@ export function showToast(opts: ToastOptions): void {
         if (dismissed) return;
         dismissed = true;
         el.style.opacity = "0";
-        el.style.transform = "translateY(8px)";
-        setTimeout(() => { el.remove(); }, 200);
+        el.style.transform = "translateX(calc(100% + 16px))";
+        setTimeout(() => { el.remove(); }, 300);
     };
 
     if (opts.onTap) {
@@ -230,7 +238,7 @@ export function showToast(opts: ToastOptions): void {
     root.appendChild(el);
     requestAnimationFrame(() => {
         el.style.opacity = "1";
-        el.style.transform = "translateY(0)";
+        el.style.transform = "translateX(0)";
     });
 
     playNotificationSound();

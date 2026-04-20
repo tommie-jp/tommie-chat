@@ -1796,10 +1796,13 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            color: #000;
         }
         .dn-modal-title {
             font-weight: bold;
-            font-size: 15px;
+            font-size: 13px;
             color: #1565c0;
             text-align: center;
         }
@@ -1811,7 +1814,8 @@
         .dn-modal-input {
             width: 100%;
             padding: 6px 8px;
-            font-size: 14px;
+            font-family: inherit;
+            font-size: 12px;
             border: 1px solid #bbb;
             border-radius: 4px;
             box-sizing: border-box;
@@ -1819,6 +1823,27 @@
         .dn-modal-status {
             font-size: 12px;
             min-height: 1.2em;
+        }
+        .dn-modal-uid {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        .dn-modal-uid-label {
+            color: #444;
+            white-space: nowrap;
+        }
+        .dn-modal-uid-val {
+            font-weight: bold;
+            color: #1565c0;
+            word-break: break-all;
+        }
+        body.theme-dark .dn-modal-uid-label {
+            color: #ddd;
+        }
+        body.theme-dark .dn-modal-uid-val {
+            color: #7ab8ff;
         }
         .dn-modal-actions {
             display: flex;
@@ -1833,7 +1858,7 @@
             padding: 6px 16px;
             cursor: pointer;
             font-family: inherit;
-            font-size: 14px;
+            font-size: 12px;
         }
         .dn-modal-actions button.cancel {
             background: #888;
@@ -1855,6 +1880,16 @@
             background: #1e242e;
             color: #eee;
             border-color: #556;
+        }
+        /* モバイルでは他のパネル（16px）と揃える */
+        @media (pointer: coarse) and (min-resolution: 2dppx) {
+            .dn-modal-box { font-size: 16px; }
+            .dn-modal-title { font-size: 18px; }
+            .dn-modal-desc { font-size: 16px; }
+            .dn-modal-input { font-size: 16px; padding: 8px 10px; }
+            .dn-modal-status { font-size: 14px; }
+            .dn-modal-uid { font-size: 14px; }
+            .dn-modal-actions button { font-size: 16px; padding: 8px 18px; }
         }
         /* 画面中央ダイアログ（showCenterDialog） - dn-modal と同じテーマ配色 */
         .center-dialog-overlay {
@@ -3827,6 +3862,9 @@
                     <option value="on">ON</option>
                     <option value="off">OFF</option>
                 </select>
+            </td></tr>
+            <tr><td class="label" title="02e.Toast Test&#10;テスト用トースト通知を表示&#10;音は 02d.通知音 の設定に従う">02e.Toast Test</td><td class="value">
+                <button id="toastTestBtn" class="debug-btn">Show</button>
             </td></tr>
             <tr><td id="label-scale" class="label" title="03.Scale&#10;レンダリング解像度スケール（BabylonJS hardwareScalingLevel）&#10;初期値: 1/devicePixelRatio&#10;典型的なMMO: 1.0〜2.0（高負荷時は2.0で50%解像度）&#10;Minecraft: 解像度スケール非対応（常にネイティブ）, 描画距離で代替">03.Scale</td><td class="value">
                 <select id="scaleSelect" class="debug-select">

@@ -5,6 +5,7 @@ import { profSetEnabled, profReset } from "./Profiler";
 import { t } from "./i18n";
 import { autoChatMessages } from "./AutoChatMessages";
 import { escapeHtml, fetchAvatarList } from "./utils";
+import { showToast } from "./Toast";
 import { cellIndex, buildTransparentPNG, sampleBgColor } from "../lib/babylon-rpgmaker-sprites/src/RpgMakerSpriteSheet";
 import avatarsDb from "../nakama/avatars.json";
 
@@ -913,6 +914,16 @@ export function setupDebugOverlay(game: GameScene): void {
         notifSoundSelect.addEventListener("change", () => {
             setNotifSoundCookie(notifSoundSelect.value);
             markNonDefault(notifSoundSelect, "on", notifSoundSelect.value);
+        });
+    }
+
+    // --- トーストテスト（動作確認用） ---
+    const toastTestBtn = document.getElementById("toastTestBtn") as HTMLButtonElement | null;
+    if (toastTestBtn) {
+        let counter = 0;
+        toastTestBtn.addEventListener("click", () => {
+            counter++;
+            showToast({ text: `テストトースト #${counter}` });
         });
     }
 

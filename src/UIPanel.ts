@@ -2187,6 +2187,9 @@ export function setupHtmlUI(game: GameScene): void {
     // 表示名モーダル（オセロパネルを ?ot=<番号> で開いた際、表示名未設定なら表示）
     // 表示名設定ブロック初期化時に代入される
     let doChangeDisplayNameShared: (() => Promise<void>) | null = null;
+    // 表示名設定モーダル（ログイン完了時に表示名未設定なら自動表示）
+    // オセロパネル初期化時に代入される
+    let showDisplayNameModalShared: (() => void) | null = null;
 
     // socket.notification 受信ハンドラ（仕様書 doc/20 参照）
     const seenNotifIds = new Set<string>();
@@ -2951,15 +2954,13 @@ export function setupHtmlUI(game: GameScene): void {
             { const db = document.getElementById("displayNameBtn") as HTMLButtonElement | null; if (db) { db.disabled = true; } }
             // 表示名パネルにユーザIDを反映
             { const uid = document.getElementById("dn-panel-userid"); if (uid) uid.textContent = loginNameInput?.value ?? "-"; }
-            // 表示名が未設定なら表示名設定パネルを自動表示
-            // ただし URL ?ot=<番号> でオセロパネルへ誘導される場合は表示名設定パネルへ飛ばさず、
-            //       オセロパネル表示後にモーダルで表示名入力を促す（下記 panelObs 参照）
+            // 表示名が未設定なら表示名設定モーダルを表示する
+            // ただし URL ?ot=<番号> でオセロパネルへ誘導される場合はオセロパネル表示後に
+            //       モーダルで表示名入力を促す（下記 panelObs 参照）
             if (!confirmedDisplayName) {
                 const hasOtParam = new URLSearchParams(location.search).has("ot");
                 if (!hasOtParam) {
-                    const mli = document.getElementById("menu-login");
-                    const dnp = document.getElementById("displayname-panel");
-                    if (mli && dnp && dnp.style.display === "none") mli.click();
+                    showDisplayNameModalShared?.();
                 }
             }
             // WebSocket切断時の自動再接続コールバック
@@ -4544,16 +4545,11 @@ export function setupHtmlUI(game: GameScene): void {
     }
 
     // ===== オセロ サウンドエフェクト（Web Audio API） =====
-    // iPhone Safari 対策: ログイン時に unlockAudio() で解禁済みの sharedAudioCtx を使う。
-    // 未解禁（ログイン前に呼ばれる経路）の場合も lazy 生成 + resume() を試みる。
+    // iPhone Safari 対策: user gesture で unlockAudio() → sharedAudioCtx 解禁済みを使う。
+    // ?ot=<N> で自動オープンした直後等、ジェスチャー前に applyState が走る経路では
+    // AudioContext を触らず早期 return して Chrome autoplay 警告を回避する。
     const othelloPlaySound = (type: "place" | "flip" | "end") => {
-        if (!sharedAudioCtx) {
-            try {
-                const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-                if (!Ctor) return;
-                sharedAudioCtx = new Ctor();
-            } catch { return; }
-        }
+        if (!audioUnlocked || !sharedAudioCtx) return;
         const ctx = sharedAudioCtx;
         if (ctx.state === "suspended") {
             ctx.resume().catch(e => console.warn("AudioContext.resume failed:", e));
@@ -5706,6 +5702,16 @@ export function setupHtmlUI(game: GameScene): void {
                 const desc = document.createElement("div");
                 desc.className = "dn-modal-desc";
                 desc.textContent = "アバターの頭上に表示される名前を設定します（0〜20文字）。空欄にすると @ユーザID が青色で表示されます。";
+                const uidRow = document.createElement("div");
+                uidRow.className = "dn-modal-uid";
+                const uidLabel = document.createElement("span");
+                uidLabel.className = "dn-modal-uid-label";
+                uidLabel.textContent = "ユーザID:";
+                const uidVal = document.createElement("span");
+                uidVal.className = "dn-modal-uid-val";
+                uidVal.textContent = loginNameInput?.value || "-";
+                uidRow.appendChild(uidLabel);
+                uidRow.appendChild(uidVal);
                 const input = document.createElement("input");
                 input.type = "text";
                 input.maxLength = 20;
@@ -5760,6 +5766,7 @@ export function setupHtmlUI(game: GameScene): void {
                 actions.appendChild(okBtn);
                 box.appendChild(title);
                 box.appendChild(desc);
+                box.appendChild(uidRow);
                 box.appendChild(input);
                 box.appendChild(status);
                 box.appendChild(actions);
@@ -5767,6 +5774,7 @@ export function setupHtmlUI(game: GameScene): void {
                 document.body.appendChild(overlay);
                 setTimeout(() => input.focus(), 50);
             };
+            showDisplayNameModalShared = showDisplayNameModal;
             const panelObs = new MutationObserver(() => {
                 const visible = othPanel.style.display !== "none";
                 if (visible === othPanelVisible) return;
