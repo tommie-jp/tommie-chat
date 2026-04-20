@@ -1,5 +1,5 @@
 @startuml
-title オセロ対戦シーケンス図
+title リバーシ対戦シーケンス図
 skinparam sequenceMessageAlign center
 skinparam maxMessageSize 200
 

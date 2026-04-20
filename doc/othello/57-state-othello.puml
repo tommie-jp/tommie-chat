@@ -1,5 +1,5 @@
 @startuml
-title オセロ画面の状態遷移図
+title リバーシ画面の状態遷移図
 
 skinparam state {
     BackgroundColor<<entry>> #E8F5E9

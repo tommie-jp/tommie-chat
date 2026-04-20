@@ -37,7 +37,7 @@ node "プレイヤーB 自宅" as homeB {
 
 cloud "インターネット" as net
 
-node "**M13** — tommieChat サーバ\n（変更なし／既存のオセロ機能を流用）" as srv
+node "**M13** — tommieChat サーバ\n（変更なし／既存のリバーシ機能を流用）" as srv
 
 sdkA -down-> net : ⑪ WebSocket / HTTPS
 sdkB -down-> net : ⑫ WebSocket / HTTPS

@@ -4736,7 +4736,7 @@ export function setupHtmlUI(game: GameScene): void {
             let winner = 0;
             let subscribed = false;
             let prevBoard: number[] = new Array(64).fill(0);
-            // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— doc/56-設計-対戦オセロ.md 参照
+            // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— doc/othello/56-設計-対戦リバーシ.md 参照
             // チェスクロック風: 黒/白 2つのクロックを並べ、アクティブ側のみカウントダウン。
             const OTHELLO_TURN_LIMIT_SEC = 30;
             const OTHELLO_RING_CIRCUMFERENCE = 2 * Math.PI * 26; // r=26
