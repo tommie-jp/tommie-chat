@@ -90,6 +90,8 @@ export function primeNotificationSound(): void {
             notifAudioEl!.volume = prev;
         }).catch(e => {
             if (notifAudioEl) notifAudioEl.volume = prev;
+            // NotAllowedError は user gesture 前の期待される状態なので抑制する
+            if ((e as Error)?.name === "NotAllowedError") return;
             console.warn("notifAudioEl prime failed:", e);
         });
     }
@@ -157,6 +159,35 @@ function ensureContainer(): HTMLDivElement {
     }
 
     return el;
+}
+
+/**
+ * 画面中央にダイアログを一定時間表示する。
+ * - タップで即消し
+ * - durationMs 経過で自動消失（デフォルト 5 秒）
+ */
+export function showCenterDialog(text: string, durationMs: number = 5000): void {
+    const overlay = document.createElement("div");
+    overlay.className = "center-dialog-overlay";
+
+    const box = document.createElement("div");
+    box.className = "center-dialog-box";
+    box.textContent = text;
+
+    let dismissed = false;
+    const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
+        box.classList.remove("show");
+        setTimeout(() => { overlay.remove(); }, 200);
+    };
+    overlay.addEventListener("click", dismiss);
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => { box.classList.add("show"); });
+
+    setTimeout(dismiss, durationMs);
 }
 
 export function showToast(opts: ToastOptions): void {

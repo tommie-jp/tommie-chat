@@ -4246,7 +4246,8 @@ func othelloSignalBroadcast(ctx context.Context, nk runtime.NakamaModule, g *Oth
 	nk.MatchSignal(ctx, matchID, string(data))
 
 	// ブロック盤面の差分更新をシグナル送信
-	othelloBlockSignal(ctx, nk, g, matchID)
+	// 3D画面にオセロの盤面をブロックで置く処理はコメントアウト（2D盤面のみ）
+	// othelloBlockSignal(ctx, nk, g, matchID)
 }
 
 // othelloBlockSignal はオセロ盤面の変更をブロック更新シグナルとして送信する
@@ -4454,10 +4455,12 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	worldMatchMu.Lock()
 	matchID := worldMatchIDs[req.WorldID]
 	worldMatchMu.Unlock()
-	if matchID != "" {
-		othelloFrameSignal(ctx, nk, g, matchID)
-		othelloBlockSignal(ctx, nk, g, matchID)
-	}
+	// 3D画面にオセロの盤面をブロックで置く処理はコメントアウト（2D盤面のみ）
+	// if matchID != "" {
+	// 	othelloFrameSignal(ctx, nk, g, matchID)
+	// 	othelloBlockSignal(ctx, nk, g, matchID)
+	// }
+	_ = matchID
 
 	// 購読者にゲーム一覧を配信（履歴更新なし）
 	othelloListBroadcast(ctx, nk, req.WorldID, false)

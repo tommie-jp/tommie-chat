@@ -1661,17 +1661,23 @@
         #othello-game-list-table tbody tr.othello-game-row-selectable {
             cursor: pointer;
         }
-        #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td {
+        #othello-history-table tbody tr.othello-history-row-selectable {
+            cursor: pointer;
+        }
+        #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td,
+        #othello-history-table tbody tr.othello-history-row-selectable.selected > td {
             background: #d7e8fb;
             border-top: 2px solid #e53935;
             border-bottom: 2px solid #e53935;
             padding-top: 0;
             padding-bottom: 0;
         }
-        #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td:first-child {
+        #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td:first-child,
+        #othello-history-table tbody tr.othello-history-row-selectable.selected > td:first-child {
             border-left: 2px solid #e53935;
         }
-        #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td:last-child {
+        #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td:last-child,
+        #othello-history-table tbody tr.othello-history-row-selectable.selected > td:last-child {
             border-right: 2px solid #e53935;
         }
         /* 選択時の URL共有/X投稿 オーバレイ: 行の下にフローティング表示（別行を作らない） */
@@ -1768,6 +1774,123 @@
         }
         body.theme-dark .oth-qr-url {
             color: #ddd;
+        }
+        /* 表示名入力モーダル（オセロパネルを ?ot=番号 で開いた際に未設定なら表示） */
+        .dn-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .dn-modal-box {
+            background: #fff;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+            max-width: 320px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .dn-modal-title {
+            font-weight: bold;
+            font-size: 15px;
+            color: #1565c0;
+            text-align: center;
+        }
+        .dn-modal-desc {
+            font-size: 12px;
+            color: #444;
+            line-height: 1.5;
+        }
+        .dn-modal-input {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 14px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .dn-modal-status {
+            font-size: 12px;
+            min-height: 1.2em;
+        }
+        .dn-modal-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .dn-modal-actions button {
+            background: #1a73e8;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 16px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .dn-modal-actions button.cancel {
+            background: #888;
+        }
+        .dn-modal-actions button:disabled {
+            background: #aaa;
+            cursor: default;
+        }
+        body.theme-dark .dn-modal-box {
+            background: #2b3240;
+        }
+        body.theme-dark .dn-modal-title {
+            color: #7ab8ff;
+        }
+        body.theme-dark .dn-modal-desc {
+            color: #ddd;
+        }
+        body.theme-dark .dn-modal-input {
+            background: #1e242e;
+            color: #eee;
+            border-color: #556;
+        }
+        /* 画面中央ダイアログ（showCenterDialog） - dn-modal と同じテーマ配色 */
+        .center-dialog-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            cursor: pointer;
+        }
+        .center-dialog-box {
+            background: #fff;
+            color: #1565c0;
+            border-radius: 10px;
+            padding: 16px 22px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+            max-width: min(420px, calc(100vw - 32px));
+            font-weight: bold;
+            font-size: 15px;
+            line-height: 1.5;
+            text-align: center;
+            word-break: break-word;
+            opacity: 0;
+            transform: scale(0.96);
+            transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+        }
+        .center-dialog-box.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+        body.theme-dark .center-dialog-box {
+            background: #2b3240;
+            color: #7ab8ff;
         }
         #othello-history-section {
             display: flex;
@@ -1974,7 +2097,8 @@
         body.theme-dark #othello-history-table tbody tr:nth-child(odd) td.oth-hist-no {
             background-color: #2b3240 !important;
         }
-        body.theme-dark #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td {
+        body.theme-dark #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td,
+        body.theme-dark #othello-history-table tbody tr.othello-history-row-selectable.selected > td {
             background: #3a4a66 !important;
         }
         body.theme-dark #othello-game-list-header-table th.othello-game-action {
@@ -3653,6 +3777,11 @@
         }
         body.panel-maximized.tab-panel-active #panel-tab-close {
             right: 6px !important;
+        }
+        /* 最大化時はロビー見出しに右パディングを追加し、
+           シリアルテストリンクが 最大化/閉じる ボタンと重ならないようにする */
+        body.panel-maximized.tab-panel-active #othello-panel.maximized #othello-game-list-title {
+            padding-right: 90px !important;
         }
     </style>
     <script src="/js/app-init.js?v=0.1.49" defer></script>

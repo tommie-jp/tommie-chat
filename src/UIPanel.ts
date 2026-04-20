@@ -5,7 +5,7 @@ import { prof } from "./Profiler";
 import { t, getLang, setLang, applyI18n } from "./i18n";
 import type { Lang } from "./i18n";
 import { escapeHtml, sanitizeColor, resolveAvatarUrl, isAvatarUrl, fetchAvatarList } from "./utils";
-import { showToast, primeNotificationSound } from "./Toast";
+import { showToast, showCenterDialog, primeNotificationSound } from "./Toast";
 import type { Notification } from "@heroiclabs/nakama-js";
 import QRCode from "qrcode";
 
@@ -2184,6 +2184,9 @@ export function setupHtmlUI(game: GameScene): void {
 
     // オセロ参加通知タップで利用する。オセロパネル初期化時に代入される（仕様書 doc/20 step 6）
     let openOthelloForGameNo: ((gameNo: number) => void) | null = null;
+    // 表示名モーダル（オセロパネルを ?ot=<番号> で開いた際、表示名未設定なら表示）
+    // 表示名設定ブロック初期化時に代入される
+    let doChangeDisplayNameShared: (() => Promise<void>) | null = null;
 
     // socket.notification 受信ハンドラ（仕様書 doc/20 参照）
     const seenNotifIds = new Set<string>();
@@ -2683,7 +2686,11 @@ export function setupHtmlUI(game: GameScene): void {
                 silentKeepalive.muted = false;
                 (silentKeepalive as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
             }
-            silentKeepalive.play().catch(e => console.warn("silentKeepalive.play failed:", e));
+            silentKeepalive.play().catch(e => {
+                // NotAllowedError は user gesture 前の期待される状態なので抑制する
+                if ((e as Error)?.name === "NotAllowedError") return;
+                console.warn("silentKeepalive.play failed:", e);
+            });
             // 通知音 Audio 要素も同じ user gesture 内で解禁（iOS Safari は Audio 要素ごとに解禁が必要）
             primeNotificationSound();
             if (sharedAudioCtx.state === "running") audioUnlocked = true;
@@ -2945,10 +2952,15 @@ export function setupHtmlUI(game: GameScene): void {
             // 表示名パネルにユーザIDを反映
             { const uid = document.getElementById("dn-panel-userid"); if (uid) uid.textContent = loginNameInput?.value ?? "-"; }
             // 表示名が未設定なら表示名設定パネルを自動表示
+            // ただし URL ?ot=<番号> でオセロパネルへ誘導される場合は表示名設定パネルへ飛ばさず、
+            //       オセロパネル表示後にモーダルで表示名入力を促す（下記 panelObs 参照）
             if (!confirmedDisplayName) {
-                const mli = document.getElementById("menu-login");
-                const dnp = document.getElementById("displayname-panel");
-                if (mli && dnp && dnp.style.display === "none") mli.click();
+                const hasOtParam = new URLSearchParams(location.search).has("ot");
+                if (!hasOtParam) {
+                    const mli = document.getElementById("menu-login");
+                    const dnp = document.getElementById("displayname-panel");
+                    if (mli && dnp && dnp.style.display === "none") mli.click();
+                }
             }
             // WebSocket切断時の自動再接続コールバック
             game.nakama.onMatchDisconnect = () => {
@@ -3137,6 +3149,8 @@ export function setupHtmlUI(game: GameScene): void {
         if (displayNameBtn) {
             displayNameBtn.onclick = doChangeDisplayName;
         }
+        // モーダル経由での表示名設定で利用（モーダルは displayNameInput に値をセットしてから呼ぶ）
+        doChangeDisplayNameShared = doChangeDisplayName;
     }
 
     // ===== ping 計測 & グラフ =====
@@ -4792,6 +4806,8 @@ export function setupHtmlUI(game: GameScene): void {
             // 履歴レコード配列から表を描画する（通知・RPC 両方から呼ばれる）
             const renderHistory = (records: import("./NakamaService").OthelloHistoryRecord[]) => {
                 if (!othHistoryTbody) return;
+                lastHistoryList = records;
+                historyReceived = true;
                 othHistoryTbody.innerHTML = "";
                 historyItems.length = 0;
                 if (records.length === 0) {
@@ -4802,6 +4818,7 @@ export function setupHtmlUI(game: GameScene): void {
                     td.textContent = "まだ履歴がありません";
                     tr.appendChild(td);
                     othHistoryTbody.appendChild(tr);
+                    tryResolvePendingOt();
                     return;
                 }
                 for (const r of records) {
@@ -4839,13 +4856,30 @@ export function setupHtmlUI(game: GameScene): void {
                     tr.appendChild(whiteTd);
                     tr.appendChild(scoreTd);
                     tr.appendChild(reasonTd);
+                    // 履歴行もタップで選択可能（赤枠ハイライトのみ、アクションなし）
+                    tr.classList.add("othello-history-row-selectable");
+                    if (selectedHistoryId === r.gameId) tr.classList.add("selected");
+                    tr.addEventListener("click", () => {
+                        selectedHistoryId = (selectedHistoryId === r.gameId) ? null : r.gameId;
+                        if (selectedHistoryId && selectedGameId) {
+                            // 履歴選択はゲーム選択と排他
+                            selectedGameId = null;
+                            applyGameList(lastGamesList);
+                        }
+                        renderHistory(records);
+                    });
                     othHistoryTbody.appendChild(tr);
                     if (tsTd) historyItems.push({ tsCell: tsTd, ts: r.ts, tsText });
                 }
+                tryResolvePendingOt();
             };
             const loadHistory = async () => {
                 if (!othHistoryTbody) return;
                 const records = await game.nakama.othelloHistory();
+                // socket 未接続時は null が返る（この場合は描画しない）
+                // 未描画のまま historyReceived=true にすると tryResolvePendingOt が
+                // 空の lastHistoryList で解決できないと誤判定してしまう
+                if (records === null) return;
                 renderHistory(records);
             };
 
@@ -4898,6 +4932,13 @@ export function setupHtmlUI(game: GameScene): void {
             let lastGamesList: import("./NakamaService").OthelloListPayload["games"] = [];
             // 履歴の日時セル参照（1秒tickでの更新用）
             const historyItems: Array<{ tsCell: HTMLTableCellElement; ts: number; tsText: string }> = [];
+            // 選択中の履歴行（タップで赤枠ハイライトのみ。アクションなし）
+            let selectedHistoryId: string | null = null;
+            // 直近の履歴（再描画・URL参入解決用）
+            let lastHistoryList: import("./NakamaService").OthelloHistoryRecord[] = [];
+            // URL ?ot=<gameNo> を解決するには games list と history の両方を受信し終えている必要がある
+            let gamesListReceived = false;
+            let historyReceived = false;
 
             // コメント列のテキストを組み立て（待機中=募集告知、対戦中=プレイヤー名）
             const othCommentText = (status: string, blackLabel: string, whiteLabel: string): string => {
@@ -4942,14 +4983,23 @@ export function setupHtmlUI(game: GameScene): void {
             // オーバレイ外クリックで選択解除（URL共有/X投稿 以外をタップしたら消す）
             // 選択中の行自体をタップした場合は行のクリックハンドラに委ねる（トグル動作）
             document.addEventListener("click", (ev) => {
-                if (!selectedGameId || !selectOverlay) return;
                 if (othLobby.style.display === "none") return;
                 const target = ev.target as Element | null;
                 if (!target) return;
-                if (selectOverlay.contains(target)) return;
-                if (target.closest?.(".othello-game-row-selectable")) return;
-                selectedGameId = null;
-                applyGameList(lastGamesList);
+                // 表示名モーダル等、パネル外のオーバレイ操作では選択解除しない
+                if (target.closest?.(".dn-modal")) return;
+                const inOverlay = selectOverlay?.contains(target) ?? false;
+                const inGameRow = !!target.closest?.(".othello-game-row-selectable");
+                const inHistRow = !!target.closest?.(".othello-history-row-selectable");
+                if (selectedGameId && !inOverlay && !inGameRow) {
+                    selectedGameId = null;
+                    applyGameList(lastGamesList);
+                }
+                if (selectedHistoryId && !inHistRow) {
+                    selectedHistoryId = null;
+                    othHistoryTbody?.querySelectorAll("tr.selected")
+                        .forEach(tr => tr.classList.remove("selected"));
+                }
             });
 
             // オーバレイ位置を選択行の直下に合わせる
@@ -5084,20 +5134,56 @@ export function setupHtmlUI(game: GameScene): void {
                 });
             };
 
-            // 選択トグル（自分の待機中ゲームでのみ作用）
+            // 選択トグル（全てのゲームで赤枠ハイライト。オーバレイは自分の待機中ゲームのみ）
+            // ゲーム選択は履歴選択と排他（履歴選択をクリアする）
             const toggleSelection = (g: import("./NakamaService").OthelloListPayload["games"][number]) => {
-                const uid = myUid();
-                const isOwnWaiting = (g.black === uid || g.white === uid) && g.status === "waiting";
-                if (!isOwnWaiting) {
-                    // 他人のゲーム/自分の対戦中ゲームはオーバレイを出さない
-                    if (selectedGameId) {
-                        selectedGameId = null;
-                        applyGameList(lastGamesList);
-                    }
-                    return;
-                }
                 selectedGameId = (selectedGameId === g.gameId) ? null : g.gameId;
+                if (selectedGameId && selectedHistoryId) {
+                    selectedHistoryId = null;
+                    othHistoryTbody?.querySelectorAll("tr.selected")
+                        .forEach(tr => tr.classList.remove("selected"));
+                }
                 applyGameList(lastGamesList);
+            };
+
+            // URL ?ot=<gameNo> の遅延解決 — games list と history 両方が揃ったタイミングで呼ぶ
+            // 解決方針: gameNo を games → history の順で探し、見つけた側の行を選択する
+            // （自動 join/watch はしない。ユーザーの選択起点に変更）
+            const tryResolvePendingOt = () => {
+                if (pendingOthelloGameNo === undefined) return;
+                if (!gamesListReceived || !historyReceived) return;
+                const targetNo = pendingOthelloGameNo;
+                const inGames = lastGamesList.find(g => g.gameNo === targetNo);
+                const inHistory = lastHistoryList.find(r => r.gameNo === targetNo);
+                if (inGames) {
+                    pendingOthelloGameNo = undefined;
+                    selectedGameId = inGames.gameId;
+                    selectedHistoryId = null;
+                    applyGameList(lastGamesList);
+                    renderHistory(lastHistoryList);
+                    // 選択行が画面外にある場合はスクロールして見えるようにする
+                    requestAnimationFrame(() => {
+                        const row = othGameList?.querySelector("tr.selected") as HTMLElement | null;
+                        row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                    });
+                } else if (inHistory) {
+                    pendingOthelloGameNo = undefined;
+                    selectedHistoryId = inHistory.gameId;
+                    selectedGameId = null;
+                    renderHistory(lastHistoryList);
+                    applyGameList(lastGamesList);
+                    requestAnimationFrame(() => {
+                        const row = othHistoryTbody?.querySelector("tr.selected") as HTMLElement | null;
+                        row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                    });
+                } else {
+                    pendingOthelloGameNo = undefined;
+                    showCenterDialog(`オセロゲーム番号${targetNo}は存在しないか終了済みです`);
+                }
+                // 選択確定後（または解決不能確定後）に、表示名未設定ならモーダルを表示する
+                if (!confirmedDisplayName && game.nakama.getSession() && othPanel.style.display !== "none") {
+                    showDisplayNameModal();
+                }
             };
 
             // 行の右端に常時表示するアクションセル（5列目）
@@ -5151,6 +5237,7 @@ export function setupHtmlUI(game: GameScene): void {
             const applyGameList = (games: import("./NakamaService").OthelloListPayload["games"]) => {
                 if (!othGameList) return;
                 lastGamesList = games;
+                gamesListReceived = true;
                 const uid = myUid();
                 // ゲーム番号降順（新しいゲームを先頭に）
                 const sorted = [...games].sort((a, b) => (b.gameNo ?? 0) - (a.gameNo ?? 0));
@@ -5176,9 +5263,12 @@ export function setupHtmlUI(game: GameScene): void {
                             showGame();
                         }
                     }
-                    pendingOthelloGameNo = undefined;
-                    // status="playing" はゲーム画面へ遷移済みなので一覧描画は不要
-                    if (ownGame.status === "playing") return;
+                    // status="playing" はゲーム画面へ遷移済みなので URL パラメータは消費済みとみなす
+                    // status="waiting" は tryResolvePendingOt で選択状態に反映するため保持
+                    if (ownGame.status === "playing") {
+                        pendingOthelloGameNo = undefined;
+                        return;
+                    }
                 }
                 // --- 以降はロビー表示中のみテーブル描画 ---
                 if (othLobby.style.display === "none") return;
@@ -5213,7 +5303,6 @@ export function setupHtmlUI(game: GameScene): void {
                         const ownerCell = mkTd(blackLabel, blackLabel);
                         ownerCell.className = "oth-game-owner";
                         const isOwnGame = g.black === uid || g.white === uid;
-                        const isOwnWaiting = isOwnGame && g.status === "waiting";
                         const commentCell = document.createElement("td");
                         commentCell.className = "othello-game-comment";
                         const commentSpan = document.createElement("span");
@@ -5235,24 +5324,27 @@ export function setupHtmlUI(game: GameScene): void {
                         tr.appendChild(ownerCell);
                         tr.appendChild(commentCell);
                         tr.appendChild(actionCell);
-                        // 自分の待機中ゲームのみタップで選択可能（URL共有/X投稿オーバレイ表示用）
-                        if (isOwnWaiting) {
-                            tr.classList.add("othello-game-row-selectable");
-                            if (selectedGameId === g.gameId) tr.classList.add("selected");
-                            tr.addEventListener("click", () => toggleSelection(g));
-                        }
+                        // 全てのゲーム行をタップで選択可能（表示変化のみ）
+                        // 自分の待機中ゲームの場合のみ URL共有/X投稿/QRコード のオーバレイを表示
+                        tr.classList.add("othello-game-row-selectable");
+                        if (selectedGameId === g.gameId) tr.classList.add("selected");
+                        tr.addEventListener("click", () => toggleSelection(g));
                         othGameList.appendChild(tr);
                         gameListItems.set(g.gameId, { tr, tsCell, ts, tsText: tsStr, ownerCell, commentCell, commentSpan, status: g.status });
                     }
                 }
                 // 選択中ゲームがなお存在すればオーバレイ位置を更新、なければ非表示
+                // オーバレイ(URL共有/X投稿/QR)は自分の待機中ゲームでのみ表示。
+                // 他人のゲームを選択した場合は赤枠のみで、オーバレイは出さない（選択は維持する）。
                 const selectedGame = selectedGameId ? sorted.find(g => g.gameId === selectedGameId) : undefined;
-                if (selectedGame && selectedGame.status === "waiting" &&
+                if (!selectedGame) {
+                    selectedGameId = null;
+                    if (selectOverlay) selectOverlay.style.display = "none";
+                } else if (selectedGame.status === "waiting" &&
                     (selectedGame.black === uid || selectedGame.white === uid)) {
                     buildSelectOverlayContent(selectedGame);
                     requestAnimationFrame(positionSelectOverlay);
                 } else {
-                    selectedGameId = null;
                     if (selectOverlay) selectOverlay.style.display = "none";
                 }
                 if (othGameList.children.length === 0) {
@@ -5262,6 +5354,9 @@ export function setupHtmlUI(game: GameScene): void {
                     const noCell = document.createElement("td"); noCell.className = "oth-game-no"; tr.appendChild(noCell);
                     const tsCell = document.createElement("td"); tr.appendChild(tsCell);
                     const commentCell = document.createElement("td");
+                    // テーブルは 5 列（No, 日時, オーナー, コメント, アクション）。
+                    // コメントセルを オーナー+コメント+アクション 3 列分に広げてマーキー領域を確保する。
+                    commentCell.colSpan = 3;
                     commentCell.className = "othello-game-comment";
                     const commentSpan = document.createElement("span");
                     commentSpan.className = "othello-comment-text othello-comment-marquee othello-comment-empty";
@@ -5272,23 +5367,9 @@ export function setupHtmlUI(game: GameScene): void {
                 } else {
                     othLobbySection?.classList.remove("othello-lobby-empty");
                 }
-                // URL パラメータ ?ot=<gameNo> の遅延処理（仕様書 doc/20 参照）
-                // list 受信時に gameNo を解決し、状態に応じて 参加/閲覧/不在 へ遷移
-                if (pendingOthelloGameNo !== undefined) {
-                    const targetNo = pendingOthelloGameNo;
-                    pendingOthelloGameNo = undefined;
-                    const target = games.find(g => g.gameNo === targetNo);
-                    if (!target) {
-                        // v1: トースト未実装のため console.warn で代替
-                        console.warn(`URL ?ot=${targetNo}: オセロゲーム番号${targetNo}は存在しないか終了済みです`);
-                    } else if (target.black === uid || target.white === uid) {
-                        // 自分が参加中のゲーム — 前段の自動遷移で既に処理済みのはず
-                    } else if (target.status === "waiting") {
-                        joinGame(target.gameId).catch(e => console.warn(`URL ?ot=${targetNo} join error:`, e));
-                    } else if (target.status === "playing") {
-                        watchGame(target.gameId).catch(e => console.warn(`URL ?ot=${targetNo} watch error:`, e));
-                    }
-                }
+                // URL パラメータ ?ot=<gameNo> の遅延処理
+                // games list と history 両方が揃ってから選択反映する（対象が履歴側にある可能性があるため）
+                tryResolvePendingOt();
             };
 
             // --- ゲーム作成 ---
@@ -5610,6 +5691,82 @@ export function setupHtmlUI(game: GameScene): void {
             // 注意: style 属性の変更はドラッグ/リサイズ等でも発火するため、
             //       display の表示⇔非表示トランジションのみに反応する
             let othPanelVisible = othPanel.style.display !== "none";
+            // モーダル重複表示を防ぐ（開いている間に再オープンされても追加で出さない）
+            let dnModalOpen = false;
+            const showDisplayNameModal = () => {
+                if (dnModalOpen) return;
+                dnModalOpen = true;
+                const overlay = document.createElement("div");
+                overlay.className = "dn-modal";
+                const box = document.createElement("div");
+                box.className = "dn-modal-box";
+                const title = document.createElement("div");
+                title.className = "dn-modal-title";
+                title.textContent = "表示名を設定";
+                const desc = document.createElement("div");
+                desc.className = "dn-modal-desc";
+                desc.textContent = "アバターの頭上に表示される名前を設定します（0〜20文字）。空欄にすると @ユーザID が青色で表示されます。";
+                const input = document.createElement("input");
+                input.type = "text";
+                input.maxLength = 20;
+                input.className = "dn-modal-input";
+                input.placeholder = "表示名（任意）";
+                const dnInput = document.getElementById("displayNameInput") as HTMLInputElement | null;
+                if (dnInput && dnInput.value) input.value = dnInput.value;
+                const status = document.createElement("div");
+                status.className = "dn-modal-status";
+                const actions = document.createElement("div");
+                actions.className = "dn-modal-actions";
+                const cancelBtn = document.createElement("button");
+                cancelBtn.className = "cancel";
+                cancelBtn.textContent = "スキップ";
+                const okBtn = document.createElement("button");
+                okBtn.textContent = "決定";
+                const close = () => {
+                    overlay.remove();
+                    dnModalOpen = false;
+                };
+                cancelBtn.addEventListener("click", close);
+                const submit = async () => {
+                    const name = input.value.trim();
+                    if (/[\x00-\x1f\x7f]/.test(name)) {
+                        status.style.color = "#ff4444";
+                        status.textContent = "制御文字は使えません";
+                        return;
+                    }
+                    if (!dnInput || !doChangeDisplayNameShared) { close(); return; }
+                    okBtn.disabled = true;
+                    dnInput.value = name;
+                    try {
+                        await doChangeDisplayNameShared();
+                    } catch (e) {
+                        console.warn("displayname modal submit error:", e);
+                    }
+                    if (confirmedDisplayName === name) {
+                        close();
+                    } else {
+                        // 失敗時は displayNameStatus にエラーが入るのでそれを読む
+                        const st = document.getElementById("displayNameStatus");
+                        status.style.color = "#ff4444";
+                        status.textContent = st?.textContent || "設定に失敗しました";
+                        okBtn.disabled = false;
+                    }
+                };
+                okBtn.addEventListener("click", submit);
+                input.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") { e.preventDefault(); submit(); }
+                });
+                actions.appendChild(cancelBtn);
+                actions.appendChild(okBtn);
+                box.appendChild(title);
+                box.appendChild(desc);
+                box.appendChild(input);
+                box.appendChild(status);
+                box.appendChild(actions);
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
+                setTimeout(() => input.focus(), 50);
+            };
             const panelObs = new MutationObserver(() => {
                 const visible = othPanel.style.display !== "none";
                 if (visible === othPanelVisible) return;
@@ -5618,6 +5775,15 @@ export function setupHtmlUI(game: GameScene): void {
                     console.log("othello panel opened");
                     ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
                     if (!currentGameId) showLobby();
+                    // 表示名が未設定ならモーダルで入力を促す
+                    // ただし ?ot=<N> で開いた場合は、背後のゲーム行を先に選択してから表示する
+                    // 表示名未設定ならモーダルで入力を促す
+                    // ?ot=<N> がある場合は list+history 受信後に tryResolvePendingOt が
+                    // ゲーム行を選択してからモーダルを表示する
+                    if (!confirmedDisplayName && game.nakama.getSession() &&
+                        pendingOthelloGameNo === undefined) {
+                        showDisplayNameModal();
+                    }
                 } else {
                     ensureUnsubscribe().catch(e => console.warn("othelloUnsubscribe error:", e));
                 }

@@ -1100,9 +1100,9 @@ export class NakamaService {
         }
     }
 
-    /** オセロ対戦履歴を取得する */
-    async othelloHistory(): Promise<OthelloHistoryRecord[]> {
-        if (!this.socket) return [];
+    /** オセロ対戦履歴を取得する。socket 未接続時は null（呼び出し側は描画しない） */
+    async othelloHistory(): Promise<OthelloHistoryRecord[] | null> {
+        if (!this.socket) return null;
         console.log("snd othelloHistory");
         const r = await this.socket.rpc("othelloHistory", "");
         try {
