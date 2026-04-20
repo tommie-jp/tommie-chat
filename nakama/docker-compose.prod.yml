@@ -52,17 +52,27 @@ services:
       - "127.0.0.1:${NAKAMA_GRPC_PORT:-7349}:7349"
       - "127.0.0.1:${NAKAMA_API_PORT:-7350}:7350"
       - "127.0.0.1:${NAKAMA_CONSOLE_PORT:-7351}:7351"
+    # 秘密情報は argv に露出させないため entrypoint で一時 YAML に書き出し --config で渡す。
+    # $$ はホスト側 compose 変数展開を抑止し、コンテナ内シェルで env から展開させるためのエスケープ。
+    # env_file は base (docker-compose.yml) 側で設定済み。
     entrypoint:
       - "/bin/sh"
       - "-ecx"
       - |
-          /nakama/nakama migrate up \
-            --database.address \
-            nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
-          && exec /nakama/nakama \
+          umask 077
+          cat > /tmp/nakama-secrets.yml <<EOF
+          database:
+            address:
+              - "nakama:$${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama"
+          socket:
+            server_key: "$${NAKAMA_SERVER_KEY:-tommie-chat}"
+          console:
+            username: "$${NAKAMA_CONSOLE_USER:-admin}"
+            password: "$${NAKAMA_CONSOLE_PASS:-password}"
+          EOF
+          /nakama/nakama migrate up --config /tmp/nakama-secrets.yml \
+          && exec /nakama/nakama --config /tmp/nakama-secrets.yml \
             --name nakama1 \
-            --database.address \
-            nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama \
             --logger.level INFO \
             --session.token_expiry_sec 7200 \
             --socket.ping_period_ms 10000 \
@@ -80,20 +90,13 @@ services:
             --runtime.env RATE_LIMIT_RPC=10 \
             --runtime.env RATE_LIMIT_RPC_BURST=20 \
             --runtime.env MINIO_ENDPOINT=minio:9000 \
-            --runtime.env MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin} \
-            --runtime.env MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin} \
             --runtime.env MINIO_USE_SSL=false \
             --runtime.env MAX_DISPLAY_NAME_LEN=30 \
             --runtime.env MAX_TEXTURE_URL_LEN=128 \
             --runtime.env MAX_ARRAY_SIZE=100 \
-            --runtime.env ADMIN_UIDS=${ADMIN_UIDS:-} \
-            --runtime.env ADMIN_EMAILS=${ADMIN_EMAILS:-} \
-            --runtime.env GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-} \
-            --runtime.env GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-} \
-            --runtime.env ENABLE_TEST_RPC=false \
-            --socket.server_key ${NAKAMA_SERVER_KEY:-tommie-chat} \
-            --console.username ${NAKAMA_CONSOLE_USER:-admin} \
-            --console.password ${NAKAMA_CONSOLE_PASS:-password}
+            --runtime.env ENABLE_TEST_RPC=false
+            # 以下は env_file 経由で Go plugin が os.Getenv() から取得（argv 露出回避）:
+            #   ADMIN_UIDS / ADMIN_EMAILS / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 
   web:
     restart: unless-stopped

@@ -964,10 +964,12 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}
 
 	// Google OAuth 設定状態: 0=OK, 1=CLIENT_ID未設定, 2=CLIENT_SECRET未設定
+	// GOOGLE_CLIENT_ID / SECRET は argv 経由ではなく env_file→os.Getenv 経由で取得
+	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
 	googleOAuthErr := 0
-	if env["GOOGLE_CLIENT_ID"] == "" {
+	if googleClientID == "" {
 		googleOAuthErr = 1
-	} else if env["GOOGLE_CLIENT_SECRET"] == "" {
+	} else if os.Getenv("GOOGLE_CLIENT_SECRET") == "" {
 		googleOAuthErr = 2
 	}
 
@@ -980,7 +982,7 @@ func rpcGetServerInfo(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		"chunkSize":      chunkSize,
 		"chunkCount":     defaultWorld.ChunkCountX,
 		"googleOAuthErr": googleOAuthErr,
-		"googleClientId": env["GOOGLE_CLIENT_ID"],
+		"googleClientId": googleClientID,
 	}
 	b, err := json.Marshal(info)
 	if err != nil {
@@ -1334,8 +1336,8 @@ func initValidationConfig(ctx context.Context) {
 	readInt("MAX_DISPLAY_NAME_LEN", &maxDisplayNameLen)
 	readInt("MAX_TEXTURE_URL_LEN", &maxTextureUrlLen)
 	readInt("MAX_ARRAY_SIZE", &maxArraySize)
-	// 管理者UID読込（カンマ区切り）
-	if v, ok := env["ADMIN_UIDS"]; ok && v != "" {
+	// 管理者UID読込（カンマ区切り）— argv 非露出のため env_file→os.Getenv 経由
+	if v := os.Getenv("ADMIN_UIDS"); v != "" {
 		for _, uid := range strings.Split(v, ",") {
 			uid = strings.TrimSpace(uid)
 			if uid != "" {
@@ -1343,8 +1345,8 @@ func initValidationConfig(ctx context.Context) {
 			}
 		}
 	}
-	// 管理者メール読込（カンマ区切り）
-	if v, ok := env["ADMIN_EMAILS"]; ok && v != "" {
+	// 管理者メール読込（カンマ区切り）— 同上
+	if v := os.Getenv("ADMIN_EMAILS"); v != "" {
 		for _, email := range strings.Split(v, ",") {
 			email = strings.TrimSpace(email)
 			if email != "" {
@@ -3419,9 +3421,9 @@ func rpcLinkGoogleByCode(ctx context.Context, logger runtime.Logger, db *sql.DB,
 		return "", runtime.NewError("code and redirectUri required", 3)
 	}
 
-	env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
-	clientID := env["GOOGLE_CLIENT_ID"]
-	clientSecret := env["GOOGLE_CLIENT_SECRET"]
+	// GOOGLE_CLIENT_ID / SECRET は argv 経由ではなく env_file→os.Getenv 経由で取得
+	clientID := os.Getenv("GOOGLE_CLIENT_ID")
+	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
 	if clientID == "" || clientSecret == "" {
 		logger.Warn("rpcLinkGoogleByCode: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET 未設定")
 		return "", runtime.NewError("google oauth not configured on server", 13)
@@ -5107,8 +5109,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	// 発行されたトークンでリンクされる攻撃を防ぐための防御層。
 	// GOOGLE_CLIENT_ID 未設定時は素通り（dev 用）。
 	if err := initializer.RegisterBeforeLinkGoogle(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, in *api.AccountGoogle) (*api.AccountGoogle, error) {
-		env, _ := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
-		expectedAud := env["GOOGLE_CLIENT_ID"]
+		expectedAud := os.Getenv("GOOGLE_CLIENT_ID")
 		if expectedAud == "" {
 			return in, nil
 		}
