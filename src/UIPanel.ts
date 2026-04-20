@@ -11,6 +11,8 @@ import QRCode from "qrcode";
 
 // socket.notification コード定数（仕様書 doc/20 参照、サーバ側 main.go と同期）
 const CODE_OTHELLO_JOINED = 1001;
+const CODE_OTHELLO_INVITE = 1005;
+const CODE_OTHELLO_INVITE_REJECTED = 1006;
 
 export function setupHtmlUI(game: GameScene): void {
     const isMobileDev = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
@@ -1923,6 +1925,7 @@ export function setupHtmlUI(game: GameScene): void {
     let ulSortAsc = true;
     const _ulCkMatch = document.cookie.match(/(?:^|; )ulFilter=([^;]*)/);
     let ulFilterMode: "room" | "all" = _ulCkMatch && decodeURIComponent(_ulCkMatch[1]) === "all" ? "all" : "room";
+    let selectedPlayerSid: string | null = null;
     const thUser  = document.getElementById("ul-th-user")  as HTMLTableCellElement;
     const thDname = document.getElementById("ul-th-dname") as HTMLTableCellElement;
     const thUuid  = document.getElementById("ul-th-uuid")  as HTMLTableCellElement;
@@ -1985,6 +1988,9 @@ export function setupHtmlUI(game: GameScene): void {
         const frag = document.createDocumentFragment();
         for (const p of sorted) {
             const tr = document.createElement("tr");
+            tr.classList.add("user-list-row-selectable");
+            tr.dataset.sid = p.sessionId;
+            if (p.sessionId === selectedPlayerSid) tr.classList.add("selected");
             const bold = p.sessionId === myId ? " class=\"ul-self\"" : "";
             const lbl = resolveDisplayLabel(p.displayName, p.username, p.sessionId);
             const fullName = lbl.suffix ? lbl.text + lbl.suffix : lbl.text;
@@ -2084,17 +2090,37 @@ export function setupHtmlUI(game: GameScene): void {
     // uuid-cell クリックをイベント委譲で処理（行ごとにリスナーを付けない）
     if (userListBody) {
         userListBody.addEventListener("click", (e) => {
-            const td = (e.target as HTMLElement).closest(".uuid-cell") as HTMLElement | null;
-            if (!td) return;
-            const text = td.dataset.copy ?? td.textContent ?? "";
-            navigator.clipboard.writeText(text).then(() => {
-                const orig = td.textContent;
-                td.textContent = "コピー済み";
-                td.style.color = "#28a745";
-                setTimeout(() => { td.textContent = orig; td.style.color = ""; }, 1000);
-            });
+            const target = e.target as HTMLElement;
+            const td = target.closest(".uuid-cell") as HTMLElement | null;
+            if (td) {
+                const text = td.dataset.copy ?? td.textContent ?? "";
+                navigator.clipboard.writeText(text).then(() => {
+                    const orig = td.textContent;
+                    td.textContent = "コピー済み";
+                    td.style.color = "#28a745";
+                    setTimeout(() => { td.textContent = orig; td.style.color = ""; }, 1000);
+                });
+                return;
+            }
+            // 行選択トグル
+            const tr = target.closest("tr.user-list-row-selectable") as HTMLElement | null;
+            if (!tr) return;
+            const sid = tr.dataset.sid ?? null;
+            selectedPlayerSid = selectedPlayerSid === sid ? null : sid;
+            renderUserList();
         });
     }
+
+    // プレイヤーリスト外クリックで選択解除
+    document.addEventListener("click", (ev) => {
+        if (!selectedPlayerSid) return;
+        if (!ulPanel || ulPanel.style.display === "none") return;
+        const target = ev.target as Element | null;
+        if (!target) return;
+        if (target.closest?.("tr.user-list-row-selectable")) return;
+        selectedPlayerSid = null;
+        renderUserList();
+    });
 
     const setUlSort = (key: UlSortKey) => {
         if (ulSortKey === key) ulSortAsc = !ulSortAsc;
@@ -2183,7 +2209,8 @@ export function setupHtmlUI(game: GameScene): void {
     });
 
     // オセロ参加通知タップで利用する。オセロパネル初期化時に代入される（仕様書 doc/20 step 6）
-    let openOthelloForGameNo: ((gameNo: number) => void) | null = null;
+    // opts.autoJoin=true は招待YES押下時の即参加用
+    let openOthelloForGameNo: ((gameNo: number, opts?: { autoJoin?: boolean }) => void) | null = null;
     // 表示名モーダル（オセロパネルを ?ot=<番号> で開いた際、表示名未設定なら表示）
     // 表示名設定ブロック初期化時に代入される
     let doChangeDisplayNameShared: (() => Promise<void>) | null = null;
@@ -2209,10 +2236,35 @@ export function setupHtmlUI(game: GameScene): void {
                 console.log(`Othello notif skipped (panel visible): gameNo=${gameNo3}`);
             } else {
                 showToast({
-                    text: `オセロ相手${opponentName}が参加しました。タップして開始（ゲーム番号:${gameNo3}）`,
+                    text: `リバーシ相手${opponentName}が参加しました。タップして開始（ゲーム番号:${gameNo3}）`,
                     onTap: () => openOthelloForGameNo?.(gameNo),
                 });
             }
+        } else if (n.code === CODE_OTHELLO_INVITE) {
+            const content = n.content as { gameNo?: number; inviterName?: string; inviterUid?: string } | undefined;
+            const gameNo = content?.gameNo ?? 0;
+            const inviterName = content?.inviterName || "誰か";
+            const inviterUid = content?.inviterUid ?? "";
+            const gameNo3 = String(gameNo).padStart(3, "0");
+            showToast({
+                text: `${inviterName}からの招待: リバーシやりませんか？ ゲーム番号=${gameNo3}`,
+                durationMs: 30000,
+                onYes: () => openOthelloForGameNo?.(gameNo, { autoJoin: true }),
+                onNo: () => {
+                    if (inviterUid) {
+                        game.nakama.othelloInviteReject(inviterUid, gameNo)
+                            .catch(e => console.warn("othelloInviteReject error:", e));
+                    }
+                },
+            });
+        } else if (n.code === CODE_OTHELLO_INVITE_REJECTED) {
+            const content = n.content as { gameNo?: number; rejecterName?: string } | undefined;
+            const gameNo = content?.gameNo ?? 0;
+            const rejecterName = content?.rejecterName || "相手";
+            const gameNo3 = String(gameNo).padStart(3, "0");
+            showToast({
+                text: `${rejecterName}に招待を断られました（ゲーム番号:${gameNo3}）`,
+            });
         }
         // DB 永続化済みなら削除（重複排除）
         if (n.persistent && n.id) {
@@ -4085,7 +4137,7 @@ export function setupHtmlUI(game: GameScene): void {
             textarea.value = "";
             return;
         }
-        const text = othelloRecruitActive ? "[オセロ相手募集中] " + raw : raw;
+        const text = othelloRecruitActive ? "[リバーシ相手募集中] " + raw : raw;
         doUpdateSpeech(text);
         textarea.value = "";
         if (game.nakama.getSession()) {
@@ -4735,6 +4787,8 @@ export function setupHtmlUI(game: GameScene): void {
             const otWin = window as unknown as { __pendingOthelloOpen?: boolean; __pendingOthelloGameNo?: number };
             let pendingOthelloOpen: boolean = otWin.__pendingOthelloOpen === true;
             let pendingOthelloGameNo: number | undefined = otWin.__pendingOthelloGameNo;
+            // 招待YES押下など、解決後に即 join を要求するフラグ
+            let pendingOthelloAutoJoin = false;
             if (pendingOthelloOpen) otWin.__pendingOthelloOpen = undefined;
             if (pendingOthelloGameNo !== undefined) otWin.__pendingOthelloGameNo = undefined;
 
@@ -5042,8 +5096,8 @@ export function setupHtmlUI(game: GameScene): void {
                     const gameNo = g.gameNo ?? 0;
                     const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
                     const shareData = {
-                        title: "tommieChat オセロ",
-                        text: `オセロで対戦しよう！（ゲーム番号${gameNo}）`,
+                        title: "tommieChat リバーシ",
+                        text: `リバーシで対戦しよう！（ゲーム番号${gameNo}）`,
                         url,
                     };
                     const copyFallback = async () => {
@@ -5077,7 +5131,7 @@ export function setupHtmlUI(game: GameScene): void {
                     ev.stopPropagation();
                     const gameNo = g.gameNo ?? 0;
                     const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
-                    const text = `オセロで対戦しよう！（ゲーム番号${gameNo}）\nLet's play Othello! (Game #${gameNo})`;
+                    const text = `リバーシで対戦しよう！（ゲーム番号${gameNo}）\nLet's play Reversi! (Game #${gameNo})`;
                     const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=tommieChat`;
                     window.open(intentUrl, "_blank", "noopener");
                 });
@@ -5090,9 +5144,127 @@ export function setupHtmlUI(game: GameScene): void {
                     const url = `${location.origin}${location.pathname}?ot=${gameNo}`;
                     showQrModal(url, gameNo);
                 });
+                const inviteBtn = document.createElement("button");
+                inviteBtn.textContent = "誘う";
+                inviteBtn.title = "オンライン中のユーザを選んで招待する";
+                inviteBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    showOthelloInviteModal(g);
+                });
                 selectOverlay.appendChild(shareBtn);
                 selectOverlay.appendChild(xBtn);
                 selectOverlay.appendChild(qrBtn);
+                selectOverlay.appendChild(inviteBtn);
+            };
+
+            // オセロ招待用ユーザ選択モーダル
+            // userMap から自分以外のオンラインユーザを一覧。タップで招待 RPC を呼び、エラーはトーストで返す。
+            // クールダウン中のユーザはボタン非アクティブ + 残り秒数を 1 秒ごとに更新。
+            // サーバ定数 OthelloInviteCooldownSec とミラー（デバッグ中は 0）
+            const OTHELLO_INVITE_COOLDOWN_MS: number = 0;
+            // 招待対象 uid → クールダウン解除時刻（ms）。モーダルを跨いで保持される。
+            const othelloInviteCooldownUntil = new Map<string, number>();
+            const showOthelloInviteModal = (g: import("./NakamaService").OthelloListPayload["games"][number]) => {
+                const myId = myUid();
+                const overlay = document.createElement("div");
+                overlay.className = "oth-invite-modal";
+                const box = document.createElement("div");
+                box.className = "oth-invite-box";
+                const title = document.createElement("div");
+                title.className = "oth-invite-title";
+                title.textContent = `リバーシに誘う（ゲーム番号:${String(g.gameNo ?? 0).padStart(3, "0")}）`;
+                const listWrap = document.createElement("div");
+                listWrap.className = "oth-invite-list";
+                // 自分以外のオンラインユーザ（uuid重複を排除 — 同一uidの複数セッションは1つに）
+                const seen = new Set<string>();
+                const candidates = Array.from(userMap.values())
+                    .filter(p => p.uuid && p.uuid !== myId)
+                    .filter(p => { if (seen.has(p.uuid)) return false; seen.add(p.uuid); return true; })
+                    .sort((a, b) => (a.displayName || a.username).localeCompare(b.displayName || b.username));
+                // uid → ボタン/表示名 の対応（クールダウンtickで残り秒を更新するのに使う）
+                const rowByUid = new Map<string, { btn: HTMLButtonElement; name: string }>();
+                const updateCooldownView = (uid: string) => {
+                    const entry = rowByUid.get(uid);
+                    if (!entry) return;
+                    const until = othelloInviteCooldownUntil.get(uid) ?? 0;
+                    const remainMs = until - Date.now();
+                    if (remainMs > 0) {
+                        entry.btn.disabled = true;
+                        entry.btn.textContent = `${entry.name}（クールダウン中 ${Math.ceil(remainMs / 1000)}秒）`;
+                    } else {
+                        entry.btn.disabled = false;
+                        entry.btn.textContent = entry.name;
+                        othelloInviteCooldownUntil.delete(uid);
+                    }
+                };
+                if (candidates.length === 0) {
+                    const empty = document.createElement("div");
+                    empty.className = "oth-invite-empty";
+                    empty.textContent = "招待できるユーザがいません";
+                    listWrap.appendChild(empty);
+                } else {
+                    for (const p of candidates) {
+                        const row = document.createElement("button");
+                        row.type = "button";
+                        row.className = "oth-invite-row";
+                        const name = p.displayName || p.username || "(noname)";
+                        row.textContent = name;
+                        rowByUid.set(p.uuid, { btn: row, name });
+                        row.addEventListener("click", async () => {
+                            row.disabled = true;
+                            try {
+                                await game.nakama.othelloInvite(g.gameId, p.uuid);
+                                showToast({ text: `${name} を招待しました` });
+                                // 招待成功 → クライアント側でクールダウン開始（サーバと同じ期間）
+                                if (OTHELLO_INVITE_COOLDOWN_MS > 0) {
+                                    othelloInviteCooldownUntil.set(p.uuid, Date.now() + OTHELLO_INVITE_COOLDOWN_MS);
+                                }
+                                dismiss();
+                            } catch (e) {
+                                const msg = (e as Error)?.message ?? String(e);
+                                let displayMsg = "招待に失敗しました";
+                                if (/in a game/i.test(msg)) displayMsg = `${name} は既にゲーム中です`;
+                                else if (/cooldown/i.test(msg)) {
+                                    const m = msg.match(/(\d+)s/);
+                                    const remainSec = m ? parseInt(m[1], 10) : 0;
+                                    displayMsg = m ? `クールダウン中（残り${m[1]}秒）` : "クールダウン中";
+                                    // サーバ拒否の残り時間をクライアント側にも反映
+                                    if (remainSec > 0) {
+                                        othelloInviteCooldownUntil.set(p.uuid, Date.now() + remainSec * 1000);
+                                        updateCooldownView(p.uuid);
+                                    }
+                                }
+                                showToast({ text: displayMsg });
+                                if (!row.disabled || !othelloInviteCooldownUntil.has(p.uuid)) row.disabled = false;
+                                console.warn("othelloInvite error:", e);
+                            }
+                        });
+                        listWrap.appendChild(row);
+                        updateCooldownView(p.uuid);
+                    }
+                }
+                // 1 秒ごとに残り秒数を更新（モーダル閉鎖時にクリア）
+                const tickTimer = rowByUid.size > 0 ? window.setInterval(() => {
+                    for (const uid of rowByUid.keys()) updateCooldownView(uid);
+                }, 1000) : 0;
+                const closeBtn = document.createElement("button");
+                closeBtn.type = "button";
+                closeBtn.className = "oth-invite-close";
+                closeBtn.textContent = "閉じる";
+                let dismissed = false;
+                const dismiss = () => {
+                    if (dismissed) return;
+                    dismissed = true;
+                    if (tickTimer) clearInterval(tickTimer);
+                    overlay.remove();
+                };
+                closeBtn.addEventListener("click", dismiss);
+                overlay.addEventListener("click", (ev) => { if (ev.target === overlay) dismiss(); });
+                box.appendChild(title);
+                box.appendChild(listWrap);
+                box.appendChild(closeBtn);
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
             };
 
             // QRコード表示モーダル — 招待URLを大きなQRコードで見せる
@@ -5103,7 +5275,7 @@ export function setupHtmlUI(game: GameScene): void {
                 box.className = "oth-qr-box";
                 const title = document.createElement("div");
                 title.className = "oth-qr-title";
-                title.textContent = `オセロ招待 (ゲーム番号${gameNo})`;
+                title.textContent = `リバーシ招待 (ゲーム番号${gameNo})`;
                 const canvas = document.createElement("canvas");
                 canvas.className = "oth-qr-canvas";
                 const urlLabel = document.createElement("div");
@@ -5153,6 +5325,8 @@ export function setupHtmlUI(game: GameScene): void {
                 const inHistory = lastHistoryList.find(r => r.gameNo === targetNo);
                 if (inGames) {
                     pendingOthelloGameNo = undefined;
+                    const autoJoin = pendingOthelloAutoJoin;
+                    pendingOthelloAutoJoin = false;
                     selectedGameId = inGames.gameId;
                     selectedHistoryId = null;
                     applyGameList(lastGamesList);
@@ -5162,6 +5336,11 @@ export function setupHtmlUI(game: GameScene): void {
                         const row = othGameList?.querySelector("tr.selected") as HTMLElement | null;
                         row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
                     });
+                    // 招待 YES などで autoJoin 要求されている場合は即 join
+                    // ただし自分が作成したゲームや既に終了/進行中の場合は join しない
+                    if (autoJoin && inGames.status === "waiting" && inGames.black !== myUid()) {
+                        joinGame(inGames.gameId).catch(e => console.warn("auto joinGame error:", e));
+                    }
                 } else if (inHistory) {
                     pendingOthelloGameNo = undefined;
                     selectedHistoryId = inHistory.gameId;
@@ -5174,7 +5353,7 @@ export function setupHtmlUI(game: GameScene): void {
                     });
                 } else {
                     pendingOthelloGameNo = undefined;
-                    showCenterDialog(`オセロゲーム番号${targetNo}は存在しないか終了済みです`);
+                    showCenterDialog(`リバーシゲーム番号${targetNo}は存在しないか終了済みです`);
                 }
                 // 選択確定後（または解決不能確定後）に、表示名未設定ならモーダルを表示する
                 if (!confirmedDisplayName && game.nakama.getSession() && othPanel.style.display !== "none") {
@@ -5641,8 +5820,10 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             // トースト通知タップで呼ばれる: URL 反映 + オセロパネルを開く（仕様書 doc/20 step 6）
-            openOthelloForGameNo = (gameNo: number) => {
+            // opts.autoJoin=true の場合は解決後に即 othelloJoin する（招待YES押下用）
+            openOthelloForGameNo = (gameNo: number, opts?: { autoJoin?: boolean }) => {
                 pendingOthelloGameNo = gameNo;
+                pendingOthelloAutoJoin = !!opts?.autoJoin;
                 try {
                     history.pushState({}, "", `?ot=${gameNo}`);
                 } catch (e) {
@@ -5653,6 +5834,9 @@ export function setupHtmlUI(game: GameScene): void {
                     menuBtn?.click();
                 } else {
                     ensureSubscribe().catch(e => console.warn("othelloSubscribe error:", e));
+                    // パネルが既に開いていて list/history を受信済みなら即座に選択反映する
+                    // （list 再受信を待つと体感が悪い。両方受信前なら次回の list/history 応答で解決する）
+                    tryResolvePendingOt();
                 }
             };
             const ensureUnsubscribe = async () => {

@@ -1100,6 +1100,24 @@ export class NakamaService {
         }
     }
 
+    /** 待機中ゲームのオーナーが指定ユーザへ招待通知を送る */
+    async othelloInvite(gameId: string, targetId: string): Promise<void> {
+        if (!this.socket) return;
+        console.log(`snd othelloInvite gameId=${gameId} target=${targetId.slice(0, 8)}`);
+        await this.socket.rpc("othelloInvite", JSON.stringify({ gameId, targetId }));
+    }
+
+    /** 招待を受けたユーザが NO を押したときにオーナーへ拒否通知を送る */
+    async othelloInviteReject(inviterUid: string, gameNo: number): Promise<void> {
+        if (!this.socket) return;
+        console.log(`snd othelloInviteReject inviter=${inviterUid.slice(0, 8)} gameNo=${gameNo}`);
+        try {
+            await this.socket.rpc("othelloInviteReject", JSON.stringify({ inviterUid, gameNo }));
+        } catch (e) {
+            console.warn("othelloInviteReject error:", e);
+        }
+    }
+
     /** オセロ対戦履歴を取得する。socket 未接続時は null（呼び出し側は描画しない） */
     async othelloHistory(): Promise<OthelloHistoryRecord[] | null> {
         if (!this.socket) return null;

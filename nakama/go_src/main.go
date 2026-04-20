@@ -3809,10 +3809,12 @@ func rpcDetachDevice(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 
 // ===== socket.notification コード定義（仕様書 doc/20 参照） =====
 const (
-	CodeOthelloJoined = 1001 // オセロ参加通知（オーナーへ）
-	CodeDirectMessage = 1002 // DM
-	CodeLiked         = 1003 // いいね
-	CodeFriendRequest = 1004 // フレンド申請
+	CodeOthelloJoined         = 1001 // オセロ参加通知（オーナーへ）
+	CodeDirectMessage         = 1002 // DM
+	CodeLiked                 = 1003 // いいね
+	CodeFriendRequest         = 1004 // フレンド申請
+	CodeOthelloInvite         = 1005 // オセロ招待（相手へ）
+	CodeOthelloInviteRejected = 1006 // オセロ招待拒否（オーナーへ）
 )
 
 // ===== オセロ ゲームロジック =====
@@ -3838,6 +3840,12 @@ type OthelloGame struct {
 
 // othelloGames はアクティブなオセロゲームをインメモリで管理する
 var othelloGames sync.Map // gameID (string) → *OthelloGame
+
+// othelloInviteCooldown は招待のクールダウンを管理する（キー="inviterUID:targetUID"）
+// 同一招待者→同一対象への連続招待を OthelloInviteCooldownSec 秒間抑制する
+var othelloInviteCooldown sync.Map // string → time.Time
+
+const OthelloInviteCooldownSec = 0 // デバッグ用: 本番は 180（3分）
 
 // othelloNewGame は初期盤面のゲームを作成する
 func othelloNewGame(gameID, blackUID string, worldID int) *OthelloGame {
@@ -4648,6 +4656,135 @@ func rpcOthelloCancel(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	return "{}", nil
 }
 
+// rpcOthelloInvite は待機中ゲームのオーナーから指定ユーザへ招待通知を送る
+// - オーナーのみ呼び出し可
+// - ゲームが "waiting" 状態であること
+// - 対象ユーザが進行中の別ゲームに参加中なら拒否（inGame）
+// - 直近 OthelloInviteCooldownSec 以内の同一(inviter,target)は拒否（cooldown）
+func rpcOthelloInvite(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloInvite")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7)
+	}
+
+	var req struct {
+		GameID   string `json:"gameId"`
+		TargetID string `json:"targetId"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" || req.TargetID == "" {
+		return "", runtime.NewError("gameId and targetId required", 3)
+	}
+	if req.TargetID == uid {
+		return "", runtime.NewError("cannot invite yourself", 3)
+	}
+
+	v, ok := othelloGames.Load(req.GameID)
+	if !ok {
+		return "", runtime.NewError("game not found", 5)
+	}
+	g := v.(*OthelloGame)
+	if g.BlackUID != uid {
+		return "", runtime.NewError("only the creator can invite", 3)
+	}
+	if g.Status != "waiting" {
+		return "", runtime.NewError("game not in waiting state", 9)
+	}
+
+	// 対象ユーザが進行中の別ゲームに参加中か確認
+	inGame := false
+	othelloGames.Range(func(_, val interface{}) bool {
+		og := val.(*OthelloGame)
+		if og.Status != "finished" && (og.BlackUID == req.TargetID || og.WhiteUID == req.TargetID) {
+			inGame = true
+			return false
+		}
+		return true
+	})
+	if inGame {
+		return "", runtime.NewError("target is already in a game", 9)
+	}
+
+	// クールダウンチェック
+	key := uid + ":" + req.TargetID
+	if v, ok := othelloInviteCooldown.Load(key); ok {
+		last := v.(time.Time)
+		if since := time.Since(last); since < time.Duration(OthelloInviteCooldownSec)*time.Second {
+			remain := int((time.Duration(OthelloInviteCooldownSec)*time.Second - since).Seconds()) + 1
+			return "", runtime.NewError(fmt.Sprintf("cooldown: %ds remaining", remain), 9)
+		}
+	}
+
+	// 招待者表示名を解決
+	cacheDN(ctx, nk, uid)
+	inviterName := ""
+	if v, ok := displayNameCache.Load(uid); ok {
+		inviterName = v.(string)
+	}
+	if inviterName == "" {
+		if v, ok := usernameCache.Load(uid); ok {
+			inviterName = v.(string)
+		}
+	}
+
+	notifContent := map[string]interface{}{
+		"gameNo":      g.GameNo,
+		"gameId":      g.GameID,
+		"inviterName": inviterName,
+		"inviterUid":  uid,
+	}
+	if err := nk.NotificationSend(ctx, req.TargetID, "オセロに招待されました", notifContent, CodeOthelloInvite, uid, true); err != nil {
+		logf("othello invite: NotificationSend failed gameId=%s target=%s err=%v\n", g.GameID, shortSID(req.TargetID), err)
+		return "", runtime.NewError("failed to send invite", 13)
+	}
+
+	othelloInviteCooldown.Store(key, time.Now())
+	logf("othello invite: gameId=%s inviter=%s%s target=%s\n", g.GameID, shortSID(uid), dn(uid), shortSID(req.TargetID))
+
+	return "{}", nil
+}
+
+// rpcOthelloInviteReject は招待を受けたユーザが NO を押したときにオーナーへ拒否通知を送る
+func rpcOthelloInviteReject(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	defer prof("rpcOthelloInviteReject")()
+	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok || uid == "" {
+		return "", runtime.NewError("authentication required", 7)
+	}
+
+	var req struct {
+		InviterUID string `json:"inviterUid"`
+		GameNo     int64  `json:"gameNo"`
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.InviterUID == "" {
+		return "", runtime.NewError("inviterUid required", 3)
+	}
+
+	// 拒否者表示名を解決
+	cacheDN(ctx, nk, uid)
+	rejecterName := ""
+	if v, ok := displayNameCache.Load(uid); ok {
+		rejecterName = v.(string)
+	}
+	if rejecterName == "" {
+		if v, ok := usernameCache.Load(uid); ok {
+			rejecterName = v.(string)
+		}
+	}
+
+	notifContent := map[string]interface{}{
+		"gameNo":       req.GameNo,
+		"rejecterName": rejecterName,
+	}
+	if err := nk.NotificationSend(ctx, req.InviterUID, "オセロ招待が断られました", notifContent, CodeOthelloInviteRejected, uid, true); err != nil {
+		logf("othello invite reject: NotificationSend failed inviter=%s err=%v\n", shortSID(req.InviterUID), err)
+		return "", runtime.NewError("failed to send reject", 13)
+	}
+
+	logf("othello invite reject: inviter=%s rejecter=%s%s gameNo=%d\n", shortSID(req.InviterUID), shortSID(uid), dn(uid), req.GameNo)
+	return "{}", nil
+}
+
 // rpcOthelloComment は待機中ゲームのコメント列を更新する（ロビー購読者に配信）
 // 呼び出し権は作成者（black）のみ。text はクライアント整形済み文字列。
 func rpcOthelloComment(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
@@ -4947,6 +5084,8 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"othelloCancel", rpcOthelloCancel},
 		{"othelloComment", rpcOthelloComment},
 		{"othelloHistory", rpcOthelloHistory},
+		{"othelloInvite", rpcOthelloInvite},
+		{"othelloInviteReject", rpcOthelloInviteReject},
 	}
 	for _, r := range rpcs {
 		if err := initializer.RegisterRpc(r.name, withRateLimit(rl, r.fn)); err != nil {

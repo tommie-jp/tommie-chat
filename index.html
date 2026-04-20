@@ -1665,7 +1665,8 @@
             cursor: pointer;
         }
         #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td,
-        #othello-history-table tbody tr.othello-history-row-selectable.selected > td {
+        #othello-history-table tbody tr.othello-history-row-selectable.selected > td,
+        #user-list tbody tr.user-list-row-selectable.selected > td {
             background: #d7e8fb;
             border-top: 2px solid #e53935;
             border-bottom: 2px solid #e53935;
@@ -1673,12 +1674,17 @@
             padding-bottom: 0;
         }
         #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td:first-child,
-        #othello-history-table tbody tr.othello-history-row-selectable.selected > td:first-child {
+        #othello-history-table tbody tr.othello-history-row-selectable.selected > td:first-child,
+        #user-list tbody tr.user-list-row-selectable.selected > td:first-child {
             border-left: 2px solid #e53935;
         }
         #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td:last-child,
-        #othello-history-table tbody tr.othello-history-row-selectable.selected > td:last-child {
+        #othello-history-table tbody tr.othello-history-row-selectable.selected > td:last-child,
+        #user-list tbody tr.user-list-row-selectable.selected > td:last-child {
             border-right: 2px solid #e53935;
+        }
+        #user-list tbody tr.user-list-row-selectable {
+            cursor: pointer;
         }
         /* 選択時の URL共有/X投稿 オーバレイ: 行の下にフローティング表示（別行を作らない） */
         #othello-select-overlay {
@@ -1774,6 +1780,103 @@
         }
         body.theme-dark .oth-qr-url {
             color: #ddd;
+        }
+        /* オセロ招待ユーザ選択モーダル */
+        .oth-invite-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .oth-invite-box {
+            background: #fff;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+            max-width: 360px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 80vh;
+        }
+        .oth-invite-title {
+            font-weight: bold;
+            font-size: 15px;
+            color: #1565c0;
+            text-align: center;
+        }
+        .oth-invite-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow-y: auto;
+            max-height: 50vh;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 6px;
+        }
+        .oth-invite-row {
+            background: #f5f9ff;
+            border: 1px solid #c7ddf5;
+            border-radius: 6px;
+            padding: 10px 12px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            text-align: left;
+            color: #1a3a66;
+        }
+        .oth-invite-row:hover:not(:disabled) {
+            background: #e3f0ff;
+        }
+        .oth-invite-row:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+        .oth-invite-empty {
+            text-align: center;
+            color: #888;
+            font-size: 13px;
+            padding: 20px 0;
+        }
+        .oth-invite-close {
+            align-self: center;
+            background: #1a73e8;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .oth-invite-close:hover {
+            background: #1565c0;
+        }
+        body.theme-dark .oth-invite-box {
+            background: #2b3240;
+        }
+        body.theme-dark .oth-invite-title {
+            color: #7ab8ff;
+        }
+        body.theme-dark .oth-invite-list {
+            border-color: #3a4a66;
+        }
+        body.theme-dark .oth-invite-row {
+            background: #344055;
+            border-color: #3a4a66;
+            color: #e8eef5;
+        }
+        body.theme-dark .oth-invite-row:hover:not(:disabled) {
+            background: #3d4d66;
+        }
+        body.theme-dark .oth-invite-empty {
+            color: #aaa;
         }
         /* 表示名入力モーダル（オセロパネルを ?ot=番号 で開いた際に未設定なら表示） */
         .dn-modal {
@@ -2133,7 +2236,8 @@
             background-color: #2b3240 !important;
         }
         body.theme-dark #othello-game-list-table tbody tr.othello-game-row-selectable.selected > td,
-        body.theme-dark #othello-history-table tbody tr.othello-history-row-selectable.selected > td {
+        body.theme-dark #othello-history-table tbody tr.othello-history-row-selectable.selected > td,
+        body.theme-dark #user-list tbody tr.user-list-row-selectable.selected > td {
             background: #3a4a66 !important;
         }
         body.theme-dark #othello-game-list-header-table th.othello-game-action {
@@ -4231,7 +4335,7 @@
         <button class="menu-item" id="menu-minimap" data-i18n-prefix="menu.minimap">✓ ミニマップ</button>
         <button class="menu-item" id="menu-bookmarks" data-i18n-prefix="menu.bookmarks">　 ブックマーク</button>
         <button class="menu-item" id="menu-rooms" data-i18n-prefix="menu.rooms">　 部屋一覧</button>
-        <button class="menu-item" id="menu-othello">　 オセロ</button>
+        <button class="menu-item" id="menu-othello">　 リバーシ</button>
         <button class="menu-item dev-only" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
         <button class="menu-item dev-only" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
         <button class="menu-item" id="menu-tooltips">✓ ツールチップ</button>
@@ -4484,7 +4588,7 @@
             <button type="button" class="panel-tab" data-target="chat-settings-panel" data-menu="menu-chatsettings" data-tab-key="menu.chatsettings">5.チャット設定</button>
             <button type="button" class="panel-tab" data-target="bookmark-panel" data-menu="menu-bookmarks" data-tab-key="menu.bookmarks">6.ブックマーク</button>
             <button type="button" class="panel-tab" data-target="room-list-panel" data-menu="menu-rooms" data-tab-key="menu.rooms">7.部屋一覧</button>
-            <button type="button" class="panel-tab" data-target="othello-panel" data-menu="menu-othello">7b.オセロ</button>
+            <button type="button" class="panel-tab" data-target="othello-panel" data-menu="menu-othello">7b.リバーシ</button>
             <button type="button" class="panel-tab" data-target="server-settings-panel" data-menu="menu-serversettings" data-tab-key="menu.serversettings">8.サーバ設定</button>
             <button type="button" class="panel-tab" data-target="server-log-panel" data-menu="menu-serverlog" data-tab-key="menu.serverlog">9.サーバ接続ログ</button>
             <button type="button" class="panel-tab" data-target="ping-panel" data-menu="menu-ping" data-tab-key="menu.ping">10.Pingグラフ</button>
@@ -4536,7 +4640,7 @@
 
     <div id="othello-panel" style="display:none;">
         <div id="othello-header">
-            <span>オセロ</span>
+            <span>リバーシ</span>
             <span class="oth-header-btns">
                 <span id="othello-max" title="最大化">⛶</span>
                 <span id="othello-close">❌️</span>
@@ -4578,7 +4682,7 @@
                     <div id="othello-history-scroll">
                         <table id="othello-history-header-table">
                             <colgroup>
-                                <col style="width:44px"><col style="width:64px"><col><col><col style="width:50px"><col style="width:44px">
+                                <col style="width:44px"><col style="width:64px"><col><col><col style="width:62px"><col style="width:44px">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -4593,7 +4697,7 @@
                         </table>
                         <table id="othello-history-table">
                             <colgroup>
-                                <col style="width:44px"><col style="width:64px"><col><col><col style="width:50px"><col style="width:44px">
+                                <col style="width:44px"><col style="width:64px"><col><col><col style="width:62px"><col style="width:44px">
                             </colgroup>
                             <tbody id="othello-history-tbody"></tbody>
                         </table>

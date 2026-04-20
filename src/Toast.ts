@@ -14,6 +14,11 @@ export interface ToastOptions {
     text: string;
     durationMs?: number;
     onTap?: () => void;
+    // YES/NO ボタン — 指定時はバブル本体タップでは消えず、いずれかのボタンタップで消える
+    yesLabel?: string;
+    noLabel?: string;
+    onYes?: () => void;
+    onNo?: () => void;
 }
 
 const DEFAULT_DURATION_MS = 10000;
@@ -220,7 +225,12 @@ export function showToast(opts: ToastOptions): void {
         transform: translateX(calc(100% + 16px));
         transition: opacity 0.3s ease-out, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
     `;
-    el.textContent = opts.text;
+    const hasYesNo = !!(opts.onYes || opts.onNo);
+    if (hasYesNo) el.style.cursor = "default";
+
+    const textSpan = document.createElement("div");
+    textSpan.textContent = opts.text;
+    el.appendChild(textSpan);
 
     let dismissed = false;
     const dismiss = () => {
@@ -231,8 +241,43 @@ export function showToast(opts: ToastOptions): void {
         setTimeout(() => { el.remove(); }, 300);
     };
 
-    // タップで消える（onTap 指定時はコールバック実行も）
-    el.addEventListener("click", () => { opts.onTap?.(); dismiss(); });
+    if (hasYesNo) {
+        const btnRow = document.createElement("div");
+        btnRow.style.cssText = `
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 10px;
+        `;
+        const makeBtn = (label: string, primary: boolean, onClick: () => void) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.textContent = label;
+            b.style.cssText = `
+                font: inherit;
+                padding: 6px 18px;
+                border-radius: 8px;
+                border: ${primary ? "none" : "1px solid rgba(255,255,255,0.6)"};
+                background: ${primary ? "#fff" : "transparent"};
+                color: ${primary ? "#0076d7" : "#fff"};
+                font-weight: ${primary ? "700" : "500"};
+                cursor: pointer;
+            `;
+            b.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                onClick();
+                dismiss();
+            });
+            return b;
+        };
+        btnRow.appendChild(makeBtn(opts.noLabel ?? "NO", false, () => { opts.onNo?.(); }));
+        btnRow.appendChild(makeBtn(opts.yesLabel ?? "YES", true, () => { opts.onYes?.(); }));
+        el.appendChild(btnRow);
+        // 本体タップでは消さない（誤タップ防止）
+    } else {
+        // タップで消える（onTap 指定時はコールバック実行も）
+        el.addEventListener("click", () => { opts.onTap?.(); dismiss(); });
+    }
 
     root.appendChild(el);
     requestAnimationFrame(() => {
