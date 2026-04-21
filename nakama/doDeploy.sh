@@ -458,7 +458,7 @@ server {
     #   - form-action: 認可リダイレクト先
     #   - connect-src: トークン交換 (サーバ側 RPC 経由なので厳密には不要だが将来的な fetch 用に許可)
     #   - script-src / frame-src: One Tap 併用時用（現状の方式 B のみなら不要）
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.babylonjs.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' data:; connect-src 'self' wss://*.tommie.jp https://cdn.babylonjs.com https://oauth2.googleapis.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'; frame-src https://accounts.google.com; form-action 'self' https://accounts.google.com" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.babylonjs.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' data:; connect-src 'self' wss://*.tommie.jp https://cdn.babylonjs.com https://oauth2.googleapis.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'self' https://accounts.google.com; form-action 'self' https://accounts.google.com" always;
 
     # カスタムエラーページ
     error_page 502 503 504 /maintenance.html;
