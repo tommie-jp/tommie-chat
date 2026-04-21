@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env": {}
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/tommie/24-mmo-Tommie-chat"
+      ],
+      "env": {}
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "env": {}
+    },
+    "postgres-nakama": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgres://nakama_readonly:${NAKAMA_READONLY_PASS}@localhost:5432/nakama"
+      ],
+      "env": {
+        "NAKAMA_READONLY_PASS": "${NAKAMA_READONLY_PASS}"
+      }
+    }
+  }
+}
