@@ -1,0 +1,105 @@
+@startuml
+title SerialReversiAdapter の状態遷移図
+
+skinparam state {
+    BackgroundColor<<idle>> #E8F5E9
+    BackgroundColor<<play>> #FFF3E0
+    BackgroundColor<<wait>> #E3F2FD
+    BackgroundColor<<error>> #FFEBEE
+}
+
+' === 状態定義 ===
+' adapter の内部状態。UI パネル上の「接続状態表示」もこの値を参照する。
+' ※ 案 B2: オーナーは対局席に座らず、CPU が 1 席・他プレイヤーが 1 席を占める。
+'   よって「自分手番」とは実際には「CPU 手番（オーナーが中継する）」を指す。
+
+state "S0: 未接続" as Disconnected <<idle>> {
+    Disconnected : SerialPort: 未オープン
+    Disconnected : 対局: なし
+    Disconnected : UI: [🔌 外部 CPU を接続] を表示
+}
+
+state "S1: 接続済み・対局なし" as Connected <<idle>> {
+    Connected : SerialPort: オープン
+    Connected : 対局: なし / 待機中ゲームのみ
+    Connected : UI: [新ゲーム作成] 可能
+}
+
+state "S2: 相手手番" as OpponentTurn <<play>> {
+    OpponentTurn : 対局: playing
+    OpponentTurn : 直前動作: 何もしない（相手の着手待ち）
+    OpponentTurn : 入口: othelloUpdate(他者手番)
+}
+
+state "S3: CPU 応答待ち" as WaitingCpu <<wait>> {
+    WaitingCpu : 対局: playing, CPU 手番
+    WaitingCpu : 直前動作:
+    WaitingCpu :   "M <相手の手>\\n" を UART 送信
+    WaitingCpu :   ( または初手時は "S B\\n" )
+    WaitingCpu : 監視: タイムアウトタイマ作動
+}
+
+state "S4: nakama 送信中" as Relaying <<play>> {
+    Relaying : 受信行をパース→合法手チェック
+    Relaying : othelloMove RPC 発行
+    Relaying : 成否に応じて S2 / S1 / SE へ遷移
+}
+
+state "S5: 終局" as Finished <<idle>> {
+    Finished : gameStatus = finished
+    Finished : 結果バナー表示
+    Finished : CPUホストモード ON → 自動で新規ゲーム作成
+}
+
+state "SE: 接続エラー / 不正応答" as ErrorState <<error>> {
+    ErrorState : 原因: SerialPort 切断 / パース失敗 /
+    ErrorState :   不正手 / CPU タイムアウト
+    ErrorState : UI: 警告表示 +
+    ErrorState :   [再送] [手動入力] [強制投了]
+}
+
+' === 遷移 ===
+
+' --- 起動 ---
+[*] --> Disconnected : U0: パネル初期化
+
+' --- 接続・切断 ---
+Disconnected --> Connected : U1: [🔌接続]押下\nrequestPort + open 成功
+Disconnected --> Connected : U2: getPorts() による\n永続権限での自動再接続
+Connected --> Disconnected : U3: [切断]押下 / port.close
+OpponentTurn --> Disconnected : U3': 切断\n(対局は中断)
+WaitingCpu --> Disconnected : U3': 切断
+Relaying --> Disconnected : U3': 切断
+
+' --- ゲーム開始 ---
+Connected --> OpponentTurn : G1: 他プレイヤー参加\nothelloUpdate(status=playing)\n黒=CPU から開始なら G2 へ
+Connected --> WaitingCpu : G2: 他プレイヤー参加\n( CPU 先手の場合、初手を催促 )\n"S B\\n" 送信
+
+' --- 対局ループ ---
+OpponentTurn --> WaitingCpu : N1: othelloUpdate\n(相手着手、CPU 手番へ)\n"M <手>\\n" 送信
+WaitingCpu --> Relaying : R1: シリアル受信\n"<手>\\n"
+Relaying --> OpponentTurn : R2: othelloMove RPC 成功\n(次は相手手番)
+Relaying --> Finished : R3: 終局手\n(gameStatus=finished)
+
+' --- 特殊シリアル応答 ---
+WaitingCpu --> Relaying : R4: "PASS\\n"\n(nakama にパス送信)
+WaitingCpu --> Finished : R5: "RESIGN\\n"\nothelloResign RPC
+WaitingCpu --> WaitingCpu : R6: "READY\\n"\n(直前指示を再送)
+
+' --- nakama 側イベント ---
+OpponentTurn --> Finished : N2: 終局通知\n(相手投了/両者パス/満局)
+WaitingCpu --> Finished : N2': 終局通知
+
+' --- エラー系 ---
+WaitingCpu --> ErrorState : E1: CPU 応答タイムアウト
+WaitingCpu --> ErrorState : E2: 不正応答 / パース失敗
+Relaying --> ErrorState : E3: RPC エラー\n(非合法手など)
+ErrorState --> WaitingCpu : E4: [再送] 選択\n直前指示を再送
+ErrorState --> Relaying : E5: [手動入力] 選択\nユーザが盤面から手入力
+ErrorState --> Finished : E6: [強制投了] 選択\nothelloResign
+
+' --- 終局後 ---
+Finished --> Connected : F1: [ロビーへ] / 次局作成\n(CPUホストモード ON なら自動)
+Finished --> Disconnected : F2: [切断] / パネル閉
+
+@enduml

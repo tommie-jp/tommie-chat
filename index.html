@@ -591,6 +591,9 @@
         #server-log-list::-webkit-scrollbar,
         .oth-invite-list::-webkit-scrollbar,
         #about-panel-body::-webkit-scrollbar,
+        #serial-test-body::-webkit-scrollbar,
+        #serial-test-body #log::-webkit-scrollbar,
+        #serial-test-body #console-log::-webkit-scrollbar,
         #settings-body::-webkit-scrollbar { width: 8px; height: 8px; }
         #debug-body::-webkit-scrollbar-track,
         #chat-history-list::-webkit-scrollbar-track,
@@ -599,6 +602,9 @@
         #server-log-list::-webkit-scrollbar-track,
         .oth-invite-list::-webkit-scrollbar-track,
         #about-panel-body::-webkit-scrollbar-track,
+        #serial-test-body::-webkit-scrollbar-track,
+        #serial-test-body #log::-webkit-scrollbar-track,
+        #serial-test-body #console-log::-webkit-scrollbar-track,
         #settings-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
         #debug-body::-webkit-scrollbar-thumb,
         #chat-history-list::-webkit-scrollbar-thumb,
@@ -607,6 +613,9 @@
         #server-log-list::-webkit-scrollbar-thumb,
         .oth-invite-list::-webkit-scrollbar-thumb,
         #about-panel-body::-webkit-scrollbar-thumb,
+        #serial-test-body::-webkit-scrollbar-thumb,
+        #serial-test-body #log::-webkit-scrollbar-thumb,
+        #serial-test-body #console-log::-webkit-scrollbar-thumb,
         #settings-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
         #debug-body::-webkit-scrollbar-thumb:hover,
         #chat-history-list::-webkit-scrollbar-thumb:hover,
@@ -615,6 +624,9 @@
         #server-log-list::-webkit-scrollbar-thumb:hover,
         .oth-invite-list::-webkit-scrollbar-thumb:hover,
         #about-panel-body::-webkit-scrollbar-thumb:hover,
+        #serial-test-body::-webkit-scrollbar-thumb:hover,
+        #serial-test-body #log::-webkit-scrollbar-thumb:hover,
+        #serial-test-body #console-log::-webkit-scrollbar-thumb:hover,
         #settings-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
 
         #debug-body {
@@ -1335,27 +1347,17 @@
             font-size: 14px;
             background: #fff;
             color: #333;
+            contain: paint;
         }
-        #serial-test-body::-webkit-scrollbar { width: 8px; }
-        #serial-test-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
-        #serial-test-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
-        #serial-test-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
         body.theme-dark #serial-test-body { background: #1a1a1a; color: #ddd; }
-        body.theme-dark #serial-test-body::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
-        body.theme-dark #serial-test-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
-        body.theme-dark #serial-test-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
         #serial-test-body button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
         #serial-test-body button:disabled { opacity: 0.4; cursor: not-allowed; }
         #serial-test-body select,
         #serial-test-body input { font-family: inherit; font-size: 1em; padding: 0.2em; }
         #serial-test-body textarea { font-family: monospace; font-size: 14px; line-height: 1.5; }
-        #serial-test-body textarea::-webkit-scrollbar { width: 8px; height: 8px; }
-        #serial-test-body textarea::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        #serial-test-body textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
-        #serial-test-body textarea::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
-        #serial-test-body #log { width: 100%; height: 40vh;
+        #serial-test-body #log { width: 100%; height: 180px; resize: none;
                background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-        #serial-test-body #console-log { width: 100%; height: 20vh;
+        #serial-test-body #console-log { width: 100%; height: 100px; resize: none;
                background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
         #serial-test-body .section-label { font-size: 1em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
         #serial-test-body .section-label button { font-size: 0.9em; padding: 0.1em 0.5em; }
