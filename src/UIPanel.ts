@@ -5381,8 +5381,8 @@ export function setupHtmlUI(game: GameScene): void {
                         td.appendChild(watchBtn);
                     }
                     const cancelBtn = document.createElement("button");
-                    cancelBtn.textContent = "取消";
-                    cancelBtn.title = "この待機中ゲームを取り消す";
+                    cancelBtn.textContent = "削除";
+                    cancelBtn.title = "この待機中ゲームを削除する";
                     cancelBtn.addEventListener("click", async (ev) => {
                         ev.stopPropagation();
                         try {
@@ -5397,6 +5397,35 @@ export function setupHtmlUI(game: GameScene): void {
                         }
                     });
                     td.appendChild(cancelBtn);
+                } else if (isOwnGame && g.status === "playing" && g.isCpu) {
+                    // 自作 CPU 対戦ゲームが対戦中: オーナーは対局席に居ないので [閲覧][削除] を表示
+                    const watchBtn = document.createElement("button");
+                    watchBtn.textContent = "閲覧";
+                    watchBtn.title = "自作 CPU 対戦ゲームを観戦する";
+                    watchBtn.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        watchGame(g.gameId, true).catch(e => console.warn("othelloWatch error:", e));
+                    });
+                    td.appendChild(watchBtn);
+                    const delBtn = document.createElement("button");
+                    delBtn.textContent = "削除";
+                    delBtn.title = "この対戦中ゲームを終了する（CPU 側が投了）";
+                    delBtn.addEventListener("click", async (ev) => {
+                        ev.stopPropagation();
+                        try {
+                            await game.nakama.othelloResign(g.gameId);
+                            if (currentGameId === g.gameId) {
+                                currentGameId = null;
+                                gameStatus = "";
+                                myColor = 0;
+                            }
+                            selectedGameId = null;
+                            refreshRecruit();
+                        } catch (e) {
+                            console.warn("othelloResign error:", e);
+                        }
+                    });
+                    td.appendChild(delBtn);
                 } else if (!isOwnGame) {
                     const watchBtn = document.createElement("button");
                     watchBtn.textContent = "閲覧";
@@ -5451,7 +5480,8 @@ export function setupHtmlUI(game: GameScene): void {
                     // status="waiting" は tryResolvePendingOt で選択状態に反映するため保持
                     if (ownGame.status === "playing") {
                         pendingOthelloGameNo = undefined;
-                        return;
+                        // CPU 対戦ゲームはオーナーがロビーに残るため、コメント更新のため再描画を通す
+                        if (!ownGame.isCpu) return;
                     }
                 }
                 // --- 以降はロビー表示中のみテーブル描画 ---
@@ -5493,12 +5523,13 @@ export function setupHtmlUI(game: GameScene): void {
                         commentSpan.className = "othello-comment-text";
                         if (isOwnGame) {
                             // 自分が作成したゲームは太字青。
-                            // CPU 対戦ゲーム: 対戦中は「<オーナー>のCPUと<相手>と対戦中」、待機中はサーバ発 g.comment（「〇〇のCPU」）
+                            // CPU 対戦ゲーム: 他プレイヤー参加で playing に遷移すると「<自分>のCPUと<相手>の対戦が準備中...」、
+                            //   待機中はサーバ発 g.comment（「〇〇のCPU」）
                             // 通常ゲーム: 「自分が作成」
                             commentSpan.classList.add("othello-comment-own");
                             let ownLabel: string;
                             if (g.isCpu && g.status === "playing" && whiteLabel) {
-                                ownLabel = `${blackLabel}のCPUと${whiteLabel}と対戦中`;
+                                ownLabel = `${blackLabel}のCPUと${whiteLabel}の対戦が準備中...`;
                             } else if (g.isCpu) {
                                 ownLabel = g.comment || "自分が作成";
                             } else {
