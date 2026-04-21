@@ -1348,6 +1348,7 @@
             background: #fff;
             color: #333;
             contain: paint;
+            position: relative;
         }
         body.theme-dark #serial-test-body { background: #1a1a1a; color: #ddd; }
         #serial-test-body button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
@@ -1371,11 +1372,14 @@
         #serial-test-body legend { padding: 0 0.3em; color: #555; }
         #serial-test-body label { margin-right: 1em; }
         #serial-test-new-game {
+            position: absolute;
+            top: 8px;
+            right: 16px;
+            z-index: 1;
             font-family: inherit;
             font-size: 11px;
             font-weight: normal;
             padding: 2px 8px;
-            margin-right: 4px;
             background: #5b8ac7;
             color: #fff;
             border: 1px solid rgba(0,0,0,0.15);
@@ -4905,12 +4909,12 @@
         <div id="serial-test-header">
             <span>シリアルテスト</span>
             <span class="oth-header-btns">
-                <button type="button" id="serial-test-new-game" title="自作 CPU 対戦ゲームをリバーシロビーに作成">新ゲーム作成</button>
                 <span id="serial-test-max" title="最大化">⛶</span>
                 <span id="serial-test-close">❌️</span>
             </span>
         </div>
         <div id="serial-test-body">
+            <button type="button" id="serial-test-new-game" title="自作 CPU 対戦ゲームをリバーシロビーに作成">新ゲーム作成</button>
             <fieldset>
                 <legend>接続</legend>
                 <div class="row">

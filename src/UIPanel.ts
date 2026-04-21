@@ -6230,7 +6230,7 @@ export function setupHtmlUI(game: GameScene): void {
                 stHeader.addEventListener("pointerdown", (e: PointerEvent) => {
                     const tgt = e.target as HTMLElement;
                     // ヘッダ内のクリック可能要素はドラッグ扱いしない（button の click が preventDefault で潰れるため）
-                    if (tgt.closest("#serial-test-close, #serial-test-max, #serial-test-new-game")) return;
+                    if (tgt.closest("#serial-test-close, #serial-test-max")) return;
                     isDrag = true;
                     const rect = stPanel.getBoundingClientRect();
                     offX = e.clientX - rect.left;
