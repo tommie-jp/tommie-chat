@@ -1329,8 +1329,45 @@
         #serial-test-body {
             flex: 1;
             min-height: 0;
-            display: flex;
+            overflow-y: auto;
+            padding: 8px;
+            font-family: sans-serif;
+            font-size: 14px;
+            background: #fff;
+            color: #333;
         }
+        #serial-test-body::-webkit-scrollbar { width: 8px; }
+        #serial-test-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+        #serial-test-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+        #serial-test-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+        body.theme-dark #serial-test-body { background: #1a1a1a; color: #ddd; }
+        body.theme-dark #serial-test-body::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+        body.theme-dark #serial-test-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
+        body.theme-dark #serial-test-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+        #serial-test-body button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
+        #serial-test-body button:disabled { opacity: 0.4; cursor: not-allowed; }
+        #serial-test-body select,
+        #serial-test-body input { font-family: inherit; font-size: 1em; padding: 0.2em; }
+        #serial-test-body textarea { font-family: monospace; font-size: 14px; line-height: 1.5; }
+        #serial-test-body textarea::-webkit-scrollbar { width: 8px; height: 8px; }
+        #serial-test-body textarea::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        #serial-test-body textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
+        #serial-test-body textarea::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+        #serial-test-body #log { width: 100%; height: 40vh;
+               background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
+        #serial-test-body #console-log { width: 100%; height: 20vh;
+               background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
+        #serial-test-body .section-label { font-size: 1em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
+        #serial-test-body .section-label button { font-size: 0.9em; padding: 0.1em 0.5em; }
+        #serial-test-body .row { margin: 0.3em 0; }
+        #serial-test-body .status { font-weight: bold; }
+        #serial-test-body .status.connected { color: #2a7; }
+        #serial-test-body .status.disconnected { color: #888; }
+        #serial-test-body .status.error { color: #c33; }
+        #serial-test-body .stats { font-size: 0.9em; color: #666; margin-left: 1em; }
+        #serial-test-body fieldset { border: 1px solid #ccc; padding: 0.4em 0.8em; margin: 0.4em 0; }
+        #serial-test-body legend { padding: 0 0.3em; color: #555; }
+        #serial-test-body label { margin-right: 1em; }
         #serial-test-new-game {
             font-family: inherit;
             font-size: 11px;
@@ -1350,14 +1387,6 @@
             background: #4a7fb5;
             border-color: rgba(255,255,255,0.15);
         }
-        #serial-test-iframe {
-            flex: 1;
-            width: 100%;
-            height: 100%;
-            border: 0;
-            background: #fff;
-        }
-        body.theme-dark #serial-test-iframe { background: #111; }
         #othello-status {
             font-weight: bold;
             text-align: center;
@@ -4880,7 +4909,96 @@
             </span>
         </div>
         <div id="serial-test-body">
-            <iframe id="serial-test-iframe" src="about:blank" loading="lazy" title="シリアルテスト" referrerpolicy="same-origin"></iframe>
+            <fieldset>
+                <legend>接続</legend>
+                <div class="row">
+                    API:
+                    <select id="api">
+                        <option value="auto" selected>自動</option>
+                        <option value="native">Native (navigator.serial)</option>
+                        <option value="polyfill">Polyfill (WebUSB)</option>
+                    </select>
+                    Baud:
+                    <select id="baud">
+                        <option value="300">300</option>
+                        <option value="1200">1,200</option>
+                        <option value="9600">9,600</option>
+                        <option value="38400">38,400</option>
+                        <option value="115200" selected>115,200</option>
+                        <option value="230400">230,400</option>
+                        <option value="460800">460,800</option>
+                        <option value="921600">921,600</option>
+                    </select>
+                    <button id="connect">新接続</button>
+                    <button id="reconnect">再接続</button>
+                    <button id="disconnect" disabled>接続を切る</button>
+                </div>
+                <div class="row">
+                    状態: <span id="status" class="status disconnected">未接続</span>
+                    <span class="stats" id="stats"></span>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>表示オプション</legend>
+                <div class="row">
+                    <label><input type="checkbox" id="opt-line-buffer" checked> 行バッファリング（改行で確定）</label>
+                    <label><input type="checkbox" id="opt-line-number" checked> 行番号</label>
+                    <label>タイムスタンプ:
+                        <select id="opt-timestamp">
+                            <option value="none">なし</option>
+                            <option value="clock">時刻</option>
+                            <option value="relative" selected>相対時間</option>
+                        </select>
+                    </label>
+                    <label>Hex:
+                        <select id="opt-hex">
+                            <option value="none" selected>なし</option>
+                            <option value="hex">Hex</option>
+                            <option value="hex-ascii">Hex+ASCII</option>
+                            <option value="hex-ascii-offset">Hex+ASCII+オフセット</option>
+                        </select>
+                    </label>
+                    <label><input type="checkbox" id="opt-autoscroll" checked> スクロール</label>
+                    <label>行間:
+                        <select id="opt-line-gap">
+                            <option value="1">0</option>
+                            <option value="1.25">1/4</option>
+                            <option value="1.5" selected>1/2</option>
+                        </select>
+                    </label>
+                </div>
+            </fieldset>
+
+            <div class="section-label">
+                <span>シリアル出力</span>
+                <span>
+                    <button id="copy-log">Copy</button>
+                    <button id="clear">Clear</button>
+                </span>
+            </div>
+            <textarea id="log" readonly></textarea>
+
+            <div class="row">
+                <input id="send-text" placeholder="送信文字列" style="width: 60%;">
+                改行:
+                <select id="send-eol">
+                    <option value="crlf">CRLF</option>
+                    <option value="lf">LF</option>
+                    <option value="cr">CR</option>
+                    <option value="none">なし</option>
+                </select>
+                <button id="send" disabled>送信</button>
+            </div>
+
+            <div class="section-label">
+                <span>コンソールログ</span>
+                <span>
+                    <button id="copy-console">Copy</button>
+                    <button id="clear-console">Clear</button>
+                </span>
+            </div>
+            <textarea id="console-log" readonly></textarea>
         </div>
     </div>
 
@@ -4904,6 +5022,7 @@
     <div id="app-footer-version" style="position:fixed;bottom:2px;left:auto;right:8px;font-size:10px;font-family:monospace;opacity:0.85;pointer-events:auto;cursor:pointer;z-index:9997;line-height:1.5;text-align:right;"><span id="app-footer-text"></span></div>
 
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/js/test-web-serial-api.js"></script>
     <script src="/js/sw-register.js"></script>
     <script src="/js/google-oauth.js" defer></script>
     <div id="custom-tooltip"></div>

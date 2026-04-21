@@ -6204,14 +6204,12 @@ export function setupHtmlUI(game: GameScene): void {
     }
 
     // ===== シリアルテストパネル (7b3) =====
-    // 中身は /test-web-serial-api.html を iframe で内包。
-    // パネルを初めて開いたときに iframe の src を設定 (lazy-load) して、不要な時のポート列挙を避ける。
+    // 中身は test-web-serial-api.js でインライン DOM を操作する（iframe は使わない）。
     {
         const stPanel   = document.getElementById("serial-test-panel") as HTMLElement | null;
         const stHeader  = document.getElementById("serial-test-header") as HTMLElement | null;
         const stClose   = document.getElementById("serial-test-close") as HTMLElement | null;
         const stMax     = document.getElementById("serial-test-max") as HTMLElement | null;
-        const stIframe  = document.getElementById("serial-test-iframe") as HTMLIFrameElement | null;
         const isMobileDevST = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
         const sCk = (k: string, v: string) =>
             document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
@@ -6287,18 +6285,6 @@ export function setupHtmlUI(game: GameScene): void {
                     sCk("panelMax", willMax ? "1" : "0");
                 });
             }
-            // 初回表示時に iframe を lazy-load
-            const loadIframeIfNeeded = () => {
-                if (!stIframe) return;
-                if (!stIframe.src || stIframe.src === "about:blank" || stIframe.src.endsWith("about:blank")) {
-                    stIframe.src = "/test-web-serial-api.html";
-                }
-            };
-            new MutationObserver(() => {
-                if (stPanel.style.display !== "none") loadIframeIfNeeded();
-            }).observe(stPanel, { attributes: true, attributeFilter: ["style"] });
-            // 初期状態で表示中なら即読み込み（Cookie からの復元時など）
-            if (stPanel.style.display !== "none") loadIframeIfNeeded();
             // [新ゲーム作成] ボタン — CPU 対戦ゲームをリバーシロビーに作成
             const stNewGameBtn = document.getElementById("serial-test-new-game") as HTMLButtonElement | null;
             if (stNewGameBtn) {
