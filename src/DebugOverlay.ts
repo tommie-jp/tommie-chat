@@ -701,7 +701,9 @@ export function setupDebugOverlay(game: GameScene): void {
         makeToggle("menu-ping",           "ping-panel",            "menu.ping",          "showPing");
         makeToggle("menu-bookmarks",      "bookmark-panel",        "menu.bookmarks",     "showBookmarks");
         makeToggle("menu-rooms",           "room-list-panel",       "menu.rooms",         "showRooms");
-        makeToggle("menu-othello",         "othello-panel",         "menu.othello",       "showOthello");
+        makeToggle("menu-othello",         "othello-panel",         "menu.reversiLobby",  "showOthello");
+        makeToggle("menu-othello-play",    "othello-play-panel",    "menu.reversiPlay",   "showOthelloPlay");
+        makeToggle("menu-serial-test",     "serial-test-panel",     "menu.serialTest",    "showSerialTest");
         makeToggle("menu-ccu",            "ccu-panel",             "menu.ccu",           "showCcu");
         makeToggle("menu-debug",          "debug-overlay",         "menu.debug",         "showDebug");
         makeToggle("menu-about",          "about-panel",           "menu.about",         "showAbout");

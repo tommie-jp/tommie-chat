@@ -1,12 +1,23 @@
-# 設計: リバーシ CPU ブリッジ (Node.js)
+# 設計: リバーシ CPU ブリッジ (Node.js) — 将来オプション
 
-自作ハードウェアのリバーシ CPU を nakama 上の対戦相手としてオンライン公開するためのヘッドレスブリッジの設計メモ。
+自作ハードウェアのリバーシ CPU を nakama 上の**別アカウントの常駐 bot** として 24/7 公開するためのヘッドレスブリッジ設計メモ。
+
+> **現時点の主力路線は [doc/reversi/59-設計-外部CPU接続.md](reversi/59-設計-外部CPU接続.md) の Web Serial 接続代行方式**。
+> 本ドキュメントはそれとは用途が異なる「CPU 本人を独立した nakama アカウントとして 24/7 常駐させたい」場合の設計で、**当面は実装しない**。
+>
+> | 文書 | 運用形態 | 接続方式 | 実装優先度 |
+> | --- | --- | --- | --- |
+> | **doc/reversi/59** | **人間 A が自作 CPU を持ち込んで代理接続** | ブラウザ Web Serial | **主力・優先** |
+> | 本ドキュメント (doc/51) | 自作 CPU を独立アカウントで 24/7 常駐 | Node.js + `serialport` | 将来検討 |
+>
+> Web Serial 方式で蓄積した UART プロトコル ([doc/reversi/59 §UART プロトコル仕様](reversi/59-設計-外部CPU接続.md)) は本ドキュメントでも流用する前提。
 
 ## 背景・狙い
 
-- tommieChat のリバーシ対戦に「自作 CPU」を常駐プレイヤーとして参加させたい
-- ブラウザ上で AI を動かすと端末性能で強さがバラつく・タブを閉じると消える・WebSerial 制約で常駐不可
-- Windows11 + Node.js でヘッドレスブリッジを組む方が自由度が高く運用も楽（後述トレードオフ比較）
+- 「CPU 製作者が PC を開いて毎回接続する」ではなく、**CPU ボット自身を nakama の独立プレイヤーとしてロビーに常駐させたい**ケース
+- 例: 大会運営主催の「いつでも挑戦可能な CPU」、自作 CPU のレーティング蓄積
+- ブラウザ上で AI を動かすと端末性能で強さがバラつく・タブを閉じると消える
+- Windows11 / Raspberry Pi + Node.js でヘッドレスブリッジを組む方が 24/7 運用向き
 
 ## 全体構成
 
@@ -556,130 +567,28 @@ nssm install tommie-cpu-bridge "C:\path\bridge.exe"
 
 ## 実行環境
 
-運用ホストと UART 接続手段の組み合わせは複数パターンある。
+常駐運用を前提とするため、ホストは据置前提の Linux/Windows マシン:
 
-| ホスト | UART 接続経路 | 用途 | 備考 |
-| --- | --- | --- | --- |
-| Android + tommieChat ブラウザ | **WebSerial / WebUSB** | **自作 CPU 持ち込み対戦（採用）** | 常駐不要なら最短ルート |
-| Windows 11 ネイティブ + Node.js ブリッジ | `serialport` (kernel driver 経由) | 据置の常駐 bot（将来） | ネイティブバインディング最も楽 |
-| Raspberry Pi + Node.js ブリッジ | `serialport` | 据置の常駐 bot（将来） | Linux 扱い |
-| WSL2 Ubuntu24 + Node.js ブリッジ | UART なし（フェーズ 1〜3 のみ） | 開発メイン | USB passthrough は `usbipd-win` 必須 |
-| Android + Termux + Node.js ブリッジ | （断念） | — | `termux-usb` fd は raw usbfs で `read/write` 不可 (EINVAL)、チップ別プロトコル自力実装が必要 |
+| ホスト | 用途 | 備考 |
+| --- | --- | --- |
+| Windows 11 ネイティブ | 本番常駐の第一候補 | `serialport` ネイティブバインディング最も素直、`nssm` でサービス化 |
+| Raspberry Pi (Linux) | 本番常駐の代替 | 省電力で 24/7 運用向き、`systemd` でサービス化 |
+| WSL2 Ubuntu24 | 開発メイン | フェーズ 1〜3 (純 JS) は OS 非依存、UART 検証は usbipd-win 必須 |
 
-### Android + tommieChat 経由 (採用案)
-
-外部持ち出し端末が Android しかない運用前提では、**tommieChat のリバーシパネルに埋め込んだシリアルテスト UI を使って自作 CPU と直結する**のが最短ルート。
-
-既に [public/test-web-serial-api.html](../public/test-web-serial-api.html) で Android Chrome での WebSerial/WebUSB 接続動作を確認済み。WebSerial 非対応端末向けには [public/js/web-serial-polyfill.js](../public/js/web-serial-polyfill.js) (WebUSB ベース) に自動フォールバック。
-
-#### 構成
-
-```text
-[自作CPU (MCU)] ─UART─ [USB-OTG] ─ [Android]
-                                     └─ Android Chrome ─ tommieChat リバーシパネル
-                                                             └─ WSS ─→ nakama ─→ 対戦相手
-```
-
-- **CPU は人間 A のユーザ ID で着手を打つ**（人間 A が自作 CPU の着手を代行する扱い）
-- ロビー → 新ゲーム → 対戦相手マッチング → リバーシパネル下部のシリアル UI で MCU から着手を受信 → 盤面へ反映
-- 常駐 bot ではなく「イベント時の持ち込み CPU」用途
-
-#### 当初 WebSerial 不採用理由の再評価
-
-| 当初デメリット | Android + 持ち込み運用での評価 |
-| --- | --- |
-| タブ閉じたら CPU も消える | 対戦中は前面固定 → 問題なし |
-| バックグラウンドタブのスロットル | 同上 |
-| Chromium 系のみ対応 | Android Chrome で十分 |
-| 人間と同じユーザ ID | 代行操作なので問題なし |
-| ユーザジェスチャ毎セッション | 対戦開始時 1 回 → 許容 |
-
-#### UI 配置
-
-- リバーシパネル (`#othello-lobby`) の履歴セクション直下、`<iframe src="/test-web-serial-api.html">` で埋め込み
-- `#othello-lobby` を `overflow-y: auto` にし、モバイルでもスクロールして到達可能
-- ロビー上部のヘッダには既存のリンク「シリアルテスト」を残す（独立タブで開きたいとき用）
-
-#### Android 特有の注意点
-
-- **OTG 給電**: 充電中 OTG 非対応機種あり。Y 字 OTG ケーブル or 対戦中バッテリー駆動
-- **画面スリープで JS 停止**: `navigator.wakeLock.request('screen')` で回避（将来実装）
-- **USB デバイス許可**: Android のダイアログで毎回許可が必要なケースあり
-
-### Android + Termux + Node.js ブリッジ (断念の記録)
-
-検討当初、Termux 上の Node.js でブリッジを常駐させる案を調査した。フェーズ 1〜3 (純 JS) までは以下手順で動くことを確認:
-
-```bash
-pkg install nodejs git
-cd ~/tommie-chat/bridge && npm install && node dist/index.js
-termux-wake-lock   # 画面オフ対策
-```
-
-しかし **UART (フェーズ 5) で詰んだ**:
-
-- `termux-usb -e "node test.js" /dev/bus/usb/...` で渡される fd は raw usbfs ハンドル
-- `fs.createWriteStream(null, { fd }).write(...)` が `EINVAL` でエラー
-- usbfs は `USBDEVFS_*` ioctl (libusb プロトコル) しか受け付けない
-- 加えて USB-シリアル変換チップ (FT232/CP210x/CH340) は各社独自プロトコルで、kernel ドライバなしでは自力実装が必要
-- 非 root Termux では kernel ドライバ (`/dev/ttyUSB0`) が使えない
-
-→ 解決には `node-usb` + チップ別プロトコルの userspace 実装 or Kotlin サイドカー (`usb-serial-for-android` + TCP 中継) が必要で、**ブラウザ内 WebSerial のほうが遥かに楽**という結論になった。
-
-### Node.js ブリッジ (将来: 据置常駐)
-
-Windows 11 / Raspberry Pi に据置して 24/7 常駐させる用途は依然として有効。こちらはフェーズ 1〜6 の本筋として温存する。当面は Android + tommieChat ルートを優先実装。
+> **Android は本路線の対象外**。Android + ブラウザ経由でシリアルを扱うのは [doc/reversi/59](reversi/59-設計-外部CPU接続.md) の路線。
 
 ## 確定事項
 
-- **UART 接続は Android + tommieChat の WebSerial/WebUSB 経由を優先**。自作 CPU を人間が持ち込み、リバーシパネル下部に埋め込んだシリアル UI (`/test-web-serial-api.html`) で接続する運用
-- **Android + Termux + Node.js ルートは UART 層で断念**。`termux-usb` fd が raw usbfs で `read/write` 不可 (EINVAL)、USB-シリアル変換チップのプロトコル自力実装が必要なため割に合わない
-- **Node.js ブリッジ (Windows/RasPi 据置) は将来の本格常駐用に温存**。フェーズ 1〜3 (純 JS) は今も有効
-- **「CPU と対戦」機能は新規実装**。tommieChat 本体にまだ存在しないため、サーバ・クライアント・シリアル入力フックを一式新規に作る
-- **リポジトリは tommieChat 本体の `bridge/` サブディレクトリ**（Node.js ブリッジ用）。複雑化したら別リポジトリへ切り出す
+- **本ドキュメントは将来オプション**。当面は [doc/reversi/59](reversi/59-設計-外部CPU接続.md) の Web Serial 接続代行方式を優先実装する
+- **用途は「独立アカウントでの 24/7 常駐 bot」**に限定。人間 A が自作 CPU を持ち込んで代理接続するユースケースは doc/59 の範囲
+- **UART プロトコルは doc/59 と共通**（`S B\r\n` / `M D3\r\n` 等）。本路線でも同仕様を流用する
+- **リポジトリは tommieChat 本体の `bridge/` サブディレクトリ**。複雑化したら別リポジトリへ切り出す
+- **Android + Termux ルートは不採用**。`termux-usb` fd が raw usbfs で `read/write` 不可 (EINVAL)、USB-シリアル変換チップのプロトコル自力実装が必要なため。常駐は Windows/RasPi に限る
 - **GUI は作らない**。手動プレイしたい場合は tommieChat で CPU アカウントにログインすれば足りる
-- **CLI は疎通確認用**。Node.js ブリッジを実装する場合のみ
-- **本番運用は Google 認証推奨**。BAN 回避を困難にするための抑止策として
+- **本番運用は Google 認証推奨**。独立アカウント運用なので BAN 実効性のため
 
 ## 関連ドキュメント
 
 - [10-ブラウザ側ファイル構成.md](10-ブラウザ側ファイル構成.md)
 - [11-RPC関数一覧.md](11-RPC関数一覧.md)（リバーシ `oth*` RPC の参照用）
 - [50-設計-部屋システム.md](50-設計-部屋システム.md)
-
-## シリアル接続の前にすること
-
-- 仕様変更
-  - 画面遷移を変更
-    - 従来のリバーシパネルをリバーシロビーへ名前変更
-    - リバーシプレイパネルを新設
-      - ゲーム中の盤面表示
-  - リバーシロビーパネル｜閲覧ボタンか、参加ボタンを押したとき、
-    - リバーシプレイパネルへ遷移
-      - ロビーへボタンでリバーシロビーパネルへ遷移
-
-## 設計方針
-- シリアルテストパネルを新規作成する。
-- シリアルテストパネルの仕様
-  - 自作オセロCPUのUARTーUSBシリアルの接続確認するパネル。
-  - 既に実績のあるシリアルテストページの内容と同じ。
-
-### 自作CPUをリバーシゲームに参加する想定手順
-
-- 当面は毎回、人がゲームを作成、削除する。
-- リバーシパネルを開く
-- シリアルテストパネルを開く
-  - CPUとのシリアル接続を確認
-  - シリアルテストパネル｜新ゲーム作成ボタンを押す
-  - リバーシパネル｜ゲームロビーに新ゲームが作成される
-    - リバーシパネル｜新ゲーム開始ボタンを押したときの表示とは別にする
-      - オーナー:「自分」
-      - コメント:自分の表示名＋「のCPU」
-      - 閲覧ボタン
-        - 自分のCPUのゲームの閲覧画面へ遷移
-      - 削除ボタン
-- ゲーム中
-  - リバーシパネル｜ゲームロビーにCPU対戦ゲームを表示
-  - 
-- 作成したゲームの削除
-  - リバーシパネル｜ゲームロビーで削除できる

@@ -5,12 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>シリアルテスト</title>
 <style>
+  /* Windows 11 Chrome + Babylon canvas の水色ゴーストスクロールバー対策。
+     デフォルトスクロールバーは GPU コンポジタで独立レイヤー化されると親ウィンドウの
+     Babylon canvas に #87ceeb の縦バーが焼き付く。カスタム ::-webkit-scrollbar を
+     定義するとレイヤー扱いが変わり発症しない。 */
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar { width: 8px; height: 8px; }
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+  html::-webkit-scrollbar-thumb:hover,
+  body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
   body { font-family: sans-serif; font-size: 14px; padding: 1em; max-width: 1000px; margin: 0 auto; }
   h1 { font-size: 1.5em; margin: 0 0 0.5em 0; }
   button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   select, input { font-family: inherit; font-size: 1em; padding: 0.2em; }
   textarea { font-family: monospace; font-size: 14px; line-height: 1.5; }
+  textarea::-webkit-scrollbar { width: 8px; height: 8px; }
+  textarea::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+  textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
+  textarea::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
   #log { width: 100%; height: 40vh;
          background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
   #console-log { width: 100%; height: 20vh;

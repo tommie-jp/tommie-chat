@@ -1240,7 +1240,9 @@
         }
 
         /* ===== オセロパネル ===== */
-        #othello-panel {
+        #othello-panel,
+        #othello-play-panel,
+        #serial-test-panel {
             position: fixed;
             top: 80px;
             left: 50%;
@@ -1261,7 +1263,9 @@
             display: flex;
             flex-direction: column;
         }
-        #othello-header {
+        #othello-header,
+        #othello-play-header,
+        #serial-test-header {
             padding: 4px 8px;
             font-weight: bold;
             font-size: 13px;
@@ -1276,39 +1280,37 @@
             touch-action: none;
             overflow: visible;
         }
-        #othello-close {
+        #othello-close,
+        #othello-play-close,
+        #serial-test-close {
             cursor: pointer;
             font-size: 11px;
             line-height: 1;
             opacity: 0.6;
             padding: 4px 6px;
         }
-        #othello-close:hover { opacity: 1; }
+        #othello-close:hover,
+        #othello-play-close:hover,
+        #serial-test-close:hover { opacity: 1; }
         .oth-header-btns {
             display: flex;
             align-items: center;
             gap: 2px;
         }
-        #othello-max {
+        #othello-max,
+        #othello-play-max,
+        #serial-test-max {
             cursor: pointer;
             font-size: 13px;
             line-height: 1;
             opacity: 0.6;
             padding: 4px 6px;
         }
-        #othello-max:hover { opacity: 1; }
-        #othello-serial-test {
-            font-size: 11px;
-            font-weight: normal;
-            color: #06c;
-            text-decoration: underline;
-            padding: 4px 6px;
-            opacity: 0.75;
-            white-space: nowrap;
-        }
-        #othello-serial-test:hover { opacity: 1; }
-        body.theme-dark #othello-serial-test { color: #8cf; }
-        #othello-body {
+        #othello-max:hover,
+        #othello-play-max:hover,
+        #serial-test-max:hover { opacity: 1; }
+        #othello-body,
+        #othello-play-body {
             display: flex;
             flex-direction: column;
             flex: 1;
@@ -1317,6 +1319,38 @@
             padding: 8px;
             gap: 6px;
         }
+        #serial-test-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+        }
+        #serial-test-new-game {
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: normal;
+            padding: 2px 8px;
+            margin-right: 4px;
+            background: #5b8ac7;
+            color: #fff;
+            border: 1px solid rgba(0,0,0,0.15);
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        #serial-test-new-game:hover { background: #4a7fb5; }
+        #serial-test-new-game:disabled { opacity: 0.5; cursor: default; }
+        body.theme-dark #serial-test-new-game {
+            background: #4a7fb5;
+            border-color: rgba(255,255,255,0.15);
+        }
+        #serial-test-iframe {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            border: 0;
+            background: #fff;
+        }
+        body.theme-dark #serial-test-iframe { background: #111; }
         #othello-status {
             font-weight: bold;
             text-align: center;
@@ -2210,11 +2244,15 @@
             opacity: 0.4;
             cursor: default;
         }
-        body.theme-dark #othello-panel {
+        body.theme-dark #othello-panel,
+        body.theme-dark #othello-play-panel,
+        body.theme-dark #serial-test-panel {
             background: rgba(30,30,30,0.92);
             color: #ddd;
         }
-        body.theme-dark #othello-header {
+        body.theme-dark #othello-header,
+        body.theme-dark #othello-play-header,
+        body.theme-dark #serial-test-header {
             color: #ddd;
             background: rgba(50,50,50,0.6);
             border-bottom-color: rgba(255,255,255,0.1);
@@ -2969,6 +3007,8 @@
             #bookmark-panel,
             #room-list-panel,
             #othello-panel,
+            #othello-play-panel,
+            #serial-test-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel,
@@ -3004,6 +3044,8 @@
             #bookmark-header,
             #room-list-header,
             #othello-header,
+            #othello-play-header,
+            #serial-test-header,
             #debug-title-bar,
             #about-panel-header,
             #displayname-header,
@@ -3034,6 +3076,10 @@
             #bookmark-close,
             #othello-close,
             #othello-max,
+            #othello-play-close,
+            #othello-play-max,
+            #serial-test-close,
+            #serial-test-max,
             #about-panel-close,
             #displayname-close,
             #avatar-close,
@@ -3421,6 +3467,8 @@
             body.tab-panel-active #bookmark-panel > #bookmark-header,
             body.tab-panel-active #room-list-panel > #room-list-header,
             body.tab-panel-active #othello-panel > #othello-header,
+            body.tab-panel-active #othello-play-panel > #othello-play-header,
+            body.tab-panel-active #serial-test-panel > #serial-test-header,
             body.tab-panel-active #server-settings-panel > #server-settings-header,
             body.tab-panel-active #server-log-panel > #server-log-header,
             body.tab-panel-active #ping-panel > #ping-header,
@@ -3464,6 +3512,8 @@
             #bookmark-panel,
             #room-list-panel,
             #othello-panel,
+            #othello-play-panel,
+            #serial-test-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel,
@@ -3496,6 +3546,8 @@
             #bookmark-header,
             #room-list-header,
             #othello-header,
+            #othello-play-header,
+            #serial-test-header,
             #debug-title-bar,
             #about-panel-header,
             #displayname-header,
@@ -3514,7 +3566,8 @@
                 left: 8px !important;
             }
             /* ポートレート: オセロ盤面を大きく表示 */
-            #othello-body {
+            #othello-body,
+            #othello-play-body {
                 padding: 12px !important;
                 align-items: stretch !important;
             }
@@ -3649,6 +3702,8 @@
             #bookmark-panel,
             #room-list-panel,
             #othello-panel,
+            #othello-play-panel,
+            #serial-test-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel,
@@ -3674,6 +3729,8 @@
             #bookmark-header > span:first-child,
             #room-list-header > span:first-child,
             #othello-header > span:first-child,
+            #othello-play-header > span:first-child,
+            #serial-test-header > span:first-child,
             #debug-title-text,
             #about-panel-header > span:first-child,
             #displayname-header > span:first-child,
@@ -3690,6 +3747,8 @@
             #bookmark-close,
             #room-list-close,
             #othello-close,
+            #othello-play-close,
+            #serial-test-close,
             #about-panel-close,
             #displayname-close,
             #avatar-close,
@@ -3721,6 +3780,8 @@
             #bookmark-panel,
             #room-list-panel,
             #othello-panel,
+            #othello-play-panel,
+            #serial-test-panel,
             #debug-overlay,
             #about-panel,
             #displayname-panel,
@@ -3904,6 +3965,8 @@
         body.panel-maximized #bookmark-panel.maximized,
         body.panel-maximized #room-list-panel.maximized,
         body.panel-maximized #othello-panel.maximized,
+        body.panel-maximized #othello-play-panel.maximized,
+        body.panel-maximized #serial-test-panel.maximized,
         body.panel-maximized #debug-overlay.maximized,
         body.panel-maximized #about-panel.maximized,
         body.panel-maximized #displayname-panel.maximized,
@@ -4377,7 +4440,9 @@
         <button class="menu-item" id="menu-minimap" data-i18n-prefix="menu.minimap">✓ ミニマップ</button>
         <button class="menu-item" id="menu-bookmarks" data-i18n-prefix="menu.bookmarks">　 ブックマーク</button>
         <button class="menu-item" id="menu-rooms" data-i18n-prefix="menu.rooms">　 部屋一覧</button>
-        <button class="menu-item" id="menu-othello">　 リバーシ</button>
+        <button class="menu-item" id="menu-othello" data-i18n-prefix="menu.reversiLobby">　 リバーシロビー</button>
+        <button class="menu-item" id="menu-othello-play" data-i18n-prefix="menu.reversiPlay">　 リバーシプレイ</button>
+        <button class="menu-item" id="menu-serial-test" data-i18n-prefix="menu.serialTest">　 シリアルテスト</button>
         <button class="menu-item dev-only" id="menu-ping" data-i18n-prefix="menu.ping">✓ Ping グラフ</button>
         <button class="menu-item dev-only" id="menu-ccu" data-i18n-prefix="menu.ccu">　 同接グラフ</button>
         <button class="menu-item" id="menu-tooltips">✓ ツールチップ</button>
@@ -4630,7 +4695,9 @@
             <button type="button" class="panel-tab" data-target="chat-settings-panel" data-menu="menu-chatsettings" data-tab-key="menu.chatsettings">5.チャット設定</button>
             <button type="button" class="panel-tab" data-target="bookmark-panel" data-menu="menu-bookmarks" data-tab-key="menu.bookmarks">6.ブックマーク</button>
             <button type="button" class="panel-tab" data-target="room-list-panel" data-menu="menu-rooms" data-tab-key="menu.rooms">7.部屋一覧</button>
-            <button type="button" class="panel-tab" data-target="othello-panel" data-menu="menu-othello">7b.リバーシ</button>
+            <button type="button" class="panel-tab" data-target="othello-panel" data-menu="menu-othello" data-tab-num="7b" data-tab-key="menu.reversiLobby">7b.リバーシロビー</button>
+            <button type="button" class="panel-tab" data-target="othello-play-panel" data-menu="menu-othello-play" data-tab-num="7b2" data-tab-key="menu.reversiPlay">7b2.リバーシプレイ</button>
+            <button type="button" class="panel-tab" data-target="serial-test-panel" data-menu="menu-serial-test" data-tab-num="7b3" data-tab-key="menu.serialTest">7b3.シリアルテスト</button>
             <button type="button" class="panel-tab" data-target="server-settings-panel" data-menu="menu-serversettings" data-tab-key="menu.serversettings">8.サーバ設定</button>
             <button type="button" class="panel-tab" data-target="server-log-panel" data-menu="menu-serverlog" data-tab-key="menu.serverlog">9.サーバ接続ログ</button>
             <button type="button" class="panel-tab" data-target="ping-panel" data-menu="menu-ping" data-tab-key="menu.ping">10.Pingグラフ</button>
@@ -4682,7 +4749,7 @@
 
     <div id="othello-panel" style="display:none;">
         <div id="othello-header">
-            <span>リバーシ</span>
+            <span>リバーシロビー</span>
             <span class="oth-header-btns">
                 <span id="othello-max" title="最大化">⛶</span>
                 <span id="othello-close">❌️</span>
@@ -4694,7 +4761,6 @@
                 <div id="othello-game-list-section">
                     <div id="othello-game-list-title">
                         <span>ゲームロビー</span>
-                        <a id="othello-serial-test" href="/test-web-serial-api.html" target="_blank" rel="noopener" title="Web Serial API テストページを開く">シリアルテスト</a>
                     </div>
                     <div id="othello-game-list-scroll">
                         <table id="othello-game-list-header-table">
@@ -4747,8 +4813,20 @@
                 </div>
                 <button id="othello-create-btn">新ゲーム開始</button>
             </div>
+        </div>
+    </div>
+
+    <div id="othello-play-panel" style="display:none;">
+        <div id="othello-play-header">
+            <span>リバーシプレイ</span>
+            <span class="oth-header-btns">
+                <span id="othello-play-max" title="最大化">⛶</span>
+                <span id="othello-play-close">❌️</span>
+            </span>
+        </div>
+        <div id="othello-play-body">
             <!-- ゲーム画面 -->
-            <div id="othello-game" style="display:none;">
+            <div id="othello-game">
                 <div id="othello-game-no-label"></div>
                 <div id="othello-status">対戦相手を待っています…</div>
                 <div id="othello-timer" style="display:none;">
@@ -4782,6 +4860,20 @@
                     <button id="othello-back-btn" style="display:none;">ロビーへ</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="serial-test-panel" style="display:none;">
+        <div id="serial-test-header">
+            <span>シリアルテスト</span>
+            <span class="oth-header-btns">
+                <button type="button" id="serial-test-new-game" title="自作 CPU 対戦ゲームをリバーシロビーに作成">新ゲーム作成</button>
+                <span id="serial-test-max" title="最大化">⛶</span>
+                <span id="serial-test-close">❌️</span>
+            </span>
+        </div>
+        <div id="serial-test-body">
+            <iframe id="serial-test-iframe" src="about:blank" loading="lazy" title="シリアルテスト" referrerpolicy="same-origin"></iframe>
         </div>
     </div>
 

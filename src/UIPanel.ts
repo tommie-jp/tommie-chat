@@ -1505,7 +1505,8 @@ export function setupHtmlUI(game: GameScene): void {
                 .observe(document.body, { attributes: true, attributeFilter: ["class"] });
             const panelObsIds = ["user-list-panel", "chat-history-panel", "chat-settings-panel",
                 "server-settings-panel", "server-log-panel", "ping-panel",
-                "ccu-panel", "bookmark-panel", "room-list-panel", "othello-panel", "debug-overlay",
+                "ccu-panel", "bookmark-panel", "room-list-panel", "othello-panel",
+                "othello-play-panel", "serial-test-panel", "debug-overlay",
                 "about-panel", "displayname-panel", "avatar-panel"];
             for (const id of panelObsIds) {
                 const el = document.getElementById(id);
@@ -4652,6 +4653,10 @@ export function setupHtmlUI(game: GameScene): void {
         const othClose     = document.getElementById("othello-close") as HTMLElement | null;
         const othMax       = document.getElementById("othello-max") as HTMLElement | null;
         const othLobby     = document.getElementById("othello-lobby") as HTMLElement | null;
+        const othPlayPanel   = document.getElementById("othello-play-panel") as HTMLElement | null;
+        const othPlayHeader  = document.getElementById("othello-play-header") as HTMLElement | null;
+        const othPlayClose   = document.getElementById("othello-play-close") as HTMLElement | null;
+        const othPlayMax     = document.getElementById("othello-play-max") as HTMLElement | null;
         const othGameView  = document.getElementById("othello-game") as HTMLElement | null;
         const othBoard     = document.getElementById("othello-board") as HTMLElement | null;
         const othBlack     = document.getElementById("othello-black-count") as HTMLElement | null;
@@ -4668,31 +4673,19 @@ export function setupHtmlUI(game: GameScene): void {
         const othPassBtn   = document.getElementById("othello-pass-btn") as HTMLButtonElement | null;
         const othResignBtn = document.getElementById("othello-resign-btn") as HTMLButtonElement | null;
         const othBackBtn   = document.getElementById("othello-back-btn") as HTMLButtonElement | null;
-        const othSerialTest = document.getElementById("othello-serial-test") as HTMLAnchorElement | null;
-
-        // PWA standalone だと <a target="_blank"> が同ウィンドウで開くブラウザがあるため、window.open で明示する。
-        // Chrome は window.open の 3 引数目に feature 文字列を渡すと「別タブ」ではなく「独立ウィンドウ（popup）」
-        // として開く仕様なので、第3引数は渡さない。opener 側の保護は rel="noopener" と手動 nullify で担保する。
-        if (othSerialTest) {
-            othSerialTest.addEventListener("click", (e) => {
-                e.preventDefault();
-                const w = window.open(othSerialTest.href, "_blank");
-                if (w) w.opener = null;
-            });
-        }
-
         if (othPanel && othHeader && othBoard && othLobby && othGameView) {
             // --- 盤面サイズ自動調整 ---
             // iPhone Safari で visualViewport 変化中に測ると gameRect が旧値のことがあるため
             // rAF で次フレームに測り直す
             let fitRafPending = false;
+            const isPlayPanelVisible = () => !!othPlayPanel && othPlayPanel.style.display !== "none";
             const fitBoard = () => {
-                if (othGameView.style.display === "none") return;
+                if (!isPlayPanelVisible()) return;
                 if (fitRafPending) return;
                 fitRafPending = true;
                 requestAnimationFrame(() => {
                     fitRafPending = false;
-                    if (othGameView.style.display === "none") return;
+                    if (!isPlayPanelVisible()) return;
                     // ボードを一旦縮小してflex レイアウトを安定させる
                     othBoard.style.width = "0";
                     othBoard.style.height = "0";
@@ -4938,10 +4931,13 @@ export function setupHtmlUI(game: GameScene): void {
                 othelloRecruitGameId = othelloRecruitActive ? currentGameId : null;
             };
 
-            // --- 画面切り替え ---
+            // --- 画面切り替え（物理パネル 2 枚間の遷移）---
+            // doc/reversi/60 で決めた 7b.リバーシロビー / 7b2.リバーシプレイ の分割。
+            // 表示→非表示の順で切替えることで、両方 display:none になる瞬間を作らず
+            // MutationObserver (othPanel/othPlayPanel 両監視) が unsubscribe を誤発火しない。
             const showLobby = () => {
-                othLobby.style.display = "";
-                othGameView.style.display = "none";
+                othPanel.style.display = "";
+                if (othPlayPanel) othPlayPanel.style.display = "none";
                 currentGameId = null;
                 myColor = 0;
                 gameStatus = "";
@@ -4958,8 +4954,8 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             const showGame = () => {
-                othLobby.style.display = "none";
-                othGameView.style.display = "";
+                if (othPlayPanel) othPlayPanel.style.display = "";
+                othPanel.style.display = "none";
                 renderBoard();
                 requestAnimationFrame(fitBoard);
             };
@@ -5371,6 +5367,18 @@ export function setupHtmlUI(game: GameScene): void {
                 const td = document.createElement("td");
                 td.className = "othello-game-action";
                 if (isOwnGame && g.status === "waiting") {
+                    // CPU 対戦ゲームのオーナーは観戦のみ可能（対局席に座らないため [閲覧] を表示）
+                    // ロビーは閉じずにプレイパネルを追加表示する
+                    if (g.isCpu) {
+                        const watchBtn = document.createElement("button");
+                        watchBtn.textContent = "閲覧";
+                        watchBtn.title = "自作 CPU 対戦ゲームを観戦する";
+                        watchBtn.addEventListener("click", (ev) => {
+                            ev.stopPropagation();
+                            watchGame(g.gameId, true).catch(e => console.warn("othelloWatch error:", e));
+                        });
+                        td.appendChild(watchBtn);
+                    }
                     const cancelBtn = document.createElement("button");
                     cancelBtn.textContent = "取消";
                     cancelBtn.title = "この待機中ゲームを取り消す";
@@ -5483,10 +5491,11 @@ export function setupHtmlUI(game: GameScene): void {
                         const commentSpan = document.createElement("span");
                         commentSpan.className = "othello-comment-text";
                         if (isOwnGame) {
-                            // 自分が作成したゲームは太字青で「自分が作成」を表示
+                            // 自分が作成したゲームは太字青。CPU 対戦ゲームはサーバ発「〇〇のCPU」を表示、それ以外は「自分が作成」
                             commentSpan.classList.add("othello-comment-own");
-                            commentSpan.textContent = "自分が作成";
-                            commentCell.title = "自分が作成";
+                            const ownLabel = g.isCpu ? (g.comment || "自分が作成") : "自分が作成";
+                            commentSpan.textContent = ownLabel;
+                            commentCell.title = ownLabel;
                         } else {
                             if (g.status === "waiting") commentSpan.classList.add("othello-comment-marquee");
                             applyCommentContent(commentSpan, commentText, blackLabel);
@@ -5562,7 +5571,9 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             // --- ゲーム閲覧（観戦、サーバ状態を変更しない） ---
-            const watchGame = async (gameId: string) => {
+            // keepLobby=true でリバーシロビーパネルを閉じずにプレイパネルを追加表示
+            // （CPU 対戦ゲームのオーナーが閲覧するとき使用）
+            const watchGame = async (gameId: string, keepLobby = false) => {
                 currentGameId = gameId; // applyState の gameId チェックを通過させるため先に設定
                 myColor = 0; // 観戦
                 prevBoard = new Array(64).fill(0);
@@ -5570,7 +5581,14 @@ export function setupHtmlUI(game: GameScene): void {
                     const res = await game.nakama.othelloJoin(gameId, true);
                     if (!res) { currentGameId = null; return; }
                     applyState(res);
-                    showGame();
+                    if (keepLobby) {
+                        // ロビーを閉じずにプレイパネルだけ表示
+                        if (othPlayPanel) othPlayPanel.style.display = "";
+                        renderBoard();
+                        requestAnimationFrame(fitBoard);
+                    } else {
+                        showGame();
+                    }
                 } catch (e) {
                     currentGameId = null;
                     console.warn("othelloJoin(watch) error:", e);
@@ -5793,11 +5811,12 @@ export function setupHtmlUI(game: GameScene): void {
                             const uid = myUid();
                             const isOwnGame = gd.black === uid || gd.white === uid;
                             if (isOwnGame) {
-                                // 自分が作成したゲームは太字青で「自分が作成」を維持
-                                entry.commentSpan.textContent = "自分が作成";
+                                // 自分が作成したゲームは太字青。CPU 対戦はサーバ発「〇〇のCPU」を表示、それ以外は「自分が作成」
+                                const ownLabel = gd.isCpu ? (gd.comment || "自分が作成") : "自分が作成";
+                                entry.commentSpan.textContent = ownLabel;
                                 entry.commentSpan.classList.add("othello-comment-own");
                                 entry.commentSpan.classList.remove("othello-comment-marquee");
-                                entry.commentCell.title = "自分が作成";
+                                entry.commentCell.title = ownLabel;
                             } else {
                                 entry.commentSpan.classList.remove("othello-comment-own");
                                 applyCommentContent(entry.commentSpan, commentText, blackLabel);
@@ -5959,8 +5978,13 @@ export function setupHtmlUI(game: GameScene): void {
                 setTimeout(() => input.focus(), 50);
             };
             showDisplayNameModalShared = showDisplayNameModal;
+            // ロビーとプレイは物理的に別パネルになったため、いずれかが表示中なら購読を継続する。
+            // MutationObserver は両パネルの style 変化をまとめて監視する。
+            const isEitherPanelVisible = () =>
+                othPanel.style.display !== "none" ||
+                (!!othPlayPanel && othPlayPanel.style.display !== "none");
             const panelObs = new MutationObserver(() => {
-                const visible = othPanel.style.display !== "none";
+                const visible = isEitherPanelVisible();
                 if (visible === othPanelVisible) return;
                 othPanelVisible = visible;
                 if (visible) {
@@ -5981,6 +6005,7 @@ export function setupHtmlUI(game: GameScene): void {
                 }
             });
             panelObs.observe(othPanel, { attributes: true, attributeFilter: ["style"] });
+            if (othPlayPanel) panelObs.observe(othPlayPanel, { attributes: true, attributeFilter: ["style"] });
 
             // 日時セルを 1 秒ごとに更新（tick 方式、パネル表示中のみ、チラツキ防止のため差分のみ反映）
             let othTsTickCounter = 0;
@@ -6065,7 +6090,7 @@ export function setupHtmlUI(game: GameScene): void {
                     othPanel.style.display = "none";
                     sCk("showOthello", "0");
                     const mb = document.getElementById("menu-othello");
-                    if (mb) mb.textContent = "　 " + t("menu.othello");
+                    if (mb) mb.textContent = "　 " + t("menu.reversiLobby");
                 });
             }
 
@@ -6091,6 +6116,207 @@ export function setupHtmlUI(game: GameScene): void {
                     const willMax = !othPanel.classList.contains("maximized");
                     applyMaximized(willMax);
                     sCk("panelMax", willMax ? "1" : "0");
+                });
+            }
+
+            // --- リバーシプレイパネル（7b2） ---
+            // 7b (ロビー) と同じドラッグ/クローズ/最大化処理を提供する。
+            // 位置・サイズの永続化キーは独立 (othello-play-panel_*) にして、ロビーと別々に覚える。
+            if (othPlayPanel && othPlayHeader) {
+                const gCk = (k: string): string | null => {
+                    const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+                    return m ? decodeURIComponent(m[1]) : null;
+                };
+                if (!isMobileDev) {
+                    const pL = gCk("othello-play-panel_l"), pT = gCk("othello-play-panel_t");
+                    const pW = gCk("othello-play-panel_w"), pH = gCk("othello-play-panel_h");
+                    if (pL !== null) { othPlayPanel.style.left = pL + "px"; othPlayPanel.style.transform = "none"; }
+                    if (pT !== null) othPlayPanel.style.top = pT + "px";
+                    if (pW !== null) othPlayPanel.style.width = pW + "px";
+                    if (pH !== null) othPlayPanel.style.height = pH + "px";
+                    // ドラッグ
+                    let isDrag = false, offX = 0, offY = 0;
+                    othPlayHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                        if ((e.target as HTMLElement).id === "othello-play-close") return;
+                        isDrag = true;
+                        const rect = othPlayPanel.getBoundingClientRect();
+                        offX = e.clientX - rect.left;
+                        offY = e.clientY - rect.top;
+                        othPlayHeader.setPointerCapture(e.pointerId);
+                        e.preventDefault();
+                    });
+                    document.addEventListener("pointermove", (e: PointerEvent) => {
+                        if (!isDrag) return;
+                        othPlayPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                        othPlayPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                        othPlayPanel.style.transform = "none";
+                    });
+                    document.addEventListener("pointerup", () => {
+                        if (!isDrag) return;
+                        isDrag = false;
+                        const r = othPlayPanel.getBoundingClientRect();
+                        sCk("othello-play-panel_l", String(Math.round(r.left)));
+                        sCk("othello-play-panel_t", String(Math.round(r.top)));
+                    });
+                    new ResizeObserver(() => {
+                        if (othPlayPanel.style.display === "none") return;
+                        const r = othPlayPanel.getBoundingClientRect();
+                        sCk("othello-play-panel_w", String(Math.round(r.width)));
+                        sCk("othello-play-panel_h", String(Math.round(r.height)));
+                    }).observe(othPlayPanel);
+                }
+                // 閉じる: プレイパネルを単独で閉じる（ロビーへ自動復帰はしない）
+                if (othPlayClose) {
+                    othPlayClose.addEventListener("click", () => {
+                        const r = othPlayPanel.getBoundingClientRect();
+                        sCk("othello-play-panel_l", String(Math.round(r.left)));
+                        sCk("othello-play-panel_t", String(Math.round(r.top)));
+                        sCk("othello-play-panel_w", String(Math.round(r.width)));
+                        sCk("othello-play-panel_h", String(Math.round(r.height)));
+                        othPlayPanel.style.display = "none";
+                        sCk("showOthelloPlay", "0");
+                        const mb = document.getElementById("menu-othello-play");
+                        if (mb) mb.textContent = "　 " + t("menu.reversiPlay");
+                    });
+                }
+                // 最大化: 全パネル共通の body.panel-maximized フラグを使う
+                const applyPlayMaximized = (max: boolean) => {
+                    othPlayPanel.classList.toggle("maximized", max);
+                    document.body.classList.toggle("panel-maximized", max);
+                    if (othPlayMax) othPlayMax.textContent = max ? "🗗" : "⛶";
+                    if (othPlayMax) othPlayMax.title = max ? "元のサイズに戻す" : "最大化";
+                    requestAnimationFrame(() => {
+                        (game as unknown as { _othelloFitBoard?: () => void })._othelloFitBoard?.();
+                    });
+                };
+                if (getCookie("panelMax") === "1") {
+                    applyPlayMaximized(true);
+                }
+                if (othPlayMax) {
+                    othPlayMax.addEventListener("click", () => {
+                        const willMax = !othPlayPanel.classList.contains("maximized");
+                        applyPlayMaximized(willMax);
+                        sCk("panelMax", willMax ? "1" : "0");
+                    });
+                }
+            }
+        }
+    }
+
+    // ===== シリアルテストパネル (7b3) =====
+    // 中身は /test-web-serial-api.html を iframe で内包。
+    // パネルを初めて開いたときに iframe の src を設定 (lazy-load) して、不要な時のポート列挙を避ける。
+    {
+        const stPanel   = document.getElementById("serial-test-panel") as HTMLElement | null;
+        const stHeader  = document.getElementById("serial-test-header") as HTMLElement | null;
+        const stClose   = document.getElementById("serial-test-close") as HTMLElement | null;
+        const stMax     = document.getElementById("serial-test-max") as HTMLElement | null;
+        const stIframe  = document.getElementById("serial-test-iframe") as HTMLIFrameElement | null;
+        const isMobileDevST = matchMedia("(pointer:coarse) and (min-resolution:2dppx)").matches;
+        const sCk = (k: string, v: string) =>
+            document.cookie = `${k}=${encodeURIComponent(v)};path=/;max-age=${60*60*24*365}`;
+        const gCk = (k: string): string | null => {
+            const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)"));
+            return m ? decodeURIComponent(m[1]) : null;
+        };
+        if (stPanel && stHeader) {
+            if (!isMobileDevST) {
+                const sL = gCk("serial-test-panel_l"), sT = gCk("serial-test-panel_t");
+                const sW = gCk("serial-test-panel_w"), sH = gCk("serial-test-panel_h");
+                if (sL !== null) { stPanel.style.left = sL + "px"; stPanel.style.transform = "none"; }
+                if (sT !== null) stPanel.style.top = sT + "px";
+                if (sW !== null) stPanel.style.width = sW + "px";
+                if (sH !== null) stPanel.style.height = sH + "px";
+                // ドラッグ
+                let isDrag = false, offX = 0, offY = 0;
+                stHeader.addEventListener("pointerdown", (e: PointerEvent) => {
+                    const tgt = e.target as HTMLElement;
+                    // ヘッダ内のクリック可能要素はドラッグ扱いしない（button の click が preventDefault で潰れるため）
+                    if (tgt.closest("#serial-test-close, #serial-test-max, #serial-test-new-game")) return;
+                    isDrag = true;
+                    const rect = stPanel.getBoundingClientRect();
+                    offX = e.clientX - rect.left;
+                    offY = e.clientY - rect.top;
+                    stHeader.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+                document.addEventListener("pointermove", (e: PointerEvent) => {
+                    if (!isDrag) return;
+                    stPanel.style.left = Math.max(0, e.clientX - offX) + "px";
+                    stPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                    stPanel.style.transform = "none";
+                });
+                document.addEventListener("pointerup", () => {
+                    if (!isDrag) return;
+                    isDrag = false;
+                    const r = stPanel.getBoundingClientRect();
+                    sCk("serial-test-panel_l", String(Math.round(r.left)));
+                    sCk("serial-test-panel_t", String(Math.round(r.top)));
+                });
+                new ResizeObserver(() => {
+                    if (stPanel.style.display === "none") return;
+                    const r = stPanel.getBoundingClientRect();
+                    sCk("serial-test-panel_w", String(Math.round(r.width)));
+                    sCk("serial-test-panel_h", String(Math.round(r.height)));
+                }).observe(stPanel);
+            }
+            if (stClose) {
+                stClose.addEventListener("click", () => {
+                    const r = stPanel.getBoundingClientRect();
+                    sCk("serial-test-panel_l", String(Math.round(r.left)));
+                    sCk("serial-test-panel_t", String(Math.round(r.top)));
+                    sCk("serial-test-panel_w", String(Math.round(r.width)));
+                    sCk("serial-test-panel_h", String(Math.round(r.height)));
+                    stPanel.style.display = "none";
+                    sCk("showSerialTest", "0");
+                    const mb = document.getElementById("menu-serial-test");
+                    if (mb) mb.textContent = "　 " + t("menu.serialTest");
+                });
+            }
+            const applySTMax = (max: boolean) => {
+                stPanel.classList.toggle("maximized", max);
+                document.body.classList.toggle("panel-maximized", max);
+                if (stMax) stMax.textContent = max ? "🗗" : "⛶";
+                if (stMax) stMax.title = max ? "元のサイズに戻す" : "最大化";
+            };
+            if (getCookie("panelMax") === "1") applySTMax(true);
+            if (stMax) {
+                stMax.addEventListener("click", () => {
+                    const willMax = !stPanel.classList.contains("maximized");
+                    applySTMax(willMax);
+                    sCk("panelMax", willMax ? "1" : "0");
+                });
+            }
+            // 初回表示時に iframe を lazy-load
+            const loadIframeIfNeeded = () => {
+                if (!stIframe) return;
+                if (!stIframe.src || stIframe.src === "about:blank" || stIframe.src.endsWith("about:blank")) {
+                    stIframe.src = "/test-web-serial-api.html";
+                }
+            };
+            new MutationObserver(() => {
+                if (stPanel.style.display !== "none") loadIframeIfNeeded();
+            }).observe(stPanel, { attributes: true, attributeFilter: ["style"] });
+            // 初期状態で表示中なら即読み込み（Cookie からの復元時など）
+            if (stPanel.style.display !== "none") loadIframeIfNeeded();
+            // [新ゲーム作成] ボタン — CPU 対戦ゲームをリバーシロビーに作成
+            const stNewGameBtn = document.getElementById("serial-test-new-game") as HTMLButtonElement | null;
+            if (stNewGameBtn) {
+                stNewGameBtn.addEventListener("click", async () => {
+                    if (stNewGameBtn.disabled) return;
+                    stNewGameBtn.disabled = true;
+                    try {
+                        const res = await game.nakama.othelloCreate(game.currentWorldId, true);
+                        if (!res) {
+                            console.warn("othelloCreate(isCpu) returned null");
+                            return;
+                        }
+                        console.log(`CPU 対戦ゲーム作成: gameId=${res.gameId} gameNo=${res.gameNo}`);
+                    } catch (e) {
+                        console.warn("othelloCreate(isCpu) error:", e);
+                    } finally {
+                        stNewGameBtn.disabled = false;
+                    }
                 });
             }
         }
@@ -6149,11 +6375,23 @@ export function setupHtmlUI(game: GameScene): void {
         const closeBtn = document.getElementById("panel-tab-close");
         if (tabBar && tabs.length > 0) {
             // タブラベルを「N.<訳語>」形式で描画（言語切替時にも呼ぶ）
+            // - data-tab-num が指定されていればそれを使う（7b / 7b2 / 7b3 など非連番用）
+            // - 無指定なら配列インデックス +1 ではなく「直前の通常タブの番号 + 1」を採る
+            //   （間に 7b/7b2/7b3 のような副タブが挟まっても、後続の 8,9,10… が狂わないように）
             const renderTabLabels = () => {
-                tabs.forEach((tab, i) => {
+                let seq = 0;
+                tabs.forEach((tab) => {
                     const key = tab.dataset.tabKey;
+                    const explicit = tab.dataset.tabNum;
                     if (!key) return;
-                    tab.textContent = `${i + 1}.${t(key as Parameters<typeof t>[0])}`;
+                    let num: string;
+                    if (explicit) {
+                        num = explicit;
+                    } else {
+                        seq += 1;
+                        num = String(seq);
+                    }
+                    tab.textContent = `${num}.${t(key as Parameters<typeof t>[0])}`;
                 });
             };
             renderTabLabels();

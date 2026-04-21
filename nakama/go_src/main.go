@@ -3837,6 +3837,7 @@ type OthelloGame struct {
 	BoardGX   int      `json:"boardGX"`   // ブロック盤面���左上ワールドX座標
 	BoardGZ   int      `json:"boardGZ"`   // ブロック盤面の左上ワールドZ座標
 	Comment   string   `json:"comment"`   // ロビーのコメント列に表示する文言（クライアント整形）
+	IsCpu     bool     `json:"isCpu"`     // 自作 CPU 対戦ゲーム（オーナーは観戦のみ、CPU 席はオーナー経由で中継）
 	PrevBoard [64]int8 `json:"-"`         // 前回の盤面（差分検出用）
 }
 
@@ -4145,6 +4146,7 @@ func othelloGameResponse(g *OthelloGame) map[string]interface{} {
 		"boardGX":        g.BoardGX,
 		"boardGZ":        g.BoardGZ,
 		"comment":        g.Comment,
+		"isCpu":          g.IsCpu,
 	}
 }
 
@@ -4197,6 +4199,7 @@ func othelloListPayload(ctx context.Context, nk runtime.NakamaModule, worldID in
 				"blackCount":     b,
 				"whiteCount":     w,
 				"comment":        g.Comment,
+				"isCpu":          g.IsCpu,
 			})
 		}
 		return true
@@ -4426,7 +4429,8 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}
 
 	var req struct {
-		WorldID int `json:"worldId"`
+		WorldID int  `json:"worldId"`
+		IsCpu   bool `json:"isCpu"`
 	}
 	if payload != "" {
 		json.Unmarshal([]byte(payload), &req)
@@ -4451,15 +4455,29 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	gameID := othelloNextGameID()
 	g := othelloNewGame(gameID, uid, req.WorldID)
 	g.GameNo = othelloNextGameNo(ctx, nk)
-	// ブロ��ク盤面の配置位置（ワールド中心付近に固定）
+	g.IsCpu = req.IsCpu
+	// ブロック盤面の配置位置（ワールド中心付近に固定）
 	g.BoardGX = 504
 	g.BoardGZ = 504
 	// 表示名・username・認証フラグをキャッシュに読み込み（以降の list/history で cache-only で参照可）
 	cacheDN(ctx, nk, uid)
 	computeAuthFlags(ctx, nk, uid)
+	// CPU 対戦ゲームのコメントはサーバ側で固定フォーマット（「〇〇のCPU」）
+	if g.IsCpu {
+		ownerName := ""
+		if v, ok := displayNameCache.Load(uid); ok {
+			ownerName = v.(string)
+		}
+		if ownerName == "" {
+			if v, ok := usernameCache.Load(uid); ok {
+				ownerName = v.(string)
+			}
+		}
+		g.Comment = ownerName + "のCPU"
+	}
 	othelloGames.Store(gameID, g)
 
-	logf("othello create: gameId=%s black=%s%s worldId=%d board=(%d,%d)\n", gameID, shortSID(uid), dn(uid), req.WorldID, g.BoardGX, g.BoardGZ)
+	logf("othello create: gameId=%s black=%s%s worldId=%d board=(%d,%d) isCpu=%v\n", gameID, shortSID(uid), dn(uid), req.WorldID, g.BoardGX, g.BoardGZ, g.IsCpu)
 
 	// 盤面ブロックを配置（初期盤面＝緑60マス+石4つ）
 	worldMatchMu.Lock()
@@ -4512,6 +4530,7 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	if g.Status != "waiting" {
 		return "", runtime.NewError("game already started or finished", 9) // FAILED_PRECONDITION
 	}
+	// オーナーは対局席に座れない（通常ゲームの自己対戦禁止、CPU 対戦ゲームの観戦専念）
 	if g.BlackUID == uid {
 		return "", runtime.NewError("cannot join own game", 3)
 	}

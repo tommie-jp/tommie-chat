@@ -48,6 +48,7 @@ export interface OthelloUpdatePayload {
     blackCount: number;
     whiteCount: number;
     comment?: string;
+    isCpu?: boolean;
     flipped?: number[];
 }
 
@@ -75,6 +76,7 @@ export interface OthelloListPayload {
         blackCount: number;
         whiteCount: number;
         comment?: string;
+        isCpu?: boolean;
     }[];
     history?: OthelloHistoryRecord[]; // 省略時は履歴更新なし
 }
@@ -1050,11 +1052,12 @@ export class NakamaService {
 
     // ===== オセロ RPC =====
 
-    /** オセロゲームを作成 */
-    async othelloCreate(worldId: number): Promise<OthelloUpdatePayload | null> {
+    /** オセロゲームを作成
+     *  @param isCpu true を指定すると自作 CPU 対戦ゲームとして作成される（オーナーは観戦席のみ） */
+    async othelloCreate(worldId: number, isCpu: boolean = false): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
-        console.log(`snd othelloCreate worldId=${worldId}`);
-        const r = await this.socket.rpc("othelloCreate", JSON.stringify({ worldId }));
+        console.log(`snd othelloCreate worldId=${worldId}${isCpu ? " isCpu" : ""}`);
+        const r = await this.socket.rpc("othelloCreate", JSON.stringify({ worldId, isCpu }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
 
