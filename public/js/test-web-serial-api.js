@@ -162,72 +162,68 @@ function getSerial() {
   return polyfillSerial;
 }
 
-// 画面内コンソール（Android リモートデバッグ無しでも見れるように）
-// シリアル出力 (#log) とは別の textarea (#console-log) に表示する
-(function installConsoleHook() {
-  const origLog = console.log.bind(console);
-  const origWarn = console.warn.bind(console);
-  const origError = console.error.bind(console);
-  const fmt = (args) => Array.from(args).map((a) => {
-    if (a instanceof Error) return `${a.name}: ${a.message}\n${a.stack || ''}`;
-    if (typeof a === 'object') { try { return JSON.stringify(a); } catch (e) { return String(a); } }
-    return String(a);
-  }).join(' ');
-  // コンソールログもバッチ化（logger 自身が高頻度で呼ばれてもメインスレッドを止めないため）
-  // 1フレーム（rAF）ごとにまとめて flush
-  let pendingConsole = '';
-  let consoleFlushScheduled = false;
-  // 表示中テキスト長をローカル変数で追跡し、nodeValue.length 読み取りを最小化する
-  let consoleLen = 0;
-  const flushConsole = () => {
-    consoleFlushScheduled = false;
-    const el = document.getElementById('console-log');
-    if (!el || !pendingConsole) return;
-    // 追記前に「末尾付近に居たか」を記録。末尾追従中のユーザだけ新着で自動スクロール、
-    // 途中まで遡って読んでる最中のユーザは位置を保つ（一般的なログビューの挙動）。
-    const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
-    appendToPre(el, pendingConsole);
-    consoleLen += pendingConsole.length;
-    pendingConsole = '';
-    if (consoleLen > CONSOLE_MAX) {
-      rotatePre(el, CONSOLE_MAX, CONSOLE_KEEP);
-      consoleLen = getPreText(el).length;
-    }
-    if (wasAtBottom) el.scrollTop = el.scrollHeight;
+// 画面内コンソール: シリアルテスト自身のログだけを #console-log に出す（Android リモートデバッグ無しでも
+// 本機能の動作確認ができるように）。グローバル console.* はフックしない（index.html に埋め込んだ場合に
+// nakama 等の無関係ログが混入するのを防ぐため）。ブラウザの devtools にも同じ内容が出るよう、
+// slog/swarn/serror から origLog/origWarn/origError を同時に呼ぶ。
+const origLog = console.log.bind(console);
+const origWarn = console.warn.bind(console);
+const origError = console.error.bind(console);
+const fmtArgs = (args) => Array.from(args).map((a) => {
+  if (a instanceof Error) return `${a.name}: ${a.message}\n${a.stack || ''}`;
+  if (typeof a === 'object') { try { return JSON.stringify(a); } catch (e) { return String(a); } }
+  return String(a);
+}).join(' ');
+// コンソールログもバッチ化（高頻度呼び出しでメインスレッドを止めないため）。1フレーム毎に flush
+let pendingConsole = '';
+let consoleFlushScheduled = false;
+let consoleLen = 0;
+const flushConsole = () => {
+  consoleFlushScheduled = false;
+  const el = document.getElementById('console-log');
+  if (!el || !pendingConsole) return;
+  // 追記前に「末尾付近に居たか」を記録。末尾追従中のユーザだけ新着で自動スクロール、
+  // 途中まで遡って読んでる最中のユーザは位置を保つ（一般的なログビューの挙動）。
+  const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+  appendToPre(el, pendingConsole);
+  consoleLen += pendingConsole.length;
+  pendingConsole = '';
+  if (consoleLen > CONSOLE_MAX) {
+    rotatePre(el, CONSOLE_MAX, CONSOLE_KEEP);
+    consoleLen = getPreText(el).length;
+  }
+  if (wasAtBottom) el.scrollTop = el.scrollHeight;
+  syncScrollbar('console-log');
+};
+const writeToConsole = (tag, args) => {
+  const lineOpt = document.getElementById('opt-line-number');
+  const linePrefix = (lineOpt && lineOpt.checked) ? lineNumPrefix(++consoleLineNo) : '';
+  const ts = new Date().toTimeString().slice(0, 8);
+  pendingConsole += `${linePrefix}[${ts}][${tag}] ${fmtArgs(args)}\n`;
+  if (pendingConsole.length > CONSOLE_MAX) pendingConsole = pendingConsole.slice(-CONSOLE_KEEP);
+  if (!consoleFlushScheduled) {
+    consoleFlushScheduled = true;
+    requestAnimationFrame(flushConsole);
+  }
+};
+// モジュールローカルのログ関数。これ以降 slog/warn/error の呼び出しはすべて slog/swarn/serror に置換。
+function slog(...args)   { writeToConsole('LOG',  args); origLog(...args); }
+function swarn(...args)  { writeToConsole('WARN', args); origWarn(...args); }
+function serror(...args) { writeToConsole('ERR',  args); origError(...args); }
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('clear-console');
+  if (btn) btn.onclick = () => {
+    clearPre(document.getElementById('console-log'));
+    consoleLineNo = 0; consoleLen = 0;
     syncScrollbar('console-log');
   };
-  const writeToConsole = (tag, args) => {
-    const lineOpt = document.getElementById('opt-line-number');
-    const linePrefix = (lineOpt && lineOpt.checked) ? lineNumPrefix(++consoleLineNo) : '';
-    const ts = new Date().toTimeString().slice(0, 8);
-    pendingConsole += `${linePrefix}[${ts}][${tag}] ${fmt(args)}\n`;
-    // 非アクティブタブで rAF が止まっている間に無限に膨らまないよう上限でトリム
-    if (pendingConsole.length > CONSOLE_MAX) pendingConsole = pendingConsole.slice(-CONSOLE_KEEP);
-    if (!consoleFlushScheduled) {
-      consoleFlushScheduled = true;
-      requestAnimationFrame(flushConsole);
-    }
-  };
-  console.log = function () { writeToConsole('LOG', arguments); origLog(...arguments); };
-  console.warn = function () { writeToConsole('WARN', arguments); origWarn(...arguments); };
-  console.error = function () { writeToConsole('ERR', arguments); origError(...arguments); };
-  window.addEventListener('error', (e) => writeToConsole('UNCAUGHT', [e.message, e.filename + ':' + e.lineno]));
-  window.addEventListener('unhandledrejection', (e) => writeToConsole('UNHANDLED', [e.reason]));
-  document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('clear-console');
-    if (btn) btn.onclick = () => {
-      clearPre(document.getElementById('console-log'));
-      consoleLineNo = 0; consoleLen = 0;
-      syncScrollbar('console-log');
-    };
-  });
-})();
+});
 
 // 環境情報を起動時に出す
-console.log('UA:', navigator.userAgent);
-console.log('serial in navigator:', 'serial' in navigator);
-console.log('usb in navigator:', 'usb' in navigator);
-console.log('isSecureContext:', window.isSecureContext);
+slog('UA:', navigator.userAgent);
+slog('serial in navigator:', 'serial' in navigator);
+slog('usb in navigator:', 'usb' in navigator);
+slog('isSecureContext:', window.isSecureContext);
 
 // 16進 4桁フォーマット（undefined の場合は '?'）
 const hex4 = (n) => (n == null ? '?' : '0x' + n.toString(16).padStart(4, '0'));
@@ -252,17 +248,17 @@ function dumpPolyfillPort(p) {
 if (navigator.serial) {
   navigator.serial.getPorts().then((ports) => {
     nativeAuthorizedCount = ports.length;
-    console.log('Native: 既に許可済みのポート数:', ports.length);
-    ports.forEach((p, i) => console.log(`  native[${i}]: ${dumpNativePort(p)}`));
-  }).catch((e) => { nativeAuthorizedCount = -1; console.warn('Native getPorts:', e); });
+    slog('Native: 既に許可済みのポート数:', ports.length);
+    ports.forEach((p, i) => slog(`  native[${i}]: ${dumpNativePort(p)}`));
+  }).catch((e) => { nativeAuthorizedCount = -1; swarn('Native getPorts:', e); });
 } else {
   nativeAuthorizedCount = 0;
 }
 polyfillSerial.getPorts().then((ports) => {
   polyfillAuthorizedCount = ports.length;
-  console.log('Polyfill: 既に許可済みのポート数:', ports.length);
-  ports.forEach((p, i) => console.log(`  polyfill[${i}]: ${dumpPolyfillPort(p)}`));
-}).catch((e) => { polyfillAuthorizedCount = -1; console.warn('Polyfill getPorts:', e); });
+  slog('Polyfill: 既に許可済みのポート数:', ports.length);
+  ports.forEach((p, i) => slog(`  polyfill[${i}]: ${dumpPolyfillPort(p)}`));
+}).catch((e) => { polyfillAuthorizedCount = -1; swarn('Polyfill getPorts:', e); });
 
 let port = null;
 let reader = null;
@@ -516,17 +512,17 @@ async function doConnect(useExisting) {
   const serial = getSerial();
   if (useExisting && lastPort) {
     port = lastPort;
-    console.log('再接続: 既存ポートを再オープン');
+    slog('再接続: 既存ポートを再オープン');
   } else {
-    console.log(`[${mode}] requestPort 呼び出し直前`);
+    slog(`[${mode}] requestPort 呼び出し直前`);
     port = await serial.requestPort({});
     lastPort = port;
-    console.log(`[${mode}] requestPort 成功:`, JSON.stringify(port.getInfo()));
+    slog(`[${mode}] requestPort 成功:`, JSON.stringify(port.getInfo()));
   }
   const baud = parseInt($('baud').value, 10);
-  console.log('port.open baudRate=', baud);
+  slog('port.open baudRate=', baud);
   await port.open({ baudRate: baud });
-  console.log('port.open 成功');
+  slog('port.open 成功');
   bytesRx = 0;
   bytesTx = 0;
   connectedAt = Date.now();
@@ -543,9 +539,9 @@ async function doConnect(useExisting) {
 
 async function doDisconnect() {
   abortRead = true;
-  try { if (reader) await reader.cancel(); } catch (e) { console.warn('reader cancel:', e); }
-  try { if (writer) writer.releaseLock(); } catch (e) { console.warn('writer release:', e); }
-  try { if (port) await port.close(); } catch (e) { console.warn('port close:', e); }
+  try { if (reader) await reader.cancel(); } catch (e) { swarn('reader cancel:', e); }
+  try { if (writer) writer.releaseLock(); } catch (e) { swarn('writer release:', e); }
+  try { if (port) await port.close(); } catch (e) { swarn('port close:', e); }
   port = null;
   reader = null;
   writer = null;
@@ -560,7 +556,7 @@ async function doDisconnect() {
 $('connect').onclick = async () => {
   try { await doConnect(false); }
   catch (e) {
-    console.error('connect 例外:', e);
+    serror('connect 例外:', e);
     emitLine('[ERR] ' + e.name + ': ' + e.message);
     setStatus('エラー: ' + e.message, 'error');
   }
@@ -571,7 +567,7 @@ $('reconnect').onclick = async () => {
     if (port) await doDisconnect();
     await doConnect(true);
   } catch (e) {
-    console.error('reconnect 例外:', e);
+    serror('reconnect 例外:', e);
     emitLine('[ERR] ' + e.name + ': ' + e.message);
     setStatus('エラー: ' + e.message, 'error');
   }
@@ -591,7 +587,7 @@ async function readLoop() {
     emitLine('[READ ERR] ' + e.message);
   } finally {
     flushLineBuffer();
-    try { reader.releaseLock(); } catch (e) { console.warn('reader release:', e); }
+    try { reader.releaseLock(); } catch (e) { swarn('reader release:', e); }
   }
 }
 
@@ -630,7 +626,7 @@ async function copyPreToClipboard(btn, preEl) {
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = orig; }, 1000);
   } catch (e) {
-    console.warn('clipboard writeText:', e);
+    swarn('clipboard writeText:', e);
     const sel = window.getSelection();
     if (sel) {
       const range = document.createRange();

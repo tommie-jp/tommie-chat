@@ -5492,9 +5492,18 @@ export function setupHtmlUI(game: GameScene): void {
                         const commentSpan = document.createElement("span");
                         commentSpan.className = "othello-comment-text";
                         if (isOwnGame) {
-                            // 自分が作成したゲームは太字青。CPU 対戦ゲームはサーバ発「〇〇のCPU」を表示、それ以外は「自分が作成」
+                            // 自分が作成したゲームは太字青。
+                            // CPU 対戦ゲーム: 対戦中は「<オーナー>のCPUと<相手>と対戦中」、待機中はサーバ発 g.comment（「〇〇のCPU」）
+                            // 通常ゲーム: 「自分が作成」
                             commentSpan.classList.add("othello-comment-own");
-                            const ownLabel = g.isCpu ? (g.comment || "自分が作成") : "自分が作成";
+                            let ownLabel: string;
+                            if (g.isCpu && g.status === "playing" && whiteLabel) {
+                                ownLabel = `${blackLabel}のCPUと${whiteLabel}と対戦中`;
+                            } else if (g.isCpu) {
+                                ownLabel = g.comment || "自分が作成";
+                            } else {
+                                ownLabel = "自分が作成";
+                            }
                             commentSpan.textContent = ownLabel;
                             commentCell.title = ownLabel;
                         } else {
@@ -5660,9 +5669,10 @@ export function setupHtmlUI(game: GameScene): void {
                 // ステータス文字サイズや戻るボタン表示で兄弟要素の高さが変わるため再フィット
                 requestAnimationFrame(fitBoard);
                 // E10: ロビーに居る自分の待機中ゲームに相手が参加 → G3ゲーム画面へ自動遷移
-                // CPU 対戦ゲームのオーナーはロビーを閉じず、プレイパネルを追加表示するのみ（案 B2）
-                if (prevStatus === "waiting" && gameStatus === "playing" && othLobby.style.display !== "none") {
-                    showGame(data.isCpu === true);
+                // CPU 対戦ゲームはオーナーがシリアルテストパネルで観戦するため、プレイパネルを自動表示しない
+                if (prevStatus === "waiting" && gameStatus === "playing" && othLobby.style.display !== "none"
+                    && data.isCpu !== true) {
+                    showGame(false);
                 }
             };
 
