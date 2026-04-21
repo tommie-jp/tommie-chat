@@ -1,7 +1,7 @@
 // tommieChat Service Worker
 // CACHE_VERSION は APP_VERSION と同期（doVersionUp.sh が自動更新）
 // バージョンを変更するとキャッシュが自動クリアされます
-const CACHE_VERSION = "v0.1.57";
+const CACHE_VERSION = "v0.1.58";
 const CACHE_NAME = "tommiechat-" + CACHE_VERSION;
 
 // キャッシュ対象（アプリシェル）
