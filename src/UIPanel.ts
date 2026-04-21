@@ -4953,9 +4953,10 @@ export function setupHtmlUI(game: GameScene): void {
                 loadHistory().catch(e => console.warn("othelloHistory error:", e));
             };
 
-            const showGame = () => {
+            const showGame = (keepLobby = false) => {
                 if (othPlayPanel) othPlayPanel.style.display = "";
-                othPanel.style.display = "none";
+                // CPU 対戦ゲームのオーナーは観戦のみ（案 B2）。ロビーを閉じずにプレイパネルを追加表示する。
+                if (!keepLobby) othPanel.style.display = "none";
                 renderBoard();
                 requestAnimationFrame(fitBoard);
             };
@@ -5443,7 +5444,7 @@ export function setupHtmlUI(game: GameScene): void {
                             game.nakama.othelloJoin(ownGame.gameId, true).then(state => {
                                 if (state) applyState(state);
                             }).catch(e => console.warn("othelloJoin(watch) error:", e));
-                            showGame();
+                            showGame(ownGame.isCpu === true);
                         }
                     }
                     // status="playing" はゲーム画面へ遷移済みなので URL パラメータは消費済みとみなす
@@ -5581,14 +5582,7 @@ export function setupHtmlUI(game: GameScene): void {
                     const res = await game.nakama.othelloJoin(gameId, true);
                     if (!res) { currentGameId = null; return; }
                     applyState(res);
-                    if (keepLobby) {
-                        // ロビーを閉じずにプレイパネルだけ表示
-                        if (othPlayPanel) othPlayPanel.style.display = "";
-                        renderBoard();
-                        requestAnimationFrame(fitBoard);
-                    } else {
-                        showGame();
-                    }
+                    showGame(keepLobby);
                 } catch (e) {
                     currentGameId = null;
                     console.warn("othelloJoin(watch) error:", e);
@@ -5646,26 +5640,29 @@ export function setupHtmlUI(game: GameScene): void {
                 }
                 if (othBlack) othBlack.textContent = String(data.blackCount);
                 if (othWhite) othWhite.textContent = String(data.whiteCount);
-                // プレイヤー名（自分のほうは "(YOU)" を付ける）
+                // プレイヤー名。CPU 対戦ではオーナー席は CPU が占めるので "のCPU"、
+                // 通常対戦ではオーナー自身が対局するので "(YOU)" を付ける。
                 const uid = myUid();
+                const ownerSuffix = data.isCpu === true ? "のCPU" : "(YOU)";
                 if (othBlackName) {
                     const label = formatPlayer(data.blackName || "", data.blackUser, data.blackHasGoogle, data.blackIsAdmin);
-                    othBlackName.textContent = label + (data.black === uid ? "(YOU)" : "");
+                    othBlackName.textContent = label + (data.black === uid ? ownerSuffix : "");
                 }
                 if (othWhiteName) {
                     if (!data.white) {
                         othWhiteName.textContent = "？";
                     } else {
                         const label = formatPlayer(data.whiteName || "", data.whiteUser, data.whiteHasGoogle, data.whiteIsAdmin);
-                        othWhiteName.textContent = label + (data.white === uid ? "(YOU)" : "");
+                        othWhiteName.textContent = label + (data.white === uid ? ownerSuffix : "");
                     }
                 }
                 renderBoard();
                 // ステータス文字サイズや戻るボタン表示で兄弟要素の高さが変わるため再フィット
                 requestAnimationFrame(fitBoard);
                 // E10: ロビーに居る自分の待機中ゲームに相手が参加 → G3ゲーム画面へ自動遷移
+                // CPU 対戦ゲームのオーナーはロビーを閉じず、プレイパネルを追加表示するのみ（案 B2）
                 if (prevStatus === "waiting" && gameStatus === "playing" && othLobby.style.display !== "none") {
-                    showGame();
+                    showGame(data.isCpu === true);
                 }
             };
 
@@ -6221,7 +6218,14 @@ export function setupHtmlUI(game: GameScene): void {
             if (!isMobileDevST) {
                 const sL = gCk("serial-test-panel_l"), sT = gCk("serial-test-panel_t");
                 const sW = gCk("serial-test-panel_w"), sH = gCk("serial-test-panel_h");
-                if (sL !== null) { stPanel.style.left = sL + "px"; stPanel.style.transform = "none"; }
+                // CSS の `right:0; margin:0 auto` (transform 無し中央寄せ) が auto マージンで
+                // 再センタリングしてしまうため、明示位置を設定するときは right/margin もクリアする
+                if (sL !== null) {
+                    stPanel.style.left = sL + "px";
+                    stPanel.style.right = "auto";
+                    stPanel.style.margin = "0";
+                    stPanel.style.transform = "none";
+                }
                 if (sT !== null) stPanel.style.top = sT + "px";
                 if (sW !== null) stPanel.style.width = sW + "px";
                 if (sH !== null) stPanel.style.height = sH + "px";
@@ -6242,6 +6246,8 @@ export function setupHtmlUI(game: GameScene): void {
                     if (!isDrag) return;
                     stPanel.style.left = Math.max(0, e.clientX - offX) + "px";
                     stPanel.style.top  = Math.max(0, e.clientY - offY) + "px";
+                    stPanel.style.right = "auto";
+                    stPanel.style.margin = "0";
                     stPanel.style.transform = "none";
                 });
                 document.addEventListener("pointerup", () => {

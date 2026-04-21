@@ -22,15 +22,42 @@
   button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   select, input { font-family: inherit; font-size: 1em; padding: 0.2em; }
-  textarea { font-family: monospace; font-size: 14px; line-height: 1.5; }
-  textarea::-webkit-scrollbar { width: 8px; height: 8px; }
-  textarea::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-  textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
-  textarea::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
-  #log { width: 100%; height: 40vh;
-         background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-  #console-log { width: 100%; height: 20vh;
-         background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
+  /* index.html 側のパネルと同じ自作スクロールバー方式で統一（JS 共通化のため）。
+     単体ページではゴースト問題はないが、構造を揃えておくことで test-web-serial-api.js を分岐なく使える。 */
+  .log-wrap {
+    position: relative;
+    width: 100%;
+    margin: 0;
+  }
+  .log-wrap-main { height: 40vh; }
+  .log-wrap-console { height: 20vh; }
+  #log, #console-log {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: 1px solid #444;
+    padding: 0.5em;
+    padding-right: calc(0.5em + 10px);
+    margin: 0;
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  #log { background: #111; color: #cfc; }
+  #console-log { background: #1a1a1a; color: #ffc; }
+  .fake-sb {
+    position: absolute; top: 2px; right: 2px; bottom: 2px; width: 8px;
+    background: rgba(255,255,255,0.05); border-radius: 4px;
+  }
+  .fake-sb-thumb {
+    position: absolute; left: 0; top: 0; width: 100%; height: 20px;
+    background: rgba(255,255,255,0.3); border-radius: 4px; cursor: grab; touch-action: none;
+  }
+  .fake-sb-thumb:hover { background: rgba(255,255,255,0.5); }
+  .fake-sb-thumb.dragging { background: rgba(255,255,255,0.6); cursor: grabbing; }
   .section-label { font-size: 1em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
   .section-label button { font-size: 0.9em; padding: 0.1em 0.5em; }
   .row { margin: 0.3em 0; }
@@ -115,7 +142,10 @@
     <button id="clear">Clear</button>
   </span>
 </div>
-<textarea id="log" readonly></textarea>
+<div class="log-wrap log-wrap-main">
+  <pre id="log"></pre>
+  <div class="fake-sb" data-target="log"><div class="fake-sb-thumb"></div></div>
+</div>
 
 <div class="row">
   <input id="send-text" placeholder="送信文字列" style="width: 60%;">
@@ -136,7 +166,10 @@
     <button id="clear-console">Clear</button>
   </span>
 </div>
-<textarea id="console-log" readonly></textarea>
+<div class="log-wrap log-wrap-console">
+  <pre id="console-log"></pre>
+  <div class="fake-sb" data-target="console-log"><div class="fake-sb-thumb"></div></div>
+</div>
 
 <script type="module" src="/js/test-web-serial-api.js"></script>
 </body>

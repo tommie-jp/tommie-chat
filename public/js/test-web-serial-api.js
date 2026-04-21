@@ -3,12 +3,123 @@ import { serial as polyfillSerial } from './web-serial-polyfill.js';
 
 const $ = (id) => document.getElementById(id);
 
-// textarea のログローテーション: 値が maxLen 超過で末尾 keepLen 分だけ残す（行頭で切る）
-function rotateTextarea(el, maxLen, keepLen) {
-  if (!el || el.value.length <= maxLen) return;
-  const cutFrom = el.value.length - keepLen;
-  const nl = el.value.indexOf('\n', cutFrom);
-  el.value = el.value.slice(nl >= 0 ? nl + 1 : cutFrom);
+// 自作スクロールバー: 対象要素 (pre) は overflow:hidden（ネイティブ scroll 機構を無効化して
+// Chromium コンポジタの層昇格→Babylon canvas ゴースト焼き付きバグを回避）、scrollTop は JS で操作する。
+// wheel / thumb drag の両方で対応、thumb 位置は表示時と appendToPre 後の syncThumb 呼び出しで同期。
+const scrollbars = new Map(); // id -> { target, thumb, sync }
+function setupFakeScrollbar(target, track, thumb) {
+  const sync = () => {
+    const ch = target.clientHeight;
+    const sh = target.scrollHeight;
+    const st = target.scrollTop;
+    if (sh <= ch + 1) {
+      thumb.style.display = 'none';
+      return;
+    }
+    thumb.style.display = '';
+    const trackH = track.clientHeight;
+    const thumbH = Math.max(20, Math.round(trackH * ch / sh));
+    const maxThumbTop = trackH - thumbH;
+    const scrollRange = sh - ch;
+    const thumbTop = scrollRange > 0 ? Math.round(st / scrollRange * maxThumbTop) : 0;
+    thumb.style.height = thumbH + 'px';
+    thumb.style.top = thumbTop + 'px';
+  };
+  target.addEventListener('wheel', (e) => {
+    if (target.scrollHeight <= target.clientHeight + 1) return;
+    e.preventDefault();
+    target.scrollTop = Math.max(0, Math.min(target.scrollHeight - target.clientHeight,
+      target.scrollTop + e.deltaY));
+    sync();
+  }, { passive: false });
+  let dragging = false, startY = 0, startScroll = 0;
+  thumb.addEventListener('pointerdown', (e) => {
+    dragging = true; startY = e.clientY; startScroll = target.scrollTop;
+    thumb.classList.add('dragging');
+    thumb.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  thumb.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dy = e.clientY - startY;
+    const ch = target.clientHeight;
+    const sh = target.scrollHeight;
+    const trackH = track.clientHeight;
+    const thumbH = Math.max(20, Math.round(trackH * ch / sh));
+    const maxThumbTop = Math.max(1, trackH - thumbH);
+    const scrollRange = sh - ch;
+    target.scrollTop = Math.max(0, Math.min(scrollRange, startScroll + dy * (scrollRange / maxThumbTop)));
+    sync();
+  });
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    thumb.classList.remove('dragging');
+    try { thumb.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+  thumb.addEventListener('pointerup', endDrag);
+  thumb.addEventListener('pointercancel', endDrag);
+  // トラッククリックでページ単位ジャンプ
+  track.addEventListener('pointerdown', (e) => {
+    if (e.target !== track) return;
+    const rect = track.getBoundingClientRect();
+    const thumbRect = thumb.getBoundingClientRect();
+    const dir = e.clientY < thumbRect.top ? -1 : 1;
+    target.scrollTop = Math.max(0, Math.min(target.scrollHeight - target.clientHeight,
+      target.scrollTop + dir * target.clientHeight * 0.9));
+    sync();
+  });
+  return { sync };
+}
+function initScrollbars() {
+  document.querySelectorAll('.fake-sb').forEach((track) => {
+    const targetId = track.dataset.target;
+    const target = document.getElementById(targetId);
+    const thumb = track.querySelector('.fake-sb-thumb');
+    if (!target || !thumb) return;
+    scrollbars.set(targetId, { target, thumb, ...setupFakeScrollbar(target, track, thumb) });
+  });
+}
+function syncScrollbar(id) { scrollbars.get(id)?.sync(); }
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initScrollbars);
+} else {
+  initScrollbars();
+}
+// パネル自体のリサイズで clientHeight が変わる（serial-test-panel は resize: both）。
+// ResizeObserver で wrap の寸法変化を監視して thumb 位置/高さを再計算する。
+if (typeof ResizeObserver !== 'undefined') {
+  const ro = new ResizeObserver(() => scrollbars.forEach((s) => s.sync()));
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.log-wrap').forEach((el) => ro.observe(el));
+  });
+}
+
+// <pre> 要素への追記は単一テキストノードの nodeValue を伸ばすことで実現する（DOM ノード数を増やさず、textContent 全書き換えも避ける）
+function preTextNode(el) {
+  if (!el) return null;
+  if (!el.firstChild) el.appendChild(document.createTextNode(''));
+  return el.firstChild;
+}
+function appendToPre(el, text) {
+  const n = preTextNode(el);
+  if (n) n.nodeValue += text;
+}
+function getPreText(el) {
+  return (el && el.firstChild) ? el.firstChild.nodeValue : '';
+}
+function clearPre(el) {
+  const n = preTextNode(el);
+  if (n) n.nodeValue = '';
+}
+// <pre> のログローテーション: 値が maxLen 超過で末尾 keepLen 分だけ残す（行頭で切る）
+function rotatePre(el, maxLen, keepLen) {
+  const n = el && el.firstChild;
+  if (!n || n.nodeValue.length <= maxLen) return;
+  const v = n.nodeValue;
+  const cutFrom = v.length - keepLen;
+  const nl = v.indexOf('\n', cutFrom);
+  n.nodeValue = v.slice(nl >= 0 ? nl + 1 : cutFrom);
 }
 const LOG_MAX = 200000, LOG_KEEP = 150000;
 const CONSOLE_MAX = 100000, CONSOLE_KEEP = 75000;
@@ -66,21 +177,24 @@ function getSerial() {
   // 1フレーム（rAF）ごとにまとめて flush
   let pendingConsole = '';
   let consoleFlushScheduled = false;
-  // textarea の長さをローカル変数で追跡し、el.value.length 読み取り（文字列コピーが走る可能性）を避ける
+  // 表示中テキスト長をローカル変数で追跡し、nodeValue.length 読み取りを最小化する
   let consoleLen = 0;
   const flushConsole = () => {
     consoleFlushScheduled = false;
     const el = document.getElementById('console-log');
     if (!el || !pendingConsole) return;
-    el.value += pendingConsole;
+    // 追記前に「末尾付近に居たか」を記録。末尾追従中のユーザだけ新着で自動スクロール、
+    // 途中まで遡って読んでる最中のユーザは位置を保つ（一般的なログビューの挙動）。
+    const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+    appendToPre(el, pendingConsole);
     consoleLen += pendingConsole.length;
     pendingConsole = '';
-    // ローテーション時のみ scrollHeight を読んで強制レイアウトを回避
     if (consoleLen > CONSOLE_MAX) {
-      rotateTextarea(el, CONSOLE_MAX, CONSOLE_KEEP);
-      consoleLen = el.value.length;
-      el.scrollTop = el.scrollHeight;
+      rotatePre(el, CONSOLE_MAX, CONSOLE_KEEP);
+      consoleLen = getPreText(el).length;
     }
+    if (wasAtBottom) el.scrollTop = el.scrollHeight;
+    syncScrollbar('console-log');
   };
   const writeToConsole = (tag, args) => {
     const lineOpt = document.getElementById('opt-line-number');
@@ -101,7 +215,11 @@ function getSerial() {
   window.addEventListener('unhandledrejection', (e) => writeToConsole('UNHANDLED', [e.reason]));
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('clear-console');
-    if (btn) btn.onclick = () => { document.getElementById('console-log').value = ''; consoleLineNo = 0; consoleLen = 0; };
+    if (btn) btn.onclick = () => {
+      clearPre(document.getElementById('console-log'));
+      consoleLineNo = 0; consoleLen = 0;
+      syncScrollbar('console-log');
+    };
   });
 })();
 
@@ -229,7 +347,7 @@ function toHexAscii(bytes, offset) {
 // シリアル出力のバッチ化: 受信は高頻度で発生するので、1フレーム（rAF）ごとにまとめて DOM に書き込む
 let pendingLog = '';
 let logFlushScheduled = false;
-// textarea の長さをローカル変数で追跡し、el.value.length 読み取り（文字列コピーが走る可能性）を避ける
+// 表示中テキスト長をローカル変数で追跡し、nodeValue.length 読み取りを最小化する
 let logLen = 0;
 function flushLog() {
   logFlushScheduled = false;
@@ -237,7 +355,7 @@ function flushLog() {
   if (!el || !pendingLog) return;
   const autoscroll = $('opt-autoscroll').checked;
 
-  el.value += pendingLog;
+  appendToPre(el, pendingLog);
   logLen += pendingLog.length;
   pendingLog = '';
 
@@ -245,20 +363,22 @@ function flushLog() {
   // 発生する（＝スクロール位置の再計算が必要な）時だけ読むようにしてメモリ/CPU を節約する
   if (logLen <= LOG_MAX) {
     if (autoscroll) el.scrollTop = el.scrollHeight;
+    syncScrollbar('log');
     return;
   }
 
   // ローテーションあり: 頭から削られた分だけ scrollTop を補正して表示位置を保つ
   const savedScrollTop = el.scrollTop;
   const heightBefore = el.scrollHeight;
-  rotateTextarea(el, LOG_MAX, LOG_KEEP);
-  logLen = el.value.length;
+  rotatePre(el, LOG_MAX, LOG_KEEP);
+  logLen = getPreText(el).length;
   const heightAfter = el.scrollHeight;
   if (autoscroll) {
     el.scrollTop = heightAfter;
   } else {
     el.scrollTop = Math.max(0, savedScrollTop - (heightBefore - heightAfter));
   }
+  syncScrollbar('log');
 }
 function appendLog(s) {
   if (!s) return;
@@ -492,30 +612,37 @@ $('send-text').addEventListener('keydown', (e) => {
 });
 
 $('clear').onclick = () => {
-  $('log').value = '';
+  clearPre($('log'));
   lineBuffer = '';
   pendingLog = '';
   logLen = 0;
   serialLineNo = 0;
   atLineStart = true;
+  syncScrollbar('log');
 };
 
-// textarea の内容をクリップボードへ。失敗時は選択状態にしてフォールバック
-async function copyTextareaToClipboard(btn, textareaEl) {
+// <pre> の内容をクリップボードへ。失敗時は選択範囲にしてフォールバック
+async function copyPreToClipboard(btn, preEl) {
+  const text = getPreText(preEl);
   try {
-    await navigator.clipboard.writeText(textareaEl.value);
+    await navigator.clipboard.writeText(text);
     const orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = orig; }, 1000);
   } catch (e) {
     console.warn('clipboard writeText:', e);
-    textareaEl.focus();
-    textareaEl.select();
+    const sel = window.getSelection();
+    if (sel) {
+      const range = document.createRange();
+      range.selectNodeContents(preEl);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
   }
 }
 
-$('copy-log').onclick = () => copyTextareaToClipboard($('copy-log'), $('log'));
-$('copy-console').onclick = () => copyTextareaToClipboard($('copy-console'), $('console-log'));
+$('copy-log').onclick = () => copyPreToClipboard($('copy-log'), $('log'));
+$('copy-console').onclick = () => copyPreToClipboard($('copy-console'), $('console-log'));
 
 $('opt-line-buffer').addEventListener('change', () => {
   flushLineBuffer();
