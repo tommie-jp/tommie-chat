@@ -467,13 +467,178 @@ CLI は疎通確認用なので、本番運用は自律 AI に移行する。
 - ブリッジに `Session.restore` + `sessionRefresh` ループ実装
 - device_id 方式と両対応（`tokens.json` があれば優先）
 
+## 配布・パッケージング
+
+開発中は `node dist/index.js` で動かせばよいが、他人の PC で動かす・サービス化する段階では単一 exe 化を検討する。
+
+### パッケージャの選択
+
+フェーズの進行に応じて切り替え:
+
+| フェーズ | パッケージャ | 理由 |
+| --- | --- | --- |
+| 1〜3 (純 JS) | **Node.js SEA** (Single Executable Applications) | Node 21+ 公式、追加依存なし |
+| 5〜 (`serialport` 追加後) | **@yao-pkg/pkg** | ネイティブモジュール (`.node`) のバンドルが得意 |
+
+#### Node.js SEA（初期）
+
+Node 標準機能。`sea-config.json` で設定、`postject` で Node バイナリにブロブ注入。
+
+```bash
+cat > sea-config.json <<EOF
+{ "main": "dist/index.js", "output": "sea-prep.blob" }
+EOF
+node --experimental-sea-config sea-config.json
+node -e "require('fs').copyFileSync(process.execPath, 'bridge.exe')"
+npx postject bridge.exe NODE_SEA_BLOB sea-prep.blob \
+  --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+```
+
+- 利点: 公式、将来性、ライセンス整理不要
+- 欠点: ネイティブモジュールの組込みが面倒（`.node` を別配置して動的 require）
+
+#### @yao-pkg/pkg（UART 統合後）
+
+Vercel pkg の後継コミュニティ版。`package.json` の `pkg.assets` でネイティブ `.node` を同梱できる。
+
+```bash
+npm install -g @yao-pkg/pkg
+pkg . --targets node20-win-x64 --output dist/bridge.exe
+```
+
+```json
+// package.json
+{
+  "pkg": {
+    "targets": ["node20-win-x64"],
+    "assets": ["node_modules/serialport/**/*.node"]
+  }
+}
+```
+
+### ビルドスクリプト
+
+`bridge/package.json` に両方のレシピを用意して、移行しやすくしておく:
+
+```json
+{
+  "scripts": {
+    "build": "tsc",
+    "build:exe": "node --experimental-sea-config sea-config.json && node scripts/make-sea.js",
+    "build:exe:pkg": "pkg . --targets node20-win-x64 --output dist/bridge.exe"
+  }
+}
+```
+
+### サイズ・配布
+
+- exe 単体で **80〜100 MB** (Node v20 同梱)。UPX 圧縮は Defender 誤検知増のため非推奨
+- 配布 zip 構成: `bridge.exe` + (pkg の場合) `.node` ファイル + `.env.example` + `README.md`
+
+### Windows 11 特有の考慮
+
+1. **コード署名 (Authenticode)**: 未署名だと SmartScreen 警告。長期運用なら EV 証明書（年 3〜20 万円）検討
+2. **Defender 誤検知**: SEA/pkg 共に初期は誤検知されやすい。Microsoft に誤検知報告で緩和
+3. **サービス化**: `nssm install tommie-cpu-bridge C:\path\to\bridge.exe` で Windows サービス化、PC 起動時に自動開始
+4. **インストーラ化 (任意)**: Inno Setup / NSIS で `.msi` / `.exe` インストーラにすれば、サービス登録・アンインストールまで自動化
+
+### フェーズ 4 との関係
+
+[フェーズ 4](#フェーズ-4-運用耐性半日) の「Windows サービス化」は `node dist/index.js` 経由でも `bridge.exe` 経由でも実行可能:
+
+```bash
+# 開発中 (Node インストール必要)
+nssm install tommie-cpu-bridge "C:\Program Files\nodejs\node.exe" "C:\path\bridge\dist\index.js"
+
+# 配布後 (Node 不要)
+nssm install tommie-cpu-bridge "C:\path\bridge.exe"
+```
+
+## 実行環境
+
+運用ホストと UART 接続手段の組み合わせは複数パターンある。
+
+| ホスト | UART 接続経路 | 用途 | 備考 |
+| --- | --- | --- | --- |
+| Android + tommieChat ブラウザ | **WebSerial / WebUSB** | **自作 CPU 持ち込み対戦（採用）** | 常駐不要なら最短ルート |
+| Windows 11 ネイティブ + Node.js ブリッジ | `serialport` (kernel driver 経由) | 据置の常駐 bot（将来） | ネイティブバインディング最も楽 |
+| Raspberry Pi + Node.js ブリッジ | `serialport` | 据置の常駐 bot（将来） | Linux 扱い |
+| WSL2 Ubuntu24 + Node.js ブリッジ | UART なし（フェーズ 1〜3 のみ） | 開発メイン | USB passthrough は `usbipd-win` 必須 |
+| Android + Termux + Node.js ブリッジ | （断念） | — | `termux-usb` fd は raw usbfs で `read/write` 不可 (EINVAL)、チップ別プロトコル自力実装が必要 |
+
+### Android + tommieChat 経由 (採用案)
+
+外部持ち出し端末が Android しかない運用前提では、**tommieChat のリバーシパネルに埋め込んだシリアルテスト UI を使って自作 CPU と直結する**のが最短ルート。
+
+既に [public/test-web-serial-api.html](../public/test-web-serial-api.html) で Android Chrome での WebSerial/WebUSB 接続動作を確認済み。WebSerial 非対応端末向けには [public/js/web-serial-polyfill.js](../public/js/web-serial-polyfill.js) (WebUSB ベース) に自動フォールバック。
+
+#### 構成
+
+```text
+[自作CPU (MCU)] ─UART─ [USB-OTG] ─ [Android]
+                                     └─ Android Chrome ─ tommieChat リバーシパネル
+                                                             └─ WSS ─→ nakama ─→ 対戦相手
+```
+
+- **CPU は人間 A のユーザ ID で着手を打つ**（人間 A が自作 CPU の着手を代行する扱い）
+- ロビー → 新ゲーム → 対戦相手マッチング → リバーシパネル下部のシリアル UI で MCU から着手を受信 → 盤面へ反映
+- 常駐 bot ではなく「イベント時の持ち込み CPU」用途
+
+#### 当初 WebSerial 不採用理由の再評価
+
+| 当初デメリット | Android + 持ち込み運用での評価 |
+| --- | --- |
+| タブ閉じたら CPU も消える | 対戦中は前面固定 → 問題なし |
+| バックグラウンドタブのスロットル | 同上 |
+| Chromium 系のみ対応 | Android Chrome で十分 |
+| 人間と同じユーザ ID | 代行操作なので問題なし |
+| ユーザジェスチャ毎セッション | 対戦開始時 1 回 → 許容 |
+
+#### UI 配置
+
+- リバーシパネル (`#othello-lobby`) の履歴セクション直下、`<iframe src="/test-web-serial-api.html">` で埋め込み
+- `#othello-lobby` を `overflow-y: auto` にし、モバイルでもスクロールして到達可能
+- ロビー上部のヘッダには既存のリンク「シリアルテスト」を残す（独立タブで開きたいとき用）
+
+#### Android 特有の注意点
+
+- **OTG 給電**: 充電中 OTG 非対応機種あり。Y 字 OTG ケーブル or 対戦中バッテリー駆動
+- **画面スリープで JS 停止**: `navigator.wakeLock.request('screen')` で回避（将来実装）
+- **USB デバイス許可**: Android のダイアログで毎回許可が必要なケースあり
+
+### Android + Termux + Node.js ブリッジ (断念の記録)
+
+検討当初、Termux 上の Node.js でブリッジを常駐させる案を調査した。フェーズ 1〜3 (純 JS) までは以下手順で動くことを確認:
+
+```bash
+pkg install nodejs git
+cd ~/tommie-chat/bridge && npm install && node dist/index.js
+termux-wake-lock   # 画面オフ対策
+```
+
+しかし **UART (フェーズ 5) で詰んだ**:
+
+- `termux-usb -e "node test.js" /dev/bus/usb/...` で渡される fd は raw usbfs ハンドル
+- `fs.createWriteStream(null, { fd }).write(...)` が `EINVAL` でエラー
+- usbfs は `USBDEVFS_*` ioctl (libusb プロトコル) しか受け付けない
+- 加えて USB-シリアル変換チップ (FT232/CP210x/CH340) は各社独自プロトコルで、kernel ドライバなしでは自力実装が必要
+- 非 root Termux では kernel ドライバ (`/dev/ttyUSB0`) が使えない
+
+→ 解決には `node-usb` + チップ別プロトコルの userspace 実装 or Kotlin サイドカー (`usb-serial-for-android` + TCP 中継) が必要で、**ブラウザ内 WebSerial のほうが遥かに楽**という結論になった。
+
+### Node.js ブリッジ (将来: 据置常駐)
+
+Windows 11 / Raspberry Pi に据置して 24/7 常駐させる用途は依然として有効。こちらはフェーズ 1〜6 の本筋として温存する。当面は Android + tommieChat ルートを優先実装。
+
 ## 確定事項
 
-- **UART は当面後回し**（フェーズ 5）
-- **「CPU と対戦」機能は新規実装**。tommieChat 本体にまだ存在しないため、サーバ・クライアント・ブリッジを一式新規に作る
-- **リポジトリは tommieChat 本体の `bridge/` サブディレクトリ**。複雑化したら別リポジトリへ切り出す
+- **UART 接続は Android + tommieChat の WebSerial/WebUSB 経由を優先**。自作 CPU を人間が持ち込み、リバーシパネル下部に埋め込んだシリアル UI (`/test-web-serial-api.html`) で接続する運用
+- **Android + Termux + Node.js ルートは UART 層で断念**。`termux-usb` fd が raw usbfs で `read/write` 不可 (EINVAL)、USB-シリアル変換チップのプロトコル自力実装が必要なため割に合わない
+- **Node.js ブリッジ (Windows/RasPi 据置) は将来の本格常駐用に温存**。フェーズ 1〜3 (純 JS) は今も有効
+- **「CPU と対戦」機能は新規実装**。tommieChat 本体にまだ存在しないため、サーバ・クライアント・シリアル入力フックを一式新規に作る
+- **リポジトリは tommieChat 本体の `bridge/` サブディレクトリ**（Node.js ブリッジ用）。複雑化したら別リポジトリへ切り出す
 - **GUI は作らない**。手動プレイしたい場合は tommieChat で CPU アカウントにログインすれば足りる
-- **CLI は疎通確認用**。本番運用は Node.js 自律 AI (`MODE=auto`) が担う
+- **CLI は疎通確認用**。Node.js ブリッジを実装する場合のみ
 - **本番運用は Google 認証推奨**。BAN 回避を困難にするための抑止策として
 
 ## 関連ドキュメント
@@ -481,3 +646,40 @@ CLI は疎通確認用なので、本番運用は自律 AI に移行する。
 - [10-ブラウザ側ファイル構成.md](10-ブラウザ側ファイル構成.md)
 - [11-RPC関数一覧.md](11-RPC関数一覧.md)（リバーシ `oth*` RPC の参照用）
 - [50-設計-部屋システム.md](50-設計-部屋システム.md)
+
+## シリアル接続の前にすること
+
+- 仕様変更
+  - 画面遷移を変更
+    - 従来のリバーシパネルをリバーシロビーへ名前変更
+    - リバーシプレイパネルを新設
+      - ゲーム中の盤面表示
+  - リバーシロビーパネル｜閲覧ボタンか、参加ボタンを押したとき、
+    - リバーシプレイパネルへ遷移
+      - ロビーへボタンでリバーシロビーパネルへ遷移
+
+## 設計方針
+- シリアルテストパネルを新規作成する。
+- シリアルテストパネルの仕様
+  - 自作オセロCPUのUARTーUSBシリアルの接続確認するパネル。
+  - 既に実績のあるシリアルテストページの内容と同じ。
+
+### 自作CPUをリバーシゲームに参加する想定手順
+
+- 当面は毎回、人がゲームを作成、削除する。
+- リバーシパネルを開く
+- シリアルテストパネルを開く
+  - CPUとのシリアル接続を確認
+  - シリアルテストパネル｜新ゲーム作成ボタンを押す
+  - リバーシパネル｜ゲームロビーに新ゲームが作成される
+    - リバーシパネル｜新ゲーム開始ボタンを押したときの表示とは別にする
+      - オーナー:「自分」
+      - コメント:自分の表示名＋「のCPU」
+      - 閲覧ボタン
+        - 自分のCPUのゲームの閲覧画面へ遷移
+      - 削除ボタン
+- ゲーム中
+  - リバーシパネル｜ゲームロビーにCPU対戦ゲームを表示
+  - 
+- 作成したゲームの削除
+  - リバーシパネル｜ゲームロビーで削除できる
