@@ -18,6 +18,12 @@ for (const method of ["log", "warn", "error"] as const) {
 
 console.log(`tommieChat v${APP_VERSION} #${APP_COMMIT_COUNTER} (${APP_DATE})`);
 
+// Android では Web Serial API が使えないのでシリアルテスト関連 UI を非表示にする。
+// body.platform-android クラスを起動時に付与し、CSS 側で該当要素を隠す。
+if (/Android/.test(navigator.userAgent)) {
+    document.body.classList.add("platform-android");
+}
+
 // URL パラメータ ?ot=<ゲーム番号> を page load 時に取り込む（仕様書 doc/20 参照）
 // 実際の処理は socket 接続確立後に UIPanel 側で行う（遅延呼び出し）
 {

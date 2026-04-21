@@ -1239,6 +1239,13 @@
             background: rgba(255,255,255,0.16);
         }
 
+        /* Android では Web Serial API が使えないのでシリアルテスト関連 UI を非表示（main.ts で body.platform-android を付与） */
+        body.platform-android #menu-serial-test,
+        body.platform-android .panel-tab[data-target="serial-test-panel"],
+        body.platform-android #serial-test-panel {
+            display: none !important;
+        }
+
         /* ===== オセロパネル ===== */
         #othello-panel,
         #othello-play-panel,
