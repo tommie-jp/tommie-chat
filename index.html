@@ -591,9 +591,6 @@
         #server-log-list::-webkit-scrollbar,
         .oth-invite-list::-webkit-scrollbar,
         #about-panel-body::-webkit-scrollbar,
-        #serial-test-body::-webkit-scrollbar,
-        #serial-test-body #log::-webkit-scrollbar,
-        #serial-test-body #console-log::-webkit-scrollbar,
         #settings-body::-webkit-scrollbar { width: 8px; height: 8px; }
         #debug-body::-webkit-scrollbar-track,
         #chat-history-list::-webkit-scrollbar-track,
@@ -602,9 +599,6 @@
         #server-log-list::-webkit-scrollbar-track,
         .oth-invite-list::-webkit-scrollbar-track,
         #about-panel-body::-webkit-scrollbar-track,
-        #serial-test-body::-webkit-scrollbar-track,
-        #serial-test-body #log::-webkit-scrollbar-track,
-        #serial-test-body #console-log::-webkit-scrollbar-track,
         #settings-body::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
         #debug-body::-webkit-scrollbar-thumb,
         #chat-history-list::-webkit-scrollbar-thumb,
@@ -613,9 +607,6 @@
         #server-log-list::-webkit-scrollbar-thumb,
         .oth-invite-list::-webkit-scrollbar-thumb,
         #about-panel-body::-webkit-scrollbar-thumb,
-        #serial-test-body::-webkit-scrollbar-thumb,
-        #serial-test-body #log::-webkit-scrollbar-thumb,
-        #serial-test-body #console-log::-webkit-scrollbar-thumb,
         #settings-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
         #debug-body::-webkit-scrollbar-thumb:hover,
         #chat-history-list::-webkit-scrollbar-thumb:hover,
@@ -624,9 +615,6 @@
         #server-log-list::-webkit-scrollbar-thumb:hover,
         .oth-invite-list::-webkit-scrollbar-thumb:hover,
         #about-panel-body::-webkit-scrollbar-thumb:hover,
-        #serial-test-body::-webkit-scrollbar-thumb:hover,
-        #serial-test-body #log::-webkit-scrollbar-thumb:hover,
-        #serial-test-body #console-log::-webkit-scrollbar-thumb:hover,
         #settings-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
 
         #debug-body {
@@ -1264,8 +1252,6 @@
         #serial-test-panel {
             position: fixed;
             top: 80px;
-            left: 50%;
-            transform: translateX(-50%);
             width: 340px;
             height: 420px;
             min-width: 280px;
@@ -1281,6 +1267,22 @@
             color: #000;
             display: flex;
             flex-direction: column;
+        }
+        #othello-panel,
+        #othello-play-panel {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        /* serial-test-panel は transform 祖先による Babylon canvas のゴースト焼き付きを
+           回避するため transform を使わない配置方法（#room-list-panel 参考）にする。
+           isolation + contain で独立したスタッキングコンテキスト + 描画封じ込めを明示し、
+           textarea 内部のネイティブ scrollbar が誘発する層昇格を panel 内に閉じ込める */
+        #serial-test-panel {
+            left: 0;
+            right: 0;
+            margin: 0 auto;
+            isolation: isolate;
+            contain: layout paint;
         }
         #othello-header,
         #othello-play-header,
@@ -1338,44 +1340,67 @@
             padding: 8px;
             gap: 6px;
         }
+        /* 部屋一覧(#room-list-panel) と同じ多層構造:
+           panel(overflow:hidden) > body(flex, non-scroll) > scroll(overflow:auto + カスタム scrollbar)
+           加えて #serial-test-panel は transform を持たない（left/right+margin:auto 中央寄せ） */
         #serial-test-body {
+            display: flex;
+            flex-direction: column;
             flex: 1;
             min-height: 0;
-            overflow-y: auto;
+            background: #fff;
+            color: #333;
+        }
+        body.theme-dark #serial-test-body { background: #1a1a1a; color: #ddd; }
+        #serial-test-scroll {
+            overflow: auto;
+            flex: 1;
+            min-height: 0;
             padding: 8px;
             font-family: sans-serif;
             font-size: 14px;
-            background: #fff;
-            color: #333;
-            contain: paint;
-            position: relative;
         }
-        body.theme-dark #serial-test-body { background: #1a1a1a; color: #ddd; }
-        #serial-test-body button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
-        #serial-test-body button:disabled { opacity: 0.4; cursor: not-allowed; }
-        #serial-test-body select,
-        #serial-test-body input { font-family: inherit; font-size: 1em; padding: 0.2em; }
-        #serial-test-body textarea { font-family: monospace; font-size: 14px; line-height: 1.5; }
-        #serial-test-body #log { width: 100%; height: 180px; resize: none;
-               background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-        #serial-test-body #console-log { width: 100%; height: 100px; resize: none;
-               background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box; }
-        #serial-test-body .section-label { font-size: 1em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
-        #serial-test-body .section-label button { font-size: 0.9em; padding: 0.1em 0.5em; }
-        #serial-test-body .row { margin: 0.3em 0; }
-        #serial-test-body .status { font-weight: bold; }
-        #serial-test-body .status.connected { color: #2a7; }
-        #serial-test-body .status.disconnected { color: #888; }
-        #serial-test-body .status.error { color: #c33; }
-        #serial-test-body .stats { font-size: 0.9em; color: #666; margin-left: 1em; }
-        #serial-test-body fieldset { border: 1px solid #ccc; padding: 0.4em 0.8em; margin: 0.4em 0; }
-        #serial-test-body legend { padding: 0 0.3em; color: #555; }
-        #serial-test-body label { margin-right: 1em; }
+        #serial-test-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        #serial-test-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.95); }
+        #serial-test-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 4px; }
+        #serial-test-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+        #serial-test-scroll button { font-family: inherit; font-size: 1em; padding: 0.3em 0.8em; margin: 0.15em; cursor: pointer; }
+        #serial-test-scroll button:disabled { opacity: 0.4; cursor: not-allowed; }
+        #serial-test-scroll select,
+        #serial-test-scroll input { font-family: inherit; font-size: 1em; padding: 0.2em; }
+        /* textarea のネイティブスクロール領域が Chromium コンポジタで独立レイヤーに昇格し、
+           レイヤー位置の更新ズレで Babylon canvas にゴースト矩形（textarea と同じ形状）が
+           焼き付くバグの対策。
+           overflow: hidden で textarea の内部スクロール機構自体を無効化し、層昇格を防ぐ。
+           内容が textarea の高さを超えた場合は単純にクリップされる。 */
+        #serial-test-scroll textarea {
+            font-family: monospace; font-size: 14px; line-height: 1.5;
+            overflow: hidden;
+        }
+        #serial-test-scroll #log {
+            width: 100%; height: 40vh;
+            background: #111; color: #cfc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box;
+        }
+        #serial-test-scroll #console-log {
+            width: 100%; height: 20vh;
+            background: #1a1a1a; color: #ffc; border: 1px solid #444; padding: 0.5em; box-sizing: border-box;
+        }
+        #serial-test-scroll .section-label { font-size: 1em; color: #555; margin-top: 0.4em; margin-bottom: 0.1em; display: flex; justify-content: space-between; align-items: center; }
+        #serial-test-scroll .section-label button { font-size: 0.9em; padding: 0.1em 0.5em; }
+        #serial-test-scroll .row { margin: 0.3em 0; }
+        #serial-test-scroll .status { font-weight: bold; }
+        #serial-test-scroll .status.connected { color: #2a7; }
+        #serial-test-scroll .status.disconnected { color: #888; }
+        #serial-test-scroll .status.error { color: #c33; }
+        #serial-test-scroll .stats { font-size: 0.9em; color: #666; margin-left: 1em; }
+        #serial-test-scroll fieldset { border: 1px solid #ccc; padding: 0.4em 0.8em; margin: 0.4em 0; }
+        #serial-test-scroll legend { padding: 0 0.3em; color: #555; }
+        #serial-test-scroll label { margin-right: 1em; }
         #serial-test-new-game {
             position: absolute;
-            top: 8px;
+            top: 32px;
             right: 16px;
-            z-index: 1;
+            z-index: 2;
             font-family: inherit;
             font-size: 11px;
             font-weight: normal;
@@ -4913,8 +4938,9 @@
                 <span id="serial-test-close">❌️</span>
             </span>
         </div>
+        <button type="button" id="serial-test-new-game" title="自作 CPU 対戦ゲームをリバーシロビーに作成">新ゲーム作成</button>
         <div id="serial-test-body">
-            <button type="button" id="serial-test-new-game" title="自作 CPU 対戦ゲームをリバーシロビーに作成">新ゲーム作成</button>
+            <div id="serial-test-scroll">
             <fieldset>
                 <legend>接続</legend>
                 <div class="row">
@@ -5005,6 +5031,7 @@
                 </span>
             </div>
             <textarea id="console-log" readonly></textarea>
+            </div>
         </div>
     </div>
 
