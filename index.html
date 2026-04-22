@@ -1556,12 +1556,14 @@
             gap: 4px;
         }
         #othello-board {
+            /* 先頭の 0.5fr 行／列は a-h / 1-8 のラベル枠。残り 8 本が盤面 */
             display: grid;
-            grid-template-columns: repeat(8, 1fr);
-            grid-template-rows: repeat(8, 1fr);
-            gap: 1px;
-            background: #000;
-            border: 2px solid #000;
+            grid-template-columns: 0.5fr repeat(8, 1fr);
+            grid-template-rows: 0.5fr repeat(8, 1fr);
+            /* 外枠はラベル領域ではなく 8x8 盤面の外周だけに引く（セル側の oth-top 等で描画） */
+            gap: 0;
+            background: transparent;
+            border: none;
             box-sizing: border-box;
             align-self: center;
             flex-shrink: 1;
@@ -1569,6 +1571,23 @@
             min-height: 0;
             max-width: 100%;
             max-height: 100%;
+        }
+        .othello-label {
+            /* ラベル背景はパネルに透過（パネル色と自動で一致） */
+            background: transparent;
+            color: #000;
+            font-family: monospace;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* ラベル行／列は盤面の 0.5/8.5 ≈ 5.9% なので、その約 60% で文字サイズを決める */
+            font-size: 3.5cqmin;
+            user-select: none;
+        }
+        /* #othello-board 自身をコンテナ化してラベルの font-size が追従できるようにする */
+        #othello-board {
+            container-type: size;
         }
         .othello-cell {
             background: #2e8b57;
@@ -1579,7 +1598,15 @@
             position: relative;
             min-width: 0;
             min-height: 0;
+            /* 内部罫線は各セルの上／左に 1px。外周 (oth-top/bot/left/right) は 2px で上書き */
+            border-top: 1px solid #000;
+            border-left: 1px solid #000;
+            box-sizing: border-box;
         }
+        .othello-cell.oth-top    { border-top:    2px solid #000; }
+        .othello-cell.oth-bottom { border-bottom: 2px solid #000; }
+        .othello-cell.oth-left   { border-left:   2px solid #000; }
+        .othello-cell.oth-right  { border-right:  2px solid #000; }
         .othello-cell:hover {
             background: #3a9d68;
         }
@@ -5019,9 +5046,9 @@
                     </label>
                     <label>Hex:
                         <select id="opt-hex">
-                            <option value="none" selected>なし</option>
+                            <option value="none">なし</option>
                             <option value="hex">Hex</option>
-                            <option value="hex-ascii">Hex+ASCII</option>
+                            <option value="hex-ascii" selected>Hex+ASCII</option>
                             <option value="hex-ascii-offset">Hex+ASCII+オフセット</option>
                         </select>
                     </label>
@@ -5029,8 +5056,8 @@
                     <label>行間:
                         <select id="opt-line-gap">
                             <option value="1">0</option>
-                            <option value="1.25">1/4</option>
-                            <option value="1.5" selected>1/2</option>
+                            <option value="1.25" selected>1/4</option>
+                            <option value="1.5">1/2</option>
                         </select>
                     </label>
                 </div>

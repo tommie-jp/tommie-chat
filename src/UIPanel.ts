@@ -6,7 +6,7 @@ import { t, getLang, setLang, applyI18n } from "./i18n";
 import type { Lang } from "./i18n";
 import { escapeHtml, sanitizeColor, resolveAvatarUrl, isAvatarUrl, fetchAvatarList } from "./utils";
 import { showToast, showCenterDialog, primeNotificationSound } from "./Toast";
-import { notifyOwnCpuGameStarted } from "./SerialReversiAdapter";
+import { onGameStateUpdate as serialOnGameStateUpdate } from "./SerialReversiAdapter";
 import type { Notification } from "@heroiclabs/nakama-js";
 import QRCode from "qrcode";
 
@@ -5665,12 +5665,10 @@ export function setupHtmlUI(game: GameScene): void {
                 const prevStatus = gameStatus;
                 currentTurn = data.turn;
                 gameStatus = data.status;
-                // 自作 CPU 対戦ゲームに相手が参加 → シリアル経由で CPU へ "S B\r\n" を送る
-                // オーナー (= data.black === uid) だけが送る。applyGameList は applyState の後に走り
-                // gameStatus がすでに更新済みのため、ここで playing 遷移を検知する。
-                if (data.isCpu && prevStatus !== "playing" && data.status === "playing" && data.black === myUid()) {
-                    notifyOwnCpuGameStarted(data.gameId);
-                }
+                // 自作 CPU 対戦ゲームの中継。オーナー判定・送信タイミング判定は Adapter 側で行う
+                // （doc/reversi/61 §6.1 の SB/SW/MO/PA/EB/EW/ED を playing/finished 遷移から生成）。
+                // 第3引数は受信 MO を othelloMove RPC に橋渡しするためのポート (Phase 4)。
+                serialOnGameStateUpdate(data, myUid(), game.nakama);
                 if (gameStatus === "playing" && (currentTurn !== prevTurn || prevStatus !== "playing")) {
                     turnStartMs = Date.now();
                 } else if (gameStatus !== "playing") {
@@ -5719,11 +5717,31 @@ export function setupHtmlUI(game: GameScene): void {
                 const isMyTurn = gameStatus === "playing" && currentTurn === myColor;
                 const legalMoves = isMyTurn ? getLocalLegalMoves(myColor) : new Set<number>();
                 othBoard.innerHTML = "";
+                // 先頭行: 左上コーナー（空）＋ 列ラベル a-h（doc/reversi/61 §7 WOF 棋譜表記準拠）
+                const corner = document.createElement("div");
+                corner.className = "othello-label";
+                othBoard.appendChild(corner);
+                for (let c = 0; c < 8; c++) {
+                    const lbl = document.createElement("div");
+                    lbl.className = "othello-label";
+                    lbl.textContent = String.fromCharCode("a".charCodeAt(0) + c);
+                    othBoard.appendChild(lbl);
+                }
                 for (let r = 0; r < 8; r++) {
+                    // 各行の先頭: 行ラベル 1-8
+                    const rlbl = document.createElement("div");
+                    rlbl.className = "othello-label";
+                    rlbl.textContent = String(r + 1);
+                    othBoard.appendChild(rlbl);
                     for (let c = 0; c < 8; c++) {
                         const idx = r * 8 + c;
                         const cell = document.createElement("div");
                         cell.className = "othello-cell";
+                        // 8x8 盤面の外周に 2px の枠を引くためのクラス
+                        if (r === 0) cell.classList.add("oth-top");
+                        if (r === 7) cell.classList.add("oth-bottom");
+                        if (c === 0) cell.classList.add("oth-left");
+                        if (c === 7) cell.classList.add("oth-right");
                         if (idx === lastMoveIdx) cell.classList.add("last-move");
                         if (board[idx] !== 0) {
                             const stone = document.createElement("div");

@@ -273,9 +273,17 @@ let connectedAt = 0;
 // 受信ストリームを CR/LF/CRLF で分割して登録リスナに渡す（doc/reversi/61 §4 受信側）。
 const adapterLineListeners = new Set();
 let adapterLineBuf = '';
+let adapterFeedTimer = null; // §5 文字間 100ms タイムアウト用
 function adapterFeed(text) {
   if (adapterLineListeners.size === 0) { adapterLineBuf = ''; return; }
   adapterLineBuf += text;
+  // 文字間タイムアウト 100ms: 新しい文字が来るたびタイマー再セット。
+  // 時間内に改行が来なかった分はパーサリセットとして破棄する (§5)
+  if (adapterFeedTimer !== null) clearTimeout(adapterFeedTimer);
+  adapterFeedTimer = setTimeout(() => {
+    if (adapterLineBuf.length > 0) adapterLineBuf = '';
+    adapterFeedTimer = null;
+  }, 100);
   const parts = adapterLineBuf.split(/\r\n|\r|\n/);
   adapterLineBuf = parts.pop() ?? '';
   // バイナリ等で改行が来ない場合の暴走防止（80 バイト超で破棄・§5 の RX バッファ推奨値）
@@ -470,17 +478,20 @@ function processIncoming(value) {
 
   const hexMode = $('opt-hex').value;
   if (hexMode === 'hex') {
-    emitLine(toHex(value));
+    emitLine('RECV  ' + toHex(value));
     return;
   }
   if (hexMode === 'hex-ascii') {
-    for (const line of toHexAscii(value)) emitLine(line);
+    const lines = toHexAscii(value);
+    lines.forEach((line, i) => emitLine((i === 0 ? 'RECV  ' : '      ') + line));
     return;
   }
   if (hexMode === 'hex-ascii-offset') {
     // 接続開始からの累積バイト数を offset に使う。bytesRx は processIncoming 冒頭で加算済みのため、今回チャンクの開始は bytesRx - value.length。
     const startOffset = bytesRx - value.length;
-    for (const line of toHexAscii(value, startOffset)) emitLine(line);
+    const lines = toHexAscii(value, startOffset);
+    if (lines.length > 0) lines[0] = 'RECV    ' + lines[0].slice(8);
+    for (const line of lines) emitLine(line);
     return;
   }
 
@@ -496,10 +507,11 @@ function processIncoming(value) {
   lineBuffer = lines.pop() || '';
   // バイナリ等で改行が来ない場合に lineBuffer が無限に膨らむのを防ぐ（4KB 超えたら確定出力）
   if (lineBuffer.length > 4096) {
-    emitLine(lineBuffer);
+    emitLine('[RECV] ' + JSON.stringify(lineBuffer));
     lineBuffer = '';
   }
-  for (const line of lines) emitLine(line);
+  // split で \n が落ちているので JSON 表示時は付け直す（§4 送信側は LF のみ想定）
+  for (const line of lines) emitLine('[RECV] ' + JSON.stringify(line + '\n'));
 }
 
 function flushLineBuffer() {
