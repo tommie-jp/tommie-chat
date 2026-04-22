@@ -269,6 +269,25 @@ let bytesRx = 0;
 let bytesTx = 0;
 let connectedAt = 0;
 
+// SerialReversiAdapter 向けの行通知。UI 用の opt-line-buffer 設定とは独立に、
+// 受信ストリームを CR/LF/CRLF で分割して登録リスナに渡す（doc/reversi/61 §4 受信側）。
+const adapterLineListeners = new Set();
+let adapterLineBuf = '';
+function adapterFeed(text) {
+  if (adapterLineListeners.size === 0) { adapterLineBuf = ''; return; }
+  adapterLineBuf += text;
+  const parts = adapterLineBuf.split(/\r\n|\r|\n/);
+  adapterLineBuf = parts.pop() ?? '';
+  // バイナリ等で改行が来ない場合の暴走防止（80 バイト超で破棄・§5 の RX バッファ推奨値）
+  if (adapterLineBuf.length > 256) adapterLineBuf = '';
+  for (const line of parts) {
+    if (line.length === 0) continue;
+    for (const cb of adapterLineListeners) {
+      try { cb(line); } catch (e) { swarn('adapter onLine cb:', e); }
+    }
+  }
+}
+
 function setStatus(text, cls) {
   const el = $('status');
   el.textContent = text;
@@ -444,6 +463,11 @@ function emitRaw(text) {
 function processIncoming(value) {
   bytesRx += value.length;
 
+  // UI 側の表示モードに関係なく Adapter へは行単位で配る
+  if (adapterLineListeners.size > 0) {
+    adapterFeed(new TextDecoder().decode(value));
+  }
+
   const hexMode = $('opt-hex').value;
   if (hexMode === 'hex') {
     emitLine(toHex(value));
@@ -527,6 +551,7 @@ async function doConnect(useExisting) {
   bytesTx = 0;
   connectedAt = Date.now();
   lineBuffer = '';
+  adapterLineBuf = '';
   lastMode = mode;
   setStatus(`接続中 (${mode} / ${portLabel(port, mode)})`, 'connected');
   $('connect').disabled = true;
@@ -610,7 +635,8 @@ $('send-text').addEventListener('keydown', (e) => {
 // SerialReversiAdapter 用ブリッジ。接続中のシリアルポートへ任意文字列を送る最小 API。
 // writer は接続/切断で差し替わるので毎回現在値を参照する。
 // 改行は LF (\n) のみ。自作 CPU/FPGA 向けにパーサ単純化と 1 バイト節約のため
-// (doc/reversi/59-設計-外部CPU接続.md §メッセージ書式)。
+// (doc/reversi/61-UARTプロトコル仕様.md §4)。
+// 受信は onLine(cb) で 1 行ずつ受け取れる。UI の表示オプションに依存しない独立経路。
 window.__serialTestBridge = {
   isConnected() { return writer !== null; },
   async sendLine(text) {
@@ -621,7 +647,11 @@ window.__serialTestBridge = {
     bytesTx += bytes.length;
     emitSend(bytes, txt);
   },
+  onLine(cb)  { if (typeof cb === 'function') adapterLineListeners.add(cb); },
+  offLine(cb) { adapterLineListeners.delete(cb); },
 };
+// 後から起動するモジュール (SerialReversiAdapter) が attach できるよう通知
+window.dispatchEvent(new Event('serialtestbridge-ready'));
 
 $('clear').onclick = () => {
   clearPre($('log'));
