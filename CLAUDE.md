@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+- .envや機微ファイルは読まない、出力しない。
+- ~/へ直接アクセスは禁止
 
 ## Project Overview
 
