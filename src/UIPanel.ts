@@ -6,6 +6,7 @@ import { t, getLang, setLang, applyI18n } from "./i18n";
 import type { Lang } from "./i18n";
 import { escapeHtml, sanitizeColor, resolveAvatarUrl, isAvatarUrl, fetchAvatarList } from "./utils";
 import { showToast, showCenterDialog, primeNotificationSound } from "./Toast";
+import { notifyOwnCpuGameStarted } from "./SerialReversiAdapter";
 import type { Notification } from "@heroiclabs/nakama-js";
 import QRCode from "qrcode";
 
@@ -5664,6 +5665,12 @@ export function setupHtmlUI(game: GameScene): void {
                 const prevStatus = gameStatus;
                 currentTurn = data.turn;
                 gameStatus = data.status;
+                // 自作 CPU 対戦ゲームに相手が参加 → シリアル経由で CPU へ "S B\r\n" を送る
+                // オーナー (= data.black === uid) だけが送る。applyGameList は applyState の後に走り
+                // gameStatus がすでに更新済みのため、ここで playing 遷移を検知する。
+                if (data.isCpu && prevStatus !== "playing" && data.status === "playing" && data.black === myUid()) {
+                    notifyOwnCpuGameStarted(data.gameId);
+                }
                 if (gameStatus === "playing" && (currentTurn !== prevTurn || prevStatus !== "playing")) {
                     turnStartMs = Date.now();
                 } else if (gameStatus !== "playing") {

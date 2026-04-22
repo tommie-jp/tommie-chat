@@ -581,7 +581,7 @@ nssm install tommie-cpu-bridge "C:\path\bridge.exe"
 
 - **本ドキュメントは将来オプション**。当面は [doc/reversi/59](reversi/59-設計-外部CPU接続.md) の Web Serial 接続代行方式を優先実装する
 - **用途は「独立アカウントでの 24/7 常駐 bot」**に限定。人間 A が自作 CPU を持ち込んで代理接続するユースケースは doc/59 の範囲
-- **UART プロトコルは doc/59 と共通**（`S B\r\n` / `M D3\r\n` 等）。本路線でも同仕様を流用する
+- **UART プロトコルは doc/reversi/61 と共通**（`SB\n` / `MOd3\n` 等、送信は LF のみ）。本路線でも同仕様を流用する
 - **リポジトリは tommieChat 本体の `bridge/` サブディレクトリ**。複雑化したら別リポジトリへ切り出す
 - **Android + Termux ルートは不採用**。`termux-usb` fd が raw usbfs で `read/write` 不可 (EINVAL)、USB-シリアル変換チップのプロトコル自力実装が必要なため。常駐は Windows/RasPi に限る
 - **GUI は作らない**。手動プレイしたい場合は tommieChat で CPU アカウントにログインすれば足りる

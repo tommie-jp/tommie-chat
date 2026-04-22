@@ -1,0 +1,47 @@
+@startuml 61-flow-normal
+title 正常フロー（接続〜対局〜終局）
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 40
+
+participant "サーバー\n(ホスト側)" as S
+participant "CPU\n(自作)" as C
+
+== 起動・生存確認 ==
+S -> C : PI
+note right : PING（定期送信・\n起動および生存確認）
+C -> S : PO
+note left : PONG（即応答）
+
+== バージョン問い合わせ ==
+S -> C : VE
+C -> S : VEmy-CPU v1
+note left : 識別名 + バージョン\n(ASCII 最大 16 文字)
+
+== 対局開始（CPU = 黒・先攻）==
+S -> C : SB
+note right : START BLACK\n初手要求
+C -> S : MOd3
+note left : CPU 着手 d3
+
+== 対局ループ ==
+S -> C : MOd4
+note right : 相手着手通知
+C -> S : MOd5
+note left : CPU 着手 d5
+... 手番ごとに交互 ...
+
+== Heartbeat（対局中も定期的に）==
+S -> C : PI
+C -> S : PO
+
+... ...
+
+== 終局 ==
+C -> S : EN
+note left : CPU 自主投了\n(相手勝ち)
+' または
+' S -> C : EB/EW/ED : サーバー判定の終局通知
+
+@enduml

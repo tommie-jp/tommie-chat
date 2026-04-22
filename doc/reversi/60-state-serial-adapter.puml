@@ -1,4 +1,4 @@
-@startuml
+@startuml 60-state-serial-adapter
 title SerialReversiAdapter の状態遷移図
 
 skinparam state {
@@ -34,8 +34,8 @@ state "S2: 相手手番" as OpponentTurn <<play>> {
 state "S3: CPU 応答待ち" as WaitingCpu <<wait>> {
     WaitingCpu : 対局: playing, CPU 手番
     WaitingCpu : 直前動作:
-    WaitingCpu :   "M <相手の手>\\n" を UART 送信
-    WaitingCpu :   ( または初手時は "S B\\n" )
+    WaitingCpu :   "MOd?\\n" を UART 送信
+    WaitingCpu :   ( または初手時は "SB\\n" )
     WaitingCpu : 監視: タイムアウトタイマ作動
 }
 
@@ -73,18 +73,18 @@ Relaying --> Disconnected : U3': 切断
 
 ' --- ゲーム開始 ---
 Connected --> OpponentTurn : G1: 他プレイヤー参加\nothelloUpdate(status=playing)\n黒=CPU から開始なら G2 へ
-Connected --> WaitingCpu : G2: 他プレイヤー参加\n( CPU 先手の場合、初手を催促 )\n"S B\\n" 送信
+Connected --> WaitingCpu : G2: 他プレイヤー参加\n( CPU 先手の場合、初手を催促 )\n"SB\\n" 送信
 
 ' --- 対局ループ ---
-OpponentTurn --> WaitingCpu : N1: othelloUpdate\n(相手着手、CPU 手番へ)\n"M <手>\\n" 送信
-WaitingCpu --> Relaying : R1: シリアル受信\n"<手>\\n"
+OpponentTurn --> WaitingCpu : N1: othelloUpdate\n(相手着手、CPU 手番へ)\n"MOd?\\n" 送信
+WaitingCpu --> Relaying : R1: シリアル受信\n"MOd?\\n"
 Relaying --> OpponentTurn : R2: othelloMove RPC 成功\n(次は相手手番)
 Relaying --> Finished : R3: 終局手\n(gameStatus=finished)
 
 ' --- 特殊シリアル応答 ---
-WaitingCpu --> Relaying : R4: "PASS\\n"\n(nakama にパス送信)
-WaitingCpu --> Finished : R5: "RESIGN\\n"\nothelloResign RPC
-WaitingCpu --> WaitingCpu : R6: "READY\\n"\n(直前指示を再送)
+WaitingCpu --> Relaying : R4: "PS\\n"\n(nakama にパス送信)
+WaitingCpu --> Finished : R5: "EN\\n"\nothelloResign RPC
+WaitingCpu --> WaitingCpu : R6: "RE\\n"\n(直前指示を再送)
 
 ' --- nakama 側イベント ---
 OpponentTurn --> Finished : N2: 終局通知\n(相手投了/両者パス/満局)

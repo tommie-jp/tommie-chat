@@ -607,6 +607,22 @@ $('send-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !$('send').disabled) $('send').click();
 });
 
+// SerialReversiAdapter 用ブリッジ。接続中のシリアルポートへ任意文字列を送る最小 API。
+// writer は接続/切断で差し替わるので毎回現在値を参照する。
+// 改行は LF (\n) のみ。自作 CPU/FPGA 向けにパーサ単純化と 1 バイト節約のため
+// (doc/reversi/59-設計-外部CPU接続.md §メッセージ書式)。
+window.__serialTestBridge = {
+  isConnected() { return writer !== null; },
+  async sendLine(text) {
+    if (!writer) throw new Error('serial not connected');
+    const txt = text + '\n';
+    const bytes = new TextEncoder().encode(txt);
+    await writer.write(bytes);
+    bytesTx += bytes.length;
+    emitSend(bytes, txt);
+  },
+};
+
 $('clear').onclick = () => {
   clearPre($('log'));
   lineBuffer = '';
