@@ -16,20 +16,20 @@ note left : PONG（即応答）
 
 == バージョン問い合わせ ==
 S -> C : VE
-C -> S : VEmy-CPU v1
-note left : 識別名 + バージョン\n(ASCII 最大 16 文字)
+C -> S : VE01tommie-CPU v1
+note left : プロトコルバージョン 2 桁\n(現状は 01 のみ) + 識別名\n(ASCII 最大 16 文字)
 
 == 対局開始（CPU = 黒・先攻）==
 S -> C : SB
 note right : START BLACK\n初手要求
-C -> S : MOd3
-note left : CPU 着手 d3
+C -> S : MOf5
+note left : CPU 着手 f5\n(黒の代表的初手・\n虎定石の起点)
 
 == 対局ループ ==
-S -> C : MOd4
-note right : 相手着手通知
-C -> S : MOd5
-note left : CPU 着手 d5
+S -> C : MOd6
+note right : 相手着手通知\n(虎定石の白応手)
+C -> S : MOc3
+note left : CPU 着手 c3\n(虎定石・黒 3 手目)
 ... 手番ごとに交互 ...
 
 == Heartbeat（対局中も定期的に）==

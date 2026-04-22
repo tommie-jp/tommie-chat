@@ -26,7 +26,7 @@ note left : READY\n起動完了・再送要求
 
 == サーバー側の復帰処理 ==
 note over S
-  直前の指示（SB / MOd? / BT... 等）
+  直前の指示（SB / MOd? / BO... 等）
   を再送して局面を復元
 end note
 S -> C : MOd5

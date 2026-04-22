@@ -82,7 +82,7 @@ Relaying --> OpponentTurn : R2: othelloMove RPC 成功\n(次は相手手番)
 Relaying --> Finished : R3: 終局手\n(gameStatus=finished)
 
 ' --- 特殊シリアル応答 ---
-WaitingCpu --> Relaying : R4: "PS\\n"\n(nakama にパス送信)
+WaitingCpu --> Relaying : R4: "PA\\n"\n(nakama にパス送信)
 WaitingCpu --> Finished : R5: "EN\\n"\nothelloResign RPC
 WaitingCpu --> WaitingCpu : R6: "RE\\n"\n(直前指示を再送)
 

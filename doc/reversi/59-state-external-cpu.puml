@@ -5,7 +5,6 @@ skinparam state {
     BackgroundColor<<boot>> #E8F5E9
     BackgroundColor<<idle>> #E3F2FD
     BackgroundColor<<play>> #FFF3E0
-    BackgroundColor<<over>> #ECEFF1
 }
 
 ' === 状態定義 ===
@@ -24,12 +23,14 @@ state "C0: BOOT" as Boot <<boot>> {
 state "C1: IDLE" as Idle <<idle>> {
     Idle : 接続済み・対局なし or 終局後
     Idle : 何もしない（受信待ち）
+    Idle : 終局種別（EB/EW/ED）は
+    Idle :   必要なら内部変数に保持
 }
 
 state "C2: MY_TURN" as MyTurn <<play>> {
     MyTurn : CPU 手番
     MyTurn : 着手を計算
-    MyTurn : 送信: "MOd?" / "PS"（パス）
+    MyTurn : 送信: "MOd?" / "PA"（パス）
     MyTurn :   / "EN"（投了）のいずれか
 }
 
@@ -38,22 +39,16 @@ state "C3: WAIT_OPP" as WaitOpp <<play>> {
     WaitOpp : 何もしない（受信待ち）
 }
 
-state "C4: GAME_OVER" as Over <<over>> {
-    Over : 終局
-    Over : 受信した終局種別
-    Over :   （EB / EW / ED）を保持
-}
-
 ' === 共通応答（副作用なし・自己遷移） ===
 note as N1
   **共通応答**
   "PI" → "PO"（BOOT 以外の全状態で有効）
-  "VE" → "VE<名前>"（C1 以降で有効）
+  "VE" → "VE<NN><名前>"（C1 以降で有効）
 end note
 
-' PI は BOOT を除く全状態で自己遷移（煩雑さ回避のため C1 のみ図示、C2/C3/C4 も同様）
-Idle    --> Idle    : P1: 受信 "PI" → 送信 "PO"
-Idle    --> Idle    : V1: 受信 "VE" → 送信 "VE<名前>"
+' PI は BOOT を除く全状態で自己遷移（煩雑さ回避のため C1 のみ図示、C2/C3 も同様）
+Idle    -left->  Idle    : P1: 受信 "PI"\n→ 送信 "PO"
+Idle    -right-> Idle    : V1: 受信 "VE"\n→ 送信 "VE<NN><名前>"
 
 ' === 遷移 ===
 
@@ -62,7 +57,7 @@ Idle    --> Idle    : V1: 受信 "VE" → 送信 "VE<名前>"
 Boot --> Idle : U1: "RE" 送信後
 
 ' --- 盤面同期（接続直後 / リセット復帰）---
-Idle --> Idle : I1: 受信 "BT..."\n内部盤面を上書き\n(続く SB/SW を待つ)
+Idle --> Idle : I1: 受信 "BO..."\n内部盤面を上書き\n(続く SB/SW を待つ)
 
 ' --- 対局開始 ---
 Idle --> MyTurn : G1: 受信 "SB"\n(黒・先攻。直ちに着手計算)
@@ -70,17 +65,14 @@ Idle --> WaitOpp : G2: 受信 "SW"\n(白・後攻。相手の着手待ち)
 
 ' --- 対局ループ ---
 MyTurn --> WaitOpp : M1: 送信 "MOd?"\n(通常着手)
-MyTurn --> WaitOpp : M2: 送信 "PS"\n(合法手なし・パス)
-MyTurn --> Over   : M3: 送信 "EN"\n(自主投了)
+MyTurn --> WaitOpp : M2: 送信 "PA"\n(合法手なし・パス)
+MyTurn --> Idle   : M3: 送信 "EN"\n(自主投了 → IDLE へ戻る)
 
 WaitOpp --> MyTurn : W1: 受信 "MOd?"\n(相手着手 → CPU 手番)
-WaitOpp --> MyTurn : W2: 受信 "PS"\n(相手パス → CPU 手番)
+WaitOpp --> MyTurn : W2: 受信 "PA"\n(相手パス → CPU 手番)
 
 ' --- 終局 ---
-MyTurn  --> Over : E1: 受信 "EB"/"EW"/"ED"\n(着手前に終局通知)
-WaitOpp --> Over : E2: 受信 "EB"/"EW"/"ED"
-
-' --- 新規対局 ---
-Over --> Idle : F1: 一定時間後 / 内部リセット\n(次の "SB"/"SW" 受信待ちへ)
+MyTurn  --> Idle : E1: 受信 "EB"/"EW"/"ED"\n(着手前に終局通知 → IDLE へ)
+WaitOpp --> Idle : E2: 受信 "EB"/"EW"/"ED"\n(→ IDLE へ)
 
 @enduml
