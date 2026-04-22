@@ -15,6 +15,7 @@ interface SerialTestBridge {
     sendLine(text: string): Promise<void>;
     onLine?(cb: (line: string) => void): void;
     offLine?(cb: (line: string) => void): void;
+    emitStatus?(text: string): void;
 }
 
 declare global {
@@ -76,6 +77,13 @@ class SerialReversiAdapter {
         this.stopPingLoop();
     }
 
+    // Adapter の受信処理結果を serial テストパネルのログに出す。OK or NG+理由。
+    private emitStatus(ok: boolean, detail?: string): void {
+        const b = window.__serialTestBridge;
+        if (!b || typeof b.emitStatus !== "function") return;
+        b.emitStatus(ok ? "OK" : `NG ${detail ?? "unknown"}`);
+    }
+
     // 受信 1 行のパース。§4 大文字小文字は区別しないので先頭 2 文字を大文字化して判定。
     private onLine(raw: string): void {
         const line = raw.replace(/[\r\n]+$/g, "");
@@ -84,11 +92,12 @@ class SerialReversiAdapter {
         const rest = line.slice(2);
         switch (head) {
             case "PO":
-                // §10 共通応答。ハートビートの応答
+                // §10 共通応答。ハートビートの応答。OK は頻度が多いので出さない。
                 this.onPongReceived();
                 return;
             case "VE":
                 console.log(`SerialReversi <CPU: VE ${rest}`);
+                this.emitStatus(true);
                 return;
             case "MO":
                 this.handleMoMessage(rest);
@@ -97,29 +106,36 @@ class SerialReversiAdapter {
                 // §11 MY_TURN でのみ意味がある。Nakama 側にパス RPC が無いため警告のみ
                 if (this.state !== "MY_TURN") {
                     console.debug("SerialReversi <CPU: PA を MY_TURN 外で受信、破棄");
+                    this.emitStatus(false, `PA in state=${this.state}`);
                     return;
                 }
                 console.warn("SerialReversi <CPU: PA (CPU がパス宣言) - Nakama にパス RPC 未実装、手動操作で対応");
+                this.emitStatus(false, "PA: Nakama にパス RPC 未実装");
                 return;
             case "EN":
                 this.handleEnMessage();
                 return;
             case "RE":
                 this.handleReMessage();
+                this.emitStatus(true);
                 return;
             case "ER":
                 // §6.2 #7 ログ記録のみ、自動再送はしない
                 console.log("SerialReversi <CPU: ER (ログのみ・再送しない)");
+                this.emitStatus(true);
                 return;
             case "ST":
                 console.log(`SerialReversi <CPU: ST ${rest}`);
+                this.emitStatus(true);
                 return;
             case "NC":
                 console.log(`SerialReversi <CPU: NC ${rest}`);
+                this.emitStatus(true);
                 return;
             default:
                 // §8: 現在状態で無効なコマンドは黙って捨てる
                 console.debug(`SerialReversi <CPU: 不明コマンド "${line}" を破棄`);
+                this.emitStatus(false, `unknown cmd: ${line}`);
                 return;
         }
     }
@@ -129,6 +145,7 @@ class SerialReversiAdapter {
         const m = rest.match(/^([a-hA-H])([1-8])/);
         if (!m) {
             console.warn(`SerialReversi <CPU: MO${rest} パース失敗、破棄`);
+            this.emitStatus(false, `MO パース失敗: ${rest}`);
             return;
         }
         const colCh = m[1].toLowerCase();
@@ -137,22 +154,28 @@ class SerialReversiAdapter {
         const row = rowCh.charCodeAt(0) - "1".charCodeAt(0);
         if (this.state !== "MY_TURN") {
             console.debug(`SerialReversi <CPU: MO${colCh}${rowCh} を MY_TURN 外で受信、破棄`);
+            this.emitStatus(false, `MO${colCh}${rowCh} in state=${this.state}`);
             return;
         }
         if (this.cpuStalled) {
             console.warn(`SerialReversi <CPU: MO${colCh}${rowCh} 受信するも CPU 停止中フラグ、破棄`);
+            this.emitStatus(false, `MO${colCh}${rowCh}: CPU stalled`);
             return;
         }
         if (!this.currentGameId || !this.movePort) {
             console.warn(`SerialReversi <CPU: MO${colCh}${rowCh} 受信するもゲーム未結線、破棄`);
+            this.emitStatus(false, `MO${colCh}${rowCh}: no game bound`);
             return;
         }
         console.log(`SerialReversi <CPU: MO${colCh}${rowCh} → othelloMove(row=${row}, col=${col})`);
         const gameId = this.currentGameId;
         const port = this.movePort;
         this.state = "WAIT_OPP";
+        this.emitStatus(true);
         port.othelloMove(gameId, row, col).catch((e) => {
+            const msg = e instanceof Error ? e.message : String(e);
             console.warn(`SerialReversi: othelloMove RPC 失敗 (${colCh}${rowCh}):`, e);
+            this.emitStatus(false, `MO${colCh}${rowCh} RPC 拒否: ${msg}`);
         });
     }
 
@@ -160,6 +183,7 @@ class SerialReversiAdapter {
     private handleEnMessage(): void {
         if (!this.currentGameId || !this.movePort) {
             console.warn("SerialReversi <CPU: EN 受信するもゲーム未結線、破棄");
+            this.emitStatus(false, "EN: no game bound");
             return;
         }
         console.log(`SerialReversi <CPU: EN (投了) → othelloResign(gameId=${this.currentGameId})`);
@@ -167,8 +191,11 @@ class SerialReversiAdapter {
         const gameId = this.currentGameId;
         // §10 終局時: CPU は EN 送信後ただちに IDLE へ
         this.state = "IDLE";
+        this.emitStatus(true);
         port.othelloResign(gameId).catch((e) => {
+            const msg = e instanceof Error ? e.message : String(e);
             console.warn("SerialReversi: othelloResign RPC 失敗:", e);
+            this.emitStatus(false, `EN RPC 拒否: ${msg}`);
         });
     }
 
@@ -295,6 +322,16 @@ class SerialReversiAdapter {
                  && this.prevTurn !== turn && turn !== cpuColor) {
             this.state = "WAIT_OPP";
         }
+        // (3b) サーバー auto-pass: CPU が打った直後なのに turn が CPU のまま戻ってきた
+        //      → 相手に合法手がなくサーバが自動でパス処理 (main.go othelloApplyMove)。
+        //      CPU には「相手パス」として PA を通知し、もう一度打たせる
+        else if (this.prevStatus === "playing" && status === "playing"
+                 && this.prevTurn === turn && turn === cpuColor
+                 && lastMove !== this.prevLastMove && lastMove >= 0
+                 && this.state === "WAIT_OPP") {
+            this.sendDirective("PA");
+            this.state = "MY_TURN";
+        }
 
         // (4) 終局
         if (this.prevStatus !== "finished" && status === "finished") {
@@ -315,7 +352,8 @@ class SerialReversiAdapter {
     private sendDirective(line: string, opts?: { skipRecord?: boolean }): void {
         const b = window.__serialTestBridge;
         if (!b || !b.isConnected()) {
-            console.warn(`SerialReversiAdapter: シリアル未接続のため "${line}\\n" 送信をスキップ`);
+            // シリアル未接続は通常状態。CPU 対戦モードで毎ターン呼ばれるため debug に留める
+            console.debug(`SerialReversiAdapter: シリアル未接続のため "${line}\\n" 送信をスキップ`);
             return;
         }
         if (this.cpuStalled) {

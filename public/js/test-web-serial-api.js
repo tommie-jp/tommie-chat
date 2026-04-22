@@ -414,10 +414,27 @@ function appendLog(s) {
   }
 }
 
+// Replay モード: reversi_cpu.py --replay 用の "TX/RX <ascii>" 形式で 1 メッセージ 1 行を追記する。
+// タイムスタンプ・行番号なし。PI/PO は opt-replay-skip-pipo でフィルタ。
+function shouldSkipReplay(text) {
+  if (!$('opt-replay-skip-pipo') || !$('opt-replay-skip-pipo').checked) return false;
+  const head = text.slice(0, 2).toUpperCase();
+  return head === 'PI' || head === 'PO';
+}
+function emitReplayLine(kind, text) {
+  if (!text) return;
+  if (shouldSkipReplay(text)) return;
+  appendLog(`${kind} ${text}\n`);
+}
+
 // SEND 行の出力。現在の Hex モードに合わせて受信と同じ書式で出し、受信との比較をしやすくする。
 // hex-ascii-offset モードでは先頭行のオフセット欄を "SEND    " に置換する（8 文字で幅を合わせる）。
 function emitSend(bytes, txt) {
   const hexMode = $('opt-hex').value;
+  if (hexMode === 'replay') {
+    emitReplayLine('TX', txt.replace(/[\r\n]+$/g, ''));
+    return;
+  }
   if (hexMode === 'hex') {
     emitLine('SEND  ' + toHex(bytes));
     return;
@@ -470,13 +487,25 @@ function emitRaw(text) {
 
 function processIncoming(value) {
   bytesRx += value.length;
-
-  // UI 側の表示モードに関係なく Adapter へは行単位で配る
+  emitIncomingLines(value);
+  // Adapter への行通知は表示より後にする。こうしないと Adapter が emitStatus('OK') を出したとき
+  // RX 行より先にステータス行が出てしまい、時系列が分かりづらくなる。
   if (adapterLineListeners.size > 0) {
     adapterFeed(new TextDecoder().decode(value));
   }
+}
 
+function emitIncomingLines(value) {
   const hexMode = $('opt-hex').value;
+  if (hexMode === 'replay') {
+    // 1 メッセージ 1 行 (LF 区切り)。複数行が 1 チャンクで来た場合も必ず分割する。
+    lineBuffer += new TextDecoder().decode(value);
+    const lines = lineBuffer.split(/\r?\n/);
+    lineBuffer = lines.pop() || '';
+    if (lineBuffer.length > 4096) lineBuffer = '';
+    for (const line of lines) emitReplayLine('RX', line);
+    return;
+  }
   if (hexMode === 'hex') {
     emitLine('RECV  ' + toHex(value));
     return;
@@ -649,6 +678,18 @@ $('send-text').addEventListener('keydown', (e) => {
 // 改行は LF (\n) のみ。自作 CPU/FPGA 向けにパーサ単純化と 1 バイト節約のため
 // (doc/reversi/61-UARTプロトコル仕様.md §4)。
 // 受信は onLine(cb) で 1 行ずつ受け取れる。UI の表示オプションに依存しない独立経路。
+// Adapter から受信処理の結果 (OK/NG+理由) をログに差し込むためのフック。
+// replay モードでは "# ..." (コメント) として出し、reversi_cpu.py --replay が skip する形にする。
+// 他モードでは "[OK]" / "[NG 理由]" 形式で emitLine 経由 (タイムスタンプ・行番号付与)。
+function emitAdapterStatus(text) {
+  if (!text) return;
+  if ($('opt-hex').value === 'replay') {
+    appendLog('# ' + text + '\n');
+  } else {
+    emitLine('[' + text + ']');
+  }
+}
+
 window.__serialTestBridge = {
   isConnected() { return writer !== null; },
   async sendLine(text) {
@@ -661,6 +702,7 @@ window.__serialTestBridge = {
   },
   onLine(cb)  { if (typeof cb === 'function') adapterLineListeners.add(cb); },
   offLine(cb) { adapterLineListeners.delete(cb); },
+  emitStatus(text) { emitAdapterStatus(text); },
 };
 // 後から起動するモジュール (SerialReversiAdapter) が attach できるよう通知
 window.dispatchEvent(new Event('serialtestbridge-ready'));

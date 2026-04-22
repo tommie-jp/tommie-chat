@@ -1,0 +1,45 @@
+# シナリオ: 相手 auto-pass 通知 (PA) を CPU が正しく受理して次を打つ
+# 2局目ログ line 125-133 相当:
+#   黒 g3 → サーバで白 auto-pass → Adapter が PA 通知 → 黒 g4
+#   黒 a5 → サーバで白 auto-pass → Adapter が PA 通知 → 黒 g5
+# ただし局面を初期化するため 1 手目からシナリオ化する。
+TX SB
+RX MOd3
+TX MOc3
+RX MOb3
+TX MOe3
+RX MOf3
+TX MOd2
+RX MOc1
+TX MOe2
+RX MOd1
+TX MOd6
+RX MOc4
+TX MOc2
+RX MOb2
+TX MOb4
+RX MOf4
+TX MOa3
+RX MOa4
+TX MOf1
+RX MOe1
+TX MOf5
+RX MOg1
+TX MOc5
+RX MOa2
+TX MOb1
+RX MOa1
+TX MOf2
+RX MOg2
+TX MOh1
+RX MOh2
+TX MOh3
+RX MOg3
+# ここで白 auto-pass
+TX PA
+RX MOg4
+TX MOb5
+RX MOa5
+# 再び白 auto-pass
+TX PA
+RX MOg5

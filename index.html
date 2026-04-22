@@ -5033,6 +5033,13 @@
             </fieldset>
 
             <fieldset>
+                <legend>自動化</legend>
+                <div class="row">
+                    <label><input type="checkbox" id="opt-auto-new-game"> 連続対戦（終局後 3 秒で自動で新ゲーム作成）</label>
+                </div>
+            </fieldset>
+
+            <fieldset>
                 <legend>表示オプション</legend>
                 <div class="row">
                     <label><input type="checkbox" id="opt-line-buffer" checked> 行バッファリング（改行で確定）</label>
@@ -5050,8 +5057,10 @@
                             <option value="hex">Hex</option>
                             <option value="hex-ascii" selected>Hex+ASCII</option>
                             <option value="hex-ascii-offset">Hex+ASCII+オフセット</option>
+                            <option value="replay">Replay (TX/RX)</option>
                         </select>
                     </label>
+                    <label><input type="checkbox" id="opt-replay-skip-pipo" checked> PI/PO除外（replay時）</label>
                     <label><input type="checkbox" id="opt-autoscroll" checked> スクロール</label>
                     <label>行間:
                         <select id="opt-line-gap">

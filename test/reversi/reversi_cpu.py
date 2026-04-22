@@ -209,12 +209,84 @@ class ReversiCPU:
         self.state = "WAIT_OPP"
 
 
+class _CaptureSerial:
+    """--replay モード用の fake serial。ReversiCPU.send() の書き込みを記録する。"""
+    def __init__(self):
+        self.sent_lines = []
+
+    def write(self, data):
+        if isinstance(data, (bytes, bytearray)):
+            data = data.decode("ascii", errors="replace")
+        for ln in data.split("\n"):
+            ln = ln.rstrip("\r")
+            if ln:
+                self.sent_lines.append(ln)
+
+
+def run_replay(path: str, log_ping: bool) -> int:
+    """シナリオファイルを再生し、CPU の送信を期待値と照合。一致=0, 不一致=1, 構文エラー=2。"""
+    scenario = []  # [(kind, text, lineno)]
+    with open(path, encoding="utf-8") as f:
+        for lineno, raw in enumerate(f, 1):
+            s = raw.rstrip("\r\n")
+            if not s or s.startswith("#"):
+                continue
+            if s.startswith("TX "):
+                scenario.append(("TX", s[3:], lineno))
+            elif s.startswith("RX "):
+                scenario.append(("RX", s[3:], lineno))
+            elif s in ("TX", "RX"):
+                # prefix のみの行は空メッセージ扱い (使わないが構文エラー回避)
+                scenario.append((s, "", lineno))
+            else:
+                print(f"[ERR] {path}:{lineno} unknown line: {s!r}", file=sys.stderr)
+                return 2
+
+    fake = _CaptureSerial()
+    cpu = ReversiCPU(fake, log_ping=log_ping)
+
+    expected = []
+    actual_at_rx = []  # RX 時点での actual 末尾位置のスナップショット用
+    cursor = 0
+
+    for kind, text, lineno in scenario:
+        if kind == "TX":
+            cpu.handle(text)
+        else:  # RX
+            expected.append(text)
+
+    # PI/PO は比較から除外 (シナリオ側で TX PI が無ければ RX PO も発生しない)
+    actual = [ln for ln in fake.sent_lines
+              if log_ping or ln[:2].upper() not in ("PI", "PO")]
+
+    if actual == expected:
+        print(f"[OK] {path}: {len(expected)} RX matched", flush=True)
+        return 0
+
+    # 差分表示
+    print(f"[FAIL] {path}: expected {len(expected)} RX lines, got {len(actual)}", file=sys.stderr)
+    n = max(len(expected), len(actual))
+    for i in range(n):
+        e = expected[i] if i < len(expected) else "<missing>"
+        a = actual[i] if i < len(actual) else "<missing>"
+        mark = "  " if e == a else ">>"
+        print(f"{mark} {i+1:4d}: expected={e!r}  actual={a!r}", file=sys.stderr)
+    return 1
+
+
 def main():
     ap = argparse.ArgumentParser(description="リバーシ CPU 疑似クライアント")
-    ap.add_argument("--port", required=True, help="シリアルポート (例: COM3 / /dev/ttyUSB0)")
+    ap.add_argument("--port", help="シリアルポート (例: COM3 / /dev/ttyUSB0)")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("-l", "--log-ping", action="store_true", help="PI/PO ハートビートもログ出力する")
+    ap.add_argument("--replay", help="シナリオファイル (TX/RX 形式) を再生し、CPU 応答を照合")
     args = ap.parse_args()
+
+    if args.replay:
+        sys.exit(run_replay(args.replay, log_ping=args.log_ping))
+
+    if not args.port:
+        ap.error("--port or --replay is required")
 
     ser = serial.Serial(args.port, args.baud, timeout=0.1)
     print(f"[INFO] opened {args.port} @ {args.baud}bps", flush=True)

@@ -5669,6 +5669,22 @@ export function setupHtmlUI(game: GameScene): void {
                 // （doc/reversi/61 §6.1 の SB/SW/MO/PA/EB/EW/ED を playing/finished 遷移から生成）。
                 // 第3引数は受信 MO を othelloMove RPC に橋渡しするためのポート (Phase 4)。
                 serialOnGameStateUpdate(data, myUid(), game.nakama);
+                // 連続対戦: 自分がオーナーの CPU ゲームが終局したら 3 秒後に自動で新ゲーム作成
+                if (prevStatus === "playing" && gameStatus === "finished"
+                    && data.isCpu === true
+                    && (data.black === myUid() || data.white === myUid())) {
+                    const autoCb = document.getElementById("opt-auto-new-game") as HTMLInputElement | null;
+                    if (autoCb?.checked) {
+                        setTimeout(() => {
+                            // 発火時に再チェック (ユーザがチェック外してたらキャンセル)
+                            if (!autoCb.checked) return;
+                            const btn = document.getElementById("serial-test-new-game") as HTMLButtonElement | null;
+                            if (!btn || btn.disabled) return;
+                            console.log("連続対戦: 自動で新ゲーム作成");
+                            btn.click();
+                        }, 3000);
+                    }
+                }
                 if (gameStatus === "playing" && (currentTurn !== prevTurn || prevStatus !== "playing")) {
                     turnStartMs = Date.now();
                 } else if (gameStatus !== "playing") {
@@ -6364,6 +6380,10 @@ export function setupHtmlUI(game: GameScene): void {
                     if (stNewGameBtn.disabled) return;
                     stNewGameBtn.disabled = true;
                     try {
+                        // othello パネルを開いてない状態でこのボタンを押しても状態更新を受信できるよう、
+                        // 先に subscribe を確実にしておく。subscribe 無しだと onOthelloUpdate が発火せず、
+                        // Adapter が SB/SW を CPU に送れないため CPU が起動しない。
+                        await game.nakama.othelloSubscribe(true).catch(e => console.warn("othelloSubscribe error:", e));
                         const res = await game.nakama.othelloCreate(game.currentWorldId, true);
                         if (!res) {
                             console.warn("othelloCreate(isCpu) returned null");
