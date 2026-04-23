@@ -1,0 +1,14 @@
+{
+    "name": "VE 問い合わせに VE<NN><名前> を返す",
+    "section": "§6.2 #4",
+    "required": true,
+    "timeout_ms": 500,
+    "steps": [
+        {
+            "tx": "VE"
+        },
+        {
+            "rx_regex": "^VE[0-9]{2}.{1,16}$"
+        }
+    ]
+}

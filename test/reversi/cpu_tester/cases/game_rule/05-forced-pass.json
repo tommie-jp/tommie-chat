@@ -1,0 +1,26 @@
+{
+    "name": "CPU (BLACK) が合法手無しの局面で PA を返す",
+    "section": "§6.2 #2, §14.1",
+    "required": true,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "_note": "game_2 の post-f1 盤面を作り、opp が g1 を打つと BLACK に合法手無し → PA 応答が期待値。",
+    "steps": [
+        {
+            "tx": "SB"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_bo": "2222210022221000211100000011100000011100000000000000000000000000"
+        },
+        {
+            "tx_opp_mo": "g1"
+        },
+        {
+            "rx_pa": true
+        }
+    ]
+}

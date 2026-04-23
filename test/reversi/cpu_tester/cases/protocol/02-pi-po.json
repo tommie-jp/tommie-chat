@@ -1,0 +1,14 @@
+{
+    "name": "PI に PO を返す (ハートビート)",
+    "section": "§6.1 #10, §6.2 #3",
+    "required": true,
+    "timeout_ms": 500,
+    "steps": [
+        {
+            "tx": "PI"
+        },
+        {
+            "rx": "PO"
+        }
+    ]
+}

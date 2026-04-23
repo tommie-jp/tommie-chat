@@ -1,0 +1,77 @@
+# Game 2 scenario from 2026-04-24 03:37 logs (logs/cpu_20260424_033703.log).
+# Python (BLACK) gets auto-passed by the server multiple times in mid-game:
+#   - after f1 the opponent plays g1, f2, e3 consecutively (3 auto-passes)
+#   - later after h7 the opponent plays a7, b7 consecutively (1 auto-pass)
+# This covers the fix in src/SerialReversiAdapter.ts case (2b) where the
+# adapter must forward each consecutive opponent move to the CPU as its own
+# MO directive rather than bundling them as a single MO on turn change.
+# Final: WHITE wins 40-23.
+
+TX SB
+RX MOd3
+TX MOc3
+RX MOb3
+TX MOb2
+RX MOb1
+TX MOa1
+RX MOc4
+TX MOc1
+RX MOc2
+TX MOd2
+RX MOd1
+TX MOe1
+RX MOa2
+TX MOa3
+RX MOf5
+TX MOe2
+RX MOf1
+# --- ここから 3 連続 auto-pass ---
+TX MOg1
+RX PA
+TX MOf2
+RX PA
+TX MOe3
+RX PA
+# --- auto-pass 区間終わり、通常対局再開 ---
+TX MOb5
+RX MOb4
+TX MOa5
+RX MOa4
+TX MOc5
+RX MOa6
+TX MOf4
+RX MOf3
+TX MOg3
+RX MOg2
+TX MOh2
+RX MOh1
+TX MOh3
+RX MOh4
+TX MOg4
+RX MOc6
+TX MOg5
+RX MOh5
+TX MOb6
+RX MOc7
+TX MOd6
+RX MOe6
+TX MOf6
+RX MOg6
+TX MOh6
+RX MOh7
+# --- 後半戦で 1 回 auto-pass ---
+TX MOa7
+RX PA
+TX MOb7
+RX MOa8
+TX MOd7
+RX MOe7
+TX MOf7
+RX MOg7
+TX MOg8
+RX MOb8
+TX MOc8
+RX MOd8
+TX MOe8
+RX MOf8
+TX EW

@@ -33,81 +33,11 @@ def _install_sigint_handler():
         _interrupted = True
     signal.signal(signal.SIGINT, _handler)
 
-BLACK = 1
-WHITE = 2
-EMPTY = 0
-DIRS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-
-def init_board():
-    b = [[EMPTY] * 8 for _ in range(8)]
-    b[3][3] = WHITE
-    b[3][4] = BLACK
-    b[4][3] = BLACK
-    b[4][4] = WHITE
-    return b
-
-
-def opponent(c):
-    return WHITE if c == BLACK else BLACK
-
-
-def find_flips(board, row, col, color):
-    if board[row][col] != EMPTY:
-        return []
-    opp = opponent(color)
-    flips = []
-    for dr, dc in DIRS:
-        r, c = row + dr, col + dc
-        line = []
-        while 0 <= r < 8 and 0 <= c < 8 and board[r][c] == opp:
-            line.append((r, c))
-            r += dr
-            c += dc
-        if line and 0 <= r < 8 and 0 <= c < 8 and board[r][c] == color:
-            flips.extend(line)
-    return flips
-
-
-def legal_moves(board, color):
-    out = []
-    for r in range(8):
-        for c in range(8):
-            if find_flips(board, r, c, color):
-                out.append((r, c))
-    return out
-
-
-def apply_move(board, row, col, color):
-    flips = find_flips(board, row, col, color)
-    if not flips:
-        return False
-    board[row][col] = color
-    for r, c in flips:
-        board[r][c] = color
-    return True
-
-
-def parse_coord(s):
-    s = s.lower()
-    col = ord(s[0]) - ord("a")
-    row = ord(s[1]) - ord("1")
-    if not (0 <= col < 8 and 0 <= row < 8):
-        raise ValueError(f"out of range: {s!r}")
-    return row, col
-
-
-def fmt_coord(row, col):
-    return f"{chr(ord('a') + col)}{row + 1}"
-
-
-def board_from_bo(s):
-    if len(s) != 64 or any(ch not in "012" for ch in s):
-        return None
-    b = [[EMPTY] * 8 for _ in range(8)]
-    for i, ch in enumerate(s):
-        b[i // 8][i % 8] = int(ch)
-    return b
+from reversi_rules import (  # noqa: E402
+    BLACK, WHITE, EMPTY, DIRS,
+    init_board, opponent, find_flips, legal_moves, apply_move,
+    parse_coord, fmt_coord, board_from_bo, board_to_bo,
+)
 
 
 def print_board(board):
@@ -116,11 +46,6 @@ def print_board(board):
         row = " ".join("." if v == 0 else ("B" if v == BLACK else "W") for v in board[r])
         print(f"  {r + 1} {row}")
     sys.stdout.flush()
-
-
-def board_to_bo(board):
-    """BO エンコーディング形式の 64 文字列 (行優先 a1..h1, a2..h2, ...)"""
-    return "".join(str(board[r][c]) for r in range(8) for c in range(8))
 
 
 def ts():
@@ -154,18 +79,34 @@ class ReversiCPU:
         if self.log_ping or head != "PO":
             log_tx(line + "\n")
         self.ser.write(data)
+        # HHD 仮想ブリッジ等でバッファ遅延が起きないよう明示フラッシュ
+        try:
+            self.ser.flush()
+        except Exception:
+            pass
 
     def handle(self, line):
+        # §4: CR 混入は仕様違反 → ER を返す
+        if "\r" in line:
+            print(f"[WARN] CR detected in input (§4 violation): {line!r}", flush=True)
+            self.send("ER")
+            return
         s = line.strip()
-        head = s[:2].upper()
+        head = s[:2]  # §4: コマンドは大文字必須。upper() はしない
         if head not in ("PI", "PO"):
             self.last_game_activity = time.time()
         if self.log_ping or head != "PI":
             log_rx(line + "\n")
         if len(s) < 2:
             return
-        cmd = s[:2].upper()
+        cmd = s[:2]
         rest = s[2:]
+
+        # §4: コマンド部は大文字のみ受理。小文字・混在は仕様違反 → ER
+        if not cmd.isupper() or not cmd.isalpha():
+            print(f"[WARN] lowercase or non-alpha command (§4 violation): {cmd!r}", flush=True)
+            self.send("ER")
+            return
 
         if cmd == "PI":
             self.send("PO")
@@ -187,10 +128,17 @@ class ReversiCPU:
         elif cmd == "MO":
             if self.color is None or len(rest) < 2:
                 return
+            coord = rest[:2]
+            # §7: 座標は小文字のみ受理 (MOD3 等は ER)
+            if not (coord[0].islower() and coord[1].isdigit()):
+                print(f"[WARN] non-lowercase coord (§7 violation): {coord!r}", flush=True)
+                self.send("ER")
+                return
             try:
-                r, c = parse_coord(rest[:2])
+                r, c = parse_coord(coord)
             except ValueError as e:
                 print(f"[WARN] bad coord: {e}", flush=True)
+                self.send("ER")
                 return
             if not apply_move(self.board, r, c, opponent(self.color)):
                 # 盤面乖離 → §6.2 #10 RS (REQUEST SYNC) で再同期要求。
@@ -227,7 +175,9 @@ class ReversiCPU:
             self.state = "IDLE"
             self.color = None
         else:
-            print(f"[WARN] unknown cmd: {s!r}", flush=True)
+            # §4.1 未知コマンド → ER
+            print(f"[WARN] unknown cmd: {s!r} — responding ER", flush=True)
+            self.send("ER")
 
     def my_move(self):
         if self.state != "MY_TURN" or self.color is None:
@@ -334,7 +284,38 @@ def main():
 
     _install_sigint_handler()
 
-    ser = serial.Serial(args.port, args.baud, timeout=0.1)
+    try:
+        ser = serial.Serial(args.port, args.baud, timeout=0.1)
+    except serial.SerialException as e:
+        msg = str(e).lower()
+        port_repr = repr(args.port)
+        if "access is denied" in msg or "permissionerror" in msg or "アクセス" in str(e):
+            print(
+                f"\n[COM ポート使用中] {port_repr} を他のプロセスが掴んでいます。\n"
+                f"\n考えられる原因:\n"
+                f"  1. tommieChat のシリアルテストパネル (ブラウザ) が接続中\n"
+                f"     → 「接続を切る」ボタンを押すかタブを閉じる\n"
+                f"  2. 前回の reversi_cpu.py や cpu_tester がまだ残留\n"
+                f"     → PowerShell で Get-Process py,python,pythonw | Stop-Process -Force\n"
+                f"  3. 他のターミナル端末ソフト (PuTTY / TeraTerm) が COM を開いている\n"
+                f"     → 該当ソフトの接続を切る\n"
+                f"\n元のエラー: {e}\n",
+                file=sys.stderr,
+            )
+            sys.exit(4)
+        if "could not open port" in msg or "filenotfounderror" in msg or "no such file" in msg:
+            print(
+                f"\n[COM ポート未存在] {port_repr} が見つかりません。\n"
+                f"\n考えられる原因:\n"
+                f"  1. COM ポート番号のタイプミス (--port の値を確認)\n"
+                f"  2. HHD / com0com の仮想ブリッジが未作成 / 再起動で消失\n"
+                f"     → 仮想シリアルツールの GUI でブリッジを作成\n"
+                f"  3. 実機 CPU の USB ケーブルが外れている\n"
+                f"\n元のエラー: {e}\n",
+                file=sys.stderr,
+            )
+            sys.exit(4)
+        raise
     print(f"[INFO] opened {args.port} @ {args.baud}bps (Ctrl+C to quit)", flush=True)
 
     cpu = ReversiCPU(ser, log_ping=args.log_ping)
@@ -352,17 +333,13 @@ def main():
                 buf += chunk
                 last_rx = time.time()
                 while True:
+                    # §4: 改行は LF のみ。CR は行内に残したまま handle() に渡し、
+                    # handle 内で §4.1 仕様違反として ER 応答させる。
                     idx_lf = buf.find(b"\n")
-                    idx_cr = buf.find(b"\r")
-                    if idx_lf < 0 and idx_cr < 0:
+                    if idx_lf < 0:
                         break
-                    idxs = [i for i in (idx_lf, idx_cr) if i >= 0]
-                    idx = min(idxs)
-                    line_bytes = buf[:idx]
-                    nxt = idx + 1
-                    if buf[idx:idx + 1] == b"\r" and buf[nxt:nxt + 1] == b"\n":
-                        nxt += 1
-                    buf = buf[nxt:]
+                    line_bytes = buf[:idx_lf]  # CR を含む場合は含めたまま
+                    buf = buf[idx_lf + 1:]
                     if line_bytes:
                         cpu.handle(line_bytes.decode("ascii", errors="replace"))
             else:
@@ -370,10 +347,11 @@ def main():
                     print(f"[WARN] inter-char timeout, discard: {buf!r}", flush=True)
                     buf = b""
 
-            # STUCK 検知: MY_TURN / WAIT_OPP で活動が止まったら状態ダンプ
+            # STUCK 検知: MY_TURN (CPU が応答すべき局面) のみ。
+            # WAIT_OPP は人間相手の長考で正当に長くなりうるので対象外。
             now = time.time()
             idle = now - cpu.last_game_activity
-            if cpu.state != "IDLE" and idle > STUCK_THRESHOLD:
+            if cpu.state == "MY_TURN" and idle > STUCK_THRESHOLD:
                 if now - last_stuck_dump > STUCK_DUMP_INTERVAL:
                     print(
                         f"[STUCK] state={cpu.state} color={cpu.color} "

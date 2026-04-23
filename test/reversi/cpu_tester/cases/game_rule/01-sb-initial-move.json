@@ -1,0 +1,16 @@
+{
+    "name": "SB を受けて初期局面 BLACK の合法手 (d3/c4/e6/f5 のどれか) を返す",
+    "section": "§7, §9",
+    "required": true,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "steps": [
+        {
+            "tx": "SB"
+        },
+        {
+            "rx_mo_legal": true
+        }
+    ]
+}

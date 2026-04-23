@@ -1,0 +1,18 @@
+{
+    "name": "終局 EW (白勝ち) 後も追加の MO を送らない",
+    "section": "§6.1 #7",
+    "required": true,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "_note": "EW は 08 の EB と対称のケース。CPU は IDLE へ遷移する。",
+    "steps": [
+        { "tx": "SB" },
+        { "rx_mo_legal": true },
+        { "tx": "EW" },
+        { "rx_silent_ms": 300 },
+        { "tx": "PI" },
+        { "rx": "PO" },
+        { "rx_silent_ms": 300 }
+    ]
+}

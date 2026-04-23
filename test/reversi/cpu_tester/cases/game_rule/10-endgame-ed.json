@@ -1,0 +1,18 @@
+{
+    "name": "終局 ED (引き分け) 後も追加の MO を送らない",
+    "section": "§6.1 #8",
+    "required": true,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "_note": "ED は 08/09 と対称のケース。CPU は IDLE へ遷移する。",
+    "steps": [
+        { "tx": "SB" },
+        { "rx_mo_legal": true },
+        { "tx": "ED" },
+        { "rx_silent_ms": 300 },
+        { "tx": "PI" },
+        { "rx": "PO" },
+        { "rx_silent_ms": 300 }
+    ]
+}

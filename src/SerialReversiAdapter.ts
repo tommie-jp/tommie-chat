@@ -39,7 +39,9 @@ const STUCK_DUMP_INTERVAL_MS = 10_000; // STUCK 中の再ダンプ間隔
 const STUCK_CHECK_INTERVAL_MS = 2_000; // STUCK チェックの走査間隔
 const RS_MAX_RETRIES = 3;              // RS 連続試行回数の上限（超過で投了）
 
-class SerialReversiAdapter {
+// テスト (test/SerialReversiAdapter.test.ts) から new できるよう export する。
+// 実行時は下部の const adapter = new SerialReversiAdapter() がシングルトンとして使われる。
+export class SerialReversiAdapter {
     // §10 C1 (IDLE) / C2 (MY_TURN) / C3 (WAIT_OPP) のミラー
     private state: AdapterState = "IDLE";
     private bridgeAttached = false;
@@ -100,12 +102,35 @@ class SerialReversiAdapter {
         b.emitStatus(ok ? "OK" : `NG ${detail ?? "unknown"}`);
     }
 
-    // 受信 1 行のパース。§4 大文字小文字は区別しないので先頭 2 文字を大文字化して判定。
+    // §4.1 仕様違反受信時に ER を返す。sendDirective は lastDirectiveSent を上書きしないよう
+    // skipRecord=true で呼ぶ。未接続ならサイレント。
+    private sendErrorResponse(): void {
+        const b = window.__serialTestBridge;
+        if (!b || !b.isConnected()) return;
+        b.sendLine("ER").catch((e) => console.warn("SerialReversi: ER 送信失敗:", e));
+    }
+
+    // 受信 1 行のパース。§4: コマンドは大文字のみ、改行は LF のみ。
+    // 仕様違反受信は §4.1 に従い ER で応答する。
     private onLine(raw: string): void {
-        const line = raw.replace(/[\r\n]+$/g, "");
+        // CR 混入チェック (§4 仕様違反)
+        if (raw.includes("\r")) {
+            console.warn(`SerialReversi: CR detected in input (§4 violation): ${JSON.stringify(raw)}`);
+            this.sendErrorResponse();
+            this.emitStatus(false, "CR in input (§4)");
+            return;
+        }
+        const line = raw.replace(/\n$/g, "");
         if (line.length === 0) return;
-        const head = line.slice(0, 2).toUpperCase();
+        const head = line.slice(0, 2);
         const rest = line.slice(2);
+        // §4 コマンドは大文字のみ
+        if (!/^[A-Z]{2}$/.test(head)) {
+            console.warn(`SerialReversi: lowercase or non-alpha command (§4 violation): ${JSON.stringify(head)}`);
+            this.sendErrorResponse();
+            this.emitStatus(false, `non-uppercase cmd: ${head}`);
+            return;
+        }
         // STUCK 検知用: PI/PO 以外の受信は「ゲーム活動」として記録
         if (head !== "PI" && head !== "PO") {
             this.lastGameActivity = Date.now();
@@ -494,9 +519,10 @@ class SerialReversiAdapter {
     }
 
     // ゲーム活動が N 秒無ければ現在状態を WARN でダンプ (重複ダンプは抑制)
+    // MY_TURN (CPU が応答すべき局面) のみ検知。WAIT_OPP は人間相手が長考しうるので対象外。
     // シリアル未接続の観戦タブでは偽陽性が出るのでスキップする
     private stuckTick(): void {
-        if (this.state === "IDLE") return;
+        if (this.state !== "MY_TURN") return;
         const b = window.__serialTestBridge;
         if (!b || !b.isConnected()) return;
         const now = Date.now();

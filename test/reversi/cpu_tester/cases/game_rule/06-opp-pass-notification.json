@@ -1,0 +1,23 @@
+{
+    "name": "opp パス通知 (PA) を受けて CPU が打ち続ける",
+    "section": "§6.1 #4",
+    "required": true,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "_note": "最初の CPU 手の後に意図的に PA (opp pass) を送ると CPU がもう一度打つ。合法手が残っているので PA 応答ではなく MO で返す。",
+    "steps": [
+        {
+            "tx": "SB"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx": "PA"
+        },
+        {
+            "rx_mo_legal": true
+        }
+    ]
+}

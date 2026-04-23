@@ -1,0 +1,15 @@
+{
+    "name": "小文字 ve は §4 違反で ER 応答",
+    "section": "§4, §4.1",
+    "required": true,
+    "timeout_ms": 500,
+    "_note": "v0.1 仕様改訂: コマンドは大文字のみ受理。小文字は ER で拒否。",
+    "steps": [
+        {
+            "tx": "ve"
+        },
+        {
+            "rx": "ER"
+        }
+    ]
+}

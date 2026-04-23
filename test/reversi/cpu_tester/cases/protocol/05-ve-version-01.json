@@ -1,0 +1,14 @@
+{
+    "name": "VE 応答のバージョンは 01 (本仕様ドラフト v0.1)",
+    "section": "§6.2 #4",
+    "required": true,
+    "timeout_ms": 500,
+    "steps": [
+        {
+            "tx": "VE"
+        },
+        {
+            "rx_regex": "^VE01.{1,16}$"
+        }
+    ]
+}

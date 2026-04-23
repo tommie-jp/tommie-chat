@@ -1,0 +1,15 @@
+{
+    "name": "CPU は盤面乖離時に RS (REQUEST SYNC) を能動送信する (任意)",
+    "section": "§6.2 #10, §12.1",
+    "required": false,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "_note": "意図的に不正な MO (初期盤面で d4 は非合法) を送って CPU が RS を返すか確認。RS は §6.2 #10 で任意実装なので --required-only では skip する。",
+    "steps": [
+        { "tx": "SB" },
+        { "rx_mo_legal": true },
+        { "tx": "MOd4" },
+        { "rx": "RS" }
+    ]
+}

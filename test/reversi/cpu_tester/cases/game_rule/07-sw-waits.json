@@ -1,0 +1,16 @@
+{
+    "name": "SW を受けても自分では打たずに相手の手を待つ",
+    "section": "§6.1 #2, §9",
+    "required": true,
+    "cpu_color": "W",
+    "initial_board": "initial",
+    "timeout_ms": 500,
+    "steps": [
+        {
+            "tx": "SW"
+        },
+        {
+            "rx_silent_ms": 500
+        }
+    ]
+}

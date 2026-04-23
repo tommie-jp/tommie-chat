@@ -1,0 +1,40 @@
+{
+    "name": "SB 後、相手と 5 手交互に打っても CPU は合法手を返し続ける",
+    "section": "§9",
+    "required": true,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "steps": [
+        {
+            "tx": "SB"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_opp_mo": "c3"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_opp_mo": "b2"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_opp_mo": "a1"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_opp_mo": "c1"
+        },
+        {
+            "rx_mo_legal": true
+        }
+    ]
+}

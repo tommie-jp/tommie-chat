@@ -1,0 +1,32 @@
+{
+    "name": "終局 (EB/EW/ED) 後は追加の MO を送らない",
+    "section": "§6.1 #6-8",
+    "required": true,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "_note": "SB で 1 手打たせたあと EB (黒勝ち) を送ると CPU は IDLE へ遷移。直後に PI を送っても PO は返るが MO は出ない。",
+    "steps": [
+        {
+            "tx": "SB"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx": "EB"
+        },
+        {
+            "rx_silent_ms": 300
+        },
+        {
+            "tx": "PI"
+        },
+        {
+            "rx": "PO"
+        },
+        {
+            "rx_silent_ms": 300
+        }
+    ]
+}

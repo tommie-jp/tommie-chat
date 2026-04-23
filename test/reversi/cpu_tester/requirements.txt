@@ -1,0 +1,6 @@
+pyserial>=3.5
+pytest>=8.0
+pytest-timeout>=2.2
+pytest-html>=4.0
+# HHD 仮想ブリッジ等の transient 失敗に備えて自動リトライ (仮想ブリッジが不安定な環境向け)
+pytest-rerunfailures>=14.0

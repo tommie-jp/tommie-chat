@@ -1,0 +1,26 @@
+{
+    "name": "BO で盤面を再投入しても対局を続けられる",
+    "section": "§6.1 #5, §7",
+    "required": false,
+    "cpu_color": "B",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "_note": "SB + 初手 (d3) の後に、post-d3 相当の盤面を BO で再投入 (冗長だが BO 受理テスト)。続けて opp が c3 (post-d3 で WHITE の合法手) を打つと CPU は合法手で応答する。",
+    "steps": [
+        {
+            "tx": "SB"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_bo": "0000000000000000000100000001100000012000000000000000000000000000"
+        },
+        {
+            "tx_opp_mo": "c3"
+        },
+        {
+            "rx_mo_legal": true
+        }
+    ]
+}

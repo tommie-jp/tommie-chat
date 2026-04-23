@@ -1,0 +1,37 @@
+{
+    "name": "SW 後、相手 (BLACK) が先手を打ち、CPU (WHITE) は合法手で返し続ける",
+    "section": "§9",
+    "required": true,
+    "cpu_color": "W",
+    "initial_board": "initial",
+    "timeout_ms": 3000,
+    "steps": [
+        {
+            "tx": "SW"
+        },
+        {
+            "tx_opp_mo": "d3"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_opp_mo": "b3"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_opp_mo": "b1"
+        },
+        {
+            "rx_mo_legal": true
+        },
+        {
+            "tx_opp_mo": "c4"
+        },
+        {
+            "rx_mo_legal": true
+        }
+    ]
+}
