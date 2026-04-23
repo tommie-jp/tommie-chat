@@ -34,6 +34,10 @@ type AdapterState = "IDLE" | "MY_TURN" | "WAIT_OPP";
 
 const PING_INTERVAL_MS = 3000; // §5
 const PING_FAIL_THRESHOLD = 3; // §5 3 連続失敗で切断扱い
+const STUCK_THRESHOLD_MS = 10_000;     // PI/PO 以外の活動が N ms 無ければ STUCK
+const STUCK_DUMP_INTERVAL_MS = 10_000; // STUCK 中の再ダンプ間隔
+const STUCK_CHECK_INTERVAL_MS = 2_000; // STUCK チェックの走査間隔
+const RS_MAX_RETRIES = 3;              // RS 連続試行回数の上限（超過で投了）
 
 class SerialReversiAdapter {
     // §10 C1 (IDLE) / C2 (MY_TURN) / C3 (WAIT_OPP) のミラー
@@ -59,6 +63,16 @@ class SerialReversiAdapter {
     //          PI / VE / ER の類は対象外
     private lastDirectiveSent = "";
 
+    // STUCK 検知: PI/PO 以外の TX/RX があった最終時刻と、最後にダンプした時刻
+    private lastGameActivity = Date.now();
+    private lastStuckDump = 0;
+    private stuckTimer: ReturnType<typeof setInterval> | null = null;
+
+    // RS (再同期要求) 受信時のため、最後に受け取ったサーバ盤面を保持
+    private lastBoardSnapshot: number[] | null = null;
+    // RS 連続試行回数。RS_MAX_RETRIES を超えたら反則負け扱い (othelloResign) する
+    private rsRetryCount = 0;
+
     attachBridge(): boolean {
         if (this.bridgeAttached) return true;
         const b = window.__serialTestBridge;
@@ -66,6 +80,7 @@ class SerialReversiAdapter {
         b.onLine(this.lineHandler);
         this.bridgeAttached = true;
         this.startPingLoop();
+        this.startStuckLoop();
         return true;
     }
 
@@ -75,6 +90,7 @@ class SerialReversiAdapter {
         if (b && typeof b.offLine === "function") b.offLine(this.lineHandler);
         this.bridgeAttached = false;
         this.stopPingLoop();
+        this.stopStuckLoop();
     }
 
     // Adapter の受信処理結果を serial テストパネルのログに出す。OK or NG+理由。
@@ -90,6 +106,10 @@ class SerialReversiAdapter {
         if (line.length === 0) return;
         const head = line.slice(0, 2).toUpperCase();
         const rest = line.slice(2);
+        // STUCK 検知用: PI/PO 以外の受信は「ゲーム活動」として記録
+        if (head !== "PI" && head !== "PO") {
+            this.lastGameActivity = Date.now();
+        }
         switch (head) {
             case "PO":
                 // §10 共通応答。ハートビートの応答。OK は頻度が多いので出さない。
@@ -121,12 +141,15 @@ class SerialReversiAdapter {
                 return;
             case "ER":
                 // §6.2 #7 ログ記録のみ、自動再送はしない
-                console.log("SerialReversi <CPU: ER (ログのみ・再送しない)");
+                console.log(`SerialReversi <CPU: ER ${rest}`);
                 this.emitStatus(true);
                 return;
             case "ST":
                 console.log(`SerialReversi <CPU: ST ${rest}`);
                 this.emitStatus(true);
+                return;
+            case "RS":
+                this.handleRsMessage();
                 return;
             case "NC":
                 console.log(`SerialReversi <CPU: NC ${rest}`);
@@ -171,12 +194,20 @@ class SerialReversiAdapter {
         const gameId = this.currentGameId;
         const port = this.movePort;
         this.state = "WAIT_OPP";
+        this.rsRetryCount = 0; // CPU が正常に MO を返せたら RS カウンタをリセット
         this.emitStatus(true);
-        port.othelloMove(gameId, row, col).catch((e) => {
-            const msg = e instanceof Error ? e.message : String(e);
-            console.warn(`SerialReversi: othelloMove RPC 失敗 (${colCh}${rowCh}):`, e);
-            this.emitStatus(false, `MO${colCh}${rowCh} RPC 拒否: ${msg}`);
-        });
+        const t0 = performance.now();
+        port.othelloMove(gameId, row, col).then(
+            (res) => {
+                const dt = (performance.now() - t0).toFixed(0);
+                console.log(`SerialReversi: othelloMove RES ${dt}ms ok=${!!res} (${colCh}${rowCh})`);
+            },
+            (e) => {
+                const msg = e instanceof Error ? e.message : String(e);
+                console.warn(`SerialReversi: othelloMove RPC 失敗 (${colCh}${rowCh}):`, e);
+                this.emitStatus(false, `MO${colCh}${rowCh} RPC 拒否: ${msg}`);
+            },
+        );
     }
 
     // CPU からの EN → othelloResign RPC
@@ -192,11 +223,64 @@ class SerialReversiAdapter {
         // §10 終局時: CPU は EN 送信後ただちに IDLE へ
         this.state = "IDLE";
         this.emitStatus(true);
-        port.othelloResign(gameId).catch((e) => {
-            const msg = e instanceof Error ? e.message : String(e);
-            console.warn("SerialReversi: othelloResign RPC 失敗:", e);
-            this.emitStatus(false, `EN RPC 拒否: ${msg}`);
-        });
+        const t0 = performance.now();
+        port.othelloResign(gameId).then(
+            (res) => {
+                const dt = (performance.now() - t0).toFixed(0);
+                console.log(`SerialReversi: othelloResign RES ${dt}ms ok=${!!res}`);
+            },
+            (e) => {
+                const msg = e instanceof Error ? e.message : String(e);
+                console.warn("SerialReversi: othelloResign RPC 失敗:", e);
+                this.emitStatus(false, `EN RPC 拒否: ${msg}`);
+            },
+        );
+    }
+
+    // CPU からの RS (REQUEST SYNC §6.2 #10)。盤面乖離検知時の再同期要求。
+    // §12.1 に従い、現在のサーバ盤面を BO で送り、直前の指示 (通常 MO?) を再送する。
+    // ただし連続 RS_MAX_RETRIES 回まで。超過したら反則負け扱いで投了 RPC を呼ぶ。
+    private handleRsMessage(): void {
+        console.log("SerialReversi <CPU: RS (REQUEST SYNC)");
+        if (!this.lastBoardSnapshot || !this.lastDirectiveSent) {
+            console.warn("SerialReversi: RS 受信 — 再同期用スナップショットが無いため無視");
+            this.emitStatus(false, "RS: no snapshot");
+            return;
+        }
+        this.rsRetryCount++;
+        if (this.rsRetryCount > RS_MAX_RETRIES) {
+            console.error(
+                `SerialReversi: RS が ${RS_MAX_RETRIES} 回連続で解消せず — CPU を反則負け扱いで投了`,
+            );
+            this.emitStatus(false, `RS limit(${RS_MAX_RETRIES}) exceeded: CPU 反則負け → 投了`);
+            this.rsRetryCount = 0;
+            if (this.currentGameId && this.movePort) {
+                const gameId = this.currentGameId;
+                this.movePort.othelloResign(gameId).then(
+                    () => {
+                        console.log(`SerialReversi: othelloResign 成功 (gameId=${gameId})`);
+                        this.emitStatus(false, `CPU 反則負け: 投了完了 (${gameId})`);
+                    },
+                    (e) => {
+                        const msg = e instanceof Error ? e.message : String(e);
+                        console.warn("SerialReversi: othelloResign RPC 失敗:", e);
+                        this.emitStatus(false, `CPU 反則負け: 投了 RPC 失敗: ${msg}`);
+                    },
+                );
+            } else {
+                this.emitStatus(false, "CPU 反則負け: gameId/movePort 未設定で投了スキップ");
+            }
+            return;
+        }
+        console.warn(
+            `SerialReversi: RS 受信 (${this.rsRetryCount}/${RS_MAX_RETRIES}) — ` +
+            `BO 再同期 + "${this.lastDirectiveSent}" 再送`,
+        );
+        this.emitStatus(false, `RS (${this.rsRetryCount}/${RS_MAX_RETRIES}): resyncing`);
+        // BO は state を変えず (skipRecord で lastDirectiveSent 上書きも避ける)、
+        // そのあと直前の MO 指示を再送する
+        this.sendDirective("BO" + encodeBO(this.lastBoardSnapshot), { skipRecord: true });
+        this.sendDirective(this.lastDirectiveSent, { skipRecord: true });
     }
 
     // CPU からの RE (READY) → 直前指示を再送 (§12)
@@ -275,12 +359,16 @@ class SerialReversiAdapter {
             this.startSent = false;
             this.lastDirectiveSent = "";
             this.state = "IDLE";
+            this.lastBoardSnapshot = null;
+            this.rsRetryCount = 0;
         }
 
         const status = p.status;
         const turn = p.turn;
         const lastMove = typeof p.lastMove === "number" ? p.lastMove : -1;
         const board = p.board ?? [];
+        // ER illegal 再同期のため常にサーバ盤面の最新をスナップショットしておく
+        if (board.length === 64) this.lastBoardSnapshot = board.slice();
 
         // (1) 対局開始 or 対局中途参加: prev != playing → playing
         if (this.prevStatus !== "playing" && status === "playing" && !this.startSent) {
@@ -311,8 +399,10 @@ class SerialReversiAdapter {
                 const row = Math.floor(lastMove / 8);
                 const colCh = String.fromCharCode("a".charCodeAt(0) + col);
                 const rowCh = String.fromCharCode("1".charCodeAt(0) + row);
+                console.log(`SerialReversi BOARD(post-OPP ${colCh}${rowCh}) ${encodeBO(board)}`);
                 this.sendDirective(`MO${colCh}${rowCh}`);
             } else {
+                console.log(`SerialReversi BOARD(opp-pass) ${encodeBO(board)}`);
                 this.sendDirective("PA");
             }
             this.state = "MY_TURN";
@@ -320,6 +410,7 @@ class SerialReversiAdapter {
         // (3) 対局中: CPU→相手に手番が移ったら状態のみ更新
         else if (this.prevStatus === "playing" && status === "playing"
                  && this.prevTurn !== turn && turn !== cpuColor) {
+            console.log(`SerialReversi BOARD(post-MY) ${encodeBO(board)}`);
             this.state = "WAIT_OPP";
         }
         // (3b) サーバー auto-pass: CPU が打った直後なのに turn が CPU のまま戻ってきた
@@ -331,6 +422,27 @@ class SerialReversiAdapter {
                  && this.state === "WAIT_OPP") {
             this.sendDirective("PA");
             this.state = "MY_TURN";
+        }
+        // (2b) サーバー auto-pass (CPU 側): CPU の手番が来る前に相手が追加着手した
+        //      → CPU に合法手がなくサーバが CPU を自動パスして相手がもう一手打った。
+        //      CPU にはその相手の追加着手だけ MO で通知する (連続発生なら複数回起きる)。
+        //      CPU は my_move で合法手無しを検出し PA を返すが、サーバは既に auto-pass 済みで
+        //      adapter は WAIT_OPP のため debug 破棄される (影響なし)。
+        else if (this.prevStatus === "playing" && status === "playing"
+                 && this.prevTurn === turn && turn !== cpuColor
+                 && lastMove !== this.prevLastMove && lastMove >= 0
+                 && this.state === "WAIT_OPP") {
+            const placed = board[lastMove];
+            const oppColor = cpuColor === 1 ? 2 : 1;
+            if (placed === oppColor) {
+                const col = lastMove % 8;
+                const row = Math.floor(lastMove / 8);
+                const colCh = String.fromCharCode("a".charCodeAt(0) + col);
+                const rowCh = String.fromCharCode("1".charCodeAt(0) + row);
+                console.log(`SerialReversi BOARD(post-OPP ${colCh}${rowCh}, CPU auto-passed) ${encodeBO(board)}`);
+                this.sendDirective(`MO${colCh}${rowCh}`);
+            }
+            // state は WAIT_OPP のまま (turn が CPU に戻るまで)
         }
 
         // (4) 終局
@@ -361,10 +473,44 @@ class SerialReversiAdapter {
             return;
         }
         if (!opts?.skipRecord) this.lastDirectiveSent = line;
+        // sendDirective は常にゲーム活動 (PI/VE/ER/PO は sendDirective 経由で送らない)
+        this.lastGameActivity = Date.now();
         this.attachBridge();
         b.sendLine(line).catch((e) => {
             console.warn(`SerialReversiAdapter: sendLine "${line}" 失敗:`, e);
         });
+    }
+
+    private startStuckLoop(): void {
+        if (this.stuckTimer !== null) return;
+        this.stuckTimer = setInterval(() => this.stuckTick(), STUCK_CHECK_INTERVAL_MS);
+    }
+
+    private stopStuckLoop(): void {
+        if (this.stuckTimer !== null) {
+            clearInterval(this.stuckTimer);
+            this.stuckTimer = null;
+        }
+    }
+
+    // ゲーム活動が N 秒無ければ現在状態を WARN でダンプ (重複ダンプは抑制)
+    // シリアル未接続の観戦タブでは偽陽性が出るのでスキップする
+    private stuckTick(): void {
+        if (this.state === "IDLE") return;
+        const b = window.__serialTestBridge;
+        if (!b || !b.isConnected()) return;
+        const now = Date.now();
+        const idle = now - this.lastGameActivity;
+        if (idle < STUCK_THRESHOLD_MS) return;
+        if (now - this.lastStuckDump < STUCK_DUMP_INTERVAL_MS) return;
+        this.lastStuckDump = now;
+        console.warn(
+            `SerialReversi [STUCK] state=${this.state} gameId=${this.currentGameId ?? "null"} ` +
+            `idle=${(idle / 1000).toFixed(1)}s lastDirective="${this.lastDirectiveSent}" ` +
+            `prevStatus=${this.prevStatus} prevTurn=${this.prevTurn} ` +
+            `prevLastMove=${this.prevLastMove} cpuStalled=${this.cpuStalled} ` +
+            `pingOutstanding=${this.pingOutstanding}`,
+        );
     }
 }
 

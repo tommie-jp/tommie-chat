@@ -3869,6 +3869,8 @@ func othelloNewGame(gameID, blackUID string, worldID int) *OthelloGame {
 	for i := range g.PrevBoard {
 		g.PrevBoard[i] = -1
 	}
+	logf("othelloNewGame(%s) blackUID=%s worldID=%d board=%s\n",
+		gameID, shortSID(blackUID), worldID, othelloBoardToBO(&g.Board))
 	return g
 }
 
@@ -3927,8 +3929,12 @@ func othelloApplyMove(g *OthelloGame, row, col int) ([]int, error) {
 	if g.Status != "playing" {
 		return nil, fmt.Errorf("game not in playing state")
 	}
+	// DEBUG: 適用前の盤面スナップショット
+	logf("othelloApplyMove(%s) PRE  turn=%d move=(%d,%d) board=%s\n",
+		g.GameID, g.Turn, row, col, othelloBoardToBO(&g.Board))
 	flips := othelloGetFlips(&g.Board, row, col, g.Turn)
 	if len(flips) == 0 {
+		logf("othelloApplyMove(%s) ILLEGAL move=(%d,%d) turn=%d\n", g.GameID, row, col, g.Turn)
 		return nil, fmt.Errorf("illegal move (%d,%d)", row, col)
 	}
 
@@ -3941,6 +3947,10 @@ func othelloApplyMove(g *OthelloGame, row, col int) ([]int, error) {
 	g.LastMove = idx
 	g.PassCount = 0
 
+	// DEBUG: flip 適用直後の盤面（ターン交代前）
+	logf("othelloApplyMove(%s) POST turn=%d move=(%d,%d) flips=%v board=%s\n",
+		g.GameID, g.Turn, row, col, flips, othelloBoardToBO(&g.Board))
+
 	// ターン交代
 	next := int8(3) - g.Turn
 	if len(othelloGetLegalMoves(&g.Board, next)) > 0 {
@@ -3950,6 +3960,11 @@ func othelloApplyMove(g *OthelloGame, row, col int) ([]int, error) {
 		if len(othelloGetLegalMoves(&g.Board, g.Turn)) == 0 {
 			// 両者合法手なし → 終局
 			othelloFinish(g)
+			logf("othelloApplyMove(%s) FINISH winner=%d board=%s\n",
+				g.GameID, g.Winner, othelloBoardToBO(&g.Board))
+		} else {
+			logf("othelloApplyMove(%s) AUTO_PASS opp has no legal moves, turn stays=%d\n",
+				g.GameID, g.Turn)
 		}
 		// else: g.Turn はそのまま（自分がもう1回打てる）
 	}
@@ -3965,8 +3980,11 @@ func othelloPass(g *OthelloGame) error {
 		return fmt.Errorf("cannot pass when legal moves exist")
 	}
 	g.PassCount++
+	logf("othelloPass(%s) turn=%d passCount=%d board=%s\n",
+		g.GameID, g.Turn, g.PassCount, othelloBoardToBO(&g.Board))
 	if g.PassCount >= 2 {
 		othelloFinish(g)
+		logf("othelloPass(%s) FINISH (double pass) winner=%d\n", g.GameID, g.Winner)
 		return nil
 	}
 	g.Turn = int8(3) - g.Turn
@@ -3994,6 +4012,8 @@ func othelloResign(g *OthelloGame, uid string) {
 	} else {
 		g.Winner = 1 // 白が投了 → 黒勝ち
 	}
+	logf("othelloResign(%s) by=%s winner=%d board=%s\n",
+		g.GameID, shortSID(uid), g.Winner, othelloBoardToBO(&g.Board))
 }
 
 // othelloSaveHistory は終局（通常終了・投了・中断）時に対戦結果をサーバDBに保存する
@@ -4106,6 +4126,16 @@ func othelloNextGameNo(ctx context.Context, nk runtime.NakamaModule) int64 {
 		logf("othello nextGameNo StorageWrite: %v\n", err)
 	}
 	return n
+}
+
+// othelloBoardToBO は盤面を BO 形式の 64 文字列に変換する（行優先 a1..h8, 空=0/黒=1/白=2）
+// 診断ログで使用。ブラウザ側 adapter の BOARD log, Python の ST BO と直接突合可能。
+func othelloBoardToBO(board *[64]int8) string {
+	var buf [64]byte
+	for i := 0; i < 64; i++ {
+		buf[i] = '0' + byte(board[i])
+	}
+	return string(buf[:])
 }
 
 // othelloBoardToInts は [64]int8 を []int に変換する（JSONシリアライズ用）

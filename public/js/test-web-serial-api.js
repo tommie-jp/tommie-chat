@@ -415,7 +415,9 @@ function appendLog(s) {
 }
 
 // Replay モード: reversi_cpu.py --replay 用の "TX/RX <ascii>" 形式で 1 メッセージ 1 行を追記する。
-// タイムスタンプ・行番号なし。PI/PO は opt-replay-skip-pipo でフィルタ。
+// タイムスタンプは opt-timestamp 設定に従う (なし/時刻/相対)。行番号は常になし。
+// PI/PO は opt-replay-skip-pipo でフィルタ。reversi_cpu.py --replay 側でも
+// 先頭の `[HH:MM:SS.mmm] ` を読み飛ばすのでそのまま貼って再生可能。
 function shouldSkipReplay(text) {
   if (!$('opt-replay-skip-pipo') || !$('opt-replay-skip-pipo').checked) return false;
   const head = text.slice(0, 2).toUpperCase();
@@ -424,7 +426,7 @@ function shouldSkipReplay(text) {
 function emitReplayLine(kind, text) {
   if (!text) return;
   if (shouldSkipReplay(text)) return;
-  appendLog(`${kind} ${text}\n`);
+  appendLog(`${tsPrefix()}${kind} ${text}\n`);
 }
 
 // SEND 行の出力。現在の Hex モードに合わせて受信と同じ書式で出し、受信との比較をしやすくする。
