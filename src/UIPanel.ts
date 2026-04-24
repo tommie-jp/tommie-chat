@@ -5267,6 +5267,9 @@ export function setupHtmlUI(game: GameScene): void {
 
             // QRコード表示モーダル — 招待URLを大きなQRコードで見せる
             const showQrModal = (url: string, gameNo: number) => {
+                // dev 環境 (localhost:3000) はスマホからアクセスできないので、
+                // LAN IP (192.168.1.40) に書き換えて QR 表示する
+                const qrUrl = url.replace(/^http:\/\/localhost:3000/, "http://192.168.1.40");
                 const overlay = document.createElement("div");
                 overlay.className = "oth-qr-modal";
                 const box = document.createElement("div");
@@ -5278,7 +5281,7 @@ export function setupHtmlUI(game: GameScene): void {
                 canvas.className = "oth-qr-canvas";
                 const urlLabel = document.createElement("div");
                 urlLabel.className = "oth-qr-url";
-                urlLabel.textContent = url;
+                urlLabel.textContent = qrUrl;
                 const closeBtn = document.createElement("button");
                 closeBtn.className = "oth-qr-close";
                 closeBtn.textContent = "閉じる";
@@ -5295,7 +5298,7 @@ export function setupHtmlUI(game: GameScene): void {
                 box.appendChild(closeBtn);
                 overlay.appendChild(box);
                 document.body.appendChild(overlay);
-                QRCode.toCanvas(canvas, url, { width: 240, margin: 2 }).catch(e => {
+                QRCode.toCanvas(canvas, qrUrl, { width: 240, margin: 2 }).catch(e => {
                     console.warn("QRCode.toCanvas error:", e);
                 });
             };
