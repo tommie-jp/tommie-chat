@@ -6660,23 +6660,14 @@ export function setupHtmlUI(game: GameScene): void {
         const closeBtn = document.getElementById("panel-tab-close");
         if (tabBar && tabs.length > 0) {
             // タブラベルを「N.<訳語>」形式で描画（言語切替時にも呼ぶ）
-            // - data-tab-num が指定されていればそれを使う（7b / 7b2 / 7b3 など非連番用）
-            // - 無指定なら配列インデックス +1 ではなく「直前の通常タブの番号 + 1」を採る
-            //   （間に 7b/7b2/7b3 のような副タブが挟まっても、後続の 8,9,10… が狂わないように）
+            // data-tab-key を持つタブに、並び順で 1, 2, 3, ... を付与する。
             const renderTabLabels = () => {
                 let seq = 0;
                 tabs.forEach((tab) => {
                     const key = tab.dataset.tabKey;
-                    const explicit = tab.dataset.tabNum;
                     if (!key) return;
-                    let num: string;
-                    if (explicit) {
-                        num = explicit;
-                    } else {
-                        seq += 1;
-                        num = String(seq);
-                    }
-                    tab.textContent = `${num}.${t(key as Parameters<typeof t>[0])}`;
+                    seq += 1;
+                    tab.textContent = `${seq}.${t(key as Parameters<typeof t>[0])}`;
                 });
             };
             renderTabLabels();
