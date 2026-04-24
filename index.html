@@ -567,7 +567,7 @@
             font-size: 13px;
             color: #000000;
             flex: 1;
-            text-align: center;
+            text-align: left;
         }
         #debug-minimize-btn, #debug-restore-btn {
             background: none;
@@ -1268,6 +1268,21 @@
             display: flex;
             flex-direction: column;
         }
+        /* 4 隅のリサイズハンドル。CSS resize:both は BR (右下) しか提供しないため、
+           TL/TR/BL の 3 つを JS で実装 (UIPanel.ts enableCornerResize)。
+           HTML 側はクラス名だけを受け付け、実体の pointerdown は JS で。 */
+        .panel-rz-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            z-index: 50;
+            touch-action: none;
+        }
+        .panel-rz-tl { top: 0; left: 0; cursor: nw-resize; }
+        .panel-rz-tr { top: 0; right: 0; cursor: ne-resize; }
+        .panel-rz-bl { bottom: 0; left: 0; cursor: sw-resize; }
+        /* 最大化中はリサイズ不可 */
+        .maximized .panel-rz-handle { display: none; }
         #othello-panel,
         #othello-play-panel {
             left: 50%;
@@ -1580,6 +1595,10 @@
             min-height: 0;
             max-width: 100%;
             max-height: 100%;
+            /* JS fitBoard の計算ズレや max-width 片側クランプで非正方形になるのを防ぐ保険。
+               width と height を両方 JS が設定している通常ケースでは aspect-ratio は無視されるが、
+               max-width: 100% で片方だけ縮められたときは aspect-ratio が効いてもう一方も追従する。 */
+            aspect-ratio: 1 / 1;
         }
         .othello-label {
             /* ラベル背景はパネルに透過（パネル色と自動で一致） */
@@ -1719,7 +1738,10 @@
             background: #f5faff;
         }
         #othello-game-list-scroll {
-            overflow: auto;
+            /* 縦方向のみスクロール可能にする。横方向はセル側 (td.othello-game-action) が
+               overflow:visible でボタンをはみ出させるので、水平スクロールバーが出ないよう hidden。 */
+            overflow-x: hidden;
+            overflow-y: auto;
             flex-shrink: 0;
             max-height: 146px;
             /* position:sticky × transform 祖先のゴミ描画対策（履歴スクロールと同様） */
@@ -1853,6 +1875,14 @@
             cursor: pointer;
             font-family: inherit;
             font-size: 13px;
+            /* 閲覧/参加/削除 を同じ縦横で揃える。
+               アイコン種別 (👁 emoji / ▶ 三角 / ✕ 乗算記号) で内容幅・高さが違うため、
+               min-width/min-height + line-height:1.4 で正規化する。 */
+            min-width: 70px;
+            min-height: 32px;
+            line-height: 1.4;
+            box-sizing: border-box;
+            text-align: center;
         }
         #othello-game-list-table td.othello-game-action button:first-child {
             margin-left: 0;
@@ -1863,6 +1893,23 @@
         }
         #othello-game-list-table td.othello-game-action button:not(:disabled):hover {
             background: #1565c0;
+        }
+        /* 削除ボタンは赤系の配色で「危険な操作」を示す */
+        #othello-game-list-table td.othello-game-action button.oth-btn-delete {
+            background: #ffecec;
+            color: #333;
+        }
+        #othello-game-list-table td.othello-game-action button.oth-btn-delete:not(:disabled):hover {
+            background: #ffd2d2;
+        }
+        #othello-game-list-table td.othello-game-action button.oth-btn-delete .oth-x {
+            color: #c00;
+            font-weight: bold;
+            margin-right: 2px;
+        }
+        /* 閲覧・参加ボタンに付けるアイコン余白 */
+        #othello-game-list-table td.othello-game-action button .oth-icon {
+            margin-right: 2px;
         }
         /* 自分の待機中ゲーム行: タップで選択（URL共有/X投稿オーバレイを表示） */
         #othello-game-list-table tbody tr.othello-game-row-selectable {
@@ -1905,6 +1952,9 @@
             z-index: 5;
             display: flex;
             gap: 6px;
+            /* パネル親の monospace を上書きして標準 UI フォント・サイズ */
+            font-family: -apple-system, "Segoe UI", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+            font-size: 14px;
         }
         #othello-select-overlay button {
             background: #1a73e8;
@@ -2243,6 +2293,39 @@
             flex: 1;
             min-height: 0;
             width: 100%;
+            position: relative;
+        }
+        /* 履歴行を選択したときに表示するゲーム詳細オーバレイ */
+        #othello-history-overlay {
+            position: absolute;
+            right: 8px;
+            padding: 8px 12px;
+            background: #eef4fc;
+            border: 1px solid #bcd2ee;
+            border-radius: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+            z-index: 5;
+            /* パネル親の monospace を上書きして標準 UI フォント・サイズ */
+            font-family: -apple-system, "Segoe UI", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #222;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        #othello-history-overlay .oth-hist-ov-label {
+            display: inline-block;
+            width: 2em;
+            color: #666;
+            font-weight: bold;
+        }
+        body.theme-dark #othello-history-overlay {
+            background: #2a3440;
+            border-color: #4a5a70;
+            color: #ddd;
+        }
+        body.theme-dark #othello-history-overlay .oth-hist-ov-label {
+            color: #9cb0c0;
         }
         #othello-history-title {
             font-weight: bold;
@@ -2311,6 +2394,13 @@
         #othello-history-table tbody .oth-hist-name {
             color: var(--ol-name-color, #2a7a2a);
             font-weight: bold;
+        }
+        /* 勝者セルに薄い緑背景で「勝った側」を視覚的に強調 (色表記は黒/白維持) */
+        #othello-history-table tbody td.oth-hist-winner {
+            background-color: rgba(80, 180, 100, 0.18) !important;
+        }
+        body.theme-dark #othello-history-table tbody td.oth-hist-winner {
+            background-color: rgba(80, 180, 100, 0.28) !important;
         }
         /* No欄: 横スクロール時も左端に固定 */
         #othello-history-header-table th.oth-hist-no,
@@ -4164,6 +4254,35 @@
         body.panel-maximized.tab-panel-active #othello-panel.maximized #othello-game-list-title {
             padding-right: 90px !important;
         }
+        /* 全パネルタイトル (ヘッダ) の見た目を統一。
+           薄い青背景 + 白文字。フォント・サイズ・太さも一括。
+           既存の #<id>-header { ... } 個別ルール (specificity 100) に勝つため
+           属性セレクタ (specificity 10) + !important を使う。 */
+        [id$="-header"],
+        #debug-title-bar {
+            color: #fff !important;
+            background: #42a5f5 !important; /* Material Blue 400 — 薄い青 */
+            font-family: -apple-system, "Segoe UI", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif !important;
+            font-size: 13px !important;
+            font-weight: bold !important;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.25); /* 白文字の視認性補助 */
+        }
+        #debug-title-text {
+            color: #fff !important;
+            font-family: -apple-system, "Segoe UI", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif !important;
+            font-size: 13px !important;
+            font-weight: bold !important;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.25);
+        }
+        /* ダーク テーマでも同じ薄い青 + 白文字を維持 (テーマをまたいで一貫させる) */
+        body.theme-dark [id$="-header"],
+        body.theme-dark #debug-title-bar {
+            color: #fff !important;
+            background: #1976d2 !important; /* Blue 700 — 背景暗めの環境では少し濃く */
+        }
+        body.theme-dark #debug-title-text {
+            color: #fff !important;
+        }
     </style>
     <script src="/js/app-init.js?v=0.1.62" defer></script>
     <script src="/js/panel-flash-guard.js"></script>
@@ -4902,7 +5021,7 @@
                     <div id="othello-game-list-scroll">
                         <table id="othello-game-list-header-table">
                             <colgroup>
-                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col class="oth-game-action-col" style="width:120px">
+                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col class="oth-game-action-col" style="width:170px">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -4916,7 +5035,7 @@
                         </table>
                         <table id="othello-game-list-table">
                             <colgroup>
-                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col class="oth-game-action-col" style="width:120px">
+                                <col style="width:44px"><col style="width:64px"><col class="oth-game-owner-col"><col><col class="oth-game-action-col" style="width:170px">
                             </colgroup>
                             <tbody id="othello-game-list-tbody"></tbody>
                         </table>

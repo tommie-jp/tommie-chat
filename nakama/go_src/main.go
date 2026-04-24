@@ -4754,7 +4754,9 @@ func rpcOthelloInvite(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		return "", runtime.NewError("game not found", 5)
 	}
 	g := v.(*OthelloGame)
-	if g.BlackUID != uid {
+	// オーナーのみ招待可。ただし内蔵 CPU ゲーム (ひよこ等、BlackUID = "cpu:xxx") は
+	// 常駐の公共ゲームなので誰でも招待を出せるようにする。
+	if !g.IsCpu && g.BlackUID != uid {
 		return "", runtime.NewError("only the creator can invite", 3)
 	}
 	if g.Status != "waiting" {
@@ -4802,6 +4804,12 @@ func rpcOthelloInvite(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		"gameId":      g.GameID,
 		"inviterName": inviterName,
 		"inviterUid":  uid,
+	}
+	// 内蔵 CPU ゲーム (ひよこ等) は対戦相手が CPU であることをクライアントに伝える。
+	// クライアント側の招待トーストはこれを見て「ひよこ(3歳)と対戦しませんか？」の文言に切替える。
+	if g.IsCpu && isCpuUID(g.BlackUID) {
+		notifContent["cpuUid"] = g.BlackUID
+		notifContent["cpuName"] = cpuDisplayName(g.BlackUID)
 	}
 	if err := nk.NotificationSend(ctx, req.TargetID, "オセロに招待されました", notifContent, CodeOthelloInvite, uid, true); err != nil {
 		logf("othello invite: NotificationSend failed gameId=%s target=%s err=%v\n", g.GameID, shortSID(req.TargetID), err)

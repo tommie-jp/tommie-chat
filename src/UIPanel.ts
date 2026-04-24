@@ -2243,13 +2243,21 @@ export function setupHtmlUI(game: GameScene): void {
                 });
             }
         } else if (n.code === CODE_OTHELLO_INVITE) {
-            const content = n.content as { gameNo?: number; inviterName?: string; inviterUid?: string } | undefined;
+            const content = n.content as {
+                gameNo?: number; inviterName?: string; inviterUid?: string;
+                cpuUid?: string; cpuName?: string;
+            } | undefined;
             const gameNo = content?.gameNo ?? 0;
             const inviterName = content?.inviterName || "誰か";
             const inviterUid = content?.inviterUid ?? "";
+            const cpuName = content?.cpuName ?? "";
             const gameNo3 = String(gameNo).padStart(3, "0");
+            // CPU ゲーム (ひよこ等) は「XX と対戦しませんか？」と相手を明示
+            const toastText = cpuName
+                ? `${inviterName}からの招待: ${cpuName}と対戦しませんか？ ゲーム番号=${gameNo3}`
+                : `${inviterName}からの招待: リバーシやりませんか？ ゲーム番号=${gameNo3}`;
             showToast({
-                text: `${inviterName}からの招待: リバーシやりませんか？ ゲーム番号=${gameNo3}`,
+                text: toastText,
                 durationMs: 30000,
                 onYes: () => openOthelloForGameNo?.(gameNo, { autoJoin: true }),
                 onNo: () => {
@@ -4714,8 +4722,11 @@ export function setupHtmlUI(game: GameScene): void {
                     }
                 });
             };
-            // パネルのリサイズを監視（パネルサイズはボードに依存しない）
+            // パネルのリサイズを監視（パネルサイズはボードに依存しない）。
+            // 盤面は othPlayPanel > othGameView 下に入っているので、デスクトップ Chrome で
+            // プレイパネル隅のドラッグリサイズに追従させるため othPlayPanel も観察する。
             new ResizeObserver(fitBoard).observe(othPanel);
+            if (othPlayPanel) new ResizeObserver(fitBoard).observe(othPlayPanel);
             window.addEventListener("resize", fitBoard);
             // デバイダーのドラッグ中にも呼ばれるようにする
             (game as any)._othelloFitBoard = fitBoard;
@@ -4815,6 +4826,60 @@ export function setupHtmlUI(game: GameScene): void {
             const othHistoryTbody = document.getElementById("othello-history-tbody");
             const othHistoryScroll = document.getElementById("othello-history-scroll");
             const othHistoryTheadWrap = document.getElementById("othello-history-thead-wrap");
+            const othHistorySection = document.getElementById("othello-history-section");
+
+            // 選択履歴行のゲーム詳細オーバレイ (黒/白の表示名)
+            let historyOverlay: HTMLDivElement | null = null;
+            const ensureHistoryOverlay = () => {
+                if (historyOverlay || !othHistorySection) return;
+                historyOverlay = document.createElement("div");
+                historyOverlay.id = "othello-history-overlay";
+                historyOverlay.style.display = "none";
+                othHistorySection.appendChild(historyOverlay);
+            };
+            const buildHistoryOverlayContent = (r: import("./NakamaService").OthelloHistoryRecord) => {
+                if (!historyOverlay) return;
+                historyOverlay.innerHTML = "";
+                const uid = myUid();
+                const mkLine = (label: string, name: string, isMe: boolean) => {
+                    const div = document.createElement("div");
+                    const sp = document.createElement("span");
+                    sp.className = "oth-hist-ov-label";
+                    sp.textContent = label;
+                    div.appendChild(sp);
+                    div.appendChild(document.createTextNode(name + (isMe ? " (あなた)" : "")));
+                    return div;
+                };
+                const blackName = formatPlayer(r.blackName, r.blackUser, r.blackHasGoogle, r.blackIsAdmin);
+                const whiteName = formatPlayer(r.whiteName, r.whiteUser, r.whiteHasGoogle, r.whiteIsAdmin);
+                historyOverlay.appendChild(mkLine("黒", blackName, !!uid && r.black === uid));
+                historyOverlay.appendChild(mkLine("白", whiteName, !!uid && r.white === uid));
+            };
+            const positionHistoryOverlay = () => {
+                if (!historyOverlay || !othHistorySection || !othHistoryScroll) return;
+                if (!selectedHistoryId) {
+                    historyOverlay.style.display = "none";
+                    return;
+                }
+                const selectedTr = othHistoryTbody?.querySelector<HTMLElement>("tr.selected");
+                if (!selectedTr) {
+                    historyOverlay.style.display = "none";
+                    return;
+                }
+                const rowRect = selectedTr.getBoundingClientRect();
+                const scrollRect = othHistoryScroll.getBoundingClientRect();
+                // 行がスクロール外なら非表示
+                if (rowRect.top >= scrollRect.bottom || rowRect.bottom <= scrollRect.top) {
+                    historyOverlay.style.display = "none";
+                    return;
+                }
+                const sectionRect = othHistorySection.getBoundingClientRect();
+                const OVERLAY_GAP_PX = 6;
+                historyOverlay.style.top = `${rowRect.bottom - sectionRect.top + OVERLAY_GAP_PX}px`;
+                historyOverlay.style.display = "";
+            };
+            ensureHistoryOverlay();
+            othHistoryScroll?.addEventListener("scroll", positionHistoryOverlay);
             // 水平スクロール同期: body→thead
             if (othHistoryScroll && othHistoryTheadWrap) {
                 othHistoryScroll.addEventListener("scroll", () => {
@@ -4872,8 +4937,11 @@ export function setupHtmlUI(game: GameScene): void {
                     const blackMark = r.winner === 1 ? "\u2714" : "";
                     const whiteMark = r.winner === 2 ? "\u2714" : "";
                     const reasonStr = r.reason === "resign" ? "投了" : r.winner === 3 ? "引分" : r.reason === "normal" ? "終局" : "";
-                    const blackLabel = formatPlayer(r.blackName, r.blackUser, r.blackHasGoogle, r.blackIsAdmin);
-                    const whiteLabel = formatPlayer(r.whiteName, r.whiteUser, r.whiteHasGoogle, r.whiteIsAdmin);
+                    const histUid = myUid(); // 自分識別は Nakama UID (デバイス認証/Google 認証に関わらず一意)
+                    const blackLabel = formatPlayer(r.blackName, r.blackUser, r.blackHasGoogle, r.blackIsAdmin)
+                        + (histUid && r.black === histUid ? " (あなた)" : "");
+                    const whiteLabel = formatPlayer(r.whiteName, r.whiteUser, r.whiteHasGoogle, r.whiteIsAdmin)
+                        + (histUid && r.white === histUid ? " (あなた)" : "");
 
                     const gameNoStr = r.gameNo ? String(r.gameNo % 1000).padStart(3, "0") : "";
                     const gameNoFull = r.gameNo ? String(r.gameNo) : "";
@@ -4892,6 +4960,9 @@ export function setupHtmlUI(game: GameScene): void {
                     const tsTd = document.createElement("td"); tsTd.textContent = tsText; tsTd.title = fullDateStr;
                     const blackTd = mkNameTd(blackMark, blackLabel);
                     const whiteTd = mkNameTd(whiteMark, whiteLabel);
+                    // 勝者セルに薄い背景色を付けて一目で分かるようにする (色表記は黒/白維持、オセロ棋譜規約準拠)
+                    if (r.winner === 1) blackTd.classList.add("oth-hist-winner");
+                    else if (r.winner === 2) whiteTd.classList.add("oth-hist-winner");
                     const scoreTd = document.createElement("td"); scoreTd.className = "oth-hist-score"; scoreTd.textContent = `${r.blackCount}-${r.whiteCount}`; scoreTd.title = `${r.blackCount}-${r.whiteCount}`;
                     const reasonTd = document.createElement("td"); reasonTd.className = "oth-hist-reason"; reasonTd.textContent = reasonStr; reasonTd.title = reasonStr;
                     tr.appendChild(noTd);
@@ -4914,6 +4985,18 @@ export function setupHtmlUI(game: GameScene): void {
                     });
                     othHistoryTbody.appendChild(tr);
                     if (tsTd) historyItems.push({ tsCell: tsTd, ts: r.ts, tsText });
+                }
+                // 選択中の履歴行に合わせて詳細オーバレイを更新
+                if (selectedHistoryId) {
+                    const selRec = records.find(rr => rr.gameId === selectedHistoryId);
+                    if (selRec) {
+                        buildHistoryOverlayContent(selRec);
+                        requestAnimationFrame(positionHistoryOverlay);
+                    } else if (historyOverlay) {
+                        historyOverlay.style.display = "none";
+                    }
+                } else if (historyOverlay) {
+                    historyOverlay.style.display = "none";
                 }
                 tryResolvePendingOt();
             };
@@ -4976,6 +5059,9 @@ export function setupHtmlUI(game: GameScene): void {
             }>();
             // 選択中のゲーム行（タップでトグル）。選択行の直下にアクションボタン行を挿入する。
             let selectedGameId: string | null = null;
+            // URL ?ot=<N> による自動選択は招待 QR からの着信と解釈し、オーバレイ (URL共有/X投稿/QRコード/誘う)
+            // を抑止する。ユーザーが自分でタップしたら false に戻してオーバレイを表示する。
+            let selectedViaUrl: boolean = false;
             // 直近のゲーム一覧（選択トグル時の再描画用）
             let lastGamesList: import("./NakamaService").OthelloListPayload["games"] = [];
             // 履歴の日時セル参照（1秒tickでの更新用）
@@ -4991,7 +5077,7 @@ export function setupHtmlUI(game: GameScene): void {
             // コメント列のテキストを組み立て（待機中=募集告知、対戦中=プレイヤー名）
             const othCommentText = (status: string, blackLabel: string, whiteLabel: string): string => {
                 if (status === "waiting") return `${blackLabel}がゲーム相手を募集中！`;
-                return `${blackLabel} vs ${whiteLabel}`;
+                return `${blackLabel}と${whiteLabel}が対戦中`;
             };
 
             // コメント文字列から owner 名部分だけ赤色で色分けして commentSpan へ反映
@@ -5047,6 +5133,8 @@ export function setupHtmlUI(game: GameScene): void {
                     selectedHistoryId = null;
                     othHistoryTbody?.querySelectorAll("tr.selected")
                         .forEach(tr => tr.classList.remove("selected"));
+                    // 履歴詳細オーバレイも消す
+                    if (historyOverlay) historyOverlay.style.display = "none";
                 }
             });
 
@@ -5054,7 +5142,7 @@ export function setupHtmlUI(game: GameScene): void {
             // オーバレイは section 内にあり、スクロールコンテナ (othGameListScroll) の
             // スクロール量を差し引いて section 基準の top を計算する
             const positionSelectOverlay = () => {
-                if (!selectOverlay) return;
+                if (!selectOverlay || !othLobbySection) return;
                 if (!selectedGameId || !othGameListScroll) {
                     selectOverlay.style.display = "none";
                     return;
@@ -5064,17 +5152,19 @@ export function setupHtmlUI(game: GameScene): void {
                     selectOverlay.style.display = "none";
                     return;
                 }
-                const scrollTop = othGameListScroll.scrollTop;
-                const scrollOffsetTop = othGameListScroll.offsetTop;
-                const scrollHeight = othGameListScroll.clientHeight;
-                const rowBottomInContent = entry.tr.offsetTop + entry.tr.offsetHeight;
-                // 行がスクロール外（上または下）に出たらオーバレイ非表示
-                if (rowBottomInContent - entry.tr.offsetHeight > scrollTop + scrollHeight ||
-                    rowBottomInContent < scrollTop) {
+                // getBoundingClientRect で実レンダリング位置を取得 (offsetTop/Parent の曖昧さを避ける)。
+                // 行の赤枠 (border-bottom: 2px) 込みで rect.bottom を使い、overlay はそこから +GAP px 下に置く。
+                const rowRect = entry.tr.getBoundingClientRect();
+                const scrollRect = othGameListScroll.getBoundingClientRect();
+                // 行がスクロール外(上/下)に出たらオーバレイ非表示
+                if (rowRect.top >= scrollRect.bottom || rowRect.bottom <= scrollRect.top) {
                     selectOverlay.style.display = "none";
                     return;
                 }
-                const top = scrollOffsetTop + rowBottomInContent - scrollTop;
+                // 選択行の赤枠と視覚的に分離するためのギャップ
+                const OVERLAY_GAP_PX = 6;
+                const sectionRect = othLobbySection.getBoundingClientRect();
+                const top = rowRect.bottom - sectionRect.top + OVERLAY_GAP_PX;
                 selectOverlay.style.top = `${top}px`;
                 selectOverlay.style.display = "";
             };
@@ -5307,10 +5397,13 @@ export function setupHtmlUI(game: GameScene): void {
             // ゲーム選択は履歴選択と排他（履歴選択をクリアする）
             const toggleSelection = (g: import("./NakamaService").OthelloListPayload["games"][number]) => {
                 selectedGameId = (selectedGameId === g.gameId) ? null : g.gameId;
+                // ユーザー操作での選択はオーバレイ表示対象
+                selectedViaUrl = false;
                 if (selectedGameId && selectedHistoryId) {
                     selectedHistoryId = null;
                     othHistoryTbody?.querySelectorAll("tr.selected")
                         .forEach(tr => tr.classList.remove("selected"));
+                    if (historyOverlay) historyOverlay.style.display = "none";
                 }
                 applyGameList(lastGamesList);
             };
@@ -5330,6 +5423,8 @@ export function setupHtmlUI(game: GameScene): void {
                     pendingOthelloAutoJoin = false;
                     selectedGameId = inGames.gameId;
                     selectedHistoryId = null;
+                    // URL 起動 (QR 招待等) による選択はオーバレイを出さない
+                    selectedViaUrl = true;
                     applyGameList(lastGamesList);
                     renderHistory(lastHistoryList);
                     // 選択行が画面外にある場合はスクロールして見えるようにする
@@ -5365,18 +5460,91 @@ export function setupHtmlUI(game: GameScene): void {
             // 行の右端に常時表示するアクションセル（5列目）
             // 自分の待機中ゲーム: [取消]（URL共有/X投稿 は選択時オーバレイに出す）
             // 他プレイヤーのゲーム: [閲覧] [参加]（参加は status=waiting のときのみ有効）
+            //
+            // アイコン付きボタン (XSS 防止のため textContent のみで構築):
+            //   "閲覧" → 👁 + 閲覧
+            //   "参加" → ▶ + 参加
+            //   "削除" → ✕(赤) + 削除 + class="oth-btn-delete" (薄い赤背景)
+            const makeIconBtn = (icon: string, label: string, iconClass = "oth-icon"): HTMLButtonElement => {
+                const b = document.createElement("button");
+                const sp = document.createElement("span");
+                sp.className = iconClass;
+                sp.textContent = icon;
+                b.appendChild(sp);
+                b.appendChild(document.createTextNode(label));
+                return b;
+            };
+            const makeDeleteBtn = (label: string): HTMLButtonElement => {
+                const b = makeIconBtn("✕", label, "oth-x");
+                b.classList.add("oth-btn-delete");
+                return b;
+            };
             const buildActionCell = (
                 g: import("./NakamaService").OthelloListPayload["games"][number],
                 isOwnGame: boolean,
             ): HTMLTableCellElement => {
                 const td = document.createElement("td");
                 td.className = "othello-game-action";
+                // 自分が対戦/待機中のとき (PC/モバイル 共通):
+                //   - 現在プレイ中のゲーム行     → [プレイ中] + [削除]
+                //   - 他人のゲーム行             → ボタンなし (空セル)
+                //   - 自分の他のゲーム行 (待機/CPU 対戦) → 閲覧/参加は非表示、削除のみ下の分岐で出す
+                const inGame = !!currentGameId && (gameStatus === "playing" || gameStatus === "waiting");
+                if (inGame && g.gameId === currentGameId) {
+                    // [プレイ中] でプレイパネルを前面化 (モバイルはロビー閉じて遷移)
+                    const playBtn = makeIconBtn("▶", "プレイ中");
+                    playBtn.title = "リバーシプレイ画面を表示";
+                    playBtn.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        showGame(!isMobileDev);
+                    });
+                    td.appendChild(playBtn);
+                    const delBtn = makeDeleteBtn("削除");
+                    if (g.status === "waiting") {
+                        delBtn.title = "この待機中ゲームを削除する";
+                        delBtn.addEventListener("click", async (ev) => {
+                            ev.stopPropagation();
+                            try {
+                                await game.nakama.othelloCancel(g.gameId);
+                                currentGameId = null;
+                                gameStatus = "";
+                                myColor = 0;
+                                selectedGameId = null;
+                                refreshRecruit();
+                            } catch (e) {
+                                console.warn("othelloCancel error:", e);
+                            }
+                        });
+                    } else {
+                        // playing: 投了して終了
+                        delBtn.title = "対戦を投了する";
+                        delBtn.addEventListener("click", async (ev) => {
+                            ev.stopPropagation();
+                            try {
+                                await game.nakama.othelloResign(g.gameId);
+                                currentGameId = null;
+                                gameStatus = "";
+                                myColor = 0;
+                                selectedGameId = null;
+                                refreshRecruit();
+                            } catch (e) {
+                                console.warn("othelloResign error:", e);
+                            }
+                        });
+                    }
+                    td.appendChild(delBtn);
+                    return td;
+                }
+                if (inGame && !isOwnGame) {
+                    // 他人のゲーム行は対戦中に操作させない
+                    return td;
+                }
                 if (isOwnGame && g.status === "waiting") {
                     // CPU 対戦ゲームのオーナーは観戦のみ可能（対局席に座らないため [閲覧] を表示）
-                    // ロビーは閉じずにプレイパネルを追加表示する
-                    if (g.isCpu) {
-                        const watchBtn = document.createElement("button");
-                        watchBtn.textContent = "閲覧";
+                    // ロビーは閉じずにプレイパネルを追加表示する。
+                    // モバイル対戦中は 閲覧 を隠す (自ゲーム列には上で [プレイ中] 済)。削除は残す。
+                    if (g.isCpu && !inGame) {
+                        const watchBtn = makeIconBtn("👁", "閲覧");
                         watchBtn.title = "自作 CPU 対戦ゲームを観戦する";
                         watchBtn.addEventListener("click", (ev) => {
                             ev.stopPropagation();
@@ -5384,8 +5552,7 @@ export function setupHtmlUI(game: GameScene): void {
                         });
                         td.appendChild(watchBtn);
                     }
-                    const cancelBtn = document.createElement("button");
-                    cancelBtn.textContent = "削除";
+                    const cancelBtn = makeDeleteBtn("削除");
                     cancelBtn.title = "この待機中ゲームを削除する";
                     cancelBtn.addEventListener("click", async (ev) => {
                         ev.stopPropagation();
@@ -5402,17 +5569,18 @@ export function setupHtmlUI(game: GameScene): void {
                     });
                     td.appendChild(cancelBtn);
                 } else if (isOwnGame && g.status === "playing" && g.isCpu) {
-                    // 自作 CPU 対戦ゲームが対戦中: オーナーは対局席に居ないので [閲覧][削除] を表示
-                    const watchBtn = document.createElement("button");
-                    watchBtn.textContent = "閲覧";
-                    watchBtn.title = "自作 CPU 対戦ゲームを観戦する";
-                    watchBtn.addEventListener("click", (ev) => {
-                        ev.stopPropagation();
-                        watchGame(g.gameId, true).catch(e => console.warn("othelloWatch error:", e));
-                    });
-                    td.appendChild(watchBtn);
-                    const delBtn = document.createElement("button");
-                    delBtn.textContent = "削除";
+                    // 自作 CPU 対戦ゲームが対戦中: オーナーは対局席に居ないので [閲覧][削除] を表示。
+                    // モバイル対戦中は 閲覧 を隠す。削除は残す。
+                    if (!inGame) {
+                        const watchBtn = makeIconBtn("👁", "閲覧");
+                        watchBtn.title = "自作 CPU 対戦ゲームを観戦する";
+                        watchBtn.addEventListener("click", (ev) => {
+                            ev.stopPropagation();
+                            watchGame(g.gameId, true).catch(e => console.warn("othelloWatch error:", e));
+                        });
+                        td.appendChild(watchBtn);
+                    }
+                    const delBtn = makeDeleteBtn("削除");
                     delBtn.title = "この対戦中ゲームを終了する（CPU 側が投了）";
                     delBtn.addEventListener("click", async (ev) => {
                         ev.stopPropagation();
@@ -5431,14 +5599,18 @@ export function setupHtmlUI(game: GameScene): void {
                     });
                     td.appendChild(delBtn);
                 } else if (!isOwnGame) {
-                    const watchBtn = document.createElement("button");
-                    watchBtn.textContent = "閲覧";
+                    // 他人のゲーム行: 閲覧 (常に可) + 参加 (waiting のみ)。
+                    // モバイル対戦中は上の早期 return ブロックで非表示になるのでここは PC 前提。
+                    const watchBtn = makeIconBtn("👁", "閲覧");
+                    watchBtn.title = "このゲームを観戦する";
                     watchBtn.addEventListener("click", (ev) => {
                         ev.stopPropagation();
-                        watchGame(g.gameId).catch(e => console.warn("othelloWatch error:", e));
+                        // PC はロビーを閉じずにプレイパネルを追加表示 (両パネル同時表示可)
+                        // モバイルはタブ方式 1 パネル表示なのでロビーを閉じる
+                        watchGame(g.gameId, !isMobileDev).catch(e => console.warn("othelloWatch error:", e));
                     });
-                    const joinBtn = document.createElement("button");
-                    joinBtn.textContent = "参加";
+                    const joinBtn = makeIconBtn("▶", "参加");
+                    joinBtn.title = "このゲームに参加する";
                     joinBtn.disabled = g.status !== "waiting";
                     joinBtn.addEventListener("click", (ev) => {
                         ev.stopPropagation();
@@ -5499,7 +5671,11 @@ export function setupHtmlUI(game: GameScene): void {
                         const blackLabel = formatPlayer(g.blackName, g.blackUser, g.blackHasGoogle, g.blackIsAdmin);
                         const whiteLabel = g.status === "playing"
                             ? formatPlayer(g.whiteName, g.whiteUser, g.whiteHasGoogle, g.whiteIsAdmin) : "";
-                        const commentText = (g.comment && g.comment !== "") ? g.comment : othCommentText(g.status, blackLabel, whiteLabel);
+                        // 対戦中は常に "<黒>と<白>が対戦中" の定型で表示 (サーバ発の comment を上書き)。
+                        // 待機中はサーバ発の comment があればそれ、無ければ規定文。
+                        const commentText = g.status === "playing"
+                            ? othCommentText(g.status, blackLabel, whiteLabel)
+                            : ((g.comment && g.comment !== "") ? g.comment : othCommentText(g.status, blackLabel, whiteLabel));
                         const gameNoStr = g.gameNo ? String(g.gameNo % 1000).padStart(3, "0") : "";
                         const gameNoFull = g.gameNo ? String(g.gameNo) : "";
                         const ts = othParseTs(g.gameId);
@@ -5527,13 +5703,13 @@ export function setupHtmlUI(game: GameScene): void {
                         commentSpan.className = "othello-comment-text";
                         if (isOwnGame) {
                             // 自分が作成したゲームは太字青。
-                            // CPU 対戦ゲーム: 他プレイヤー参加で playing に遷移すると「<自分>のCPUと<相手>の対戦が準備中...」、
-                            //   待機中はサーバ発 g.comment（「〇〇のCPU」）
-                            // 通常ゲーム: 「自分が作成」
+                            // 対戦中: "<黒> と <白> が対戦中" (非自ゲームと同じ定型)
+                            // 待機中の CPU 対戦: サーバ発 g.comment (「〇〇のCPU」)
+                            // 待機中の通常: 「自分が作成」
                             commentSpan.classList.add("othello-comment-own");
                             let ownLabel: string;
-                            if (g.isCpu && g.status === "playing" && whiteLabel) {
-                                ownLabel = `${blackLabel}のCPUと${whiteLabel}の対戦が準備中...`;
+                            if (g.status === "playing") {
+                                ownLabel = commentText;
                             } else if (g.isCpu) {
                                 ownLabel = g.comment || "自分が作成";
                             } else {
@@ -5563,14 +5739,18 @@ export function setupHtmlUI(game: GameScene): void {
                     }
                 }
                 // 選択中ゲームがなお存在すればオーバレイ位置を更新、なければ非表示
-                // オーバレイ(URL共有/X投稿/QR)は自分の待機中ゲームでのみ表示。
-                // 他人のゲームを選択した場合は赤枠のみで、オーバレイは出さない（選択は維持する）。
+                // オーバレイ(URL共有/X投稿/QR/誘う)は以下の待機中ゲームで表示:
+                //   - 自分が作成した対人ゲーム
+                //   - ひよこ(3歳) 等のサーバ常駐 CPU ゲーム (isCpu フラグ) — 誰でも招待できる
+                // 他人が作成した対人待機ゲームは赤枠のみ (オーバレイは出さない)。
+                // URL ?ot=<N> (QR 招待) 由来の自動選択時もオーバレイを抑止する (selectedViaUrl フラグ)。
                 const selectedGame = selectedGameId ? sorted.find(g => g.gameId === selectedGameId) : undefined;
                 if (!selectedGame) {
                     selectedGameId = null;
+                    selectedViaUrl = false;
                     if (selectOverlay) selectOverlay.style.display = "none";
-                } else if (selectedGame.status === "waiting" &&
-                    (selectedGame.black === uid || selectedGame.white === uid)) {
+                } else if (!selectedViaUrl && selectedGame.status === "waiting" &&
+                    (selectedGame.black === uid || selectedGame.white === uid || selectedGame.isCpu)) {
                     buildSelectOverlayContent(selectedGame);
                     requestAnimationFrame(positionSelectOverlay);
                 } else {
@@ -5641,7 +5821,10 @@ export function setupHtmlUI(game: GameScene): void {
                     if (!res) { currentGameId = null; return; }
                     myColor = res.black === myUid() ? 1 : (res.white === myUid() ? 2 : 0);
                     applyState(res);
-                    showGame();
+                    // PC ではロビーを閉じず両パネル表示 (ユーザはロビーでゲーム切替できるように)。
+                    // モバイル (iPhone 等) はタブ方式の 1 パネル表示なので、
+                    // ロビー → プレイ へ切り替える必要がありロビーを閉じる。
+                    showGame(!isMobileDev);
                 } catch (e) {
                     currentGameId = null;
                     console.warn("othelloJoin error:", e);
@@ -5891,14 +6074,27 @@ export function setupHtmlUI(game: GameScene): void {
                             const blackLabel = formatPlayer(gd.blackName ?? "", gd.blackUser, gd.blackHasGoogle, gd.blackIsAdmin);
                             const whiteLabel = gd.status === "playing"
                                 ? formatPlayer(gd.whiteName ?? "", gd.whiteUser, gd.whiteHasGoogle, gd.whiteIsAdmin) : "";
-                            const commentText = (gd.comment && gd.comment !== "") ? gd.comment : othCommentText(gd.status, blackLabel, whiteLabel);
+                            // 対戦中は常に "<黒>と<白>が対戦中" を強制 (サーバ発の旧コメントを上書き)。
+                            // 待機中はサーバ発 comment を優先、無ければ規定文。
+                            const commentText = gd.status === "playing"
+                                ? othCommentText(gd.status, blackLabel, whiteLabel)
+                                : ((gd.comment && gd.comment !== "") ? gd.comment : othCommentText(gd.status, blackLabel, whiteLabel));
                             entry.ownerCell.textContent = blackLabel;
                             entry.ownerCell.title = blackLabel;
                             const uid = myUid();
                             const isOwnGame = gd.black === uid || gd.white === uid;
                             if (isOwnGame) {
-                                // 自分が作成したゲームは太字青。CPU 対戦はサーバ発「〇〇のCPU」を表示、それ以外は「自分が作成」
-                                const ownLabel = gd.isCpu ? (gd.comment || "自分が作成") : "自分が作成";
+                                // 自分が作成したゲームは太字青。
+                                // 対戦中は "<黒>と<白>が対戦中" (非自ゲームと同じ定型)、
+                                // 待機中の CPU 対戦はサーバ発「〇〇のCPU」、通常は「自分が作成」
+                                let ownLabel: string;
+                                if (gd.status === "playing") {
+                                    ownLabel = commentText;
+                                } else if (gd.isCpu) {
+                                    ownLabel = gd.comment || "自分が作成";
+                                } else {
+                                    ownLabel = "自分が作成";
+                                }
                                 entry.commentSpan.textContent = ownLabel;
                                 entry.commentSpan.classList.add("othello-comment-own");
                                 entry.commentSpan.classList.remove("othello-comment-marquee");
@@ -6136,7 +6332,9 @@ export function setupHtmlUI(game: GameScene): void {
             if (!isMobileDev) {
                 let isDrag = false, offX = 0, offY = 0;
                 othHeader.addEventListener("pointerdown", (e: PointerEvent) => {
-                    if ((e.target as HTMLElement).id === "othello-close") return;
+                    const tgt = e.target as HTMLElement;
+                    // ヘッダ内のクリック可能要素はドラッグ扱いしない (setPointerCapture でクリックが潰れるため)
+                    if (tgt.closest("#othello-close, #othello-max")) return;
                     isDrag = true;
                     const rect = othPanel.getBoundingClientRect();
                     offX = e.clientX - rect.left;
@@ -6223,7 +6421,9 @@ export function setupHtmlUI(game: GameScene): void {
                     // ドラッグ
                     let isDrag = false, offX = 0, offY = 0;
                     othPlayHeader.addEventListener("pointerdown", (e: PointerEvent) => {
-                        if ((e.target as HTMLElement).id === "othello-play-close") return;
+                        const tgt = e.target as HTMLElement;
+                        // ヘッダ内のクリック可能要素はドラッグ扱いしない (setPointerCapture でクリックが潰れるため)
+                        if (tgt.closest("#othello-play-close, #othello-play-max")) return;
                         isDrag = true;
                         const rect = othPlayPanel.getBoundingClientRect();
                         offX = e.clientX - rect.left;
@@ -6537,6 +6737,120 @@ export function setupHtmlUI(game: GameScene): void {
                     const isMax = document.body.classList.contains("panel-maximized");
                     applyMaxToActive(!isMax);
                 });
+            }
+            // 通常のウインドウシステム同様、
+            //   (1) 最後に触ったパネル (pointerdown)、および
+            //   (2) display:none → 可視に切り替わったパネル (表示瞬間)
+            // を手前に表示する。
+            const PANEL_SELECTOR =
+                "#avatar-panel, #user-list-panel, #debug-overlay, #chat-history-panel, " +
+                "#server-settings-panel, #server-log-panel, #ping-panel, #bookmark-panel, " +
+                "#room-list-panel, #serial-test-panel, #ccu-panel, #chat-settings-panel, " +
+                "#othello-panel, #othello-play-panel";
+            let topPanelZ = 1000;
+            const bringPanelToFront = (panel: HTMLElement) => {
+                topPanelZ++;
+                panel.style.zIndex = String(topPanelZ);
+            };
+            // (1) pointerdown で手前化。
+            //    iPhone Safari では capture フェーズで同期的に z-index を触ると
+            //    touch target の再計算が走り、タブ切替の click が近接タブに「ずれる」事象
+            //    (3.プレイヤーリストの代わりに 2.アバター選択 が開く等) が発生するため、
+            //    モバイルでは pointerup (= ジェスチャ完了後) で手前化する。
+            const bringOnPointerDown = !isMobileDev;
+            const handler = (e: PointerEvent) => {
+                const panel = (e.target as HTMLElement).closest<HTMLElement>(PANEL_SELECTOR);
+                if (!panel) return;
+                bringPanelToFront(panel);
+            };
+            if (bringOnPointerDown) {
+                document.addEventListener("pointerdown", handler, true);
+            } else {
+                document.addEventListener("pointerup", handler, true);
+            }
+            // (2) display:none → 可視化を MutationObserver で検知して手前化
+            document.querySelectorAll<HTMLElement>(PANEL_SELECTOR).forEach((panel) => {
+                let wasHidden = panel.style.display === "none";
+                const obs = new MutationObserver(() => {
+                    const isHiddenNow = panel.style.display === "none";
+                    if (wasHidden && !isHiddenNow) bringPanelToFront(panel);
+                    wasHidden = isHiddenNow;
+                });
+                obs.observe(panel, { attributes: true, attributeFilter: ["style"] });
+            });
+
+            // パネルタイトル (ヘッダ) のダブルクリックで最大化トグル。
+            // 各パネルが個別に持っている最大化ボタン (#<prefix>-max) の click() を中継する形で、
+            // 既存のトグル処理 (盤面 fitBoard 再計算・cookie 永続化等) を再利用する。
+            document.addEventListener("dblclick", (e) => {
+                const target = e.target as HTMLElement;
+                // 閉じるボタン・最大化ボタン自体のダブルクリックは無視 (click が 2 回走って戻るため)
+                if (target.closest("[id$='-close'], [id$='-max']")) return;
+                const header = target.closest<HTMLElement>("[id$='-header'], #debug-title-bar, #serial-test-header");
+                if (!header) return;
+                const headerMax = header.querySelector<HTMLElement>("[id$='-max']");
+                if (headerMax) headerMax.click();
+            });
+
+            // 4 隅リサイズ (PC のみ)。CSS resize:both は BR しか提供しないので、TL/TR/BL は
+            // JS で <div class="panel-rz-handle panel-rz-XX"> を差し込んで pointer 追跡。
+            if (!isMobileDev) {
+                const enableCornerResize = (panel: HTMLElement) => {
+                    if (panel.dataset.cornerResizeInit === "1") return;
+                    panel.dataset.cornerResizeInit = "1";
+                    const corners = [ "tl", "tr", "bl" ] as const;
+                    for (const c of corners) {
+                        const h = document.createElement("div");
+                        h.className = `panel-rz-handle panel-rz-${c}`;
+                        panel.appendChild(h);
+                        h.addEventListener("pointerdown", (e: PointerEvent) => {
+                            if (panel.classList.contains("maximized")) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            h.setPointerCapture(e.pointerId);
+                            const rect = panel.getBoundingClientRect();
+                            const startX = e.clientX, startY = e.clientY;
+                            const startW = rect.width, startH = rect.height;
+                            const startL = rect.left, startT = rect.top;
+                            const cs = getComputedStyle(panel);
+                            const minW = parseInt(cs.minWidth, 10) || 200;
+                            const minH = parseInt(cs.minHeight, 10) || 200;
+                            // 中央寄せ用の transform / auto margin / right を無効化してから left/top を直接制御する
+                            panel.style.transform = "none";
+                            panel.style.margin = "0";
+                            panel.style.right = "auto";
+                            const move = (ev: PointerEvent) => {
+                                const dx = ev.clientX - startX;
+                                const dy = ev.clientY - startY;
+                                let newW = startW, newH = startH;
+                                if (c === "tl" || c === "bl") newW = Math.max(minW, startW - dx);
+                                else                          newW = Math.max(minW, startW + dx); // tr
+                                if (c === "tl" || c === "tr") newH = Math.max(minH, startH - dy);
+                                else                          newH = Math.max(minH, startH + dy); // bl
+                                panel.style.width = newW + "px";
+                                panel.style.height = newH + "px";
+                                if (c === "tl" || c === "bl") panel.style.left = (startL + (startW - newW)) + "px";
+                                else                          panel.style.left = startL + "px"; // tr
+                                if (c === "tl" || c === "tr") panel.style.top = (startT + (startH - newH)) + "px";
+                                else                          panel.style.top = startT + "px"; // bl
+                            };
+                            const up = () => {
+                                h.removeEventListener("pointermove", move);
+                                h.removeEventListener("pointerup", up);
+                                h.removeEventListener("pointercancel", up);
+                            };
+                            h.addEventListener("pointermove", move);
+                            h.addEventListener("pointerup", up);
+                            h.addEventListener("pointercancel", up);
+                        });
+                    }
+                };
+                document.querySelectorAll<HTMLElement>(
+                    "#avatar-panel, #user-list-panel, #debug-overlay, #chat-history-panel, " +
+                    "#server-settings-panel, #server-log-panel, #ping-panel, #bookmark-panel, " +
+                    "#room-list-panel, #serial-test-panel, #ccu-panel, #chat-settings-panel, " +
+                    "#othello-panel, #othello-play-panel"
+                ).forEach(enableCornerResize);
             }
             // Cookie から初期状態復元（タブバーが表示されていない PC では無害）
             if (getCookie("panelMax") === "1") {
