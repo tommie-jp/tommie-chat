@@ -3973,7 +3973,7 @@ export function setupHtmlUI(game: GameScene): void {
             const verEl = document.getElementById("about-app-ver");
             const dateEl = document.getElementById("about-app-date");
             const creditsEl = document.getElementById("about-app-credits");
-            if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;">tommieChat';
+            if (nameEl) nameEl.innerHTML = '<img src="/favicon.png" style="width:36px;height:36px;vertical-align:middle;margin-right:6px;">tommieChat';
             if (verEl) verEl.textContent = "Ver. " + ver + (commit ? " #" + commit : "");
             if (dateEl) dateEl.textContent = t("about.date_label") + " " + date;
             if (creditsEl) creditsEl.innerHTML = "\u00A9 2026 tommie.jp"
