@@ -1061,6 +1061,15 @@ export class NakamaService {
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
 
+    /** 内蔵 CPU との対戦を即座に開始する (doc/reversi/70-実装計画-内蔵CPU.md)。
+     *  人間=黒 (先手)、CPU=白 (後手)。cpuUid は "cpu:hiyoko" 等の sentinel。 */
+    async othelloCreateCpu(worldId: number, cpuUid: string = "cpu:hiyoko"): Promise<OthelloUpdatePayload | null> {
+        if (!this.socket) return null;
+        console.log(`snd othelloCreateCpu worldId=${worldId} cpuUid=${cpuUid}`);
+        const r = await this.socket.rpc("othelloCreateCpu", JSON.stringify({ worldId, cpuUid }));
+        return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
+    }
+
     /** オセロゲームに参加（watch=true で観戦取得、状態変更なし） */
     async othelloJoin(gameId: string, watch: boolean = false): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;

@@ -12,9 +12,9 @@ Nakama/関連コンテナを再起動する。TOMMIE_PROD=1 または /etc/tommi
 存在で本番 overlay、それ以外は dev overlay を自動選択する。
 
 オプション:
-  -h, --help     この説明を表示して終了
-      --fresh    再起動前に ./doBuild.sh --fresh を実行（Go プラグインをクリーンビルド）
-      --time     処理全体を time コマンドで計測
+  -h, --help              この説明を表示して終了
+      --fresh, --refresh  再起動前に ./doBuild.sh --fresh を実行（Go プラグインをクリーンビルド）
+      --time              処理全体を time コマンドで計測
 EOF
 }
 
@@ -23,7 +23,7 @@ TIME_MEASURE=false
 for arg in "$@"; do
     case "$arg" in
         -h|--help) usage; exit 0 ;;
-        --fresh)   FRESH_BUILD=true ;;
+        --fresh|--refresh) FRESH_BUILD=true ;;
         --time)    TIME_MEASURE=true ;;
         *) echo "不明なオプション: $arg" >&2; usage >&2; exit 2 ;;
     esac

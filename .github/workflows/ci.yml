@@ -15,9 +15,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: nakama/go_src/go.mod
+          cache-dependency-path: nakama/go_src/go.sum
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      - name: Go unit tests (nakama plugin)
+        working-directory: nakama/go_src
+        run: go test ./...
       - name: Shell script syntax check
         run: |
           failed=0

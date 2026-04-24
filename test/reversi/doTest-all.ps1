@@ -20,6 +20,11 @@ npx vitest run test/SerialReversiAdapter.test.ts
 wsl bash -c $wslCmd
 if ($LASTEXITCODE -ne 0) { $failed++ }
 
+Write-Host ""
+Write-Host "=== Phase 3: Go unit tests (nakama plugin) ===" -ForegroundColor Cyan
+& "$PSScriptRoot\doTest-go.ps1"
+if ($LASTEXITCODE -ne 0) { $failed++ }
+
 if ($failed -gt 0) {
     [Console]::Error.WriteLine("$failed phase(s) failed")
     exit 1

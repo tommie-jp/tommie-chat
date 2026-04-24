@@ -4655,6 +4655,18 @@ func rpcOthelloMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		othelloListBroadcast(ctx, nk, g.WorldID, true)
 	}
 
+	// 次の手番が内蔵 CPU なら scheduleCpuMove をトリガー (reversi_cpu.go)。
+	// CPU 対戦ゲーム (black=人間, white=cpu:xxx) の人間着手後に発火する。
+	if g.Status == "playing" {
+		nextUID := g.BlackUID
+		if g.Turn == 2 {
+			nextUID = g.WhiteUID
+		}
+		if isCpuUID(nextUID) {
+			go scheduleCpuMove(nk, g.GameID)
+		}
+	}
+
 	// 裏返し情報も含めて返す
 	resp := othelloGameResponse(g)
 	flipsInts := make([]int, len(flips))
@@ -5129,6 +5141,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"getInitialAvatarIndex", rpcGetInitialAvatarIndex},
 		{"getRecentChat", rpcGetRecentChat},
 		{"othelloCreate", rpcOthelloCreate},
+		{"othelloCreateCpu", rpcOthelloCreateCpu},
 		{"othelloJoin", rpcOthelloJoin},
 		{"othelloMove", rpcOthelloMove},
 		{"othelloResign", rpcOthelloResign},

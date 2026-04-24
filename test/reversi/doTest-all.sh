@@ -14,6 +14,10 @@ echo -e "\033[36m=== Phase 2: Adapter Vitest (SerialReversiAdapter) ===\033[0m"
 cd "$REPO_ROOT"
 npx vitest run test/SerialReversiAdapter.test.ts || fail=$((fail + 1))
 
+echo ""
+echo -e "\033[36m=== Phase 3: Go unit tests (nakama plugin) ===\033[0m"
+bash "$REPO_ROOT/test/reversi/doTest-go.sh" || fail=$((fail + 1))
+
 if [ "$fail" -gt 0 ]; then
     echo "$fail phase(s) failed" >&2
     exit 1

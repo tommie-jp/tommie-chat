@@ -52,6 +52,7 @@ Usage: ./test/doAll.sh [-n N] [-s S] [--step D] [--counts C] [-v] [-h]
   5. doTest-player-list.sh       プレイヤーリスト通知テスト
   6. doTest-sustain.sh           持続接続テスト
   7. doTest-ccu-db.sh            同接履歴 DB永続化テスト
+  8. reversi/doTest-all.sh       リバーシ (Python replay + Vitest + Go 単体)
 
 例:
   ./test/doAll.sh --counts 100,500,1000,2000
@@ -193,7 +194,7 @@ TOTAL_FAILED=0
 TOTAL_PASSED=0
 TOTAL_RUN=0
 TEST_IDX=0
-TOTAL_TESTS=7
+TOTAL_TESTS=8
 CURRENT_ROUND_LABEL=""
 
 run_test() {
@@ -362,6 +363,15 @@ run_one_round() {
     # 7. 同接履歴 DB永続化テスト
     set +e
     run_test "doTest-ccu-db.sh" $HOST_PORT_OPT
+    [ $? -ne 0 ] && round_failed=$((round_failed + 1))
+    set -e
+
+    echo "  テスト間クールダウン (3秒)..."
+    sleep 3
+
+    # 8. リバーシ (Python replay + Adapter Vitest + Go 単体) — 人数・サーバ不要
+    set +e
+    run_test "reversi/doTest-all.sh"
     [ $? -ne 0 ] && round_failed=$((round_failed + 1))
     set -e
 
