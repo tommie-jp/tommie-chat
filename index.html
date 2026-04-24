@@ -2793,15 +2793,18 @@
         #about-panel-close:hover { opacity: 1; }
         #about-panel-body {
             padding: 10px 16px;
-            line-height: 1.4;
+            line-height: 1.5;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             flex: 1;
             min-height: 0;
+            /* 親パネルの monospace を上書きして、標準 UI フォント・サイズに統一 (他パネル踏襲) */
+            font-family: -apple-system, "Segoe UI", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+            font-size: 13px;
         }
         #about-panel-body p {
             margin: 0 0 4px 0;
-            font-size: 12px;
+            font-size: inherit;
         }
         #about-panel-body p:last-child {
             margin-bottom: 0;
@@ -4282,6 +4285,22 @@
         }
         body.theme-dark #debug-title-text {
             color: #fff !important;
+        }
+        /* 全パネル: 標準 UI フォント・サイズで統一。
+           既存の各パネル個別の "Courier New", 12px を一律上書きし、
+           どのパネルも同じトーン(system-ui, 13px)で読めるようにする。 */
+        [id$="-panel"],
+        #debug-overlay {
+            font-family: -apple-system, "Segoe UI", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif !important;
+            font-size: 13px !important;
+        }
+        /* データ整列・棋譜・シリアルログのみモノスペースを維持 */
+        #log,
+        #console-log,
+        #debug-overlay td.label,
+        #debug-overlay td.value,
+        #othello-board {
+            font-family: "Courier New", Courier, monospace !important;
         }
     </style>
     <script src="/js/app-init.js?v=0.1.64" defer></script>
