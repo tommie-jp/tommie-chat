@@ -6682,20 +6682,56 @@ export function setupHtmlUI(game: GameScene): void {
             renderTabLabels();
             onLangChangeCallbacks.push(renderTabLabels);
 
-            // タブクリック → 対応するメニューボタンの click を発火して既存トグルを再利用
+            // タブ操作 → 対応するメニューボタンの click を発火して既存トグルを再利用。
+            //
+            // iOS Safari は click 発火までに ~300ms の遅延があり、その間に DOM/スクロール変化
+            // が入ると click 着弾要素がズレて別タブを選ぶ既知バグがある
+            // (ランドスケープで幅の狭いタブが多数並ぶと顕在化)。
+            //
+            // 対策:
+            //   (a) pointerdown でタップ起点のタブと座標を記録 (モジュール外の 1 スロット)
+            //   (b) pointerup は document で受けて (どこで指が離されても取れる)、
+            //       (a) の起点と、移動距離 ≤ 10px なら「タップ成立」とみなして起点タブを起動
+            //   (c) click は二重発火防止で全タブで preventDefault する
+            const activateTab = (tab: HTMLButtonElement) => {
+                if (justDraggedFromTab) return;
+                const menuId = tab.dataset.menu;
+                if (!menuId) return;
+                const menuBtn = document.getElementById(menuId);
+                const target = document.getElementById(tab.dataset.target || "");
+                if (!menuBtn || !target) return;
+                if (target.style.display !== "none") return; // 既に表示中のタブは閉じない
+                menuBtn.click();
+            };
+            let tabDownBtn: HTMLButtonElement | null = null;
+            let tabDownX = 0;
+            let tabDownY = 0;
             for (const tab of tabs) {
-                tab.addEventListener("click", () => {
-                    if (justDraggedFromTab) return; // 直前にドラッグでデバイダー移動した場合は抑止
-                    const menuId = tab.dataset.menu;
-                    if (!menuId) return;
-                    const menuBtn = document.getElementById(menuId);
-                    const target = document.getElementById(tab.dataset.target || "");
-                    if (!menuBtn || !target) return;
-                    // 既に表示中のタブを再タップした場合は閉じない（タブは切替専用）
-                    if (target.style.display !== "none") return;
-                    menuBtn.click();
+                tab.addEventListener("pointerdown", (e: PointerEvent) => {
+                    tabDownBtn = tab;
+                    tabDownX = e.clientX;
+                    tabDownY = e.clientY;
+                });
+                // click は pointerup 経路で処理済。ghost click が別タブへ誤着弾するのを防止。
+                tab.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
                 });
             }
+            document.addEventListener("pointerup", (e: PointerEvent) => {
+                if (!tabDownBtn) return;
+                const origin = tabDownBtn;
+                const dx = e.clientX - tabDownX;
+                const dy = e.clientY - tabDownY;
+                tabDownBtn = null;
+                // 指が大きく動いた場合 (横スクロール等) はタップ扱いしない。
+                // ランドスケープの狭いタブでも誤差を許容できるよう 30px 程度まで許容。
+                if (Math.hypot(dx, dy) > 30) return;
+                activateTab(origin);
+            }, true);
+            document.addEventListener("pointercancel", () => {
+                tabDownBtn = null;
+            }, true);
             // ✕ボタン → アクティブなパネルを閉じる（＝そのメニューボタンを再クリック）
             if (closeBtn) {
                 closeBtn.addEventListener("click", () => {
