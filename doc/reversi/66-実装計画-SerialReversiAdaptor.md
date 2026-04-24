@@ -168,3 +168,53 @@ class SerialReversiAdapter {
    `7b3.シリアルテストパネル` で疑似 CPU を接続し、適当な行を送信して
    DevTools コンソールに `SerialReversi: <CPU ...` が流れることを見るだけで十分
 3. Phase 3 以降は対戦ロジックに踏み込むので、必ず人 vs 人対戦を 1 局通してから着手する
+
+## 仕様適合レビュー結果（2026-04-24）
+
+[61-UARTプロトコル仕様.md](61-UARTプロトコル仕様.md) ドラフト v0.1 と
+以下の実装を突合した結果。
+
+- [src/SerialReversiAdapter.ts](../../src/SerialReversiAdapter.ts)（ブラウザ側アダプタ）
+- [test/reversi/reversi_cpu.py](../../test/reversi/reversi_cpu.py)（参照 CPU）
+- [test/reversi/cpu_tester/](../../test/reversi/cpu_tester/)（CPU 適合テスト）
+- [test/SerialReversiAdapter.test.ts](../../test/SerialReversiAdapter.test.ts)（Vitest）
+
+### 準拠できている点（OK）
+
+- §6.1 / §6.2 の双方向メッセージ（SB / SW / MO / PA / BO / EB / EW / ED / VE / PI
+  ＋ PO / EN / RE / ER / ST / NC / RS）をすべて解釈・送出
+- §4.1 CR 混入 → `ER03`、小文字・非英字コマンド → `ER02`
+- §6.3 `ER<NN>[ <reason>]` のパース（2 桁コード + 任意 reason）
+- §7 BO 行優先 64 文字・初期局面（d4=W, e4=B, d5=B, e5=W）
+- §12 RE 受信 → 直前指示再送、§12.1 RS 受信 → BO + 指示再送、
+  連続 3 回超過で `othelloResign` 反則負け扱い
+
+### 実装修正が必要な項目（対応済）
+
+1. ✅ **[Adapter] MO 座標の大文字許容を ER04 拒否に変更** — §4 / §6.1 違反の解消
+   - `handleMoMessage` の正規表現を `/^([a-h])([1-8])/` に限定
+   - 非マッチ時 `ER04 bad coord <xx>` を返す
+2. ✅ **[Adapter] 未知コマンドを ER01 で応答するよう変更** — §4.1 違反の解消
+   - `switch` default で `ER01 unknown cmd <head>` を返す
+3. ✅ **[Adapter] PI 間隔を 1000 ms に修正** — §5 仕様準拠
+   - `PING_INTERVAL_MS=3000` → `1000`（3 連続失敗閾値はそのまま）
+
+### 仕様側の曖昧さ（§14 検討事項に追記済）
+
+- ✅ §10「BO は C1 (IDLE) のみ受理」 vs §12.1「RS 後に対局中でも BO を送る」
+  → §10 の盤面同期節に「RS 直後は C2/C3 でも受理」例外を追記
+- ✅ §6.2 #8 `ST<text>` の用途
+  → 「実装者裁量で診断用の盤面スナップショット (`ST BO<64>`) を流してもよい」と追記
+
+### テスト側のカバレッジ（現状）
+
+- `cpu_tester/cases/protocol/` 11 ケース: VE / PI-PO / ER01/02/03 / 小文字拒否 /
+  CR 拒否 / 連続 PI 等で §4・§6 をほぼ網羅
+- `cpu_tester/cases/game_rule/` 11 ケース: SB/SW 初手、中盤 BO、強制パス、
+  相手パス通知、SW 待機、終局沈黙、EW/ED、CPU RS までカバー
+- `SerialReversiAdapter.test.ts`: ゲーム開始、通常進行、サーバ auto-pass（case 3b）、
+  CPU auto-pass（case 2b）、MO 受信 → RPC、RS 再同期、RS 上限超過 → 投了、
+  EN → 投了、EB/EW/ED をカバー
+- ✅ 追加済: Adapter 側の ER 応答テスト (MOD3 で ER04 / XX で ER01 / `PI\r` で ER03 /
+  `pi` で ER02) を [test/SerialReversiAdapter.test.ts](../../test/SerialReversiAdapter.test.ts)
+  に追加

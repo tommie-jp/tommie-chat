@@ -32,7 +32,7 @@ export interface SerialReversiMovePort {
 
 type AdapterState = "IDLE" | "MY_TURN" | "WAIT_OPP";
 
-const PING_INTERVAL_MS = 3000; // §5
+const PING_INTERVAL_MS = 1000; // §5 サーバー側は 1000 ms 待機
 const PING_FAIL_THRESHOLD = 3; // §5 3 連続失敗で切断扱い
 const STUCK_THRESHOLD_MS = 10_000;     // PI/PO 以外の活動が N ms 無ければ STUCK
 const STUCK_DUMP_INTERVAL_MS = 10_000; // STUCK 中の再ダンプ間隔
@@ -193,8 +193,9 @@ export class SerialReversiAdapter {
                 this.emitStatus(true);
                 return;
             default:
-                // §8: 現在状態で無効なコマンドは黙って捨てる
-                console.debug(`SerialReversi <CPU: 不明コマンド "${line}" を破棄`);
+                // §4.1: 未知コマンドは仕様違反 → ER01 で応答
+                console.warn(`SerialReversi <CPU: 未知コマンド "${line}" (§4.1 violation) → ER01`);
+                this.sendErrorResponse(1, `unknown cmd ${head}`);
                 this.emitStatus(false, `unknown cmd: ${line}`);
                 return;
         }
@@ -202,13 +203,15 @@ export class SerialReversiAdapter {
 
     // CPU からの MO 着手 → othelloMove RPC
     private handleMoMessage(rest: string): void {
-        const m = rest.match(/^([a-hA-H])([1-8])/);
+        // §4 / §6.1 / §7: 座標は小文字のみ受理。MOD3 等の大文字は ER04 で拒否
+        const m = rest.match(/^([a-h])([1-8])/);
         if (!m) {
-            console.warn(`SerialReversi <CPU: MO${rest} パース失敗、破棄`);
-            this.emitStatus(false, `MO パース失敗: ${rest}`);
+            console.warn(`SerialReversi <CPU: MO${rest} 不正座標 (§7 violation) → ER04`);
+            this.sendErrorResponse(4, `bad coord ${rest.slice(0, 2)}`);
+            this.emitStatus(false, `MO 不正座標: ${rest}`);
             return;
         }
-        const colCh = m[1].toLowerCase();
+        const colCh = m[1];
         const rowCh = m[2];
         const col = colCh.charCodeAt(0) - "a".charCodeAt(0);
         const row = rowCh.charCodeAt(0) - "1".charCodeAt(0);

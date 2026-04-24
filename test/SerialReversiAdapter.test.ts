@@ -335,6 +335,35 @@ describe("SerialReversiAdapter", () => {
         });
     });
 
+    describe("§4.1 / §6.3 仕様違反受信 → ER 応答", () => {
+        it("未知コマンド (XX) 受信で ER01 を返す", () => {
+            feedFromCpu("XX");
+            expect(sentLines()).toContain("ER01 unknown cmd XX");
+        });
+
+        it("MO の大文字座標 (MOD3) 受信で ER04 を返す", () => {
+            adapter.onGameStateUpdate(
+                payload({ board: initBoard(), turn: 1, status: "playing", lastMove: -1 }),
+                BLACK_UID, movePort,
+            );
+            mockBridge.sendLine.mockClear();
+            feedFromCpu("MOD3");
+            expect(sentLines().some((s) => s.startsWith("ER04"))).toBe(true);
+            // 不正座標は othelloMove を呼ばずに捨てる
+            expect(movePort.othelloMove).not.toHaveBeenCalled();
+        });
+
+        it("CR 混入 (PI\\r) 受信で ER03 を返す", () => {
+            feedFromCpu("PI\r");
+            expect(sentLines().some((s) => s.startsWith("ER03"))).toBe(true);
+        });
+
+        it("小文字コマンド (pi) 受信で ER02 を返す", () => {
+            feedFromCpu("pi");
+            expect(sentLines().some((s) => s.startsWith("ER02"))).toBe(true);
+        });
+    });
+
     describe("CPU からの EN (投了)", () => {
         it("EN 受信で othelloResign を呼ぶ", async () => {
             adapter.onGameStateUpdate(payload({ board: initBoard(), turn: 1, status: "playing", lastMove: -1 }), BLACK_UID, movePort);
