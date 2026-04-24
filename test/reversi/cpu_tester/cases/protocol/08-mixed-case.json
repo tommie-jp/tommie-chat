@@ -1,21 +1,13 @@
 {
-    "name": "大文字小文字混在 (Pi, pI) は §4 違反で ER 応答",
-    "section": "§4, §4.1",
+    "name": "大文字小文字混在 (Pi, pI) は §4 違反で ER02 応答",
+    "section": "§4, §4.1, §6.3",
     "required": true,
     "timeout_ms": 500,
-    "_note": "v0.1 仕様改訂: コマンドは大文字のみ受理。混在は ER で拒否。",
+    "_note": "v0.1: コマンドは大文字のみ受理。混在は ER02 (Lowercase command) で拒否。",
     "steps": [
-        {
-            "tx": "Pi"
-        },
-        {
-            "rx": "ER"
-        },
-        {
-            "tx": "pI"
-        },
-        {
-            "rx": "ER"
-        }
+        { "tx": "Pi" },
+        { "rx_regex": "^ER02( .*)?$" },
+        { "tx": "pI" },
+        { "rx_regex": "^ER02( .*)?$" }
     ]
 }

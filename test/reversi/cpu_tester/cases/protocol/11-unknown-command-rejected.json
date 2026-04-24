@@ -1,11 +1,11 @@
 {
-    "name": "未知コマンド (XX) は §4.1 違反で ER 応答",
-    "section": "§4.1",
+    "name": "未知コマンド (XX) は §4.1 違反で ER01 応答",
+    "section": "§4.1, §6.3",
     "required": true,
     "timeout_ms": 500,
-    "_note": "仕様書 §4.1 の未知コマンド処理: ER を返す (ログのみで再送なし)。",
+    "_note": "v0.1: 未知コマンドは ER01 (Unknown command) で拒否。",
     "steps": [
         { "tx": "XX" },
-        { "rx": "ER" }
+        { "rx_regex": "^ER01( .*)?$" }
     ]
 }

@@ -102,21 +102,24 @@ export class SerialReversiAdapter {
         b.emitStatus(ok ? "OK" : `NG ${detail ?? "unknown"}`);
     }
 
-    // §4.1 仕様違反受信時に ER を返す。sendDirective は lastDirectiveSent を上書きしないよう
-    // skipRecord=true で呼ぶ。未接続ならサイレント。
-    private sendErrorResponse(): void {
+    // §4.1 / §6.3: 仕様違反受信時に ER<NN>[ <reason>] を返す。
+    // code は §6.3 エラーコード表の 2 桁数値 (0-99)。reason はデバッグ用の任意文字列。
+    // 未接続ならサイレント。
+    private sendErrorResponse(code: number, reason?: string): void {
         const b = window.__serialTestBridge;
         if (!b || !b.isConnected()) return;
-        b.sendLine("ER").catch((e) => console.warn("SerialReversi: ER 送信失敗:", e));
+        const cc = String(code).padStart(2, "0");
+        const payload = reason ? `ER${cc} ${reason}` : `ER${cc}`;
+        b.sendLine(payload).catch((e) => console.warn("SerialReversi: ER 送信失敗:", e));
     }
 
     // 受信 1 行のパース。§4: コマンドは大文字のみ、改行は LF のみ。
     // 仕様違反受信は §4.1 に従い ER で応答する。
     private onLine(raw: string): void {
-        // CR 混入チェック (§4 仕様違反)
+        // CR 混入チェック (§4 仕様違反) → ER03
         if (raw.includes("\r")) {
             console.warn(`SerialReversi: CR detected in input (§4 violation): ${JSON.stringify(raw)}`);
-            this.sendErrorResponse();
+            this.sendErrorResponse(3, "CR in input");
             this.emitStatus(false, "CR in input (§4)");
             return;
         }
@@ -124,10 +127,10 @@ export class SerialReversiAdapter {
         if (line.length === 0) return;
         const head = line.slice(0, 2);
         const rest = line.slice(2);
-        // §4 コマンドは大文字のみ
+        // §4 コマンドは大文字のみ → ER02
         if (!/^[A-Z]{2}$/.test(head)) {
             console.warn(`SerialReversi: lowercase or non-alpha command (§4 violation): ${JSON.stringify(head)}`);
-            this.sendErrorResponse();
+            this.sendErrorResponse(2, `lowercase cmd ${head}`);
             this.emitStatus(false, `non-uppercase cmd: ${head}`);
             return;
         }
@@ -164,11 +167,20 @@ export class SerialReversiAdapter {
                 this.handleReMessage();
                 this.emitStatus(true);
                 return;
-            case "ER":
-                // §6.2 #7 ログ記録のみ、自動再送はしない
-                console.log(`SerialReversi <CPU: ER ${rest}`);
+            case "ER": {
+                // §6.2 #7 / §6.3 ER<NN>[ <reason>] — ログ記録のみ、自動再送はしない。
+                // rest の形: "" (ER\n) or "NN" or "NN reason"
+                const m = rest.match(/^(\d{2})(?:\s+(.*))?$/);
+                if (m) {
+                    const code = m[1];
+                    const reason = m[2] ?? "";
+                    console.log(`SerialReversi <CPU: ER code=${code}${reason ? ` reason="${reason}"` : ""}`);
+                } else {
+                    console.log(`SerialReversi <CPU: ER (legacy or malformed) ${rest}`);
+                }
                 this.emitStatus(true);
                 return;
+            }
             case "ST":
                 console.log(`SerialReversi <CPU: ST ${rest}`);
                 this.emitStatus(true);

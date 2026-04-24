@@ -1,11 +1,11 @@
 {
-    "name": "CR 混入 (PI\\r\\n) は §4 違反で ER 応答",
-    "section": "§4, §4.1",
+    "name": "CR 混入 (PI\\r\\n) は §4 違反で ER03 応答",
+    "section": "§4, §4.1, §6.3",
     "required": true,
     "timeout_ms": 500,
-    "_note": "v0.1 仕様改訂: 改行は LF のみ。CR 混入は ER で拒否。tx_raw で LF 以外も送れる。",
+    "_note": "v0.1: 改行は LF のみ。CR 混入は ER03 (CR detected) で拒否。tx_raw で LF 以外も送れる。",
     "steps": [
         { "tx_raw": "PI\r\n" },
-        { "rx": "ER" }
+        { "rx_regex": "^ER03( .*)?$" }
     ]
 }

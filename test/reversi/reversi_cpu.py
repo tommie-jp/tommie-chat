@@ -86,10 +86,10 @@ class ReversiCPU:
             pass
 
     def handle(self, line):
-        # §4: CR 混入は仕様違反 → ER を返す
+        # §4: CR 混入は仕様違反 → ER03
         if "\r" in line:
             print(f"[WARN] CR detected in input (§4 violation): {line!r}", flush=True)
-            self.send("ER")
+            self.send("ER03 CR in input")
             return
         s = line.strip()
         head = s[:2]  # §4: コマンドは大文字必須。upper() はしない
@@ -102,10 +102,10 @@ class ReversiCPU:
         cmd = s[:2]
         rest = s[2:]
 
-        # §4: コマンド部は大文字のみ受理。小文字・混在は仕様違反 → ER
+        # §4: コマンド部は大文字のみ受理。小文字・混在は仕様違反 → ER02
         if not cmd.isupper() or not cmd.isalpha():
             print(f"[WARN] lowercase or non-alpha command (§4 violation): {cmd!r}", flush=True)
-            self.send("ER")
+            self.send(f"ER02 lowercase cmd {cmd!r}")
             return
 
         if cmd == "PI":
@@ -129,16 +129,16 @@ class ReversiCPU:
             if self.color is None or len(rest) < 2:
                 return
             coord = rest[:2]
-            # §7: 座標は小文字のみ受理 (MOD3 等は ER)
+            # §7: 座標は小文字のみ受理 (MOD3 等は ER04)
             if not (coord[0].islower() and coord[1].isdigit()):
                 print(f"[WARN] non-lowercase coord (§7 violation): {coord!r}", flush=True)
-                self.send("ER")
+                self.send(f"ER04 bad coord format {coord!r}")
                 return
             try:
                 r, c = parse_coord(coord)
             except ValueError as e:
                 print(f"[WARN] bad coord: {e}", flush=True)
-                self.send("ER")
+                self.send(f"ER04 coord out of range {coord!r}")
                 return
             if not apply_move(self.board, r, c, opponent(self.color)):
                 # 盤面乖離 → §6.2 #10 RS (REQUEST SYNC) で再同期要求。
@@ -175,9 +175,9 @@ class ReversiCPU:
             self.state = "IDLE"
             self.color = None
         else:
-            # §4.1 未知コマンド → ER
-            print(f"[WARN] unknown cmd: {s!r} — responding ER", flush=True)
-            self.send("ER")
+            # §4.1 未知コマンド → ER01
+            print(f"[WARN] unknown cmd: {s!r} — responding ER01", flush=True)
+            self.send(f"ER01 unknown cmd {cmd!r}")
 
     def my_move(self):
         if self.state != "MY_TURN" or self.color is None:
