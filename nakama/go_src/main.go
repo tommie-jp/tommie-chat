@@ -4574,23 +4574,30 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 
 	logf("othello join: gameId=%s white=%s%s\n", g.GameID, shortSID(uid), dn(uid))
 
-	// オーナー（黒）へ参加通知を送信（DB永続化）
-	// 仕様書 doc/20 ⭐️通知 参照
-	opponentName := ""
-	if v, ok := displayNameCache.Load(uid); ok {
-		opponentName = v.(string)
-	}
-	if opponentName == "" {
-		if v, ok := usernameCache.Load(uid); ok {
+	// 内蔵 CPU (ひよこ等) がオーナーの場合は通知を送らない (存在しないユーザなので Notification 失敗)。
+	// 代わりに (a) ロビーに新しい hiyoko 待機ゲームを補充、(b) CPU の初手 (黒なので先手) をスケジュール。
+	if isCpuUID(g.BlackUID) {
+		go ensureHiyokoWaitingGame(context.Background(), nk, g.WorldID)
+		go scheduleCpuMove(nk, g.GameID)
+	} else {
+		// オーナー（人間の黒）へ参加通知を送信（DB永続化）
+		// 仕様書 doc/20 ⭐️通知 参照
+		opponentName := ""
+		if v, ok := displayNameCache.Load(uid); ok {
 			opponentName = v.(string)
 		}
-	}
-	notifContent := map[string]interface{}{
-		"gameNo":       g.GameNo,
-		"opponentName": opponentName,
-	}
-	if err := nk.NotificationSend(ctx, g.BlackUID, "対戦相手が見つかりました", notifContent, CodeOthelloJoined, uid, true); err != nil {
-		logf("othello join: NotificationSend failed gameId=%s black=%s err=%v\n", g.GameID, shortSID(g.BlackUID), err)
+		if opponentName == "" {
+			if v, ok := usernameCache.Load(uid); ok {
+				opponentName = v.(string)
+			}
+		}
+		notifContent := map[string]interface{}{
+			"gameNo":       g.GameNo,
+			"opponentName": opponentName,
+		}
+		if err := nk.NotificationSend(ctx, g.BlackUID, "対戦相手が見つかりました", notifContent, CodeOthelloJoined, uid, true); err != nil {
+			logf("othello join: NotificationSend failed gameId=%s black=%s err=%v\n", g.GameID, shortSID(g.BlackUID), err)
+		}
 	}
 
 	// 両者に配信（join は履歴更新なし）
@@ -5014,6 +5021,10 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	}
 	defaultWorld = getWorld(defaultWorldID)
 
+	// ひよこ(3歳) の待機中ゲームをデフォルトワールドに配置（ロビー常時表示用）。
+	// 詳細は reversi_cpu.go / doc/reversi/70-実装計画-内蔵CPU.md 参照。
+	ensureHiyokoWaitingGame(ctx, nk, defaultWorldID)
+
 	// 旧フォーマットからのマイグレーション（ground_table キーが残っている場合、デフォルトワールドのみ）
 	w := defaultWorld
 	loadedChunks := 0
@@ -5141,7 +5152,6 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		{"getInitialAvatarIndex", rpcGetInitialAvatarIndex},
 		{"getRecentChat", rpcGetRecentChat},
 		{"othelloCreate", rpcOthelloCreate},
-		{"othelloCreateCpu", rpcOthelloCreateCpu},
 		{"othelloJoin", rpcOthelloJoin},
 		{"othelloMove", rpcOthelloMove},
 		{"othelloResign", rpcOthelloResign},

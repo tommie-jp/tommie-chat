@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"math/rand"
 	"strings"
 	"time"
@@ -165,77 +163,35 @@ func scheduleCpuMove(nk runtime.NakamaModule, gameID string) {
 	}
 }
 
-// rpcOthelloCreateCpu は内蔵 CPU との対戦を即座に開始する。
-// 人間 = 黒 (先手)、CPU = 白 (後手)、status = "playing" で即 game 開始。
-// 既に同一ユーザの CPU 対戦が進行中ならそれを返す (連打防止)。
-func rpcOthelloCreateCpu(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
-	defer prof("rpcOthelloCreateCpu")()
-	uid, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
-	if !ok || uid == "" {
-		return "", runtime.NewError("authentication required", 7)
-	}
-
-	var req struct {
-		WorldID int    `json:"worldId"`
-		CpuUID  string `json:"cpuUid"`
-	}
-	if payload != "" {
-		_ = json.Unmarshal([]byte(payload), &req)
-	}
-	if req.CpuUID == "" {
-		req.CpuUID = "cpu:hiyoko"
-	}
-	if cpuEngineForUID(req.CpuUID) == nil {
-		return "", runtime.NewError("unknown cpu: "+req.CpuUID, 3)
-	}
-
-	// 既に自分が参加している進行中 CPU ゲームがあれば返す (連打防止)
-	var existing *OthelloGame
+// ensureHiyokoWaitingGame は指定ワールドに「ひよこ(3歳)」の待機中ゲームが 1 つ存在することを保証する。
+// 黒 = CPU sentinel (cpu:hiyoko)、白 = 空で作成し、人間が join したら通常通り playing に遷移する。
+// サーバ起動時 (InitModule) と、既存の hiyoko 待機ゲームが join されて playing に遷移した直後に呼ぶ。
+// ロビーに「ひよことの対戦」が常に 1 つ表示される状態を維持するのが目的。
+func ensureHiyokoWaitingGame(ctx context.Context, nk runtime.NakamaModule, worldID int) {
+	// 既に同ワールドに hiyoko 待機ゲームがあればスキップ
+	var exists bool
 	othelloGames.Range(func(_, v interface{}) bool {
 		g := v.(*OthelloGame)
-		if g.BlackUID == uid && isCpuUID(g.WhiteUID) && g.Status == "playing" {
-			existing = g
+		if g.BlackUID == "cpu:hiyoko" && g.Status == "waiting" && g.WorldID == worldID {
+			exists = true
 			return false
 		}
 		return true
 	})
-	if existing != nil {
-		resp := othelloGameResponse(existing)
-		out, _ := json.Marshal(resp)
-		return string(out), nil
+	if exists {
+		return
 	}
 
 	gameID := othelloNextGameID()
-	g := othelloNewGame(gameID, uid, req.WorldID)
+	g := othelloNewGame(gameID, "cpu:hiyoko", worldID)
 	g.GameNo = othelloNextGameNo(ctx, nk)
-	g.WhiteUID = req.CpuUID
-	g.Status = "playing" // CPU 対戦は待機不要で即開始
-	g.IsCpu = true       // 既存 UI の CPU 対戦表示を流用
+	g.IsCpu = true // 既存 UI の CPU 対戦マーカーを流用
 	g.BoardGX = 504
 	g.BoardGZ = 504
-
-	cacheDN(ctx, nk, uid)
-	computeAuthFlags(ctx, nk, uid)
-
-	ownerName := ""
-	if v, ok := displayNameCache.Load(uid); ok {
-		ownerName = v.(string)
-	}
-	if ownerName == "" {
-		if v, ok := usernameCache.Load(uid); ok {
-			ownerName = v.(string)
-		}
-	}
-	g.Comment = ownerName + " vs " + cpuDisplayName(req.CpuUID)
-
+	g.Comment = "ひよこ(3歳)と対戦しよう！"
 	othelloGames.Store(gameID, g)
 
-	logf("rpcOthelloCreateCpu: gameId=%s black=%s%s cpu=%s worldId=%d\n",
-		gameID, shortSID(uid), dn(uid), req.CpuUID, req.WorldID)
+	logf("ensureHiyokoWaitingGame: created gameId=%s worldId=%d\n", gameID, worldID)
 
-	othelloListBroadcast(ctx, nk, req.WorldID, false)
-
-	resp := othelloGameResponse(g)
-	out, _ := json.Marshal(resp)
-	return string(out), nil
+	othelloListBroadcast(ctx, nk, worldID, false)
 }

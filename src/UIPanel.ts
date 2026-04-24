@@ -4668,7 +4668,6 @@ export function setupHtmlUI(game: GameScene): void {
         const othTimer     = document.getElementById("othello-timer") as HTMLElement | null;
         const othGameNoLabel = document.getElementById("othello-game-no-label") as HTMLElement | null;
         const othCreateBtn = document.getElementById("othello-create-btn") as HTMLButtonElement | null;
-        const othCreateCpuBtn = document.getElementById("othello-create-cpu-btn") as HTMLButtonElement | null;
         const othGameList  = document.getElementById("othello-game-list-tbody") as HTMLElement | null;
         const othGameListScroll    = document.getElementById("othello-game-list-scroll") as HTMLElement | null;
         const othGameListTheadWrap = document.getElementById("othello-game-list-thead-wrap") as HTMLElement | null;
@@ -5843,30 +5842,9 @@ export function setupHtmlUI(game: GameScene): void {
                 othCreateBtn.addEventListener("click", () => { createGame().catch(e => console.warn("othelloCreate error:", e)); });
             }
 
-            // --- 内蔵 CPU 対戦ボタン (ひよこ 3歳) ---
-            // doc/reversi/70-実装計画-内蔵CPU.md §Phase 4
-            const createCpuGame = async () => {
-                if (!othCreateCpuBtn || othCreateCpuBtn.disabled) return;
-                othCreateCpuBtn.disabled = true;
-                try {
-                    const res = await game.nakama.othelloCreateCpu(game.currentWorldId, "cpu:hiyoko");
-                    if (!res) return;
-                    currentGameId = res.gameId;
-                    myColor = res.black === myUid() ? 1 : 2;
-                    gameStatus = res.status;
-                    prevBoard = new Array(64).fill(0);
-                    applyState(res);
-                    showGame();
-                } finally {
-                    // 少し遅延して enable に戻す（連打ガード）
-                    setTimeout(() => { if (othCreateCpuBtn) othCreateCpuBtn.disabled = false; }, 1000);
-                }
-            };
-            if (othCreateCpuBtn) {
-                othCreateCpuBtn.addEventListener("click", () => {
-                    createCpuGame().catch(e => console.warn("othelloCreateCpu error:", e));
-                });
-            }
+            // 内蔵 CPU (ひよこ) はサーバが自動でロビーに待機ゲームを置くので、クライアント側の作成ボタンは不要。
+            // 人間プレイヤーは通常の [参加] ボタンで hiyoko 待機ゲームに join する
+            // (doc/reversi/70-実装計画-内蔵CPU.md §Phase 4)。
 
             // --- 戻るボタン ---
             if (othBackBtn) {

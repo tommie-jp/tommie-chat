@@ -112,11 +112,16 @@ main.go 肥大化を防ぐため **新ファイル分離**。ポート側 (Phase
 
 ### Phase 4: ロビー UI (0.5 人日)
 
-- リバーシロビー ([src/UIPanel.ts](../../src/UIPanel.ts)) に
-  **「CPU 対戦（ひよこ 3歳）」ボタン**を追加
-- RPC: `createCpuGame(cpuId)` → サーバ側で match 作成、黒/白抽選、CPU 側スロットに
-  `cpu:hiyoko` UID を設定して start
-- 既存の `createRoom` / `join` 経路に乗せる
+**方針変更 (2026-04-25)**: 専用ボタンは置かず、「人間が作成した待機中ゲーム」と
+**同じ扱い**でロビー一覧に常駐させる。
+
+- サーバ起動時に `ensureHiyokoWaitingGame(defaultWorldID)` で
+  BlackUID = `"cpu:hiyoko"`, Status = `"waiting"` のゲームを 1 つ作成
+- 人間が通常の **[参加] ボタン**で hiyoko 待機ゲームに join すると
+  `rpcOthelloJoin` で Status=playing に遷移、同時に **補充用の新しい hiyoko 待機ゲーム**
+  をサーバが自動生成 → ロビー常時 1 つは hiyoko が待機
+- join 時に `scheduleCpuMove` を起動して黒=ひよこの初手が自動で打たれる
+- 観戦は既存の [閲覧] ボタン経由
 
 ### Phase 5: CPU 登録メタ・レーティング結線 (1 人日、[69 §5](69-マッチング-Elo-Glicko.md) 実装時に同時)
 
