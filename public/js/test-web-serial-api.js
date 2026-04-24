@@ -414,45 +414,56 @@ function appendLog(s) {
   }
 }
 
-// Replay モード: reversi_cpu.py --replay 用の "TX/RX <ascii>" 形式で 1 メッセージ 1 行を追記する。
-// タイムスタンプは opt-timestamp 設定に従う (なし/時刻/相対)。行番号は常になし。
-// PI/PO は opt-replay-skip-pipo でフィルタ。reversi_cpu.py --replay 側でも
-// 先頭の `[HH:MM:SS.mmm] ` を読み飛ばすのでそのまま貼って再生可能。
-function shouldSkipReplay(text) {
+// PI/PO 除外フィルタ。opt-replay-skip-pipo が ON なら text (ASCII) の先頭 2 文字が PI/PO の行を抑止。
+// 以前は replay モード限定だったが、hex 系モードでも PI/PO の hex ダンプを抑止するため全モード共通化した。
+function shouldSkipPipo(text) {
   if (!$('opt-replay-skip-pipo') || !$('opt-replay-skip-pipo').checked) return false;
   const head = text.slice(0, 2).toUpperCase();
   return head === 'PI' || head === 'PO';
 }
+// RX チャンクが単体で "PI\n" / "PO\n" のときだけ弾く簡易版。1 Hz ハートビートは単独チャンクで来るので実用上十分。
+function shouldSkipPipoChunk(value) {
+  if (!$('opt-replay-skip-pipo') || !$('opt-replay-skip-pipo').checked) return false;
+  return value.length === 3 && value[0] === 0x50 && value[2] === 0x0a
+         && (value[1] === 0x49 || value[1] === 0x4f);
+}
+
+// Replay モード: reversi_cpu.py --replay 用の "TX/RX <ascii>" 形式で 1 メッセージ 1 行を追記する。
+// タイムスタンプは opt-timestamp 設定に従う (なし/時刻/相対)。行番号は常になし。
+// reversi_cpu.py --replay 側でも 先頭の `[HH:MM:SS.mmm] ` を読み飛ばすのでそのまま貼って再生可能。
 function emitReplayLine(kind, text) {
   if (!text) return;
-  if (shouldSkipReplay(text)) return;
+  if (shouldSkipPipo(text)) return;
   appendLog(`${tsPrefix()}${kind} ${text}\n`);
 }
 
-// SEND 行の出力。現在の Hex モードに合わせて受信と同じ書式で出し、受信との比較をしやすくする。
-// hex-ascii-offset モードでは先頭行のオフセット欄を "SEND    " に置換する（8 文字で幅を合わせる）。
+// TX 行の出力。現在の Hex モードに合わせて受信と同じ書式で出し、受信との比較をしやすくする。
+// hex-ascii-offset モードでは先頭行のオフセット欄を "TX      " に置換する（8 文字で幅を合わせる）。
+// ラベルは replay モードの "TX"/"RX" と統一（2 文字 + 4 スペース = 6 文字幅で継続行と揃える）。
 function emitSend(bytes, txt) {
   const hexMode = $('opt-hex').value;
+  // PI/PO 除外は全モード共通で送信ログ抑止。実送信バイトは既に writer へ出てるので表示のみ抑える。
+  if (shouldSkipPipo(txt)) return;
   if (hexMode === 'replay') {
     emitReplayLine('TX', txt.replace(/[\r\n]+$/g, ''));
     return;
   }
   if (hexMode === 'hex') {
-    emitLine('SEND  ' + toHex(bytes));
+    emitLine('TX    ' + toHex(bytes));
     return;
   }
   if (hexMode === 'hex-ascii') {
     const lines = toHexAscii(bytes);
-    lines.forEach((line, i) => emitLine((i === 0 ? 'SEND  ' : '      ') + line));
+    lines.forEach((line, i) => emitLine((i === 0 ? 'TX    ' : '      ') + line));
     return;
   }
   if (hexMode === 'hex-ascii-offset') {
     const lines = toHexAscii(bytes, 0);
-    if (lines.length > 0) lines[0] = 'SEND    ' + lines[0].slice(8);
+    if (lines.length > 0) lines[0] = 'TX      ' + lines[0].slice(8);
     for (const line of lines) emitLine(line);
     return;
   }
-  emitLine('[SEND] ' + JSON.stringify(txt));
+  emitLine('[TX] ' + JSON.stringify(txt));
 }
 
 function emitLine(line) {
@@ -489,16 +500,59 @@ function emitRaw(text) {
 
 function processIncoming(value) {
   bytesRx += value.length;
+  const text = new TextDecoder().decode(value);
   emitIncomingLines(value);
-  // Adapter への行通知は表示より後にする。こうしないと Adapter が emitStatus('OK') を出したとき
-  // RX 行より先にステータス行が出てしまい、時系列が分かりづらくなる。
+  // Adapter への行通知は emitIncomingLines の後、盤面表示の前に挟む。
+  // こうすると 「RX 行 → Adapter の # OK → 盤面」の順で出せる。
   if (adapterLineListeners.size > 0) {
-    adapterFeed(new TextDecoder().decode(value));
+    adapterFeed(text);
+  }
+  // 盤面表示は最後。Hex モードでも動くよう独立バッファで検出。
+  checkBoardDisplay(text);
+}
+
+// ST BO<64char> を受信したら盤面を ASCII 表示する。表示オプション opt-board-display に従う。
+// 0=空(.), 1=黒(B), 2=白(W)、64 文字 row-major (a1..h1, a2..h8) — 61-UARTプロトコル仕様.md §7
+// 出力行は replay コメント形式 ("# " 接頭辞)。タイムスタンプ・行番号は付けない。
+let boardLineBuf = '';
+function checkBoardDisplay(text) {
+  const cb = $('opt-board-display');
+  if (!cb || !cb.checked) { boardLineBuf = ''; return; }
+  boardLineBuf += text;
+  const parts = boardLineBuf.split(/\r?\n/);
+  boardLineBuf = parts.pop() ?? '';
+  if (boardLineBuf.length > 512) boardLineBuf = '';
+  for (const line of parts) {
+    // §6.2 #11 BS<64char> が本流。ST BO<64> は v0.1 レガシー形式として受理。
+    const mBs = line.match(/^BS([0-2]{64})$/);
+    if (mBs) { renderBoardAscii(mBs[1]); continue; }
+    const mLegacy = line.match(/ST\s+BO([0-2]{64})\b/);
+    if (mLegacy) renderBoardAscii(mLegacy[1]);
+  }
+}
+
+function renderBoardAscii(bo) {
+  // opt-board-piece: 'bw' (黒=B / 白=W) または 'xo' (黒=X / 白=O)。空マスは常に '.'
+  const pieceSel = $('opt-board-piece');
+  const mode = pieceSel ? pieceSel.value : 'xo';
+  const black = mode === 'bw' ? 'B' : 'X';
+  const white = mode === 'bw' ? 'W' : 'O';
+  appendLog('#     a b c d e f g h\n');
+  for (let r = 0; r < 8; r++) {
+    const cells = [];
+    for (let c = 0; c < 8; c++) {
+      const v = bo.charCodeAt(r * 8 + c) - 48; // '0'..'2'
+      cells.push(v === 1 ? black : v === 2 ? white : '.');
+    }
+    appendLog(`#   ${r + 1} ${cells.join(' ')}\n`);
   }
 }
 
 function emitIncomingLines(value) {
   const hexMode = $('opt-hex').value;
+  // PI/PO 除外は hex 系モードでも有効。単体チャンクが PI\n / PO\n のときに抑止する。
+  // (1 Hz ハートビートは通常単独チャンクで到着するので実用上これで十分)
+  if (shouldSkipPipoChunk(value)) return;
   if (hexMode === 'replay') {
     // 1 メッセージ 1 行 (LF 区切り)。複数行が 1 チャンクで来た場合も必ず分割する。
     lineBuffer += new TextDecoder().decode(value);
@@ -509,19 +563,19 @@ function emitIncomingLines(value) {
     return;
   }
   if (hexMode === 'hex') {
-    emitLine('RECV  ' + toHex(value));
+    emitLine('RX    ' + toHex(value));
     return;
   }
   if (hexMode === 'hex-ascii') {
     const lines = toHexAscii(value);
-    lines.forEach((line, i) => emitLine((i === 0 ? 'RECV  ' : '      ') + line));
+    lines.forEach((line, i) => emitLine((i === 0 ? 'RX    ' : '      ') + line));
     return;
   }
   if (hexMode === 'hex-ascii-offset') {
     // 接続開始からの累積バイト数を offset に使う。bytesRx は processIncoming 冒頭で加算済みのため、今回チャンクの開始は bytesRx - value.length。
     const startOffset = bytesRx - value.length;
     const lines = toHexAscii(value, startOffset);
-    if (lines.length > 0) lines[0] = 'RECV    ' + lines[0].slice(8);
+    if (lines.length > 0) lines[0] = 'RX      ' + lines[0].slice(8);
     for (const line of lines) emitLine(line);
     return;
   }
@@ -538,11 +592,11 @@ function emitIncomingLines(value) {
   lineBuffer = lines.pop() || '';
   // バイナリ等で改行が来ない場合に lineBuffer が無限に膨らむのを防ぐ（4KB 超えたら確定出力）
   if (lineBuffer.length > 4096) {
-    emitLine('[RECV] ' + JSON.stringify(lineBuffer));
+    emitLine('[RX] ' + JSON.stringify(lineBuffer));
     lineBuffer = '';
   }
   // split で \n が落ちているので JSON 表示時は付け直す（§4 送信側は LF のみ想定）
-  for (const line of lines) emitLine('[RECV] ' + JSON.stringify(line + '\n'));
+  for (const line of lines) emitLine('[RX] ' + JSON.stringify(line + '\n'));
 }
 
 function flushLineBuffer() {
@@ -600,6 +654,7 @@ async function doConnect(useExisting) {
   $('connect').disabled = true;
   $('disconnect').disabled = false;
   $('send').disabled = false;
+  if ($('send-qt')) $('send-qt').disabled = false;
   writer = port.writable.getWriter();
   abortRead = false;
   readLoop();
@@ -619,6 +674,7 @@ async function doDisconnect() {
   $('connect').disabled = false;
   $('disconnect').disabled = true;
   $('send').disabled = true;
+  if ($('send-qt')) $('send-qt').disabled = true;
 }
 
 $('connect').onclick = async () => {
@@ -675,21 +731,30 @@ $('send-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !$('send').disabled) $('send').click();
 });
 
+// QT (終了) ボタン: "QT\n" を送信して reversi_cpu.py の参考実装限定 QT ハンドラを発火させる
+// (doc/reversi/61-UARTプロトコル仕様.md には載らない参考実装限定コマンド)
+if ($('send-qt')) {
+  $('send-qt').onclick = async () => {
+    if (!writer) return;
+    const txt = 'QT\n';
+    const bytes = new TextEncoder().encode(txt);
+    await writer.write(bytes);
+    bytesTx += bytes.length;
+    emitSend(bytes, txt);
+  };
+}
+
 // SerialReversiAdapter 用ブリッジ。接続中のシリアルポートへ任意文字列を送る最小 API。
 // writer は接続/切断で差し替わるので毎回現在値を参照する。
 // 改行は LF (\n) のみ。自作 CPU/FPGA 向けにパーサ単純化と 1 バイト節約のため
 // (doc/reversi/61-UARTプロトコル仕様.md §4)。
 // 受信は onLine(cb) で 1 行ずつ受け取れる。UI の表示オプションに依存しない独立経路。
 // Adapter から受信処理の結果 (OK/NG+理由) をログに差し込むためのフック。
-// replay モードでは "# ..." (コメント) として出し、reversi_cpu.py --replay が skip する形にする。
-// 他モードでは "[OK]" / "[NG 理由]" 形式で emitLine 経由 (タイムスタンプ・行番号付与)。
+// 全 Hex モードで "# ..." (コメント) として出す。reversi_cpu.py --replay 側で skip される書式なので、
+// ログをそのままシナリオファイルに流用しても破綻しない。タイムスタンプ・行番号は付けない。
 function emitAdapterStatus(text) {
   if (!text) return;
-  if ($('opt-hex').value === 'replay') {
-    appendLog('# ' + text + '\n');
-  } else {
-    emitLine('[' + text + ']');
-  }
+  appendLog('# ' + text + '\n');
 }
 
 window.__serialTestBridge = {

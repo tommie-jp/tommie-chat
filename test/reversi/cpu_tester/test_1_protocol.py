@@ -25,6 +25,9 @@ def _load_cases() -> list:
 
 def _run_case(cpu, case: dict):
     timeout_s = case.get("timeout_ms", 500) / 1000
+    # 既定では ST/NC/BS 等の診断応答を read_line がスキップする。
+    # BS 等の診断応答そのものを検証したいケースは case に "skip_status": false を付ける。
+    skip_status = case.get("skip_status", True)
     for i, step in enumerate(case["steps"]):
         if "tx" in step:
             cpu.send_line(step["tx"])
@@ -32,11 +35,11 @@ def _run_case(cpu, case: dict):
             # LF を含めた任意バイト列をそのまま送信 (CR 混入テスト等)
             cpu.send_raw(step["tx_raw"])
         elif "rx" in step:
-            got = cpu.read_line(timeout=timeout_s)
+            got = cpu.read_line(timeout=timeout_s, skip_status=skip_status)
             assert got == step["rx"], \
                 f"§{case.get('section', '?')} step[{i}]: expected {step['rx']!r}, got {got!r}\n\nLog:\n{cpu.dump_log()}"
         elif "rx_regex" in step:
-            got = cpu.read_line(timeout=timeout_s)
+            got = cpu.read_line(timeout=timeout_s, skip_status=skip_status)
             assert check_regex(step["rx_regex"], got), \
                 f"§{case.get('section', '?')} step[{i}]: expected /{step['rx_regex']}/, got {got!r}\n\nLog:\n{cpu.dump_log()}"
         else:

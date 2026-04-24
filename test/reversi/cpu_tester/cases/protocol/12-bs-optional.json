@@ -1,0 +1,12 @@
+{
+    "name": "BS は任意応答 (§6.2 #11)。送るなら 64 文字 0/1/2 形式",
+    "section": "§6.2 #11",
+    "required": false,
+    "timeout_ms": 1000,
+    "skip_status": false,
+    "_note": "v0.1: BS<64char> は盤面スナップショット任意通知。FPGA 最小実装では未送出で OK。参照 CPU (reversi_cpu.py) は毎手 BS を送る。SB 直後は MO (黒初手) → BS の順に来るはずだが、BS が未送出の実装もあり得るので rx_regex で最初の応答を検証する。",
+    "steps": [
+        { "tx": "SB" },
+        { "rx_regex": "^(MO[a-h][1-8]|BS[0-2]{64})$" }
+    ]
+}

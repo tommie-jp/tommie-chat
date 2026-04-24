@@ -90,7 +90,7 @@ class CpuConn:
         """指定秒内に 1 行受信する。timeout 超過で TimeoutError。
         Windows の serial.readline は GetOverlappedResult でブロックし得るので、
         in_waiting でポーリングしつつ自前バッファで行を組み立てる (非ブロッキング)。
-        skip_status=True のとき §6.2 #8 ST と #9 NC は診断情報として読み飛ばす。
+        skip_status=True のとき §6.2 #8 ST / #9 NC / #11 BS は診断情報として読み飛ばす。
         """
         import time as _time
         eff_timeout = timeout if timeout is not None else self.ser.timeout
@@ -104,7 +104,7 @@ class CpuConn:
                 self._read_buf = buf
                 line = line_bytes.decode("ascii", errors="replace").rstrip("\r\n")
                 self.log.append((time.time(), "RX", line))
-                if skip_status and len(line) >= 2 and line[:2].upper() in ("ST", "NC"):
+                if skip_status and len(line) >= 2 and line[:2].upper() in ("ST", "NC", "BS"):
                     continue  # 診断応答はスキップしてループを続ける
                 return line
             # 不足分を読み込む (非ブロッキング)

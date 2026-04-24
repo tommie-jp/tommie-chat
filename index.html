@@ -1397,6 +1397,15 @@
         .log-wrap.log-wrap-console { height: 20vh; }
         #serial-test-scroll #log { background: #111; color: #cfc; }
         #serial-test-scroll #console-log { background: #1a1a1a; color: #ffc; }
+        /* body の user-select:none を上書きしてログ・状態を選択コピー可能にする */
+        #serial-test-scroll #log,
+        #serial-test-scroll #console-log,
+        #serial-test-scroll #status,
+        #serial-test-scroll #stats {
+            -webkit-user-select: text;
+            user-select: text;
+            cursor: text;
+        }
         .fake-sb {
             position: absolute;
             top: 2px;
@@ -5060,7 +5069,14 @@
                             <option value="replay" selected>Replay (TX/RX)</option>
                         </select>
                     </label>
-                    <label><input type="checkbox" id="opt-replay-skip-pipo" checked> PI/PO除外（replay時）</label>
+                    <label><input type="checkbox" id="opt-replay-skip-pipo" checked> PI/PO除外</label>
+                    <label><input type="checkbox" id="opt-board-display" checked> 盤面表示（BS受信時）</label>
+                    <label>駒:
+                        <select id="opt-board-piece">
+                            <option value="bw">B/W</option>
+                            <option value="xo" selected>X/O</option>
+                        </select>
+                    </label>
                     <label><input type="checkbox" id="opt-autoscroll" checked> スクロール</label>
                     <label>行間:
                         <select id="opt-line-gap">
@@ -5089,11 +5105,12 @@
                 改行:
                 <select id="send-eol">
                     <option value="crlf">CRLF</option>
-                    <option value="lf">LF</option>
+                    <option value="lf" selected>LF</option>
                     <option value="cr">CR</option>
                     <option value="none">なし</option>
                 </select>
                 <button id="send" disabled>送信</button>
+                <button id="send-qt" disabled title="QT\n を送信して reversi_cpu.py を停止">QT(終了)送信</button>
             </div>
 
             <div class="section-label">

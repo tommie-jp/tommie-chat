@@ -144,7 +144,7 @@ def _run_case(cpu, case: dict):
                 for line in text.splitlines():
                     if not line.strip():
                         continue
-                    if len(line) >= 2 and line[:2].upper() in ("ST", "NC"):
+                    if len(line) >= 2 and line[:2].upper() in ("ST", "NC", "BS"):
                         continue  # 診断応答は無視
                     pytest.fail(
                         f"§{section} step[{i}]: {wait_s}s 間 応答無しを期待したが "

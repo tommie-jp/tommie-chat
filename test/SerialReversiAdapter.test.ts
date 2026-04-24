@@ -335,6 +335,25 @@ describe("SerialReversiAdapter", () => {
         });
     });
 
+    describe("§6.2 #11 BS 盤面スナップショット受信", () => {
+        const validBo = "0".repeat(27) + "21" + "0".repeat(6) + "12" + "0".repeat(27);
+
+        it("BS<64char 0/1/2> は受理し ER を返さない", () => {
+            feedFromCpu(`BS${validBo}`);
+            expect(sentLines().some((s) => s.startsWith("ER"))).toBe(false);
+        });
+
+        it("BS の書式が不正なら ER04 を返す", () => {
+            feedFromCpu("BS0123");
+            expect(sentLines().some((s) => s.startsWith("ER04"))).toBe(true);
+        });
+
+        it("レガシー形式 ST BO<64> もエラーなく受理する (v0.1 後方互換)", () => {
+            feedFromCpu(`ST BO${validBo}`);
+            expect(sentLines().some((s) => s.startsWith("ER"))).toBe(false);
+        });
+    });
+
     describe("§4.1 / §6.3 仕様違反受信 → ER 応答", () => {
         it("未知コマンド (XX) 受信で ER01 を返す", () => {
             feedFromCpu("XX");

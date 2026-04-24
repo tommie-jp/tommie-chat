@@ -72,7 +72,10 @@ class ReversiCPU:
         self.last_game_activity = time.time()
 
     def send(self, line):
-        data = (line + "\n").encode("ascii")
+        # §4 プロトコルは ASCII。もし呼び出し側で非 ASCII が混入しても (UTF-8 等を受信して
+        # !r/repr で埋め込むケース) UnicodeEncodeError で死なないよう backslashreplace で保険。
+        # 例: "愛" (U+611B) が cmd に入ると "ER02 lowercase cmd '\\u611b'" になり ASCII のまま送信。
+        data = (line + "\n").encode("ascii", errors="backslashreplace")
         head = line[:2].upper()
         if head not in ("PI", "PO"):
             self.last_game_activity = time.time()
@@ -97,21 +100,28 @@ class ReversiCPU:
             self.last_game_activity = time.time()
         if self.log_ping or head != "PI":
             log_rx(line + "\n")
-        if len(s) < 2:
+        # 空行 (余分な LF 単独) は忍容して黙殺
+        if len(s) == 0:
             return
         cmd = s[:2]
         rest = s[2:]
 
-        # §4: コマンド部は大文字のみ受理。小文字・混在は仕様違反 → ER02
-        if not cmd.isupper() or not cmd.isalpha():
-            print(f"[WARN] lowercase or non-alpha command (§4 violation): {cmd!r}", flush=True)
-            self.send(f"ER02 lowercase cmd {cmd!r}")
+        # §4: コマンド部は 2 文字の大文字英字必須。短すぎる/小文字/混在は仕様違反 → ER02
+        if len(cmd) < 2 or not cmd.isupper() or not cmd.isalpha():
+            print(f"[WARN] lowercase or non-alpha command (§4 violation): {cmd!a}", flush=True)
+            self.send(f"ER02 lowercase cmd {cmd!a}")
             return
 
         if cmd == "PI":
             self.send("PO")
         elif cmd == "VE":
             self.send("VE01tommie-py-cpu")
+        elif cmd == "QT":
+            # 参考実装限定の開発支援: ブラウザ送信文字列から "QT" を流すと本プロセスを停止。
+            # 仕様 §61 には含めない (実機 CPU は ER01 で弾く spec 適合動作で OK)。
+            print("[INFO] QT received — exiting gracefully", flush=True)
+            global _interrupted
+            _interrupted = True
         elif cmd == "SB":
             self.board = init_board()
             self.color = BLACK
@@ -131,14 +141,14 @@ class ReversiCPU:
             coord = rest[:2]
             # §7: 座標は小文字のみ受理 (MOD3 等は ER04)
             if not (coord[0].islower() and coord[1].isdigit()):
-                print(f"[WARN] non-lowercase coord (§7 violation): {coord!r}", flush=True)
-                self.send(f"ER04 bad coord format {coord!r}")
+                print(f"[WARN] non-lowercase coord (§7 violation): {coord!a}", flush=True)
+                self.send(f"ER04 bad coord format {coord!a}")
                 return
             try:
                 r, c = parse_coord(coord)
             except ValueError as e:
                 print(f"[WARN] bad coord: {e}", flush=True)
-                self.send(f"ER04 coord out of range {coord!r}")
+                self.send(f"ER04 coord out of range {coord!a}")
                 return
             if not apply_move(self.board, r, c, opponent(self.color)):
                 # 盤面乖離 → §6.2 #10 RS (REQUEST SYNC) で再同期要求。
@@ -152,8 +162,8 @@ class ReversiCPU:
             print(f"[INFO] opponent played {fmt_coord(r, c)}", flush=True)
             print(f"[BOARD post-OPP {fmt_coord(r, c)}] {board_to_bo(self.board)}", flush=True)
             print_board(self.board)
-            # §6.2 #8 ST でサーバ側にも現在盤面を通知（盤面突合のため）
-            self.send(f"ST BO{board_to_bo(self.board)}")
+            # §6.2 #11 BS でサーバ側にも現在盤面を通知（盤面突合のため）
+            self.send(f"BS{board_to_bo(self.board)}")
             self.state = "MY_TURN"
             self.my_move()
         elif cmd == "PA":
@@ -177,7 +187,7 @@ class ReversiCPU:
         else:
             # §4.1 未知コマンド → ER01
             print(f"[WARN] unknown cmd: {s!r} — responding ER01", flush=True)
-            self.send(f"ER01 unknown cmd {cmd!r}")
+            self.send(f"ER01 unknown cmd {cmd!a}")
 
     def my_move(self):
         if self.state != "MY_TURN" or self.color is None:
@@ -194,8 +204,8 @@ class ReversiCPU:
         print(f"[BOARD post-MY {fmt_coord(r, c)}] {board_to_bo(self.board)}", flush=True)
         print_board(self.board)
         self.send(f"MO{fmt_coord(r, c)}")
-        # §6.2 #8 ST でサーバ側にも現在盤面を通知（盤面突合のため）
-        self.send(f"ST BO{board_to_bo(self.board)}")
+        # §6.2 #11 BS でサーバ側にも現在盤面を通知（盤面突合のため）
+        self.send(f"BS{board_to_bo(self.board)}")
         self.state = "WAIT_OPP"
 
 
@@ -248,10 +258,10 @@ def run_replay(path: str, log_ping: bool) -> int:
             expected.append(text)
 
     # PI/PO は比較から除外 (シナリオ側で TX PI が無ければ RX PO も発生しない)
-    # ST (盤面スナップショット) も診断用なので比較対象外
+    # ST (思考状態) と BS (盤面スナップショット) は診断用なので比較対象外
     actual = [ln for ln in fake.sent_lines
               if (log_ping or ln[:2].upper() not in ("PI", "PO"))
-              and ln[:2].upper() != "ST"]
+              and ln[:2].upper() not in ("ST", "BS")]
 
     if actual == expected:
         print(f"[OK] {path}: {len(expected)} RX matched", flush=True)

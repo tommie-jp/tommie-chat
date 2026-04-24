@@ -182,8 +182,26 @@ export class SerialReversiAdapter {
                 return;
             }
             case "ST":
+                // §6.2 #8 ST は自由形式テキスト。以前は診断用に "ST BO<64>" 形式で盤面スナップショットも
+                // 流していたが、v0.1 で BS (§6.2 #11) に分離。後方互換のため当面は ST BO も受理する。
+                if (/^\s*BO[0-2]{64}$/.test(rest)) {
+                    console.warn(
+                        `SerialReversi <CPU: "ST BO<64>" はレガシー形式 (v0.1 以降は "BS<64>" を使用、§6.2 #11)`,
+                    );
+                }
                 console.log(`SerialReversi <CPU: ST ${rest}`);
                 this.emitStatus(true);
+                return;
+            case "BS":
+                // §6.2 #11 BOARD STATUS: CPU が自盤面スナップショットを報告。診断用。
+                if (/^[0-2]{64}$/.test(rest)) {
+                    console.log(`SerialReversi <CPU: BS ${rest}`);
+                    this.emitStatus(true);
+                } else {
+                    console.warn(`SerialReversi <CPU: BS 不正書式 (§6.2 #11) → ER04`);
+                    this.sendErrorResponse(4, `bad BS payload`);
+                    this.emitStatus(false, `BS 不正書式: ${rest}`);
+                }
                 return;
             case "RS":
                 this.handleRsMessage();

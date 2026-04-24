@@ -15,7 +15,15 @@ PowerShell
 # カレントフォルダ名だけ
 function prompt { "$(Split-Path -Leaf $PWD)> " }
 
-KILLするコマンド
+reversi_cpu.py (doTest1.ps1) を停止する手段
+・ブラウザのシリアルテストパネル｜送信文字列に "QT" を送る (LF)
+    → reversi_cpu.py だけ終了。同じ PowerShell 窓でプロンプトが戻る。
+    (参考実装限定の開発支援コマンド。仕様 61-UART には載らない。実機 CPU は ER01 で弾く)
+・Ctrl+C
+    → doTest1.ps1 は Tee-Object を Start-Transcript に置換済なので Ctrl+C が py へ直接届く。
+    ブラウザが接続されてない / フリーズ時のフォールバック。
+
+KILLするコマンド (最終手段: 別窓から全 py を一律キル)
 ・PowerShell
 Stop-Process -Name py -Force
 Stop-Process -Name pytest -Force

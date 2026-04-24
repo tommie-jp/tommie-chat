@@ -125,6 +125,13 @@
         <option value="replay" selected>Replay (TX/RX)</option>
       </select>
     </label>
+    <label><input type="checkbox" id="opt-board-display" checked> 盤面表示（BS受信時）</label>
+    <label>駒:
+      <select id="opt-board-piece">
+        <option value="bw">B/W</option>
+        <option value="xo" selected>X/O</option>
+      </select>
+    </label>
     <label><input type="checkbox" id="opt-autoscroll" checked> スクロール</label>
     <label>行間:
       <select id="opt-line-gap">
@@ -153,11 +160,12 @@
   改行:
   <select id="send-eol">
     <option value="crlf">CRLF</option>
-    <option value="lf">LF</option>
+    <option value="lf" selected>LF</option>
     <option value="cr">CR</option>
     <option value="none">なし</option>
   </select>
   <button id="send" disabled>送信</button>
+  <button id="send-qt" disabled title="QT\n を送信して reversi_cpu.py を停止">QT(終了)送信</button>
 </div>
 
 <div class="section-label">
