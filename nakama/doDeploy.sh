@@ -591,24 +591,33 @@ fi
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # ── 10. MinIO バケット初期化 ──
+# MinIO は docker-compose.prod.yml で profiles: ["with-minio"] により
+# デフォルト起動から除外されている (doc/23-メモリ削減計画.md §Tier1 B)。
+# サービスが起動していない場合はスキップ。必要時は次で手動起動:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     --profile with-minio up -d minio
 step "10. MinIO バケット初期化"
-echo "MinIO の起動を待機中..."
-for i in $(seq 1 30); do
-    if docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T minio mc ready local 2>/dev/null; then
-        break
-    fi
-    sleep 2
-done
+if ! docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --services --filter "status=running" 2>/dev/null | grep -qx minio; then
+    echo "ℹ️  MinIO は profiles で停止中のためバケット初期化をスキップ"
+else
+    echo "MinIO の起動を待機中..."
+    for i in $(seq 1 30); do
+        if docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T minio mc ready local 2>/dev/null; then
+            break
+        fi
+        sleep 2
+    done
 
-# mc エイリアス設定 & バケット作成
-docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T minio \
-    sh -c "mc alias set local http://localhost:9000 '$MINIO_USER' '$MINIO_PASS' && \
-           mc mb --ignore-existing local/avatars && \
-           mc mb --ignore-existing local/assets && \
-           mc mb --ignore-existing local/uploads && \
-           mc anonymous set download local/avatars && \
-           mc anonymous set download local/assets"
-echo "✅ MinIO バケット初期化完了（avatars, assets, uploads）"
+    # mc エイリアス設定 & バケット作成
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T minio \
+        sh -c "mc alias set local http://localhost:9000 '$MINIO_USER' '$MINIO_PASS' && \
+               mc mb --ignore-existing local/avatars && \
+               mc mb --ignore-existing local/assets && \
+               mc mb --ignore-existing local/uploads && \
+               mc anonymous set download local/avatars && \
+               mc anonymous set download local/assets"
+    echo "✅ MinIO バケット初期化完了（avatars, assets, uploads）"
+fi
 
 echo ""
 echo "${GREEN}=========================================${RESET}"
@@ -617,7 +626,11 @@ echo "${GREEN}=========================================${RESET}"
 echo ""
 echo "  Web:       http://$(hostname -I | awk '{print $1}')"
 echo "  Console:   http://127.0.0.1:7351 (admin / $CONSOLE_PASS)"
-echo "  MinIO:     http://127.0.0.1:9001 ($MINIO_USER / $MINIO_PASS)"
+if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --services --filter "status=running" 2>/dev/null | grep -qx minio; then
+    echo "  MinIO:     http://127.0.0.1:9001 ($MINIO_USER / $MINIO_PASS)"
+else
+    echo "  MinIO:     停止中 (profiles=with-minio で起動可)"
+fi
 echo ""
 echo "次のステップ:"
 echo "  HTTPS を設定: ./nakama/doSetupHTTPS.sh <ドメイン名>"
