@@ -488,11 +488,16 @@ server {
     }
 
     # MinIO S3 リバースプロキシ（avatars バケットの GET のみ許可）
+    # 注: minio は profiles で停止される場合があるため、resolver + 変数で
+    # DNS 解決を起動時ではなくリクエスト時まで遅延させる（minio が無い時は 502 を返す）。
+    # 127.0.0.11 は Docker 内蔵 DNS の固定アドレス。
     location /s3/avatars/ {
         limit_except GET HEAD {
             deny all;
         }
-        proxy_pass http://minio:9000/avatars/;
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $minio_upstream "minio:9000";
+        proxy_pass http://$minio_upstream/avatars/;
         proxy_http_version 1.1;
         proxy_set_header Host minio:9000;
         proxy_buffering off;
