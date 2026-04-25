@@ -102,11 +102,12 @@ else
     fi
     COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml"
     $COMPOSE down
-    $COMPOSE up -d --scale prometheus=0
+    # prometheus / minio は profiles で除外済 (docker-compose.dev.yml)。--scale 不要。
+    $COMPOSE up -d
 fi
 
 # 起動確認（最大60秒待機）
-# prometheus はスケール0で除外
+# prometheus / minio は profiles で除外済 (default profile では起動しない)
 EXPECTED_SERVICES="postgres nakama web"
 echo "コンテナ起動確認中..."
 FAILED=0

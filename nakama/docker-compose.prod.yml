@@ -37,11 +37,8 @@ services:
 
   nakama:
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+    # base の nakama.depends_on は postgres のみで minio を含まないので
+    # MinIO 停止 (profiles 化) しても depends_on の上書きは不要。
     logging:
       driver: json-file
       options:
@@ -100,6 +97,11 @@ services:
 
   web:
     restart: unless-stopped
+    # MinIO を本番停止 (profiles 化) するため、minio 依存を外す。
+    # `!override` で base の depends_on を完全置換（merge ではなく replace）。
+    depends_on: !override
+      nakama:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${WEB_PORT:-8081}:80"
     logging:
@@ -126,6 +128,13 @@ services:
         max-file: "3"
 
   minio:
+    # 本番ではデフォルト起動から外す (試験的、メモリ削減 ~80 MB)。
+    # doc/23-メモリ削減計画.md §Tier1 B 参照。
+    # 影響: /s3/avatars/<UID>.png (ユーザがアップロードしたカスタムアバター) が 502 になる。
+    #       既定アバター /avatars/* は public 経由で配信継続なので影響なし。
+    # 復活させる場合: 下行の profiles をコメントアウト or
+    #   docker compose ... --profile with-minio up -d minio
+    profiles: ["with-minio"]
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MINIO_S3_PORT:-9000}:9000"          # S3 API（内部のみ）

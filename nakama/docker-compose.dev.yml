@@ -9,6 +9,7 @@ services:
       - "5432:5432" # ホストからDB直接接続用
 
   nakama:
+    # base 側で depends_on は postgres のみなので minio 除外のための !reset は不要。
     ports:
       - "6060:6060"
       - "7349:7349"
@@ -16,14 +17,27 @@ services:
       - "7351:7351"
 
   web:
+    # MinIO を dev でも停止 (profiles 化) するため、minio 依存を外す。
+    # `!override` で base の depends_on を完全置換（merge ではなく replace）。
+    depends_on: !override
+      nakama:
+        condition: service_healthy
     ports:
       - "80:80"
 
   prometheus:
+    # dev でもデフォルト起動から外す。doc/23-メモリ削減計画.md §Tier1 A
+    # 必要時: docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+    #         --profile with-metrics up -d prometheus
+    profiles: ["with-metrics"]
     ports:
       - "9090:9090"
 
   minio:
+    # dev でもデフォルト起動から外す。doc/23-メモリ削減計画.md §Tier1 B
+    # 必要時: docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+    #         --profile with-minio up -d minio
+    profiles: ["with-minio"]
     ports:
       - "9000:9000"  # S3 API
       - "9001:9001"  # Web管理コンソール
