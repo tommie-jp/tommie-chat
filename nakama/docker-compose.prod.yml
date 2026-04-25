@@ -109,6 +109,13 @@ services:
         max-file: "3"
 
   prometheus:
+    # 本番ではデフォルト起動から外す (メモリ削減、~100 MB)。doc/23-メモリ削減計画.md §Tier1 A
+    # Nakama 自身の /metrics (port 9100) は --metrics.prometheus_port で維持されているので、
+    # 必要時は外部から `curl http://127.0.0.1:9100/metrics` で取得可能。
+    # それでも Prometheus サーバが要る局面では:
+    #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+    #     --profile with-metrics up -d prometheus
+    profiles: ["with-metrics"]
     restart: unless-stopped
     ports:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
