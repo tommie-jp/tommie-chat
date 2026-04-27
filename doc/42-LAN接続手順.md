@@ -92,3 +92,49 @@ $wslIp = (wsl hostname -I).Trim()
 netsh interface portproxy delete v4tov4 listenport=80 listenaddress=0.0.0.0
 netsh interface portproxy add v4tov4 listenport=80 listenaddress=0.0.0.0 connectport=80 connectaddress=$wslIp
 ```
+
+## ハマりポイント（任意ポート転送、例: Vite 5173 / HTTPS）
+
+別プロジェクト（例: `~/28-QR-code` の Vite + mkcert を `https://localhost:5173/` で公開する場合）で、`netsh portproxy` 設定後も **Windows ブラウザから繋がらない** ときの切り分け。
+
+### 1. UFW で当該ポートが拒否されている（最頻出）
+
+WSL2 の UFW は `Default: deny (incoming)` のため、ポート 80/3000 等の既存ルール以外は **Windows ホスト側ゲートウェイ（例: `172.18.176.1`）からの接続が黙ってドロップされる**。
+
+```bash
+# 確認
+sudo ufw status verbose
+
+# 対処（WSL2側で実行）
+sudo ufw allow 5173/tcp
+# または該当ネットワークだけ許可（より絞る場合）
+sudo ufw allow from 172.18.176.0/20 to any port 5173 proto tcp
+```
+
+WSL2 内から `curl -k https://172.18.188.130:5173/` が通るのに Windows ブラウザだけ繋がらない場合、ほぼ UFW が原因。
+
+### 2. VSCode の Auto Forward Ports と競合する可能性
+
+VSCode の Remote-WSL は PORTS タブに自動転送を表示するが、実際にバインドしているプロセスは Windows 側で確認する：
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173 -State Listen | Select-Object LocalAddress,OwningProcess
+Get-Process -Id (Get-NetTCPConnection -LocalPort 5173 -State Listen).OwningProcess
+```
+
+- `svchost`（iphlpsvc） → netsh portproxy が有効
+- `Code.exe` / `node.exe` → VSCode 側が握っている
+
+両方走らせると競合するので、原則どちらか一方に寄せる。VSCode 側に任せるなら netsh portproxy は削除し、UFW 設定も不要（VSCode トンネルは WSL 内 loopback 経由のため UFW を通らない）。
+
+### 3. mkcert の証明書警告
+
+vite-plugin-mkcert の証明書は **WSL2 内の CA で署名**されており Windows ブラウザは信頼しない。開発用途は「詳細設定 → 安全でないサイトに進む」で続行可。警告を消したい場合は WSL2 の `~/.local/share/mkcert/rootCA.pem` を Windows の「信頼されたルート証明機関」にインポート。
+
+### 切り分けフロー（順番に確認）
+
+1. WSL2 内で `curl -k https://localhost:5173/` → 200 か？（No なら Vite 自体の問題）
+2. WSL2 内で `curl -k https://<eth0 IP>:5173/` → 200 か？（No なら Vite が `0.0.0.0` でリスンしていない）
+3. Windows で `netsh interface portproxy show all` に当該ポートが出ているか
+4. Windows で `Get-NetTCPConnection -LocalPort 5173 -State Listen` のリスナーが期待通りか
+5. WSL2 で `sudo ufw status` に該当ポート許可があるか
