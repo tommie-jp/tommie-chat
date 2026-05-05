@@ -92,6 +92,7 @@ function payload(opts: {
     winner?: number;
     gameId?: string;
     cpuIsBlack?: boolean;
+    cpuColor?: number; // ビットマスク (1=黒, 2=白, 3=双方)。省略時は cpuIsBlack に応じて 1 or 2
 }): OthelloUpdatePayload {
     const cpuBlack = opts.cpuIsBlack ?? true;
     return {
@@ -106,6 +107,7 @@ function payload(opts: {
         blackCount: 0,
         whiteCount: 0,
         isCpu: true,
+        cpuColor: opts.cpuColor ?? (cpuBlack ? 1 : 2),
     };
 }
 
@@ -158,6 +160,32 @@ describe("SerialReversiAdapter", () => {
                 BLACK_UID, movePort, // helper の cpuIsBlack=false で p.white = BLACK_UID にしているため
             );
             expect(sentLines()).toContain("SW");
+        });
+
+        it("CPU vs CPU (cpuColor=3) で自分が黒席なら SB を送る", () => {
+            // 双方 CPU 対戦: cpuMask=3。自分は黒席にいるので CPU 役 cpuColor=1 として動く
+            adapter.onGameStateUpdate(
+                payload({ board: initBoard(), turn: 1, status: "playing", lastMove: -1, cpuColor: 3 }),
+                BLACK_UID, movePort,
+            );
+            expect(sentLines()).toContain("SB");
+        });
+
+        it("CPU vs CPU (cpuColor=3) で自分が白席なら SW を送る", () => {
+            adapter.onGameStateUpdate(
+                payload({ board: initBoard(), turn: 1, status: "playing", lastMove: -1, cpuIsBlack: false, cpuColor: 3 }),
+                BLACK_UID, movePort,
+            );
+            expect(sentLines()).toContain("SW");
+        });
+
+        it("自席のビットが cpuColor に立っていなければ adapter は起動しない", () => {
+            // cpuColor=1 (黒のみ CPU) だが、自分は白席にいる → 自分は人間プレイヤー扱い、adapter 起動しない
+            adapter.onGameStateUpdate(
+                payload({ board: initBoard(), turn: 1, status: "playing", lastMove: -1, cpuIsBlack: false, cpuColor: 1 }),
+                BLACK_UID, movePort,
+            );
+            expect(sentLines()).toEqual([]);
         });
 
         it("非初期盤面で始まったら BO → SB の順に送る (中途参加)", () => {

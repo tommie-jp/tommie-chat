@@ -453,9 +453,12 @@ export class SerialReversiAdapter {
     onGameStateUpdate(p: OthelloUpdatePayload, myUid: string, nakama: SerialReversiMovePort): void {
         this.movePort = nakama;
         if (!p.isCpu || !myUid) return;
+        // p.cpuColor はビットマスク (1=黒CPU / 2=白CPU / 3=双方)。
+        // 自分の席のビットが立っているときだけ adapter を起動する (CPU vs CPU では双方の adapter が独立に動く)。
+        const cpuMask = p.cpuColor ?? 0;
         let cpuColor: 0 | 1 | 2 = 0;
-        if (p.black === myUid) cpuColor = 1;
-        else if (p.white === myUid) cpuColor = 2;
+        if (p.black === myUid && (cpuMask & 1)) cpuColor = 1;
+        else if (p.white === myUid && (cpuMask & 2)) cpuColor = 2;
         if (cpuColor === 0) return;
 
         // ゲーム ID が変わったらスナップショットをリセット

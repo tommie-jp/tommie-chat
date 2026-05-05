@@ -5614,7 +5614,11 @@ export function setupHtmlUI(game: GameScene): void {
                     joinBtn.disabled = g.status !== "waiting";
                     joinBtn.addEventListener("click", (ev) => {
                         ev.stopPropagation();
-                        joinGame(g.gameId).catch(e => console.warn("othelloJoin error:", e));
+                        // シリアルテストパネルで「シリアルCPUで参加」が ON かつ相手も CPU 対戦ゲームなら、
+                        // 自分のシリアル CPU を joiner 席に座らせる (CPU vs CPU 対戦)。
+                        const joinWithCpuCb = document.getElementById("serial-test-join-with-cpu") as HTMLInputElement | null;
+                        const withCpu = !!(joinWithCpuCb?.checked && g.isCpu);
+                        joinGame(g.gameId, withCpu).catch(e => console.warn("othelloJoin error:", e));
                     });
                     td.appendChild(watchBtn);
                     td.appendChild(joinBtn);
@@ -5816,17 +5820,24 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             // --- ゲーム参加 ---
-            const joinGame = async (gameId: string) => {
+            // withCpu=true で参加するとサーバが joiner 席を CPU 扱いに切り替え (CPU vs CPU)。
+            // CPU 席の参加者はマウス操作せず観戦 (showGame は省略してロビーに残す)。
+            const joinGame = async (gameId: string, withCpu: boolean = false) => {
                 currentGameId = gameId; // ブロードキャスト到着前に設定して重複joinを防ぐ
                 try {
-                    const res = await game.nakama.othelloJoin(gameId);
+                    if (withCpu) {
+                        // SerialReversiAdapter が SB/SW を CPU に送れるよう subscribe を確実にしておく
+                        await game.nakama.othelloSubscribe(true).catch(e => console.warn("othelloSubscribe error:", e));
+                    }
+                    const res = await game.nakama.othelloJoin(gameId, false, withCpu);
                     if (!res) { currentGameId = null; return; }
                     myColor = res.black === myUid() ? 1 : (res.white === myUid() ? 2 : 0);
                     applyState(res);
                     // PC ではロビーを閉じず両パネル表示 (ユーザはロビーでゲーム切替できるように)。
                     // モバイル (iPhone 等) はタブ方式の 1 パネル表示なので、
                     // ロビー → プレイ へ切り替える必要がありロビーを閉じる。
-                    showGame(!isMobileDev);
+                    // ただし CPU で参加した場合はオーナーと同様に観戦専念なのでロビー保持。
+                    if (!withCpu) showGame(!isMobileDev);
                 } catch (e) {
                     currentGameId = null;
                     console.warn("othelloJoin error:", e);
@@ -5890,21 +5901,19 @@ export function setupHtmlUI(game: GameScene): void {
                 if (othBlack) othBlack.textContent = String(data.blackCount);
                 if (othWhite) othWhite.textContent = String(data.whiteCount);
                 // プレイヤー名の suffix:
-                //   "のCPU" — CPU 対戦の CPU 席 (cpuColor=1 なら BLACK、cpuColor=2 なら WHITE)。
+                //   "のCPU" — CPU 対戦の CPU 席 (cpuColor ビットマスク: 1=黒, 2=白, 3=双方 CPU)。
                 //              視点に依らず CPU 席に付与する。
-                //   "(YOU)" — 自分の席。CPU 対戦オーナー席には付けない（席に座っているのは CPU のため）。
+                //   "(YOU)" — 自分の席。CPU 席には付けない（席に座っているのは CPU のため）。
                 const uid = myUid();
                 let blackSuffix = "";
                 let whiteSuffix = "";
                 if (data.isCpu === true) {
-                    const cpuOnWhite = data.cpuColor === 2;
-                    if (cpuOnWhite) {
-                        whiteSuffix = "のCPU";
-                        if (data.black === uid) blackSuffix = "(YOU)";
-                    } else {
-                        blackSuffix = "のCPU";
-                        if (data.white === uid) whiteSuffix = "(YOU)";
-                    }
+                    const cpuMask = data.cpuColor ?? 0;
+                    if (cpuMask & 1) blackSuffix = "のCPU";
+                    if (cpuMask & 2) whiteSuffix = "のCPU";
+                    // 自席が CPU 席でなければ (YOU) を表示
+                    if (data.black === uid && !(cpuMask & 1)) blackSuffix = "(YOU)";
+                    if (data.white === uid && !(cpuMask & 2)) whiteSuffix = "(YOU)";
                 } else {
                     if (data.black === uid) blackSuffix = "(YOU)";
                     if (data.white === uid) whiteSuffix = "(YOU)";
@@ -6613,6 +6622,14 @@ export function setupHtmlUI(game: GameScene): void {
                     if (r.checked) sCk("serialTestCpuColor", r.value);
                 });
             });
+            // 「シリアルCPUで参加」チェックボックス: ロビーの ▶参加 押下時に withCpu=true を渡す
+            const stJoinWithCpuCb = document.getElementById("serial-test-join-with-cpu") as HTMLInputElement | null;
+            if (stJoinWithCpuCb) {
+                if (gCk("serialTestJoinWithCpu") === "1") stJoinWithCpuCb.checked = true;
+                stJoinWithCpuCb.addEventListener("change", () => {
+                    sCk("serialTestJoinWithCpu", stJoinWithCpuCb.checked ? "1" : "0");
+                });
+            }
             const getSelectedCpuColor = (): 1 | 2 => {
                 for (const r of Array.from(stCpuColorRadios)) {
                     if (r.checked) return r.value === "2" ? 2 : 1;

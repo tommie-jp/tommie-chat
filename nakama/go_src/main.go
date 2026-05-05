@@ -3837,8 +3837,8 @@ type OthelloGame struct {
 	BoardGX   int      `json:"boardGX"`   // ブロック盤面���左上ワールドX座標
 	BoardGZ   int      `json:"boardGZ"`   // ブロック盤面の左上ワールドZ座標
 	Comment   string   `json:"comment"`   // ロビーのコメント列に表示する文言（クライアント整形）
-	IsCpu     bool     `json:"isCpu"`     // 自作 CPU 対戦ゲーム（オーナーは観戦のみ、CPU 席はオーナー経由で中継）
-	CpuColor  int8     `json:"cpuColor"`  // CPU 対戦の CPU 席色: 1=黒(CPU 先手)/2=白(CPU 後手)。IsCpu=false のときは 0
+	IsCpu     bool     `json:"isCpu"`     // 自作 CPU 対戦ゲーム（CPU 操作者は観戦のみ、CPU 席はその操作者経由で中継）
+	CpuColor  int8     `json:"cpuColor"`  // CPU 席のビットマスク: 1=黒のみ / 2=白のみ / 3=双方(CPU vs CPU) / 0=CPU 無し
 	PrevBoard [64]int8 `json:"-"`         // 前回の盤面（差分検出用）
 }
 
@@ -4561,8 +4561,9 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	}
 
 	var req struct {
-		GameID string `json:"gameId"`
-		Watch  bool   `json:"watch"`
+		GameID  string `json:"gameId"`
+		Watch   bool   `json:"watch"`
+		WithCpu bool   `json:"withCpu"` // 自分のシリアル CPU で参加（CPU vs CPU 対戦）
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" {
 		return "", runtime.NewError("gameId required", 3) // INVALID_ARGUMENT
@@ -4590,12 +4591,20 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	}
 
 	// 空いている席に着席する。CPU 対戦の CpuColor=2 ではオーナーが白席なので joiner は黒席へ
+	var joinerColor int8
 	if g.WhiteUID == "" {
 		g.WhiteUID = uid
+		joinerColor = 2
 	} else if g.BlackUID == "" {
 		g.BlackUID = uid
+		joinerColor = 1
 	} else {
 		return "", runtime.NewError("game already full", 9)
+	}
+	// シリアル CPU で参加する場合は joiner 席のビットを CpuColor に立てる (CPU vs CPU 対戦に昇格)
+	if req.WithCpu {
+		g.CpuColor |= joinerColor
+		g.IsCpu = true
 	}
 	g.Status = "playing"
 
