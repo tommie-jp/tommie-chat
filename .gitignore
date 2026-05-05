@@ -56,7 +56,7 @@ work/
 ss/*.mp4
 .claude/
 .playwright-mcp/
-01-README.md
+*-ignore*
 
 # --- 公開しない内部ドキュメント ---
 # セキュリティレビュー(脆弱性詳細・防御の弱点を含むためローカル管理)

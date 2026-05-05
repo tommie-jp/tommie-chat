@@ -27,7 +27,7 @@ git clone → dist/ 転送待ち → doDeploy.sh を実行します。
 
 手順:
   # --- VPS で実行 ---
-  curl -fsSL https://raw.githubusercontent.com/open-tommie/tommie-chat/main/nakama/doDeploy-curl.sh -o doDeploy-curl.sh
+  curl -fsSL https://raw.githubusercontent.com/tommie-jp/tommie-chat/main/nakama/doDeploy-curl.sh -o doDeploy-curl.sh
   chmod +x doDeploy-curl.sh
   ./doDeploy-curl.sh
   # → git clone 後に rsync コマンドが表示される
@@ -81,7 +81,7 @@ if [ -d "tommie-chat" ]; then
 fi
 
 # ── git clone ──
-git clone https://github.com/open-tommie/tommie-chat.git
+git clone https://github.com/tommie-jp/tommie-chat.git
 
 # ── dist/ の転送待ち ──
 VPS_IP=$(hostname -I | awk '{print $1}')

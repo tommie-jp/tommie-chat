@@ -3981,7 +3981,7 @@ export function setupHtmlUI(game: GameScene): void {
                 + '<table style="border-collapse:collapse;font-size:inherit;line-height:1.6;">'
                 + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">URL</td><td><a href="https://mmo.tommie.jp" target="_blank">https://mmo.tommie.jp</a></td></tr>'
                 + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">X</td><td><a href="https://x.com/tommie_nico" target="_blank" rel="noopener" style="color:#1d9bf0;">@tommie_nico</a></td></tr>'
-                + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">GitHub</td><td><a href="https://github.com/open-tommie/tommie-chat" target="_blank">open-tommie/tommie-chat</a></td></tr>'
+                + '<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">GitHub</td><td><a href="https://github.com/tommie-jp/tommie-chat" target="_blank">tommie-jp/tommie-chat</a></td></tr>'
                 + `<tr><td style="padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;">${t("about.email_label")}</td><td><a href="mailto:open.tommie@gmail.com" style="color:#1d9bf0;">open.tommie@gmail.com</a></td></tr>`
                 + '</table>'
                 + '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:8px 0;">'

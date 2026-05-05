@@ -2,7 +2,7 @@
 
 本書は独立リポジトリへ移管されました。
 
-**正準ソース**: <https://github.com/open-tommie/reversi-uart-protocol>
+**正準ソース**: <https://github.com/tommie-jp/reversi-uart-protocol>
 
 ライセンス: CC BY 4.0
 

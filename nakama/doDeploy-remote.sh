@@ -307,7 +307,7 @@ fi
 
 # clone（ディレクトリがない場合のみ）
 if ! ssh "${SSH_TARGET}" "[ -d ${REMOTE_DIR} ]" 2>/dev/null; then
-    ssh "${SSH_TARGET}" "git clone https://github.com/open-tommie/tommie-chat.git ${REMOTE_DIR}"
+    ssh "${SSH_TARGET}" "git clone https://github.com/tommie-jp/tommie-chat.git ${REMOTE_DIR}"
 fi
 
 # data/ と .env を復元

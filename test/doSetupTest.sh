@@ -17,7 +17,7 @@ esac
 set -eo pipefail
 
 WORK_DIR="/tmp/tommie-chat-setup-test"
-REPO_URL="https://github.com/open-tommie/tommie-chat.git"
+REPO_URL="https://github.com/tommie-jp/tommie-chat.git"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 

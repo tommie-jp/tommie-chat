@@ -26,7 +26,7 @@ Usage: ./test/doDeployTest.sh [-h] [-v]
 
 例:
   mkdir -p ~/deploy-test && cd ~/deploy-test
-  curl -fsSL https://raw.githubusercontent.com/open-tommie/tommie-chat/main/test/doDeployTest.sh -o doDeployTest.sh
+  curl -fsSL https://raw.githubusercontent.com/tommie-jp/tommie-chat/main/test/doDeployTest.sh -o doDeployTest.sh
   chmod +x doDeployTest.sh
   ./doDeployTest.sh
 EOF
@@ -62,7 +62,7 @@ if [ -d "tommie-chat" ]; then
     echo "リネームしました: ${BACKUP}（手動で削除してください）"
 fi
 
-git clone https://github.com/open-tommie/tommie-chat.git
+git clone https://github.com/tommie-jp/tommie-chat.git
 cd tommie-chat
 
 # フロントエンドビルド（本番では開発環境で事前ビルドする想定だが、テストではここで実行）

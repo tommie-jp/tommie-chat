@@ -31,7 +31,7 @@ curl で最新の doDeployTest.sh を取得して実行します。
 
 セットアップ:
   mkdir -p ~/deploy-test && cd ~/deploy-test
-  curl -fsSL https://raw.githubusercontent.com/open-tommie/tommie-chat/main/test/doDeployTest-curl.sh -o doDeployTest-curl.sh
+  curl -fsSL https://raw.githubusercontent.com/tommie-jp/tommie-chat/main/test/doDeployTest-curl.sh -o doDeployTest-curl.sh
   chmod +x doDeployTest-curl.sh
   ./doDeployTest-curl.sh
 EOF
@@ -50,6 +50,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # 最新の doDeployTest.sh を取得して実行
-curl -fsSL https://raw.githubusercontent.com/open-tommie/tommie-chat/main/test/doDeployTest.sh -o doDeployTest.sh
+curl -fsSL https://raw.githubusercontent.com/tommie-jp/tommie-chat/main/test/doDeployTest.sh -o doDeployTest.sh
 chmod +x doDeployTest.sh
 exec ./doDeployTest.sh

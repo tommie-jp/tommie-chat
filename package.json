@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/open-tommie/tommie-chat.git"
+    "url": "https://github.com/tommie-jp/tommie-chat.git"
   },
   "type": "module",
   "scripts": {

@@ -86,7 +86,7 @@ Built with Babylon.js + Nakama, it provides a real-time multiplayer environment 
 ### 5.1 Clone the Repository
 
 ```bash
-git clone https://github.com/open-tommie/tommie-chat.git
+git clone https://github.com/tommie-jp/tommie-chat.git
 cd tommie-chat
 ```
 

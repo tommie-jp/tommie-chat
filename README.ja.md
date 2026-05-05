@@ -86,7 +86,7 @@ Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー
 ### 5.1 リポジトリのクローン
 
 ```bash
-git clone https://github.com/open-tommie/tommie-chat.git
+git clone https://github.com/tommie-jp/tommie-chat.git
 cd tommie-chat
 ```
 

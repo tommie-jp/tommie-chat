@@ -33,7 +33,7 @@ tommieChat への貢献に興味を持っていただきありがとうござい
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/open-tommie/tommie-chat.git
+git clone https://github.com/tommie-jp/tommie-chat.git
 cd tommie-chat
 
 # 依存関係のインストール
