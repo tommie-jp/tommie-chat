@@ -335,51 +335,69 @@ describe("SerialReversiAdapter", () => {
         });
     });
 
-    describe("§6.2 #11 BS 盤面スナップショット受信", () => {
+    describe("§7.2A #6 BS 盤面スナップショット受信", () => {
         const validBo = "0".repeat(27) + "21" + "0".repeat(6) + "12" + "0".repeat(27);
 
-        it("BS<64char 0/1/2> は受理し ER を返さない", () => {
+        it("BS<64char 0/1/2> は受理しエラー応答を返さない", () => {
             feedFromCpu(`BS${validBo}`);
-            expect(sentLines().some((s) => s.startsWith("ER"))).toBe(false);
+            expect(sentLines().some((s) => s.startsWith("-"))).toBe(false);
         });
 
-        it("BS の書式が不正なら ER04 を返す", () => {
+        it("BS の書式が不正なら -04 を返す", () => {
             feedFromCpu("BS0123");
-            expect(sentLines().some((s) => s.startsWith("ER04"))).toBe(true);
+            expect(sentLines().some((s) => s.startsWith("-04"))).toBe(true);
         });
 
-        it("レガシー形式 ST BO<64> もエラーなく受理する (v0.1 後方互換)", () => {
+        it("レガシー形式 ST BO<64> もエラーなく受理する (旧 v0.1 互換)", () => {
             feedFromCpu(`ST BO${validBo}`);
-            expect(sentLines().some((s) => s.startsWith("ER"))).toBe(false);
+            expect(sentLines().some((s) => s.startsWith("-"))).toBe(false);
         });
     });
 
-    describe("§4.1 / §6.3 仕様違反受信 → ER 応答", () => {
-        it("未知コマンド (XX) 受信で ER01 を返す", () => {
-            feedFromCpu("XX");
-            expect(sentLines()).toContain("ER01 unknown cmd XX");
+    describe("§5.1 / §7.3 仕様違反受信 → -<NN> 応答", () => {
+        it("未知コマンド (ZZ) 受信で -01 を返す", () => {
+            feedFromCpu("ZZ");
+            expect(sentLines()).toContain("-01 unknown cmd ZZ");
         });
 
-        it("MO の大文字座標 (MOD3) 受信で ER04 を返す", () => {
+        it("X* 拡張領域 (XX) 受信は仕様違反扱いせずエラー応答しない (§5)", () => {
+            feedFromCpu("XX foo");
+            expect(sentLines().some((s) => s.startsWith("-"))).toBe(false);
+        });
+
+        it("MO の大文字座標 (MOD3) 受信で -04 を返す", () => {
             adapter.onGameStateUpdate(
                 payload({ board: initBoard(), turn: 1, status: "playing", lastMove: -1 }),
                 BLACK_UID, movePort,
             );
             mockBridge.sendLine.mockClear();
             feedFromCpu("MOD3");
-            expect(sentLines().some((s) => s.startsWith("ER04"))).toBe(true);
+            expect(sentLines().some((s) => s.startsWith("-04"))).toBe(true);
             // 不正座標は othelloMove を呼ばずに捨てる
             expect(movePort.othelloMove).not.toHaveBeenCalled();
         });
 
-        it("CR 混入 (PI\\r) 受信で ER03 を返す", () => {
-            feedFromCpu("PI\r");
-            expect(sentLines().some((s) => s.startsWith("ER03"))).toBe(true);
+        it("小文字コマンド (pi) 受信で -02 を返す", () => {
+            feedFromCpu("pi");
+            expect(sentLines().some((s) => s.startsWith("-02"))).toBe(true);
+        });
+    });
+
+    describe("§7.2 +/- 応答 (RUP v0.2)", () => {
+        it("+PI 受信でハートビートが回復する", () => {
+            // 何度か feed して内部的な挙動が壊れないことのみ確認
+            feedFromCpu("+PI");
+            expect(sentLines().some((s) => s.startsWith("-"))).toBe(false);
         });
 
-        it("小文字コマンド (pi) 受信で ER02 を返す", () => {
-            feedFromCpu("pi");
-            expect(sentLines().some((s) => s.startsWith("ER02"))).toBe(true);
+        it("+VE02name 受信を成功応答としてログに出すだけで、エラーを返さない", () => {
+            feedFromCpu("+VE02MyCPU-v1");
+            expect(sentLines().some((s) => s.startsWith("-"))).toBe(false);
+        });
+
+        it("-04 bad coord 受信はログのみで再送やエラーを起こさない", () => {
+            feedFromCpu("-04 bad coord");
+            expect(sentLines().some((s) => s.startsWith("-"))).toBe(false);
         });
     });
 

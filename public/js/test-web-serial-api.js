@@ -270,7 +270,7 @@ let bytesTx = 0;
 let connectedAt = 0;
 
 // SerialReversiAdapter 向けの行通知。UI 用の opt-line-buffer 設定とは独立に、
-// 受信ストリームを CR/LF/CRLF で分割して登録リスナに渡す（doc/reversi/61 §4 受信側）。
+// 受信ストリームを CR/LF/CRLF で分割して登録リスナに渡す (RUP v0.2 §5 受信側)。
 const adapterLineListeners = new Set();
 let adapterLineBuf = '';
 let adapterFeedTimer = null; // §5 文字間 100ms タイムアウト用
@@ -286,7 +286,7 @@ function adapterFeed(text) {
   }, 100);
   const parts = adapterLineBuf.split(/\r\n|\r|\n/);
   adapterLineBuf = parts.pop() ?? '';
-  // バイナリ等で改行が来ない場合の暴走防止（80 バイト超で破棄・§5 の RX バッファ推奨値）
+  // バイナリ等で改行が来ない場合の暴走防止（80 バイト超で破棄・§6 の RX バッファ推奨値）
   if (adapterLineBuf.length > 256) adapterLineBuf = '';
   for (const line of parts) {
     if (line.length === 0) continue;
@@ -731,12 +731,12 @@ $('send-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !$('send').disabled) $('send').click();
 });
 
-// QT (終了) ボタン: "QT\n" を送信して reversi_cpu.py の参考実装限定 QT ハンドラを発火させる
-// (doc/reversi/61-UARTプロトコル仕様.md には載らない参考実装限定コマンド)
+// QT (終了) ボタン: "QT\r\n" を送信して reversi_cpu.py の参考実装限定 QT ハンドラを発火させる
+// (RUP プロトコル仕様には載らない参考実装限定コマンド)
 if ($('send-qt')) {
   $('send-qt').onclick = async () => {
     if (!writer) return;
-    const txt = 'QT\n';
+    const txt = 'QT\r\n';
     const bytes = new TextEncoder().encode(txt);
     await writer.write(bytes);
     bytesTx += bytes.length;
@@ -746,8 +746,7 @@ if ($('send-qt')) {
 
 // SerialReversiAdapter 用ブリッジ。接続中のシリアルポートへ任意文字列を送る最小 API。
 // writer は接続/切断で差し替わるので毎回現在値を参照する。
-// 改行は LF (\n) のみ。自作 CPU/FPGA 向けにパーサ単純化と 1 バイト節約のため
-// (doc/reversi/61-UARTプロトコル仕様.md §4)。
+// 改行は CR+LF (\r\n) を必須とする (RUP v0.2 §5)。
 // 受信は onLine(cb) で 1 行ずつ受け取れる。UI の表示オプションに依存しない独立経路。
 // Adapter から受信処理の結果 (OK/NG+理由) をログに差し込むためのフック。
 // 全 Hex モードで "# ..." (コメント) として出す。reversi_cpu.py --replay 側で skip される書式なので、
@@ -761,7 +760,7 @@ window.__serialTestBridge = {
   isConnected() { return writer !== null; },
   async sendLine(text) {
     if (!writer) throw new Error('serial not connected');
-    const txt = text + '\n';
+    const txt = text + '\r\n';
     const bytes = new TextEncoder().encode(txt);
     await writer.write(bytes);
     bytesTx += bytes.length;
