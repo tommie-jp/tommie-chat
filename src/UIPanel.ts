@@ -5887,20 +5887,30 @@ export function setupHtmlUI(game: GameScene): void {
                 }
                 if (othBlack) othBlack.textContent = String(data.blackCount);
                 if (othWhite) othWhite.textContent = String(data.whiteCount);
-                // プレイヤー名。CPU 対戦ではオーナー席は CPU が占めるので "のCPU"、
-                // 通常対戦ではオーナー自身が対局するので "(YOU)" を付ける。
+                // プレイヤー名の suffix:
+                //   "のCPU" — CPU 対戦のオーナー席 (現状の作成フローではオーナーは常に BLACK)。
+                //              対戦相手・観戦者から見ても CPU 席として明示するため、視点に依らず BLACK に付与する。
+                //   "(YOU)" — 自分の席。CPU 対戦オーナー席には付けない（席に座っているのは CPU のため）。
                 const uid = myUid();
-                const ownerSuffix = data.isCpu === true ? "のCPU" : "(YOU)";
+                let blackSuffix = "";
+                let whiteSuffix = "";
+                if (data.isCpu === true) {
+                    blackSuffix = "のCPU";
+                    if (data.white === uid) whiteSuffix = "(YOU)";
+                } else {
+                    if (data.black === uid) blackSuffix = "(YOU)";
+                    if (data.white === uid) whiteSuffix = "(YOU)";
+                }
                 if (othBlackName) {
                     const label = formatPlayer(data.blackName || "", data.blackUser, data.blackHasGoogle, data.blackIsAdmin);
-                    othBlackName.textContent = label + (data.black === uid ? ownerSuffix : "");
+                    othBlackName.textContent = label + blackSuffix;
                 }
                 if (othWhiteName) {
                     if (!data.white) {
                         othWhiteName.textContent = "？";
                     } else {
                         const label = formatPlayer(data.whiteName || "", data.whiteUser, data.whiteHasGoogle, data.whiteIsAdmin);
-                        othWhiteName.textContent = label + (data.white === uid ? ownerSuffix : "");
+                        othWhiteName.textContent = label + whiteSuffix;
                     }
                 }
                 renderBoard();
