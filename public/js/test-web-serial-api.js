@@ -417,11 +417,11 @@ function appendLog(s) {
 // PI/+PI 除外フィルタ。opt-replay-skip-pipo が ON ならハートビート行を抑止する。
 // RUP v0.2 では TX = "PI"、RX 応答 = "+PI"（旧 v0.1 の "PO" を置換）。
 // 以前は replay モード限定だったが、hex 系モードでもハートビートの hex ダンプを抑止するため全モード共通化した。
-// v0.1 後方互換のため "PO" / "+PO" もマッチする (hex-ascii のレガシーログを再生する場合用)。
+// v0.1 後方互換のため "PO" / "+PO" / "-PO" もマッチする。
+// 行全体が PI/PO 系のみで構成されているときのみ抑止 (例: "PI"・"+PI"・"-PI"・"+PIxxx" は対象外)。
 function shouldSkipPipo(text) {
   if (!$('opt-replay-skip-pipo') || !$('opt-replay-skip-pipo').checked) return false;
-  const stripped = text.replace(/^[+\-]/, '').slice(0, 2).toUpperCase();
-  return stripped === 'PI' || stripped === 'PO';
+  return /^[+\-]?P[IO]$/i.test(text.trim());
 }
 // RX チャンクが単体で "+PI\r\n" / "PI\r\n" / 旧 "PO\n" 等のハートビートだけ弾く簡易版。
 // 1 Hz ハートビートは通常単独チャンクで到着するので実用上これで十分。
