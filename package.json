@@ -23,7 +23,7 @@
     "test:e2e:trace": "npx playwright test --trace on"
   },
   "dependencies": {
-    "@babylonjs/core": "^9.1.0",
+    "@babylonjs/core": "^9.5.1",
     "@babylonjs/gui": "^9.1.0",
     "@babylonjs/loaders": "^9.1.0",
     "@babylonjs/materials": "^9.1.0",
