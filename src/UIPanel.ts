@@ -6,7 +6,7 @@ import { t, getLang, setLang, applyI18n } from "./i18n";
 import type { Lang } from "./i18n";
 import { escapeHtml, sanitizeColor, resolveAvatarUrl, isAvatarUrl, fetchAvatarList } from "./utils";
 import { showToast, showCenterDialog, primeNotificationSound } from "./Toast";
-import { onGameStateUpdate as serialOnGameStateUpdate } from "./SerialReversiAdapter";
+import { onGameStateUpdate as serialOnGameStateUpdate, getCachedCpuName } from "./SerialReversiAdapter";
 import type { Notification } from "@heroiclabs/nakama-js";
 import QRCode from "qrcode";
 
@@ -4841,19 +4841,25 @@ export function setupHtmlUI(game: GameScene): void {
                 if (!historyOverlay) return;
                 historyOverlay.innerHTML = "";
                 const uid = myUid();
-                const mkLine = (label: string, name: string, isMe: boolean) => {
+                const mkLine = (label: string, suffix: string) => {
                     const div = document.createElement("div");
                     const sp = document.createElement("span");
                     sp.className = "oth-hist-ov-label";
                     sp.textContent = label;
                     div.appendChild(sp);
-                    div.appendChild(document.createTextNode(name + (isMe ? " (あなた)" : "")));
+                    div.appendChild(document.createTextNode(suffix));
                     return div;
                 };
+                // 履歴行と同じ規約で「のCPU <name>」「(あなた)」を付与
+                const cpuMask = r.cpuColor ?? 0;
+                const blackCpuSuffix = (cpuMask & 1) ? "のCPU" + (r.blackCpuName ? ` ${r.blackCpuName}` : "") : "";
+                const whiteCpuSuffix = (cpuMask & 2) ? "のCPU" + (r.whiteCpuName ? ` ${r.whiteCpuName}` : "") : "";
+                const blackYou = (uid && r.black === uid && !(cpuMask & 1)) ? " (あなた)" : "";
+                const whiteYou = (uid && r.white === uid && !(cpuMask & 2)) ? " (あなた)" : "";
                 const blackName = formatPlayer(r.blackName, r.blackUser, r.blackHasGoogle, r.blackIsAdmin);
                 const whiteName = formatPlayer(r.whiteName, r.whiteUser, r.whiteHasGoogle, r.whiteIsAdmin);
-                historyOverlay.appendChild(mkLine("黒", blackName, !!uid && r.black === uid));
-                historyOverlay.appendChild(mkLine("白", whiteName, !!uid && r.white === uid));
+                historyOverlay.appendChild(mkLine("黒", blackName + blackCpuSuffix + blackYou));
+                historyOverlay.appendChild(mkLine("白", whiteName + whiteCpuSuffix + whiteYou));
             };
             const positionHistoryOverlay = () => {
                 if (!historyOverlay || !othHistorySection || !othHistoryScroll) return;
@@ -4938,10 +4944,18 @@ export function setupHtmlUI(game: GameScene): void {
                     const whiteMark = r.winner === 2 ? "\u2714" : "";
                     const reasonStr = r.reason === "resign" ? "投了" : r.winner === 3 ? "引分" : r.reason === "normal" ? "終局" : "";
                     const histUid = myUid(); // 自分識別は Nakama UID (デバイス認証/Google 認証に関わらず一意)
+                    // CPU 席を示す「のCPU <name>」サフィックス (cpuColor ビットマスク, 1=黒, 2=白, 3=双方)。
+                    // ロビー / プレイ画面と同じ規約。「(あなた)」は自席の人間プレイヤーにのみ付与。
+                    // 識別名は席ごとに blackCpuName / whiteCpuName から取得 (CPU vs CPU でも双方表示可)。
+                    const histCpuMask = r.cpuColor ?? 0;
+                    const blackCpuSuffix = (histCpuMask & 1) ? "のCPU" + (r.blackCpuName ? ` ${r.blackCpuName}` : "") : "";
+                    const whiteCpuSuffix = (histCpuMask & 2) ? "のCPU" + (r.whiteCpuName ? ` ${r.whiteCpuName}` : "") : "";
+                    const blackYouSuffix = (histUid && r.black === histUid && !(histCpuMask & 1)) ? " (あなた)" : "";
+                    const whiteYouSuffix = (histUid && r.white === histUid && !(histCpuMask & 2)) ? " (あなた)" : "";
                     const blackLabel = formatPlayer(r.blackName, r.blackUser, r.blackHasGoogle, r.blackIsAdmin)
-                        + (histUid && r.black === histUid ? " (あなた)" : "");
+                        + blackCpuSuffix + blackYouSuffix;
                     const whiteLabel = formatPlayer(r.whiteName, r.whiteUser, r.whiteHasGoogle, r.whiteIsAdmin)
-                        + (histUid && r.white === histUid ? " (あなた)" : "");
+                        + whiteCpuSuffix + whiteYouSuffix;
 
                     const gameNoStr = r.gameNo ? String(r.gameNo % 1000).padStart(3, "0") : "";
                     const gameNoFull = r.gameNo ? String(r.gameNo) : "";
@@ -5822,6 +5836,7 @@ export function setupHtmlUI(game: GameScene): void {
             // --- ゲーム参加 ---
             // withCpu=true で参加するとサーバが joiner 席を CPU 扱いに切り替え (CPU vs CPU)。
             // CPU 席の参加者はマウス操作せず観戦 (showGame は省略してロビーに残す)。
+            // withCpu=true のときは +VE で得た識別名をサーバへ送り、joiner 席の CpuName に保存させる。
             const joinGame = async (gameId: string, withCpu: boolean = false) => {
                 currentGameId = gameId; // ブロードキャスト到着前に設定して重複joinを防ぐ
                 try {
@@ -5829,7 +5844,8 @@ export function setupHtmlUI(game: GameScene): void {
                         // SerialReversiAdapter が SB/SW を CPU に送れるよう subscribe を確実にしておく
                         await game.nakama.othelloSubscribe(true).catch(e => console.warn("othelloSubscribe error:", e));
                     }
-                    const res = await game.nakama.othelloJoin(gameId, false, withCpu);
+                    const cpuName = withCpu ? getCachedCpuName() : "";
+                    const res = await game.nakama.othelloJoin(gameId, false, withCpu, cpuName);
                     if (!res) { currentGameId = null; return; }
                     myColor = res.black === myUid() ? 1 : (res.white === myUid() ? 2 : 0);
                     applyState(res);
@@ -5901,16 +5917,16 @@ export function setupHtmlUI(game: GameScene): void {
                 if (othBlack) othBlack.textContent = String(data.blackCount);
                 if (othWhite) othWhite.textContent = String(data.whiteCount);
                 // プレイヤー名の suffix:
-                //   "のCPU" — CPU 対戦の CPU 席 (cpuColor ビットマスク: 1=黒, 2=白, 3=双方 CPU)。
-                //              視点に依らず CPU 席に付与する。
+                //   "のCPU <name>" — CPU 対戦の CPU 席 (cpuColor ビットマスク: 1=黒, 2=白, 3=双方 CPU)。
+                //              視点に依らず CPU 席に付与する。<name> は +VE で取得した識別名（任意）。
                 //   "(YOU)" — 自分の席。CPU 席には付けない（席に座っているのは CPU のため）。
                 const uid = myUid();
                 let blackSuffix = "";
                 let whiteSuffix = "";
                 if (data.isCpu === true) {
                     const cpuMask = data.cpuColor ?? 0;
-                    if (cpuMask & 1) blackSuffix = "のCPU";
-                    if (cpuMask & 2) whiteSuffix = "のCPU";
+                    if (cpuMask & 1) blackSuffix = "のCPU" + (data.blackCpuName ? ` ${data.blackCpuName}` : "");
+                    if (cpuMask & 2) whiteSuffix = "のCPU" + (data.whiteCpuName ? ` ${data.whiteCpuName}` : "");
                     // 自席が CPU 席でなければ (YOU) を表示
                     if (data.black === uid && !(cpuMask & 1)) blackSuffix = "(YOU)";
                     if (data.white === uid && !(cpuMask & 2)) whiteSuffix = "(YOU)";
@@ -6646,12 +6662,15 @@ export function setupHtmlUI(game: GameScene): void {
                         // Adapter が SB/SW を CPU に送れないため CPU が起動しない。
                         await game.nakama.othelloSubscribe(true).catch(e => console.warn("othelloSubscribe error:", e));
                         const cpuColor = getSelectedCpuColor();
-                        const res = await game.nakama.othelloCreate(game.currentWorldId, true, cpuColor);
+                        // SerialReversiAdapter が +VE で取得した CPU 識別名 (プロトコルバージョン 2 桁を除く) を
+                        // サーバへ渡し、ロビーコメント「○○のCPU <name>」を構成する。未受信なら空文字。
+                        const cpuName = getCachedCpuName();
+                        const res = await game.nakama.othelloCreate(game.currentWorldId, true, cpuColor, cpuName);
                         if (!res) {
                             console.warn("othelloCreate(isCpu) returned null");
                             return;
                         }
-                        console.log(`CPU 対戦ゲーム作成: gameId=${res.gameId} gameNo=${res.gameNo} cpuColor=${cpuColor}`);
+                        console.log(`CPU 対戦ゲーム作成: gameId=${res.gameId} gameNo=${res.gameNo} cpuColor=${cpuColor} cpuName="${cpuName}"`);
                     } catch (e) {
                         console.warn("othelloCreate(isCpu) error:", e);
                     } finally {

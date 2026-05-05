@@ -77,6 +77,14 @@ export class SerialReversiAdapter {
     private lastStuckDump = 0;
     private stuckTimer: ReturnType<typeof setInterval> | null = null;
 
+    // +VE 応答の name 部分（プロトコルバージョン 2 桁を除いた識別名）。
+    // othelloCreate 呼び出し時にサーバへ渡し、ロビーの「○○のCPU」コメントに付与する。
+    private cachedCpuName = "";
+
+    getCachedCpuName(): string {
+        return this.cachedCpuName;
+    }
+
     // RS (再同期要求) 受信時のため、最後に受け取ったサーバ盤面を保持
     private lastBoardSnapshot: number[] | null = null;
     // RS 連続試行回数。RS_MAX_RETRIES を超えたら反則負け扱い (othelloResign) する
@@ -228,11 +236,13 @@ export class SerialReversiAdapter {
             this.onPongReceived();
             return;
         }
-        // +VE<NN>[name]: VERSION 応答 (NN は 2 桁プロトコルバージョン)
+        // +VE<NN>[name]: VERSION 応答 (NN は 2 桁プロトコルバージョン)。name 部分をキャッシュして
+        // ロビーの「○○のCPU」コメントに付与する用途で使う (othelloCreate 時にサーバへ渡す)。
         if (head === "VE") {
             const m = rest.match(/^(\d{2})(.*)$/);
             if (m) {
                 console.log(`SerialReversi <CPU: +VE proto=${m[1]} name="${m[2]}"`);
+                this.cachedCpuName = m[2];
             } else {
                 console.warn(`SerialReversi <CPU: +VE 不正書式: ${rest}`);
             }
@@ -668,4 +678,11 @@ export function onGameStateUpdate(
     nakama: SerialReversiMovePort,
 ): void {
     adapter.onGameStateUpdate(payload, myUid, nakama);
+}
+
+// 接続中の CPU から取得した +VE name (プロトコルバージョン 2 桁を除いた識別名)。
+// othelloCreate のときにサーバへ渡し、ロビーコメント「○○のCPU <name>」を構成する。
+// 未受信時は空文字。
+export function getCachedCpuName(): string {
+    return adapter.getCachedCpuName();
 }

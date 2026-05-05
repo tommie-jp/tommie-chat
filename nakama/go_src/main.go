@@ -3837,9 +3837,11 @@ type OthelloGame struct {
 	BoardGX   int      `json:"boardGX"`   // ブロック盤面���左上ワールドX座標
 	BoardGZ   int      `json:"boardGZ"`   // ブロック盤面の左上ワールドZ座標
 	Comment   string   `json:"comment"`   // ロビーのコメント列に表示する文言（クライアント整形）
-	IsCpu     bool     `json:"isCpu"`     // 自作 CPU 対戦ゲーム（CPU 操作者は観戦のみ、CPU 席はその操作者経由で中継）
-	CpuColor  int8     `json:"cpuColor"`  // CPU 席のビットマスク: 1=黒のみ / 2=白のみ / 3=双方(CPU vs CPU) / 0=CPU 無し
-	PrevBoard [64]int8 `json:"-"`         // 前回の盤面（差分検出用）
+	IsCpu        bool     `json:"isCpu"`        // 自作 CPU 対戦ゲーム（CPU 操作者は観戦のみ、CPU 席はその操作者経由で中継）
+	CpuColor     int8     `json:"cpuColor"`     // CPU 席のビットマスク: 1=黒のみ / 2=白のみ / 3=双方(CPU vs CPU) / 0=CPU 無し
+	BlackCpuName string   `json:"blackCpuName"` // BLACK 席が CPU のときの識別名（+VE 応答 name 部分）
+	WhiteCpuName string   `json:"whiteCpuName"` // WHITE 席が CPU のときの識別名（+VE 応答 name 部分）
+	PrevBoard    [64]int8 `json:"-"`            // 前回の盤面（差分検出用）
 }
 
 // othelloGames はアクティブなオセロゲームをインメモリで管理する
@@ -4049,6 +4051,10 @@ func othelloSaveHistory(ctx context.Context, nk runtime.NakamaModule, g *Othello
 		"winner":         g.Winner, // 0=未定, 1=黒勝, 2=白勝, 3=引分
 		"reason":         reason,   // "normal", "resign", "cancel"
 		"ts":             time.Now().UnixMilli(),
+		"isCpu":          g.IsCpu,
+		"cpuColor":       g.CpuColor, // ビットマスク 1=黒CPU / 2=白CPU / 3=双方CPU / 0=人間のみ
+		"blackCpuName":   g.BlackCpuName, // BLACK 席 CPU 識別名 (+VE 応答 name 部分)
+		"whiteCpuName":   g.WhiteCpuName, // WHITE 席 CPU 識別名
 	}
 
 	// 既存履歴を読み込み
@@ -4148,6 +4154,20 @@ func othelloBoardToInts(board *[64]int8) []int {
 	return out
 }
 
+// sanitizeCpuName は +VE name 部分を安全な文字列に整形する。
+// ASCII printable (0x20-0x7E) のみ許可、改行・制御文字は除外、最大 64 文字に切り詰め。
+// 仕様 §7.2B #10 では 0-16 文字 ASCII printable を推奨だが、表示余地のため 64 まで許容。
+func sanitizeCpuName(s string) string {
+	var b []byte
+	for i := 0; i < len(s) && len(b) < 64; i++ {
+		c := s[i]
+		if c >= 0x20 && c <= 0x7E {
+			b = append(b, c)
+		}
+	}
+	return string(b)
+}
+
 // othelloGameResponse はオセロゲームの状態をJSON用mapで返す
 func othelloGameResponse(g *OthelloGame) map[string]interface{} {
 	b, w := othelloCalcScore(&g.Board)
@@ -4179,6 +4199,8 @@ func othelloGameResponse(g *OthelloGame) map[string]interface{} {
 		"comment":        g.Comment,
 		"isCpu":          g.IsCpu,
 		"cpuColor":       g.CpuColor,
+		"blackCpuName":   g.BlackCpuName,
+		"whiteCpuName":   g.WhiteCpuName,
 	}
 }
 
@@ -4233,6 +4255,8 @@ func othelloListPayload(ctx context.Context, nk runtime.NakamaModule, worldID in
 				"comment":        g.Comment,
 				"isCpu":          g.IsCpu,
 				"cpuColor":       g.CpuColor,
+				"blackCpuName":   g.BlackCpuName,
+				"whiteCpuName":   g.WhiteCpuName,
 			})
 		}
 		return true
@@ -4462,9 +4486,10 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}
 
 	var req struct {
-		WorldID  int  `json:"worldId"`
-		IsCpu    bool `json:"isCpu"`
-		CpuColor int8 `json:"cpuColor"` // 1=黒(CPU 先手, 既定) / 2=白(CPU 後手)。IsCpu=true のときのみ意味あり
+		WorldID  int    `json:"worldId"`
+		IsCpu    bool   `json:"isCpu"`
+		CpuColor int8   `json:"cpuColor"` // 1=黒(CPU 先手, 既定) / 2=白(CPU 後手)。IsCpu=true のときのみ意味あり
+		CpuName  string `json:"cpuName"`  // 自作 CPU 識別名（+VE 応答の name 部分）。空文字なら付与しない
 	}
 	if payload != "" {
 		json.Unmarshal([]byte(payload), &req)
@@ -4514,7 +4539,7 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	// 表示名・username・認証フラグをキャッシュに読み込み（以降の list/history で cache-only で参照可）
 	cacheDN(ctx, nk, uid)
 	computeAuthFlags(ctx, nk, uid)
-	// CPU 対戦ゲームのコメントはサーバ側で固定フォーマット（「〇〇のCPU」）
+	// CPU 対戦ゲームのコメントはサーバ側で固定フォーマット（「〇〇のCPU」、CPU 識別名あれば末尾に付与）
 	if g.IsCpu {
 		ownerName := ""
 		if v, ok := displayNameCache.Load(uid); ok {
@@ -4525,13 +4550,24 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 				ownerName = v.(string)
 			}
 		}
+		// 識別名は ASCII printable に制限し、最大 64 文字に切り詰める (DOS 防御)。
+		// 作成者の席 (cpuColor=1 → 黒、cpuColor=2 → 白) に CPU 識別名を割り当てる。
+		ownerCpuName := sanitizeCpuName(req.CpuName)
+		if cpuColor == 2 {
+			g.WhiteCpuName = ownerCpuName
+		} else {
+			g.BlackCpuName = ownerCpuName
+		}
 		g.Comment = ownerName + "のCPU"
+		if ownerCpuName != "" {
+			g.Comment += " " + ownerCpuName
+		}
 	}
 	othelloGames.Store(gameID, g)
 
-	logf("othello create: gameId=%s black=%s%s white=%s%s worldId=%d board=(%d,%d) isCpu=%v cpuColor=%d\n",
+	logf("othello create: gameId=%s black=%s%s white=%s%s worldId=%d board=(%d,%d) isCpu=%v cpuColor=%d blackCpuName=%q whiteCpuName=%q\n",
 		gameID, shortSID(g.BlackUID), dn(g.BlackUID), shortSID(g.WhiteUID), dn(g.WhiteUID),
-		req.WorldID, g.BoardGX, g.BoardGZ, g.IsCpu, g.CpuColor)
+		req.WorldID, g.BoardGX, g.BoardGZ, g.IsCpu, g.CpuColor, g.BlackCpuName, g.WhiteCpuName)
 
 	// 盤面ブロックを配置（初期盤面＝緑60マス+石4つ）
 	worldMatchMu.Lock()
@@ -4564,6 +4600,7 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		GameID  string `json:"gameId"`
 		Watch   bool   `json:"watch"`
 		WithCpu bool   `json:"withCpu"` // 自分のシリアル CPU で参加（CPU vs CPU 対戦）
+		CpuName string `json:"cpuName"` // joiner 側 CPU の +VE 識別名（withCpu=true のときのみ意味あり）
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil || req.GameID == "" {
 		return "", runtime.NewError("gameId required", 3) // INVALID_ARGUMENT
@@ -4601,10 +4638,17 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 	} else {
 		return "", runtime.NewError("game already full", 9)
 	}
-	// シリアル CPU で参加する場合は joiner 席のビットを CpuColor に立てる (CPU vs CPU 対戦に昇格)
+	// シリアル CPU で参加する場合は joiner 席のビットを CpuColor に立てる (CPU vs CPU 対戦に昇格)。
+	// 識別名は joiner の席に割り当てる。
 	if req.WithCpu {
 		g.CpuColor |= joinerColor
 		g.IsCpu = true
+		joinerCpuName := sanitizeCpuName(req.CpuName)
+		if joinerColor == 1 {
+			g.BlackCpuName = joinerCpuName
+		} else {
+			g.WhiteCpuName = joinerCpuName
+		}
 	}
 	g.Status = "playing"
 

@@ -49,7 +49,9 @@ export interface OthelloUpdatePayload {
     whiteCount: number;
     comment?: string;
     isCpu?: boolean;
-    cpuColor?: number; // CPU 席のビットマスク: 1=黒のみ / 2=白のみ / 3=双方(CPU vs CPU)。isCpu=false のときは 0
+    cpuColor?: number;       // CPU 席のビットマスク: 1=黒のみ / 2=白のみ / 3=双方(CPU vs CPU)。isCpu=false のときは 0
+    blackCpuName?: string;   // BLACK 席が CPU のときの識別名 (+VE 応答 name 部分)
+    whiteCpuName?: string;   // WHITE 席が CPU のときの識別名
     flipped?: number[];
 }
 
@@ -78,7 +80,9 @@ export interface OthelloListPayload {
         whiteCount: number;
         comment?: string;
         isCpu?: boolean;
-        cpuColor?: number; // ビットマスク: 1=黒のみ / 2=白のみ / 3=双方。isCpu=false のときは 0
+        cpuColor?: number;       // ビットマスク: 1=黒のみ / 2=白のみ / 3=双方。isCpu=false のときは 0
+        blackCpuName?: string;   // BLACK 席 CPU 識別名
+        whiteCpuName?: string;   // WHITE 席 CPU 識別名
     }[];
     history?: OthelloHistoryRecord[]; // 省略時は履歴更新なし
 }
@@ -102,6 +106,10 @@ export interface OthelloHistoryRecord {
     winner: number; // 0=未定, 1=黒勝, 2=白勝, 3=引分
     reason: string; // "normal", "resign", "cancel"
     ts: number;     // UnixMilli
+    isCpu?: boolean;
+    cpuColor?: number;       // ビットマスク: 1=黒CPU / 2=白CPU / 3=双方CPU / 0=人間のみ
+    blackCpuName?: string;   // BLACK 席 CPU 識別名 (+VE 応答 name 部分)
+    whiteCpuName?: string;   // WHITE 席 CPU 識別名
 }
 
 /** OP_OTHELLO_UPDATE で受信するメッセージの共用型 */
@@ -1056,22 +1064,25 @@ export class NakamaService {
 
     /** オセロゲームを作成
      *  @param isCpu true を指定すると自作 CPU 対戦ゲームとして作成される（オーナーは観戦席のみ）
-     *  @param cpuColor CPU 対戦時の CPU 席色。1=黒(CPU 先手, 既定)、2=白(CPU 後手) */
-    async othelloCreate(worldId: number, isCpu: boolean = false, cpuColor: 1 | 2 = 1): Promise<OthelloUpdatePayload | null> {
+     *  @param cpuColor CPU 対戦時の CPU 席色。1=黒(CPU 先手, 既定)、2=白(CPU 後手)
+     *  @param cpuName 自作 CPU の識別名（+VE 応答の name 部分）。ロビーコメント末尾に付与される */
+    async othelloCreate(worldId: number, isCpu: boolean = false, cpuColor: 1 | 2 = 1, cpuName: string = ""): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
-        console.log(`snd othelloCreate worldId=${worldId}${isCpu ? ` isCpu cpuColor=${cpuColor}` : ""}`);
-        const r = await this.socket.rpc("othelloCreate", JSON.stringify({ worldId, isCpu, cpuColor }));
+        const cpuLog = isCpu ? ` isCpu cpuColor=${cpuColor}${cpuName ? ` cpuName="${cpuName}"` : ""}` : "";
+        console.log(`snd othelloCreate worldId=${worldId}${cpuLog}`);
+        const r = await this.socket.rpc("othelloCreate", JSON.stringify({ worldId, isCpu, cpuColor, cpuName }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
 
     /** オセロゲームに参加
      *  @param watch true で観戦取得（状態変更なし）
-     *  @param withCpu true で自分のシリアル CPU で参加（CPU vs CPU 対戦に昇格させる） */
-    async othelloJoin(gameId: string, watch: boolean = false, withCpu: boolean = false): Promise<OthelloUpdatePayload | null> {
+     *  @param withCpu true で自分のシリアル CPU で参加（CPU vs CPU 対戦に昇格させる）
+     *  @param cpuName withCpu=true のとき、自分の CPU の +VE 識別名（プロトコルバージョン 2 桁を除く） */
+    async othelloJoin(gameId: string, watch: boolean = false, withCpu: boolean = false, cpuName: string = ""): Promise<OthelloUpdatePayload | null> {
         if (!this.socket) return null;
-        const flags = `${watch ? " watch" : ""}${withCpu ? " withCpu" : ""}`;
+        const flags = `${watch ? " watch" : ""}${withCpu ? " withCpu" : ""}${withCpu && cpuName ? ` cpuName="${cpuName}"` : ""}`;
         console.log(`snd othelloJoin gameId=${gameId}${flags}`);
-        const r = await this.socket.rpc("othelloJoin", JSON.stringify({ gameId, watch, withCpu }));
+        const r = await this.socket.rpc("othelloJoin", JSON.stringify({ gameId, watch, withCpu, cpuName }));
         return r?.payload ? JSON.parse(r.payload) as OthelloUpdatePayload : null;
     }
 

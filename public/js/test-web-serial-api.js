@@ -519,7 +519,59 @@ function processIncoming(value) {
   }
   // 盤面表示は最後。Hex モードでも動くよう独立バッファで検出。
   checkBoardDisplay(text);
+  // PI 応答カウンタ更新。表示モードに依らず +PI 行を検出するため独立バッファで行アセンブル。
+  detectPiResponse(text);
 }
+
+// +PI ハートビート応答 / +VE バージョン応答の受信検出。
+// `PI応答：正常NNNN` / `VE: <name>` の状態表示用。
+// 行ベースで判定するため独立バッファ (lineBuffer / boardLineBuf とは別) を使う。
+// CR/LF/CRLF どれでも 1 行として処理。連続して大きな行が来た場合は 4KB 制限でリセット。
+let piDetectBuffer = '';
+let piResponseCount = 0;
+let lastPiResponseAt = 0;
+let lastVeResponse = ''; // 最後に受信した +VE のペイロード (例: "02SW-FPGA-pico2-reversi-02-max_gain.55")
+function detectPiResponse(text) {
+  piDetectBuffer += text;
+  const lines = piDetectBuffer.split(/\r\n|\r|\n/);
+  piDetectBuffer = lines.pop() || '';
+  if (piDetectBuffer.length > 4096) piDetectBuffer = '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^\+PI$/i.test(trimmed)) {
+      piResponseCount++;
+      lastPiResponseAt = Date.now();
+    } else {
+      // RUP §7.2B #10: `+VE<NN>[<name>]` 形式 (NN=プロトコルバージョン 2 桁、name は 0-16 文字 ASCII printable)。
+      const m = trimmed.match(/^\+VE(\d{2}.*)$/i);
+      if (m) lastVeResponse = m[1];
+    }
+  }
+}
+
+// PI 応答 / VE 応答の状態表示を更新する。シリアルテストパネルが開いていなくても無害 (要素無ければ no-op)。
+// 接続中で最後の +PI から PI_FRESH_MS 以内 → 緑「PI応答：正常」
+// それ以外 (未接続 / 応答なし) → 赤「PI応答：なし」
+const PI_FRESH_MS = 3000; // 1 Hz ハートビート + 3 連続失敗の §6 閾値に合わせる
+function updatePiStatus() {
+  const el = document.getElementById('serial-pi-status');
+  if (el) {
+    const count = String(piResponseCount).padStart(4, '0');
+    const fresh = port !== null && lastPiResponseAt > 0 && (Date.now() - lastPiResponseAt) < PI_FRESH_MS;
+    el.textContent = `PI応答：${fresh ? '正常' : 'なし'}${count}`;
+    el.style.color = fresh ? '#22aa22' : '#cc2222';
+  }
+  const ve = document.getElementById('serial-ve-status');
+  if (ve) {
+    if (lastVeResponse) {
+      ve.textContent = `VE:${lastVeResponse}`;
+      ve.style.color = '#22aa22';
+    } else {
+      ve.textContent = '';
+    }
+  }
+}
+setInterval(updatePiStatus, 500);
 
 // ST BO<64char> を受信したら盤面を ASCII 表示する。表示オプション opt-board-display に従う。
 // 0=空(.), 1=黒(B), 2=白(W)、64 文字 row-major (a1..h1, a2..h8) — 61-UARTプロトコル仕様.md §7
@@ -680,6 +732,11 @@ async function doDisconnect() {
   port = null;
   reader = null;
   writer = null;
+  // PI / VE 応答カウンタをリセット (次回接続で仕切り直し)
+  piResponseCount = 0;
+  lastPiResponseAt = 0;
+  piDetectBuffer = '';
+  lastVeResponse = '';
   // 切断後も、直前に接続していたポートの情報を状態欄に残しておく
   const label = lastPort ? ` (${lastMode} / ${portLabel(lastPort, lastMode)})` : '';
   setStatus('未接続' + label, 'disconnected');
