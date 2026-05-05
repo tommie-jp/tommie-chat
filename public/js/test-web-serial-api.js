@@ -414,18 +414,28 @@ function appendLog(s) {
   }
 }
 
-// PI/PO 除外フィルタ。opt-replay-skip-pipo が ON なら text (ASCII) の先頭 2 文字が PI/PO の行を抑止。
-// 以前は replay モード限定だったが、hex 系モードでも PI/PO の hex ダンプを抑止するため全モード共通化した。
+// PI/+PI 除外フィルタ。opt-replay-skip-pipo が ON ならハートビート行を抑止する。
+// RUP v0.2 では TX = "PI"、RX 応答 = "+PI"（旧 v0.1 の "PO" を置換）。
+// 以前は replay モード限定だったが、hex 系モードでもハートビートの hex ダンプを抑止するため全モード共通化した。
+// v0.1 後方互換のため "PO" / "+PO" もマッチする (hex-ascii のレガシーログを再生する場合用)。
 function shouldSkipPipo(text) {
   if (!$('opt-replay-skip-pipo') || !$('opt-replay-skip-pipo').checked) return false;
-  const head = text.slice(0, 2).toUpperCase();
-  return head === 'PI' || head === 'PO';
+  const stripped = text.replace(/^[+\-]/, '').slice(0, 2).toUpperCase();
+  return stripped === 'PI' || stripped === 'PO';
 }
-// RX チャンクが単体で "PI\n" / "PO\n" のときだけ弾く簡易版。1 Hz ハートビートは単独チャンクで来るので実用上十分。
+// RX チャンクが単体で "+PI\r\n" / "PI\r\n" / 旧 "PO\n" 等のハートビートだけ弾く簡易版。
+// 1 Hz ハートビートは通常単独チャンクで到着するので実用上これで十分。
 function shouldSkipPipoChunk(value) {
   if (!$('opt-replay-skip-pipo') || !$('opt-replay-skip-pipo').checked) return false;
-  return value.length === 3 && value[0] === 0x50 && value[2] === 0x0a
-         && (value[1] === 0x49 || value[1] === 0x4f);
+  // 末尾の改行 (CR/LF/CRLF) を除外して中身が "+PI" / "PI" / "+PO" / "PO" かどうかを判定する。
+  let end = value.length;
+  while (end > 0 && (value[end - 1] === 0x0a || value[end - 1] === 0x0d)) end--;
+  if (end < 2 || end > 3) return false;
+  let i = 0;
+  if (end === 3 && (value[0] === 0x2b /* + */ || value[0] === 0x2d /* - */)) i = 1;
+  else if (end !== 2) return false;
+  return value[i] === 0x50 /* P */
+      && (value[i + 1] === 0x49 /* I */ || value[i + 1] === 0x4f /* O */);
 }
 
 // Replay モード: reversi_cpu.py --replay 用の "TX/RX <ascii>" 形式で 1 メッセージ 1 行を追記する。
@@ -550,18 +560,20 @@ function renderBoardAscii(bo) {
 
 function emitIncomingLines(value) {
   const hexMode = $('opt-hex').value;
-  // PI/PO 除外は hex 系モードでも有効。単体チャンクが PI\n / PO\n のときに抑止する。
-  // (1 Hz ハートビートは通常単独チャンクで到着するので実用上これで十分)
-  if (shouldSkipPipoChunk(value)) return;
+  // replay モードはチャンクフィルタを使わず、行バッファリング後に shouldSkipPipo で抑止する。
+  // (per-chunk フィルタは "+" 単独 → "PI\r\n" のように分断到着するとバッファに "+" が孤児として残る不具合あり。
+  //  行アセンブル後にフィルタすれば "+PI" として確実に判定できる)
   if (hexMode === 'replay') {
-    // 1 メッセージ 1 行 (LF 区切り)。複数行が 1 チャンクで来た場合も必ず分割する。
+    // 1 メッセージ 1 行 (CR/LF/CRLF 区切り)。複数行が 1 チャンクで来た場合も必ず分割する。
     lineBuffer += new TextDecoder().decode(value);
-    const lines = lineBuffer.split(/\r?\n/);
+    const lines = lineBuffer.split(/\r\n|\r|\n/);
     lineBuffer = lines.pop() || '';
     if (lineBuffer.length > 4096) lineBuffer = '';
     for (const line of lines) emitReplayLine('RX', line);
     return;
   }
+  // hex 系モードは行バッファリングしないので per-chunk フィルタを使う (best effort)。
+  if (shouldSkipPipoChunk(value)) return;
   if (hexMode === 'hex') {
     emitLine('RX    ' + toHex(value));
     return;

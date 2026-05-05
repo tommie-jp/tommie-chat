@@ -3838,6 +3838,7 @@ type OthelloGame struct {
 	BoardGZ   int      `json:"boardGZ"`   // ブロック盤面の左上ワールドZ座標
 	Comment   string   `json:"comment"`   // ロビーのコメント列に表示する文言（クライアント整形）
 	IsCpu     bool     `json:"isCpu"`     // 自作 CPU 対戦ゲーム（オーナーは観戦のみ、CPU 席はオーナー経由で中継）
+	CpuColor  int8     `json:"cpuColor"`  // CPU 対戦の CPU 席色: 1=黒(CPU 先手)/2=白(CPU 後手)。IsCpu=false のときは 0
 	PrevBoard [64]int8 `json:"-"`         // 前回の盤面（差分検出用）
 }
 
@@ -4177,6 +4178,7 @@ func othelloGameResponse(g *OthelloGame) map[string]interface{} {
 		"boardGZ":        g.BoardGZ,
 		"comment":        g.Comment,
 		"isCpu":          g.IsCpu,
+		"cpuColor":       g.CpuColor,
 	}
 }
 
@@ -4230,6 +4232,7 @@ func othelloListPayload(ctx context.Context, nk runtime.NakamaModule, worldID in
 				"whiteCount":     w,
 				"comment":        g.Comment,
 				"isCpu":          g.IsCpu,
+				"cpuColor":       g.CpuColor,
 			})
 		}
 		return true
@@ -4459,18 +4462,20 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}
 
 	var req struct {
-		WorldID int  `json:"worldId"`
-		IsCpu   bool `json:"isCpu"`
+		WorldID  int  `json:"worldId"`
+		IsCpu    bool `json:"isCpu"`
+		CpuColor int8 `json:"cpuColor"` // 1=黒(CPU 先手, 既定) / 2=白(CPU 後手)。IsCpu=true のときのみ意味あり
 	}
 	if payload != "" {
 		json.Unmarshal([]byte(payload), &req)
 	}
 
 	// 既に待機中のゲームがあれば返す（同時に複数ゲーム作成を防止）
+	// オーナーは BlackUID か WhiteUID のどちらかに座っている
 	var existingGame *OthelloGame
 	othelloGames.Range(func(_, v interface{}) bool {
 		g := v.(*OthelloGame)
-		if g.BlackUID == uid && g.Status == "waiting" {
+		if (g.BlackUID == uid || g.WhiteUID == uid) && g.Status == "waiting" {
 			existingGame = g
 			return false
 		}
@@ -4482,10 +4487,27 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		return string(out), nil
 	}
 
+	// CPU 対戦時は CpuColor で席を決める。CpuColor=2(白) のときオーナーは白席に座る
+	cpuColor := int8(0)
+	if req.IsCpu {
+		cpuColor = req.CpuColor
+		if cpuColor != 1 && cpuColor != 2 {
+			cpuColor = 1 // 既定: CPU 先手 (黒)
+		}
+	}
 	gameID := othelloNextGameID()
-	g := othelloNewGame(gameID, uid, req.WorldID)
+	var g *OthelloGame
+	if cpuColor == 2 {
+		// CPU 後手: オーナーが白席（人間先手対戦相手は黒席に JOIN する）
+		g = othelloNewGame(gameID, "", req.WorldID)
+		g.WhiteUID = uid
+	} else {
+		// CPU 先手 or 通常対戦: オーナーが黒席
+		g = othelloNewGame(gameID, uid, req.WorldID)
+	}
 	g.GameNo = othelloNextGameNo(ctx, nk)
 	g.IsCpu = req.IsCpu
+	g.CpuColor = cpuColor
 	// ブロック盤面の配置位置（ワールド中心付近に固定）
 	g.BoardGX = 504
 	g.BoardGZ = 504
@@ -4507,7 +4529,9 @@ func rpcOthelloCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	}
 	othelloGames.Store(gameID, g)
 
-	logf("othello create: gameId=%s black=%s%s worldId=%d board=(%d,%d) isCpu=%v\n", gameID, shortSID(uid), dn(uid), req.WorldID, g.BoardGX, g.BoardGZ, g.IsCpu)
+	logf("othello create: gameId=%s black=%s%s white=%s%s worldId=%d board=(%d,%d) isCpu=%v cpuColor=%d\n",
+		gameID, shortSID(g.BlackUID), dn(g.BlackUID), shortSID(g.WhiteUID), dn(g.WhiteUID),
+		req.WorldID, g.BoardGX, g.BoardGZ, g.IsCpu, g.CpuColor)
 
 	// 盤面ブロックを配置（初期盤面＝緑60マス+石4つ）
 	worldMatchMu.Lock()
@@ -4561,18 +4585,26 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		return "", runtime.NewError("game already started or finished", 9) // FAILED_PRECONDITION
 	}
 	// オーナーは対局席に座れない（通常ゲームの自己対戦禁止、CPU 対戦ゲームの観戦専念）
-	if g.BlackUID == uid {
+	if g.BlackUID == uid || g.WhiteUID == uid {
 		return "", runtime.NewError("cannot join own game", 3)
 	}
 
-	g.WhiteUID = uid
+	// 空いている席に着席する。CPU 対戦の CpuColor=2 ではオーナーが白席なので joiner は黒席へ
+	if g.WhiteUID == "" {
+		g.WhiteUID = uid
+	} else if g.BlackUID == "" {
+		g.BlackUID = uid
+	} else {
+		return "", runtime.NewError("game already full", 9)
+	}
 	g.Status = "playing"
 
 	// 表示名・username・認証フラグをキャッシュに読み込み
 	cacheDN(ctx, nk, uid)
 	computeAuthFlags(ctx, nk, uid)
 
-	logf("othello join: gameId=%s white=%s%s\n", g.GameID, shortSID(uid), dn(uid))
+	logf("othello join: gameId=%s joiner=%s%s black=%s white=%s cpuColor=%d\n",
+		g.GameID, shortSID(uid), dn(uid), shortSID(g.BlackUID), shortSID(g.WhiteUID), g.CpuColor)
 
 	// 内蔵 CPU (ひよこ等) がオーナーの場合は通知を送らない (存在しないユーザなので Notification 失敗)。
 	// 代わりに (a) ロビーに新しい hiyoko 待機ゲームを補充、(b) CPU の初手 (黒なので先手) をスケジュール。
@@ -4580,7 +4612,12 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		go ensureHiyokoWaitingGame(context.Background(), nk, g.WorldID)
 		go scheduleCpuMove(nk, g.GameID)
 	} else {
-		// オーナー（人間の黒）へ参加通知を送信（DB永続化）
+		// オーナーへ参加通知を送信（DB永続化）。
+		// 通常対戦・CPU 対戦(先手) ではオーナーは黒席、CPU 対戦(後手) ではオーナーは白席。
+		ownerUID := g.BlackUID
+		if g.IsCpu && g.CpuColor == 2 {
+			ownerUID = g.WhiteUID
+		}
 		// 仕様書 doc/20 ⭐️通知 参照
 		opponentName := ""
 		if v, ok := displayNameCache.Load(uid); ok {
@@ -4595,8 +4632,8 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 			"gameNo":       g.GameNo,
 			"opponentName": opponentName,
 		}
-		if err := nk.NotificationSend(ctx, g.BlackUID, "対戦相手が見つかりました", notifContent, CodeOthelloJoined, uid, true); err != nil {
-			logf("othello join: NotificationSend failed gameId=%s black=%s err=%v\n", g.GameID, shortSID(g.BlackUID), err)
+		if err := nk.NotificationSend(ctx, ownerUID, "対戦相手が見つかりました", notifContent, CodeOthelloJoined, uid, true); err != nil {
+			logf("othello join: NotificationSend failed gameId=%s owner=%s err=%v\n", g.GameID, shortSID(ownerUID), err)
 		}
 	}
 
@@ -4706,7 +4743,8 @@ func rpcOthelloCancel(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	if g.Status != "waiting" {
 		return "", runtime.NewError("game not in waiting state", 9)
 	}
-	if uid != g.BlackUID {
+	// オーナーは BlackUID か WhiteUID のどちらか（CPU 対戦後手では WhiteUID）
+	if uid != g.BlackUID && uid != g.WhiteUID {
 		return "", runtime.NewError("only the creator can cancel", 3)
 	}
 
@@ -4756,7 +4794,8 @@ func rpcOthelloInvite(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 	g := v.(*OthelloGame)
 	// オーナーのみ招待可。ただし内蔵 CPU ゲーム (ひよこ等、BlackUID = "cpu:xxx") は
 	// 常駐の公共ゲームなので誰でも招待を出せるようにする。
-	if !g.IsCpu && g.BlackUID != uid {
+	// 自作 CPU 対戦 (CpuColor=2) ではオーナーが白席なので両席をチェック。
+	if !g.IsCpu && g.BlackUID != uid && g.WhiteUID != uid {
 		return "", runtime.NewError("only the creator can invite", 3)
 	}
 	if g.Status != "waiting" {

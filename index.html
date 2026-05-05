@@ -5146,7 +5146,11 @@
                 <span id="serial-test-close">❌️</span>
             </span>
         </div>
-        <button type="button" id="serial-test-new-game" title="自作 CPU 対戦ゲームをリバーシロビーに作成">新ゲーム作成</button>
+        <span id="serial-test-new-game-row">
+            <button type="button" id="serial-test-new-game" title="自作 CPU 対戦ゲームをリバーシロビーに作成">新ゲーム作成</button>
+            <label title="CPU 先手: CPU が黒で打ち始める"><input type="radio" name="serial-test-cpu-color" value="1" checked> CPU先手(黒)</label>
+            <label title="CPU 後手: 対戦相手が黒で打ち始め、CPU は白で応答"><input type="radio" name="serial-test-cpu-color" value="2"> CPU後手(白)</label>
+        </span>
         <div id="serial-test-body">
             <div id="serial-test-scroll">
             <fieldset>
@@ -5207,7 +5211,7 @@
                             <option value="replay" selected>Replay (TX/RX)</option>
                         </select>
                     </label>
-                    <label><input type="checkbox" id="opt-replay-skip-pipo" checked> PI/PO除外</label>
+                    <label title="ハートビート (PI / +PI) のログ表示を抑止する"><input type="checkbox" id="opt-replay-skip-pipo" checked> PI/+PI除外</label>
                     <label><input type="checkbox" id="opt-board-display" checked> 盤面表示（BS受信時）</label>
                     <label>駒:
                         <select id="opt-board-piece">

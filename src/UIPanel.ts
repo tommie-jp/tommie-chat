@@ -5671,6 +5671,8 @@ export function setupHtmlUI(game: GameScene): void {
                         const blackLabel = formatPlayer(g.blackName, g.blackUser, g.blackHasGoogle, g.blackIsAdmin);
                         const whiteLabel = g.status === "playing"
                             ? formatPlayer(g.whiteName, g.whiteUser, g.whiteHasGoogle, g.whiteIsAdmin) : "";
+                        // CPU 対戦後手 (cpuColor=2) ではオーナーは白席。それ以外（通常 / CPU 先手）はオーナーは黒席。
+                        const ownerLabel = (g.isCpu && g.cpuColor === 2) ? whiteLabel : blackLabel;
                         // 対戦中は常に "<黒>と<白>が対戦中" の定型で表示 (サーバ発の comment を上書き)。
                         // 待機中はサーバ発の comment があればそれ、無ければ規定文。
                         const commentText = g.status === "playing"
@@ -5694,7 +5696,7 @@ export function setupHtmlUI(game: GameScene): void {
                         const noCell = mkTd(gameNoStr, gameNoFull);
                         noCell.className = "oth-game-no";
                         const tsCell = mkTd(tsStr, fullDateStr);
-                        const ownerCell = mkTd(blackLabel, blackLabel);
+                        const ownerCell = mkTd(ownerLabel, ownerLabel);
                         ownerCell.className = "oth-game-owner";
                         const isOwnGame = g.black === uid || g.white === uid;
                         const commentCell = document.createElement("td");
@@ -5719,7 +5721,7 @@ export function setupHtmlUI(game: GameScene): void {
                             commentCell.title = ownLabel;
                         } else {
                             if (g.status === "waiting") commentSpan.classList.add("othello-comment-marquee");
-                            applyCommentContent(commentSpan, commentText, blackLabel);
+                            applyCommentContent(commentSpan, commentText, ownerLabel);
                             commentCell.title = commentText;
                         }
                         commentCell.appendChild(commentSpan);
@@ -5888,15 +5890,21 @@ export function setupHtmlUI(game: GameScene): void {
                 if (othBlack) othBlack.textContent = String(data.blackCount);
                 if (othWhite) othWhite.textContent = String(data.whiteCount);
                 // プレイヤー名の suffix:
-                //   "のCPU" — CPU 対戦のオーナー席 (現状の作成フローではオーナーは常に BLACK)。
-                //              対戦相手・観戦者から見ても CPU 席として明示するため、視点に依らず BLACK に付与する。
+                //   "のCPU" — CPU 対戦の CPU 席 (cpuColor=1 なら BLACK、cpuColor=2 なら WHITE)。
+                //              視点に依らず CPU 席に付与する。
                 //   "(YOU)" — 自分の席。CPU 対戦オーナー席には付けない（席に座っているのは CPU のため）。
                 const uid = myUid();
                 let blackSuffix = "";
                 let whiteSuffix = "";
                 if (data.isCpu === true) {
-                    blackSuffix = "のCPU";
-                    if (data.white === uid) whiteSuffix = "(YOU)";
+                    const cpuOnWhite = data.cpuColor === 2;
+                    if (cpuOnWhite) {
+                        whiteSuffix = "のCPU";
+                        if (data.black === uid) blackSuffix = "(YOU)";
+                    } else {
+                        blackSuffix = "のCPU";
+                        if (data.white === uid) whiteSuffix = "(YOU)";
+                    }
                 } else {
                     if (data.black === uid) blackSuffix = "(YOU)";
                     if (data.white === uid) whiteSuffix = "(YOU)";
@@ -6084,13 +6092,15 @@ export function setupHtmlUI(game: GameScene): void {
                             const blackLabel = formatPlayer(gd.blackName ?? "", gd.blackUser, gd.blackHasGoogle, gd.blackIsAdmin);
                             const whiteLabel = gd.status === "playing"
                                 ? formatPlayer(gd.whiteName ?? "", gd.whiteUser, gd.whiteHasGoogle, gd.whiteIsAdmin) : "";
+                            // CPU 対戦後手 (cpuColor=2) ではオーナーは白席。
+                            const ownerLabel = (gd.isCpu && gd.cpuColor === 2) ? whiteLabel : blackLabel;
                             // 対戦中は常に "<黒>と<白>が対戦中" を強制 (サーバ発の旧コメントを上書き)。
                             // 待機中はサーバ発 comment を優先、無ければ規定文。
                             const commentText = gd.status === "playing"
                                 ? othCommentText(gd.status, blackLabel, whiteLabel)
                                 : ((gd.comment && gd.comment !== "") ? gd.comment : othCommentText(gd.status, blackLabel, whiteLabel));
-                            entry.ownerCell.textContent = blackLabel;
-                            entry.ownerCell.title = blackLabel;
+                            entry.ownerCell.textContent = ownerLabel;
+                            entry.ownerCell.title = ownerLabel;
                             const uid = myUid();
                             const isOwnGame = gd.black === uid || gd.white === uid;
                             if (isOwnGame) {
@@ -6111,7 +6121,7 @@ export function setupHtmlUI(game: GameScene): void {
                                 entry.commentCell.title = ownLabel;
                             } else {
                                 entry.commentSpan.classList.remove("othello-comment-own");
-                                applyCommentContent(entry.commentSpan, commentText, blackLabel);
+                                applyCommentContent(entry.commentSpan, commentText, ownerLabel);
                                 entry.commentCell.title = commentText;
                                 entry.commentSpan.classList.toggle("othello-comment-marquee", gd.status === "waiting");
                             }
@@ -6591,7 +6601,24 @@ export function setupHtmlUI(game: GameScene): void {
                 });
             }
             // [新ゲーム作成] ボタン — CPU 対戦ゲームをリバーシロビーに作成
+            // ラジオで CPU 先手 (黒)・CPU 後手 (白) を選択。Cookie に保存して再訪時に復元する。
             const stNewGameBtn = document.getElementById("serial-test-new-game") as HTMLButtonElement | null;
+            const stCpuColorRadios = document.querySelectorAll<HTMLInputElement>('input[name="serial-test-cpu-color"]');
+            const savedCpuColor = gCk("serialTestCpuColor");
+            if (savedCpuColor === "1" || savedCpuColor === "2") {
+                stCpuColorRadios.forEach((r) => { r.checked = (r.value === savedCpuColor); });
+            }
+            stCpuColorRadios.forEach((r) => {
+                r.addEventListener("change", () => {
+                    if (r.checked) sCk("serialTestCpuColor", r.value);
+                });
+            });
+            const getSelectedCpuColor = (): 1 | 2 => {
+                for (const r of Array.from(stCpuColorRadios)) {
+                    if (r.checked) return r.value === "2" ? 2 : 1;
+                }
+                return 1;
+            };
             if (stNewGameBtn) {
                 stNewGameBtn.addEventListener("click", async () => {
                     if (stNewGameBtn.disabled) return;
@@ -6601,12 +6628,13 @@ export function setupHtmlUI(game: GameScene): void {
                         // 先に subscribe を確実にしておく。subscribe 無しだと onOthelloUpdate が発火せず、
                         // Adapter が SB/SW を CPU に送れないため CPU が起動しない。
                         await game.nakama.othelloSubscribe(true).catch(e => console.warn("othelloSubscribe error:", e));
-                        const res = await game.nakama.othelloCreate(game.currentWorldId, true);
+                        const cpuColor = getSelectedCpuColor();
+                        const res = await game.nakama.othelloCreate(game.currentWorldId, true, cpuColor);
                         if (!res) {
                             console.warn("othelloCreate(isCpu) returned null");
                             return;
                         }
-                        console.log(`CPU 対戦ゲーム作成: gameId=${res.gameId} gameNo=${res.gameNo}`);
+                        console.log(`CPU 対戦ゲーム作成: gameId=${res.gameId} gameNo=${res.gameNo} cpuColor=${cpuColor}`);
                     } catch (e) {
                         console.warn("othelloCreate(isCpu) error:", e);
                     } finally {
