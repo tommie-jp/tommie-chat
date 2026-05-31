@@ -55,7 +55,7 @@ Built with Babylon.js + Nakama, it provides a real-time multiplayer environment 
 ## 3. Tech Stack
 
 | Component | Technology |
-|---|---|
+| --- | --- |
 | 3D Engine | [Babylon.js](https://www.babylonjs.com/) 8.x |
 | Game Server | [Nakama](https://heroiclabs.com/nakama/) 3.35 |
 | Server Logic | Go |
@@ -137,7 +137,7 @@ bash test/doLint.sh
 ## 6. Port Numbers
 
 | Port | Purpose |
-|---|---|
+| --- | --- |
 | 80 | Web frontend (nginx) |
 | 5173 | Vite dev server |
 | 5432 | PostgreSQL |
@@ -205,7 +205,7 @@ tommieChat/
 Detailed documentation is available in the `doc/` directory.
 
 | Document | Description |
-|----------|-------------|
+| --- | --- |
 | [03-nakama-server-setup](doc/03-nakama-サーバ構築.md) | Nakama server setup guide |
 | [04-DB-concurrent-connections](doc/04-DB-同接データ.md) | Concurrent connection DB design |
 | [05-user-ID-deletion](doc/05-ユーザID削除.md) | User ID deletion procedure |
