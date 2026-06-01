@@ -37,6 +37,10 @@ Built with Babylon.js + Nakama, it provides a real-time multiplayer environment 
 
 *Screenshots are from the development version and may change significantly.*
 
+![tommieChat — orbiting the 3D world (live capture from mmo.tommie.jp)](ss/02-world-orbit.gif)
+
+*Live capture: orbiting the camera around the avatar in the browser-based 3D world — translucent player-placed blocks, grid terrain, and the minimap. Try it at [mmo.tommie.jp](https://mmo.tommie.jp).*
+
 ![tommieChat screenshot](ss/00-ver0.1.10.png)
 
 ![tommieChat screenshot](ss/01-ver0.1.5.png)

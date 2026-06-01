@@ -37,6 +37,10 @@ Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー
 
 *スクリーンショットは開発中のもので、今後大幅に変わることがあります。*
 
+![tommieChat — 3D ワールドをカメラで周回（mmo.tommie.jp のライブキャプチャ）](ss/02-world-orbit.gif)
+
+*ライブキャプチャ：ブラウザ上の 3D ワールドでアバターの周りをカメラ周回。半透明のプレイヤー設置ブロック・グリッド地形・ミニマップが見える。[mmo.tommie.jp](https://mmo.tommie.jp) で試せます。*
+
 ![tommieChat スクリーンショット](ss/00-ver0.1.10.png)
 
 ![tommieChat スクリーンショット](ss/01-ver0.1.5.png)
