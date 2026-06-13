@@ -37,6 +37,10 @@ Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー
 
 *スクリーンショットは開発中のもので、今後大幅に変わることがあります。*
 
+![tommieChat — 3D ワールドをカメラで周回（mmo.tommie.jp のライブキャプチャ）](ss/02-world-orbit.gif)
+
+*ライブキャプチャ：ブラウザ上の 3D ワールドでアバターの周りをカメラ周回。半透明のプレイヤー設置ブロック・グリッド地形・ミニマップが見える。[mmo.tommie.jp](https://mmo.tommie.jp) で試せます。*
+
 ![tommieChat スクリーンショット](ss/00-ver0.1.10.png)
 
 ![tommieChat スクリーンショット](ss/01-ver0.1.5.png)
@@ -55,7 +59,7 @@ Babylon.js + Nakama で構築されたリアルタイムマルチプレイヤー
 ## 3. 技術スタック
 
 | 項目 | 技術 |
-|---|---|
+| --- | --- |
 | 3Dエンジン | [Babylon.js](https://www.babylonjs.com/) 8.x |
 | ゲームサーバー | [Nakama](https://heroiclabs.com/nakama/) 3.35 |
 | サーバーロジック | Go |
@@ -137,7 +141,7 @@ bash test/doLint.sh
 ## 6. ポート番号
 
 | ポート | 用途 |
-|---|---|
+| --- | --- |
 | 80 | Web フロントエンド (nginx) |
 | 5173 | Vite 開発サーバー |
 | 5432 | PostgreSQL |
@@ -205,7 +209,7 @@ tommieChat/
 `docs/` ディレクトリに詳細ドキュメントがあります。
 
 | ドキュメント | 内容 |
-|-------------|------|
+| --- | --- |
 | [03-nakama-サーバ構築](docs/03-nakama-サーバ構築.md) | Nakama サーバの構築手順 |
 | [04-DB-同接データ](docs/04-DB-同接データ.md) | 同接データの DB 設計 |
 | [05-ユーザID削除](docs/05-ユーザID削除.md) | ユーザ ID 削除手順 |

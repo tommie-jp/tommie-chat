@@ -37,6 +37,10 @@ Built with Babylon.js + Nakama, it provides a real-time multiplayer environment 
 
 *Screenshots are from the development version and may change significantly.*
 
+![tommieChat — orbiting the 3D world (live capture from mmo.tommie.jp)](ss/02-world-orbit.gif)
+
+*Live capture: orbiting the camera around the avatar in the browser-based 3D world — translucent player-placed blocks, grid terrain, and the minimap. Try it at [mmo.tommie.jp](https://mmo.tommie.jp).*
+
 ![tommieChat screenshot](ss/00-ver0.1.10.png)
 
 ![tommieChat screenshot](ss/01-ver0.1.5.png)
@@ -55,7 +59,7 @@ Built with Babylon.js + Nakama, it provides a real-time multiplayer environment 
 ## 3. Tech Stack
 
 | Component | Technology |
-|---|---|
+| --- | --- |
 | 3D Engine | [Babylon.js](https://www.babylonjs.com/) 8.x |
 | Game Server | [Nakama](https://heroiclabs.com/nakama/) 3.35 |
 | Server Logic | Go |
@@ -137,7 +141,7 @@ bash test/doLint.sh
 ## 6. Port Numbers
 
 | Port | Purpose |
-|---|---|
+| --- | --- |
 | 80 | Web frontend (nginx) |
 | 5173 | Vite dev server |
 | 5432 | PostgreSQL |
@@ -205,7 +209,7 @@ tommieChat/
 Detailed documentation is available in the `docs/` directory.
 
 | Document | Description |
-|----------|-------------|
+| --- | --- |
 | [03-nakama-server-setup](docs/03-nakama-サーバ構築.md) | Nakama server setup guide |
 | [04-DB-concurrent-connections](docs/04-DB-同接データ.md) | Concurrent connection DB design |
 | [05-user-ID-deletion](docs/05-ユーザID削除.md) | User ID deletion procedure |
