@@ -24,7 +24,7 @@ if (/Android/.test(navigator.userAgent)) {
     document.body.classList.add("platform-android");
 }
 
-// URL パラメータ ?ot=<ゲーム番号> を page load 時に取り込む（仕様書 doc/20 参照）
+// URL パラメータ ?ot=<ゲーム番号> を page load 時に取り込む（仕様書 docs/20 参照）
 // 実際の処理は socket 接続確立後に UIPanel 側で行う（遅延呼び出し）
 {
     const params = new URLSearchParams(location.search);

@@ -27,7 +27,7 @@ case "${1:-}" in
         echo "  SSHユーザー  SSHユーザー名（解決順: 引数 > .env.deploy > デフォルト \"deploy\"）"
         echo ""
         echo "推奨: nakama/.env.deploy に DEPLOY_SSH_USER / DEPLOY_SSH_HOST を設定"
-        echo "      （形式は doc/40-デプロイ手順.md 参照）"
+        echo "      （形式は docs/40-デプロイ手順.md 参照）"
         echo ""
         echo "例:"
         echo "  $0 mmo.tommie.jp"
@@ -44,7 +44,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
-# 形式は doc/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
+# 形式は docs/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
 ENV_DEPLOY="${SCRIPT_DIR}/.env.deploy"
 if [ -f "$ENV_DEPLOY" ]; then
     # shellcheck source=/dev/null

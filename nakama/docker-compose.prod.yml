@@ -4,7 +4,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # 同一 VPS に複数環境（prod + staging 等）を並列運用する場合は、
-# nakama/.env で COMPOSE_PROJECT_NAME とポート番号を上書きする（doc/40 §4.3 参照）:
+# nakama/.env で COMPOSE_PROJECT_NAME とポート番号を上書きする（docs/40 §4.3 参照）:
 #   COMPOSE_PROJECT_NAME=tommchat-test
 #   POSTGRES_PORT=5433
 #   NAKAMA_PPROF_PORT=6160
@@ -111,7 +111,7 @@ services:
         max-file: "3"
 
   prometheus:
-    # 本番ではデフォルト起動から外す (メモリ削減、~100 MB)。doc/23-メモリ削減計画.md §Tier1 A
+    # 本番ではデフォルト起動から外す (メモリ削減、~100 MB)。docs/23-メモリ削減計画.md §Tier1 A
     # Nakama 自身の /metrics (port 9100) は --metrics.prometheus_port で維持されているので、
     # 必要時は外部から `curl http://127.0.0.1:9100/metrics` で取得可能。
     # それでも Prometheus サーバが要る局面では:
@@ -129,7 +129,7 @@ services:
 
   minio:
     # 本番ではデフォルト起動から外す (試験的、メモリ削減 ~80 MB)。
-    # doc/23-メモリ削減計画.md §Tier1 B 参照。
+    # docs/23-メモリ削減計画.md §Tier1 B 参照。
     # 影響: /s3/avatars/<UID>.png (ユーザがアップロードしたカスタムアバター) が 502 になる。
     #       既定アバター /avatars/* は public 経由で配信継続なので影響なし。
     # 復活させる場合: 下行の profiles をコメントアウト or

@@ -137,5 +137,5 @@ go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile?seconds=30
 | ------ | ---------- | ------ |
 | pprof サーバ起動 | [nakama/go_src/main.go](../nakama/go_src/main.go) | `InitModule` 内の goroutine |
 | ポート公開 | [nakama/docker-compose.yml](../nakama/docker-compose.yml) | `ports: "6060:6060"` |
-| ブラウザ側プロファイル | [doc/20-ブラウザプロファイル.md](20-ブラウザプロファイル.md) | — |
-| チューニングパラメータ | [doc/06-nakama-チューニング.md](06-nakama-チューニング.md) | — |
+| ブラウザ側プロファイル | [docs/20-ブラウザプロファイル.md](20-ブラウザプロファイル.md) | — |
+| チューニングパラメータ | [docs/06-nakama-チューニング.md](06-nakama-チューニング.md) | — |

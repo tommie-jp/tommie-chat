@@ -397,7 +397,7 @@ export class NakamaService {
         _end();
     }
 
-    /** DB 永続化された通知を取得（ログイン直後の取り残し回収用、仕様書 doc/20 参照） */
+    /** DB 永続化された通知を取得（ログイン直後の取り残し回収用、仕様書 docs/20 参照） */
     async fetchPendingNotifications(limit = 100): Promise<Notification[]> {
         if (!this.session) return [];
         try {
@@ -662,7 +662,7 @@ export class NakamaService {
 
     /**
      * Google OAuth2 認可コードを使って現在のアカウントに Google を紐付ける。
-     * doc/53-設計-認証システム.md §13 参照。
+     * docs/53-設計-認証システム.md §13 参照。
      * @param code         クライアント側で取得した OAuth2 認可コード
      * @param redirectUri  認可リクエストで使用した redirect_uri と完全一致させる
      * @returns linked=true なら紐付け成功、alreadyLinked=true なら別ユーザーが既にリンク済み

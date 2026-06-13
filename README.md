@@ -190,7 +190,7 @@ tommieChat/
 │   ├── doTest-*.sh       # Various test scripts
 │   ├── nakama-*.test.ts  # Vitest test files
 │   └── log/              # Test report output
-├── doc/                  # Documentation
+├── docs/                  # Documentation
 ├── pic/                  # Image assets & conversion scripts
 ├── .github/              # GitHub Actions / Dependabot
 ├── index.html            # Main HTML
@@ -202,24 +202,24 @@ tommieChat/
 
 ## 9. Documentation
 
-Detailed documentation is available in the `doc/` directory.
+Detailed documentation is available in the `docs/` directory.
 
 | Document | Description |
 |----------|-------------|
-| [03-nakama-server-setup](doc/03-nakama-サーバ構築.md) | Nakama server setup guide |
-| [04-DB-concurrent-connections](doc/04-DB-同接データ.md) | Concurrent connection DB design |
-| [05-user-ID-deletion](doc/05-ユーザID削除.md) | User ID deletion procedure |
-| [06-nakama-tuning](doc/06-nakama-チューニング.md) | Server tuning parameters |
-| [07-MinIO-asset-storage](doc/07-MinIO-アセットストレージ.md) | MinIO asset storage |
-| [10-frontend-file-structure](doc/10-ブラウザ側ファイル構成.md) | Frontend file structure |
-| [11-RPC-function-list](doc/11-RPC関数一覧.md) | Server RPC function list |
-| [20-browser-profiling](doc/20-ブラウザプロファイル.md) | Browser-side performance profiling |
-| [21-nakama-server-profiling](doc/21-nakamaサーバプロファイル.md) | Server-side profiling |
-| [30-test-script-list](doc/30-テストスクリプト一覧.md) | Test scripts and options |
-| [40-deployment-guide](doc/40-デプロイ手順.md) | Sakura VPS deployment guide |
-| [42-LAN-connection](doc/42-LAN接続手順.md) | LAN connection guide |
-| [43-mobile-display-test](doc/43-スマホ表示テスト.md) | Mobile display testing |
-| [51-SpriteViewer-demo](doc/51-SpriteViewerデモ.md) | SpriteViewer demo |
+| [03-nakama-server-setup](docs/03-nakama-サーバ構築.md) | Nakama server setup guide |
+| [04-DB-concurrent-connections](docs/04-DB-同接データ.md) | Concurrent connection DB design |
+| [05-user-ID-deletion](docs/05-ユーザID削除.md) | User ID deletion procedure |
+| [06-nakama-tuning](docs/06-nakama-チューニング.md) | Server tuning parameters |
+| [07-MinIO-asset-storage](docs/07-MinIO-アセットストレージ.md) | MinIO asset storage |
+| [10-frontend-file-structure](docs/10-ブラウザ側ファイル構成.md) | Frontend file structure |
+| [11-RPC-function-list](docs/11-RPC関数一覧.md) | Server RPC function list |
+| [20-browser-profiling](docs/20-ブラウザプロファイル.md) | Browser-side performance profiling |
+| [21-nakama-server-profiling](docs/21-nakamaサーバプロファイル.md) | Server-side profiling |
+| [30-test-script-list](docs/30-テストスクリプト一覧.md) | Test scripts and options |
+| [40-deployment-guide](docs/40-デプロイ手順.md) | Sakura VPS deployment guide |
+| [42-LAN-connection](docs/42-LAN接続手順.md) | LAN connection guide |
+| [43-mobile-display-test](docs/43-スマホ表示テスト.md) | Mobile display testing |
+| [51-SpriteViewer-demo](docs/51-SpriteViewerデモ.md) | SpriteViewer demo |
 
 ## 10. Development Tools
 

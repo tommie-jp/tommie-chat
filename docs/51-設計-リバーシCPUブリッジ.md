@@ -2,15 +2,15 @@
 
 自作ハードウェアのリバーシ CPU を nakama 上の**別アカウントの常駐 bot** として 24/7 公開するためのヘッドレスブリッジ設計メモ。
 
-> **現時点の主力路線は [doc/reversi/59-設計-外部CPU接続.md](reversi/59-設計-外部CPU接続.md) の Web Serial 接続代行方式**。
+> **現時点の主力路線は [docs/reversi/59-設計-外部CPU接続.md](reversi/59-設計-外部CPU接続.md) の Web Serial 接続代行方式**。
 > 本ドキュメントはそれとは用途が異なる「CPU 本人を独立した nakama アカウントとして 24/7 常駐させたい」場合の設計で、**当面は実装しない**。
 >
 > | 文書 | 運用形態 | 接続方式 | 実装優先度 |
 > | --- | --- | --- | --- |
-> | **doc/reversi/59** | **人間 A が自作 CPU を持ち込んで代理接続** | ブラウザ Web Serial | **主力・優先** |
-> | 本ドキュメント (doc/51) | 自作 CPU を独立アカウントで 24/7 常駐 | Node.js + `serialport` | 将来検討 |
+> | **docs/reversi/59** | **人間 A が自作 CPU を持ち込んで代理接続** | ブラウザ Web Serial | **主力・優先** |
+> | 本ドキュメント (docs/51) | 自作 CPU を独立アカウントで 24/7 常駐 | Node.js + `serialport` | 将来検討 |
 >
-> Web Serial 方式で蓄積した UART プロトコル ([doc/reversi/59 §UART プロトコル仕様](reversi/59-設計-外部CPU接続.md)) は本ドキュメントでも流用する前提。
+> Web Serial 方式で蓄積した UART プロトコル ([docs/reversi/59 §UART プロトコル仕様](reversi/59-設計-外部CPU接続.md)) は本ドキュメントでも流用する前提。
 
 ## 背景・狙い
 
@@ -575,13 +575,13 @@ nssm install tommie-cpu-bridge "C:\path\bridge.exe"
 | Raspberry Pi (Linux) | 本番常駐の代替 | 省電力で 24/7 運用向き、`systemd` でサービス化 |
 | WSL2 Ubuntu24 | 開発メイン | フェーズ 1〜3 (純 JS) は OS 非依存、UART 検証は usbipd-win 必須 |
 
-> **Android は本路線の対象外**。Android + ブラウザ経由でシリアルを扱うのは [doc/reversi/59](reversi/59-設計-外部CPU接続.md) の路線。
+> **Android は本路線の対象外**。Android + ブラウザ経由でシリアルを扱うのは [docs/reversi/59](reversi/59-設計-外部CPU接続.md) の路線。
 
 ## 確定事項
 
-- **本ドキュメントは将来オプション**。当面は [doc/reversi/59](reversi/59-設計-外部CPU接続.md) の Web Serial 接続代行方式を優先実装する
-- **用途は「独立アカウントでの 24/7 常駐 bot」**に限定。人間 A が自作 CPU を持ち込んで代理接続するユースケースは doc/59 の範囲
-- **UART プロトコルは doc/reversi/61 と共通**（`SB\n` / `MOd3\n` 等、送信は LF のみ）。本路線でも同仕様を流用する
+- **本ドキュメントは将来オプション**。当面は [docs/reversi/59](reversi/59-設計-外部CPU接続.md) の Web Serial 接続代行方式を優先実装する
+- **用途は「独立アカウントでの 24/7 常駐 bot」**に限定。人間 A が自作 CPU を持ち込んで代理接続するユースケースは docs/59 の範囲
+- **UART プロトコルは docs/reversi/61 と共通**（`SB\n` / `MOd3\n` 等、送信は LF のみ）。本路線でも同仕様を流用する
 - **リポジトリは tommieChat 本体の `bridge/` サブディレクトリ**。複雑化したら別リポジトリへ切り出す
 - **Android + Termux ルートは不採用**。`termux-usb` fd が raw usbfs で `read/write` 不可 (EINVAL)、USB-シリアル変換チップのプロトコル自力実装が必要なため。常駐は Windows/RasPi に限る
 - **GUI は作らない**。手動プレイしたい場合は tommieChat で CPU アカウントにログインすれば足りる

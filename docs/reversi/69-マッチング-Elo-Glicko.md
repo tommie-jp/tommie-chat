@@ -249,7 +249,7 @@ Phase A/B を本丸、C は時間が余ったらで可。
 ### 5.3 DB スキーマ（Nakama storage）
 
 Nakama は PostgreSQL の `storage` テーブルに key-value で保存する慣習
-（[doc/04-DB-スキーマ.md](../04-DB-スキーマ.md) 参照）。
+（[docs/04-DB-スキーマ.md](../04-DB-スキーマ.md) 参照）。
 
 #### `reversi_rating`（CPU / 人間で共通）
 

@@ -16,7 +16,7 @@ export function sanitizeColor(c: string): string {
 /**
  * デフォルトアバターの URL（public/avatars/ 配下、dist/ に同梱配信）。
  * MinIO (/s3/) が落ちていてもフォールバックできるよう静的配信にする。
- * 詳細: doc/07-MinIO-アセットストレージ.md の「判断基準」節
+ * 詳細: docs/07-MinIO-アセットストレージ.md の「判断基準」節
  */
 export const DEFAULT_AVATAR_URL = "/avatars/001-pipo-nekonin008.png";
 

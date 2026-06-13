@@ -12,8 +12,8 @@ import (
 // 内蔵リバーシ CPU エンジン。Nakama match から直接呼び出し、シリアル接続・別プロセス不要で
 // 常時 CPU 対戦を提供する。
 //
-// 計画: doc/reversi/70-実装計画-内蔵CPU.md
-// レーティングとアンカー設計: doc/reversi/69-マッチング-Elo-Glicko.md §5.6
+// 計画: docs/reversi/70-実装計画-内蔵CPU.md
+// レーティングとアンカー設計: docs/reversi/69-マッチング-Elo-Glicko.md §5.6
 //
 // 参考実装 (Python, UART 越しの同等 CPU): test/reversi/reversi_cpu.py
 
@@ -63,7 +63,7 @@ func cpuEngineForUID(uid string) CpuEngine {
 	return cpuEngines[uid]
 }
 
-// cpuDisplayName は CPU sentinel UID に対する表示名を返す。doc/reversi/69 §5.12 参照。
+// cpuDisplayName は CPU sentinel UID に対する表示名を返す。docs/reversi/69 §5.12 参照。
 func cpuDisplayName(cpuUID string) string {
 	switch cpuUID {
 	case "cpu:hiyoko":

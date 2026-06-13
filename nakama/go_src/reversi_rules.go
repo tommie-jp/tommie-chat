@@ -7,7 +7,7 @@ package main
 // (reversi_cpu.go) 実装で追加で要る初期盤面生成と BO パースだけを置く。
 //
 // 盤面表現は [64]int8 の行優先 (row*8+col)、0=空 / 1=黒 / 2=白。
-// doc/reversi/61-UARTプロトコル仕様.md §7 に準拠。
+// docs/reversi/61-UARTプロトコル仕様.md §7 に準拠。
 //
 // 参考実装 (Python): test/reversi/reversi_rules.py
 
@@ -24,7 +24,7 @@ func othelloInitBoard() [64]int8 {
 
 // othelloBoardFromBO は BO<64char> の 64 文字を [64]int8 に復元する。
 // 不正 (長さ違い、'0'/'1'/'2' 以外の文字を含む) なら ok=false。
-// doc/reversi/61-UARTプロトコル仕様.md §6.1 #5 / §7 参照。
+// docs/reversi/61-UARTプロトコル仕様.md §6.1 #5 / §7 参照。
 func othelloBoardFromBO(s string) (board [64]int8, ok bool) {
 	if len(s) != 64 {
 		return board, false

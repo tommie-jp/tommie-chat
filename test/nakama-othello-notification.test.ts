@@ -1,7 +1,7 @@
 /**
  * オセロ参加通知テスト（socket.notification）
  *
- * 仕様: doc/20-仕様書.md ⭐️通知 / ⭐️socket.notification 定数名
+ * 仕様: docs/20-仕様書.md ⭐️通知 / ⭐️socket.notification 定数名
  *
  * 検証内容:
  *   1. playerB が othelloJoin すると playerA（オーナー）へ socket.onnotification が配信される

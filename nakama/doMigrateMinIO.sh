@@ -27,7 +27,7 @@ Usage: ./nakama/doMigrateMinIO.sh <VPSホスト> [--pull] [SSHユーザー]
   SSHユーザー  SSHユーザー名（解決順: 引数 > .env.deploy > デフォルト "deploy"）
 
 推奨: nakama/.env.deploy に DEPLOY_SSH_USER / DEPLOY_SSH_HOST を設定
-      （形式は doc/40-デプロイ手順.md 参照）
+      （形式は docs/40-デプロイ手順.md 参照）
 
 処理内容:
   1. 転送元の MinIO データディレクトリを tar.gz にエクスポート
@@ -54,7 +54,7 @@ esac
 set -euo pipefail
 
 # ── .env.deploy 読み込み（任意、git 管理外） ──
-# 形式は doc/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
+# 形式は docs/40-デプロイ手順.md 参照: DEPLOY_SSH_USER, DEPLOY_SSH_HOST
 ENV_DEPLOY="$(cd "$(dirname "$0")" && pwd)/.env.deploy"
 if [ -f "$ENV_DEPLOY" ]; then
     # shellcheck source=/dev/null

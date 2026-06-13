@@ -94,7 +94,7 @@ Single Go file (~3000 lines) containing:
 
 `nakama/doRestart.sh` は環境変数 `TOMMIE_PROD=1` またはマーカーファイル `/etc/tommie-chat-prod` の存在で本番 overlay、それ以外は dev overlay を自動選択する。本番化は VPS で `sudo touch /etc/tommie-chat-prod` を 1 回実行。
 
-リモート操作系スクリプト（`doDeploy-remote.sh` / `doStop-remote.sh` / `doMigrateGround.sh` / `doMigrateMinIO.sh`）は `nakama/.env.deploy`（git 管理外）から `DEPLOY_SSH_USER` / `DEPLOY_SSH_HOST` を読み込む。解決順は **コマンドライン引数 > .env.deploy > デフォルト `deploy`**。形式は `doc/40-デプロイ手順.md` 参照。
+リモート操作系スクリプト（`doDeploy-remote.sh` / `doStop-remote.sh` / `doMigrateGround.sh` / `doMigrateMinIO.sh`）は `nakama/.env.deploy`（git 管理外）から `DEPLOY_SSH_USER` / `DEPLOY_SSH_HOST` を読み込む。解決順は **コマンドライン引数 > .env.deploy > デフォルト `deploy`**。形式は `docs/40-デプロイ手順.md` 参照。
 
 ## Key Conventions
 
@@ -119,13 +119,13 @@ Single Go file (~3000 lines) containing:
 
 ## Documentation
 
-- `/doc/10-ブラウザ側ファイル構成.md` — Client file structure
-- `/doc/11-RPC関数一覧.md` — RPC reference
-- `/doc/03-nakama-サーバ構築.md` — Server setup
-- `/doc/04-DB-スキーマ.md` — PostgreSQL `storage` テーブル全レコード形式
-- `/doc/06-nakama-チューニング.md` — Performance tuning
-- `/doc/12-クライアント永続化設計.md` — IndexedDB / Cookie / localStorage の使い分け
-- `/doc/30-テストスクリプト一覧.md` — Test scripts
-- `/doc/40-デプロイ手順.md` — 本番デプロイ手順
-- `/doc/50-設計-部屋システム.md` — 部屋（マルチワールド）設計
-- `/doc/92-セキュリティレビュー.md` — CSP・セキュリティヘッダ等
+- `/docs/10-ブラウザ側ファイル構成.md` — Client file structure
+- `/docs/11-RPC関数一覧.md` — RPC reference
+- `/docs/03-nakama-サーバ構築.md` — Server setup
+- `/docs/04-DB-スキーマ.md` — PostgreSQL `storage` テーブル全レコード形式
+- `/docs/06-nakama-チューニング.md` — Performance tuning
+- `/docs/12-クライアント永続化設計.md` — IndexedDB / Cookie / localStorage の使い分け
+- `/docs/30-テストスクリプト一覧.md` — Test scripts
+- `/docs/40-デプロイ手順.md` — 本番デプロイ手順
+- `/docs/50-設計-部屋システム.md` — 部屋（マルチワールド）設計
+- `/docs/92-セキュリティレビュー.md` — CSP・セキュリティヘッダ等

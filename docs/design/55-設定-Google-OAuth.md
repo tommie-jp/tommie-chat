@@ -1,6 +1,6 @@
 # 設定: Google OAuth 2.0 クライアント作成手順
 
-[doc/53-設計-認証システム.md](53-設計-認証システム.md) §8 の最小実装で必要となる Google Cloud Console 側の設定手順。
+[docs/53-設計-認証システム.md](53-設計-認証システム.md) §8 の最小実装で必要となる Google Cloud Console 側の設定手順。
 本ドキュメントは Web アプリケーション用 OAuth 2.0 クライアントを発行し、tommieChat に組み込むまでの一連の作業をまとめる。
 
 ## 0. 前提
@@ -186,7 +186,7 @@ docker compose -f nakama/docker-compose.yml logs nakama | grep -i "google\|oauth
 bash nakama/doDeploy-remote.sh mmo-test
 
 # 初回のみ: リモート側の nakama/.env に GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を設定
-# （デプロイ先は既定で ~/<ホスト名>/ に展開される — doc/40 §4 参照）
+# （デプロイ先は既定で ~/<ホスト名>/ に展開される — docs/40 §4 参照）
 ssh <user>@mmo-test.tommie.jp
 cd ~/mmo-test.tommie.jp/nakama
 vi .env   # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を追記
@@ -310,7 +310,7 @@ Google OAuth の redirect URI は **HTTPS 必須**。例外は loopback (`http:/
 | 短時間だけ HTTPS URL が欲しい | ngrok / Cloudflare Tunnel → 取得した URL を Console の承認済み Origin/Redirect に追加 |
 
 → Google OAuth テストは **`mmo-test.tommie.jp` ステージングを使うのが最短・最確実**
-（CSP・nginx 検証も同時にできる運用方針 → [doc/44-テスト環境-ngrok対VPS.md](44-テスト環境-ngrok対VPS.md)）。
+（CSP・nginx 検証も同時にできる運用方針 → [docs/44-テスト環境-ngrok対VPS.md](44-テスト環境-ngrok対VPS.md)）。
 
 ---
 

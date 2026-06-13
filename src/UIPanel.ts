@@ -10,7 +10,7 @@ import { onGameStateUpdate as serialOnGameStateUpdate, getCachedCpuName } from "
 import type { Notification } from "@heroiclabs/nakama-js";
 import QRCode from "qrcode";
 
-// socket.notification コード定数（仕様書 doc/20 参照、サーバ側 main.go と同期）
+// socket.notification コード定数（仕様書 docs/20 参照、サーバ側 main.go と同期）
 const CODE_OTHELLO_JOINED = 1001;
 const CODE_OTHELLO_INVITE = 1005;
 const CODE_OTHELLO_INVITE_REJECTED = 1006;
@@ -631,7 +631,7 @@ export function setupHtmlUI(game: GameScene): void {
                 });
             }
 
-            // ─── アカウント情報セクション（doc/53 §8 最小実装） ───
+            // ─── アカウント情報セクション（docs/53 §8 最小実装） ───
             const savedEl  = document.getElementById("account-info-saved");
             const googleEl = document.getElementById("account-info-google");
             const deviceEl = document.getElementById("account-info-device");
@@ -2210,7 +2210,7 @@ export function setupHtmlUI(game: GameScene): void {
         }
     });
 
-    // オセロ参加通知タップで利用する。オセロパネル初期化時に代入される（仕様書 doc/20 step 6）
+    // オセロ参加通知タップで利用する。オセロパネル初期化時に代入される（仕様書 docs/20 step 6）
     // opts.autoJoin=true は招待YES押下時の即参加用
     let openOthelloForGameNo: ((gameNo: number, opts?: { autoJoin?: boolean }) => void) | null = null;
     // 表示名モーダル（オセロパネルを ?ot=<番号> で開いた際、表示名未設定なら表示）
@@ -2220,7 +2220,7 @@ export function setupHtmlUI(game: GameScene): void {
     // オセロパネル初期化時に代入される
     let showDisplayNameModalShared: (() => void) | null = null;
 
-    // socket.notification 受信ハンドラ（仕様書 doc/20 参照）
+    // socket.notification 受信ハンドラ（仕様書 docs/20 参照）
     const seenNotifIds = new Set<string>();
     const handleNotification = (n: Notification) => {
         if (n.id) {
@@ -4741,7 +4741,7 @@ export function setupHtmlUI(game: GameScene): void {
             let winner = 0;
             let subscribed = false;
             let prevBoard: number[] = new Array(64).fill(0);
-            // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— doc/reversi/56-設計-対戦リバーシ.md 参照
+            // 1手の制限時間表示（段階1: 表示のみ、時間切れでも何も起きない）— docs/reversi/56-設計-対戦リバーシ.md 参照
             // チェスクロック風: 黒/白 2つのクロックを並べ、アクティブ側のみカウントダウン。
             const OTHELLO_TURN_LIMIT_SEC = 30;
             const OTHELLO_RING_CIRCUMFERENCE = 2 * Math.PI * 26; // r=26
@@ -4788,7 +4788,7 @@ export function setupHtmlUI(game: GameScene): void {
                 updateOneClock(othClockWhite, currentTurn === 2, remaining, ratio, myColor === 2);
             };
             setInterval(updateOthelloTimer, 250); // 1秒未満の粒度で滑らかに更新
-            // URL パラメータ ?ot / ?ot=<gameNo> 遅延処理用（仕様書 doc/20 参照）
+            // URL パラメータ ?ot / ?ot=<gameNo> 遅延処理用（仕様書 docs/20 参照）
             const otWin = window as unknown as { __pendingOthelloOpen?: boolean; __pendingOthelloGameNo?: number };
             let pendingOthelloOpen: boolean = otWin.__pendingOthelloOpen === true;
             let pendingOthelloGameNo: number | undefined = otWin.__pendingOthelloGameNo;
@@ -5030,7 +5030,7 @@ export function setupHtmlUI(game: GameScene): void {
             };
 
             // --- 画面切り替え（物理パネル 2 枚間の遷移）---
-            // doc/reversi/60 で決めた 7b.リバーシロビー / 7b2.リバーシプレイ の分割。
+            // docs/reversi/60 で決めた 7b.リバーシロビー / 7b2.リバーシプレイ の分割。
             // 表示→非表示の順で切替えることで、両方 display:none になる瞬間を作らず
             // MutationObserver (othPanel/othPlayPanel 両監視) が unsubscribe を誤発火しない。
             const showLobby = () => {
@@ -5649,7 +5649,7 @@ export function setupHtmlUI(game: GameScene): void {
                 // ゲーム番号降順（新しいゲームを先頭に）
                 const sorted = [...games].sort((a, b) => (b.gameNo ?? 0) - (a.gameNo ?? 0));
                 // --- 参加中ゲームの自動復帰検知（ロビー表示/ゲーム表示いずれでも常に実行）---
-                // 状態遷移図: [doc/reversi/57-state-reversi.puml](doc/reversi/57-state-reversi.puml) E4/E24
+                // 状態遷移図: [docs/reversi/57-state-reversi.puml](docs/reversi/57-state-reversi.puml) E4/E24
                 // G2待ち受け画面は廃止。status="waiting" の自ゲームはロビー一覧の行として表示する
                 const ownGame = sorted.find(g =>
                     (g.status === "playing" || g.status === "waiting") &&
@@ -5881,7 +5881,7 @@ export function setupHtmlUI(game: GameScene): void {
                 currentTurn = data.turn;
                 gameStatus = data.status;
                 // 自作 CPU 対戦ゲームの中継。オーナー判定・送信タイミング判定は Adapter 側で行う
-                // （doc/reversi/61 §6.1 の SB/SW/MO/PA/EB/EW/ED を playing/finished 遷移から生成）。
+                // （docs/reversi/61 §6.1 の SB/SW/MO/PA/EB/EW/ED を playing/finished 遷移から生成）。
                 // 第3引数は受信 MO を othelloMove RPC に橋渡しするためのポート (Phase 4)。
                 serialOnGameStateUpdate(data, myUid(), game.nakama);
                 // 連続対戦: 自分がオーナーの CPU ゲームが終局したら 3 秒後に自動で新ゲーム作成
@@ -5962,7 +5962,7 @@ export function setupHtmlUI(game: GameScene): void {
                 const isMyTurn = gameStatus === "playing" && currentTurn === myColor;
                 const legalMoves = isMyTurn ? getLocalLegalMoves(myColor) : new Set<number>();
                 othBoard.innerHTML = "";
-                // 先頭行: 左上コーナー（空）＋ 列ラベル a-h（doc/reversi/61 §7 WOF 棋譜表記準拠）
+                // 先頭行: 左上コーナー（空）＋ 列ラベル a-h（docs/reversi/61 §7 WOF 棋譜表記準拠）
                 const corner = document.createElement("div");
                 corner.className = "othello-label";
                 othBoard.appendChild(corner);
@@ -6070,7 +6070,7 @@ export function setupHtmlUI(game: GameScene): void {
 
             // 内蔵 CPU (ひよこ) はサーバが自動でロビーに待機ゲームを置くので、クライアント側の作成ボタンは不要。
             // 人間プレイヤーは通常の [参加] ボタンで hiyoko 待機ゲームに join する
-            // (doc/reversi/70-実装計画-内蔵CPU.md §Phase 4)。
+            // (docs/reversi/70-実装計画-内蔵CPU.md §Phase 4)。
 
             // --- 戻るボタン ---
             if (othBackBtn) {
@@ -6165,7 +6165,7 @@ export function setupHtmlUI(game: GameScene): void {
                 if (ok) subscribed = true;
             };
 
-            // トースト通知タップで呼ばれる: URL 反映 + オセロパネルを開く（仕様書 doc/20 step 6）
+            // トースト通知タップで呼ばれる: URL 反映 + オセロパネルを開く（仕様書 docs/20 step 6）
             // opts.autoJoin=true の場合は解決後に即 othelloJoin する（招待YES押下用）
             openOthelloForGameNo = (gameNo: number, opts?: { autoJoin?: boolean }) => {
                 pendingOthelloGameNo = gameNo;
@@ -6423,7 +6423,7 @@ export function setupHtmlUI(game: GameScene): void {
                 });
             }
 
-            // --- 最大化トグル (doc/56 参照) ---
+            // --- 最大化トグル (docs/56 参照) ---
             // body.panel-maximized を全パネル共通のフラグとして使い、タブ切替でも維持する。
             // オセロパネルには .maximized を付与。
             const applyMaximized = (max: boolean) => {

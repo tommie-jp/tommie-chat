@@ -3629,7 +3629,7 @@ func rpcRegisterDeviceInfo(ctx context.Context, logger runtime.Logger, db *sql.D
 }
 
 // rpcGetAccountStatus は「保存済みアカウントか」フラグを返す
-// （フレンド機能の前提チェック用 — doc/53 §8）
+// （フレンド機能の前提チェック用 — docs/53 §8）
 func rpcGetAccountStatus(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
 	defer prof("rpcGetAccountStatus")()
 	uid, _ := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
@@ -3809,7 +3809,7 @@ func rpcDetachDevice(ctx context.Context, logger runtime.Logger, db *sql.DB, nk 
 	return string(out), nil
 }
 
-// ===== socket.notification コード定義（仕様書 doc/20 参照） =====
+// ===== socket.notification コード定義（仕様書 docs/20 参照） =====
 const (
 	CodeOthelloJoined         = 1001 // オセロ参加通知（オーナーへ）
 	CodeDirectMessage         = 1002 // DM
@@ -4671,7 +4671,7 @@ func rpcOthelloJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk r
 		if g.IsCpu && g.CpuColor == 2 {
 			ownerUID = g.WhiteUID
 		}
-		// 仕様書 doc/20 ⭐️通知 参照
+		// 仕様書 docs/20 ⭐️通知 参照
 		opponentName := ""
 		if v, ok := displayNameCache.Load(uid); ok {
 			opponentName = v.(string)
@@ -5122,7 +5122,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	defaultWorld = getWorld(defaultWorldID)
 
 	// ひよこ(3歳) の待機中ゲームをデフォルトワールドに配置（ロビー常時表示用）。
-	// 詳細は reversi_cpu.go / doc/reversi/70-実装計画-内蔵CPU.md 参照。
+	// 詳細は reversi_cpu.go / docs/reversi/70-実装計画-内蔵CPU.md 参照。
 	ensureHiyokoWaitingGame(ctx, nk, defaultWorldID)
 
 	// 旧フォーマットからのマイグレーション（ground_table キーが残っている場合、デフォルトワールドのみ）

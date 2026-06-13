@@ -110,7 +110,7 @@ ABS_HITS=$(grep -rn --include='*.sh' --include='*.ts' --include='*.js' --include
     --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist --exclude-dir=.claude \
     | grep -v 'node_modules' | grep -v '.git/' \
     | grep -v 'doLint\.sh' | grep -v 'doSetupTest\.sh' \
-    | grep -v 'test/log/' | grep -v 'doc/' || true)
+    | grep -v 'test/log/' | grep -v 'docs/' || true)
 local_elapsed=$((SECONDS - local_start))
 
 CHECK_NAMES+=("Hardcoded absolute paths")

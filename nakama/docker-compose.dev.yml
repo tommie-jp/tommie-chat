@@ -26,7 +26,7 @@ services:
       - "80:80"
 
   prometheus:
-    # dev でもデフォルト起動から外す。doc/23-メモリ削減計画.md §Tier1 A
+    # dev でもデフォルト起動から外す。docs/23-メモリ削減計画.md §Tier1 A
     # 必要時: docker compose -f docker-compose.yml -f docker-compose.dev.yml \
     #         --profile with-metrics up -d prometheus
     profiles: ["with-metrics"]
@@ -34,7 +34,7 @@ services:
       - "9090:9090"
 
   minio:
-    # dev でもデフォルト起動から外す。doc/23-メモリ削減計画.md §Tier1 B
+    # dev でもデフォルト起動から外す。docs/23-メモリ削減計画.md §Tier1 B
     # 必要時: docker compose -f docker-compose.yml -f docker-compose.dev.yml \
     #         --profile with-minio up -d minio
     profiles: ["with-minio"]

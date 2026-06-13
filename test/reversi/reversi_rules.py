@@ -4,7 +4,7 @@
 外部 CPU テストスクリプト (test/reversi/cpu_tester/) と参照 CPU 実装
 (test/reversi/reversi_cpu.py) の両方から共有される。
 
-仕様: doc/reversi/61-UARTプロトコル仕様.md §7 座標・盤面の向き
+仕様: docs/reversi/61-UARTプロトコル仕様.md §7 座標・盤面の向き
 """
 
 BLACK = 1

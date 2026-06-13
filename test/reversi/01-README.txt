@@ -2,7 +2,7 @@
 
 テスト準備
 COM1とCOM2をシリアル回線エミュレータでつなげる。以下参照
-    doc/reversi/00-COMxとCOMyをつなげる.md
+    docs/reversi/00-COMxとCOMyをつなげる.md
 
 テスト方法
 ・Windows11 PowerShell

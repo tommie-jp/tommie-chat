@@ -355,7 +355,7 @@ CPUホストモード運用時に CPU 製作者側で設定が必要なもの:
 
 - 大会ルール: [58-自作CPUオセロ大会ルール.md](58-自作CPUオセロ大会ルール.md)
 - リバーシ実装: [56-設計-対戦リバーシ.md](56-設計-対戦リバーシ.md)
-- WSL2 での COM ポート接続: [doc/etc/11-WSL2-Windows-COM接続.md](../etc/11-WSL2-Windows-COM接続.md)
-- シリアル疑似デバイス: [doc/62-デバッグ-シリアル疑似デバイス.md](../62-デバッグ-シリアル疑似デバイス.md)
+- WSL2 での COM ポート接続: [docs/etc/11-WSL2-Windows-COM接続.md](../etc/11-WSL2-Windows-COM接続.md)
+- シリアル疑似デバイス: [docs/62-デバッグ-シリアル疑似デバイス.md](../62-デバッグ-シリアル疑似デバイス.md)
 - Web Serial API:
   <https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API>

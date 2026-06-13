@@ -5,7 +5,7 @@
 # 前提:
 #   - Ubuntu 22.04 / 24.04
 #   - sudo 権限を持つユーザーで実行
-#   - SSH 鍵認証・ファイアウォールは手動設定済み（doc/40-デプロイ手順.md 参照）
+#   - SSH 鍵認証・ファイアウォールは手動設定済み（docs/40-デプロイ手順.md 参照）
 
 case "${1:-}" in
     -h|--help)
@@ -597,7 +597,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # ── 10. MinIO バケット初期化 ──
 # MinIO は docker-compose.prod.yml で profiles: ["with-minio"] により
-# デフォルト起動から除外されている (doc/23-メモリ削減計画.md §Tier1 B)。
+# デフォルト起動から除外されている (docs/23-メモリ削減計画.md §Tier1 B)。
 # サービスが起動していない場合はスキップ。必要時は次で手動起動:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 #     --profile with-minio up -d minio
@@ -640,4 +640,4 @@ echo ""
 echo "次のステップ:"
 echo "  HTTPS を設定: ./nakama/doSetupHTTPS.sh <ドメイン名>"
 echo ""
-echo "詳細: doc/40-デプロイ手順.md"
+echo "詳細: docs/40-デプロイ手順.md"

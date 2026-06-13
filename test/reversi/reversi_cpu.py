@@ -2,7 +2,7 @@
 """
 リバーシ CPU 疑似クライアント (Windows CLI)
 
-doc/reversi/61-UARTプロトコル仕様.md に沿って CPU 側として動作する。
+docs/reversi/61-UARTプロトコル仕様.md に沿って CPU 側として動作する。
 - サーバから届いた PI/VE/SB/SW/MO/PA/BO/EB/EW/ED を処理
 - 手番になったら合法手の先頭を選んで MOxx を返す
 - 送受信したシリアルデータはすべて標準出力にダンプ
