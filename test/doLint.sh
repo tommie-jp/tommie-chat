@@ -75,7 +75,7 @@ if [ -f nakama/go_src/main.go ]; then
         -v "$(pwd)/nakama/go_src":/go_src \
         -v nakama-go-cache:/go/pkg/mod \
         -w /go_src \
-        "registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:3.35.0" \
+        "registry.heroiclabs.com/heroiclabs/nakama-pluginbuilder:3.41.0" \
         -c "go vet ./..."
 fi
 

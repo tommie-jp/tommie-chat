@@ -1,7 +1,7 @@
 module github.com/tommie/nakama-tommie-chat
 
-go 1.25.0
+go 1.27.1
 
-require github.com/heroiclabs/nakama-common v1.44.0
+require github.com/heroiclabs/nakama-common v1.48.0
 
-require google.golang.org/protobuf v1.36.8 // indirect
+require google.golang.org/protobuf v1.36.12 // indirect

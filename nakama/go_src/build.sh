@@ -4,7 +4,7 @@
 
 set -e
 
-NAKAMA_VERSION="3.35.0"
+NAKAMA_VERSION="3.41.0"
 OUT_DIR="$(cd "$(dirname "$0")/.." && pwd)/modules"
 mkdir -p "$OUT_DIR"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

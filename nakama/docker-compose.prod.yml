@@ -77,7 +77,7 @@ services:
             --socket.write_wait_ms 5000 \
             --shutdown_grace_sec 5 \
             --metrics.prometheus_port 9100 \
-            --runtime.env NAKAMA_VERSION=3.35.0 \
+            --runtime.env NAKAMA_VERSION=3.41.0 \
             --match.input_queue_size 8192 \
             --socket.outgoing_queue_size 2048 \
             --socket.max_request_size_bytes 131072 \
